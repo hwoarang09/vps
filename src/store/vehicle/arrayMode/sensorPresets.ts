@@ -40,11 +40,11 @@ export const SENSOR_PRESETS: SensorPreset[] = [
   // 1: 좌커브
   {
     zones: {
-      approach: { leftAngle: 65, rightAngle: 20, leftLength: 1, rightLength: 0.7, dec: -1 },
-      brake:    { leftAngle: 65, rightAngle: 20, leftLength: 0.7, rightLength: 0.4, dec: -3 },
-      stop:     { leftAngle: 65, rightAngle: 20, leftLength: 0.4, rightLength: 0.3, dec: -Infinity },
+      approach: { leftAngle: 65, rightAngle: -10, leftLength: 1.2, rightLength: 1, dec: -1 },
+      brake:    { leftAngle: 65, rightAngle: -10, leftLength: 0.7, rightLength: 0.7, dec: -3 },
+      stop:     { leftAngle: 65, rightAngle: -10, leftLength: 0.6, rightLength: 0.6, dec: -Infinity },
     },
-    leftAngle: 65, rightAngle: 20, leftLength: 2, rightLength: 1.2,
+    leftAngle: 65, rightAngle: -10, leftLength: 2, rightLength: 1.2,
   },
   // 2: 우커브
   {
@@ -55,6 +55,15 @@ export const SENSOR_PRESETS: SensorPreset[] = [
     },
     leftAngle: -20, rightAngle: -65, leftLength: 1.2, rightLength: 2,
   },
+  // 3: 180도
+  {
+    zones: {
+      approach: { leftAngle: 55, rightAngle: -55, leftLength: 1, rightLength: 1, dec: -1 },
+      brake:    { leftAngle: 55, rightAngle: -55, leftLength: 0.7, rightLength: 0.7, dec: -3 },
+      stop:     { leftAngle: 55, rightAngle: -55, leftLength: 0.5, rightLength: 0.5, dec: -Infinity },
+    },
+    leftAngle: 55, rightAngle: -55, leftLength: 1, rightLength: 1,
+  },  
   // 3: 합류
   {
     zones: {
