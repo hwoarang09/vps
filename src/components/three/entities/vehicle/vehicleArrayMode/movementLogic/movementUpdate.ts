@@ -1,4 +1,5 @@
-import { VEHICLE_DATA_SIZE, MovementData, SensorData,MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { VEHICLE_DATA_SIZE, MovementData, SensorData, MovingStatus, NextEdgeState } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { enqueueVehicleTransfer, processTransferQueue } from "../logic/TransferMgr";
 
 import { VehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
@@ -43,6 +44,9 @@ export function updateMovement(params: MovementUpdateParams) {
 
   frameCount++;
 
+  // Process Transfer Queue
+  processTransferQueue(edgeArray, vehicleLoopMap, edgeNameToIndex, store.transferMode);
+
   for (let i = 0; i < actualNumVehicles; i++) {
     const ptr = i * VEHICLE_DATA_SIZE;
 
@@ -52,25 +56,19 @@ export function updateMovement(params: MovementUpdateParams) {
     }
 
     // 2. Data Read (Direct Access)
-    // No object allocation here. Just reading values to stack variables.
-    const currentEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
-    const velocity = data[ptr + MovementData.VELOCITY];
-    const acceleration = data[ptr + MovementData.ACCELERATION];
-    const deceleration = data[ptr + MovementData.DECELERATION];
-    const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
-    const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]); // -1,0,1,2
-    let hitZone = -1;
-    if (rawHit === 2) {
-      hitZone = 2;
-    } else if (deceleration !== 0) {
-      hitZone = rawHit;
-    }
-    
-    // Position fallbacks
-    let finalX = data[ptr + MovementData.X];
-    let finalY = data[ptr + MovementData.Y];
-    let finalZ = data[ptr + MovementData.Z];
-    let finalRotation = data[ptr + MovementData.ROTATION];
+    // Extracted to helper for readability (Note: this creates a small object allocation)
+    let {
+      currentEdgeIndex,
+      velocity,
+      acceleration,
+      deceleration,
+      edgeRatio,
+      hitZone,
+      finalX,
+      finalY,
+      finalZ,
+      finalRotation
+    } = readVehicleState(data, ptr);
 
     // Safety check
     const currentEdge = edgeArray[currentEdgeIndex];
@@ -103,6 +101,15 @@ export function updateMovement(params: MovementUpdateParams) {
     // 4. Calculate New Ratio
     const rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
 
+    // --- Transfer Request Trigger ---
+    const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
+    // Request trigger condition: ratio >= 0.5 and STATE is EMPTY
+    if (rawNewRatio >= 0.5 && nextEdgeState === NextEdgeState.EMPTY) {
+      data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.PENDING;
+      enqueueVehicleTransfer(i);
+    }
+    // --------------------------------
+
     // 5. Handle Edge Transition
     // Note: handleEdgeTransition still returns a temporary object. 
     // This is the next optimization target if GC is still high.
@@ -111,8 +118,6 @@ export function updateMovement(params: MovementUpdateParams) {
       currentEdgeIndex,
       rawNewRatio,
       edgeArray,
-      vehicleLoopMap,
-      edgeNameToIndex,
       store
     );
 
@@ -196,4 +201,42 @@ function calculateAccDec(
   }
 
   return { appliedAccel, appliedDecel };
+}
+
+/**
+ * Reads vehicle state from Float32Array into a structured object.
+ * Note: Creates a temporary object, but improves readability vs inline access.
+ */
+function readVehicleState(data: Float32Array, ptr: number) {
+  const currentEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
+  const velocity = data[ptr + MovementData.VELOCITY];
+  const acceleration = data[ptr + MovementData.ACCELERATION];
+  const deceleration = data[ptr + MovementData.DECELERATION];
+  const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
+
+  const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]);
+  let hitZone = -1;
+  if (rawHit === 2) {
+    hitZone = 2;
+  } else if (deceleration !== 0) {
+    hitZone = rawHit;
+  }
+
+  const finalX = data[ptr + MovementData.X];
+  const finalY = data[ptr + MovementData.Y];
+  const finalZ = data[ptr + MovementData.Z];
+  const finalRotation = data[ptr + MovementData.ROTATION];
+
+  return {
+    currentEdgeIndex,
+    velocity,
+    acceleration,
+    deceleration,
+    edgeRatio,
+    hitZone,
+    finalX,
+    finalY,
+    finalZ,
+    finalRotation
+  };
 }

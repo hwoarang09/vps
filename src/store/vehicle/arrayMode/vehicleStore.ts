@@ -14,6 +14,10 @@ export interface VehicleArrayStore {
   actualNumVehicles: number;
   setActualNumVehicles: (num: number) => void;
 
+  // Transfer Mode
+  transferMode: TransferMode;
+  setTransferMode: (mode: TransferMode) => void;
+
   // Initialize arrays (call once on app start)
   initArrayMemory: () => void;
 
@@ -85,6 +89,9 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
     setActualNumVehicles: (num) => {
       set({ actualNumVehicles: num });
     },
+
+    transferMode: TransferMode.LOOP,
+    setTransferMode: (mode) => set({ transferMode: mode }),
 
     // Initialize array memory
     initArrayMemory: () => {
@@ -268,3 +275,8 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
     },
   })
 );
+
+export enum TransferMode {
+  LOOP = "LOOP",
+  RANDOM = "RANDOM",
+}

@@ -44,42 +44,54 @@ export const JobState = {
 } as const;
 
 // Data structure layout
-// Data structure layout
-const MOVEMENT_SIZE = 11; // x, y, z, rotation, velocity, acceleration, deceleration, edgeRatio, movingStatus, currentEdge, offset
-const SENSOR_SIZE = 2; // sensor preset index, sensor hit zone
-const LOGIC_SIZE = 3;  // trafficState, stopReason, jobState
-export const VEHICLE_DATA_SIZE = MOVEMENT_SIZE + SENSOR_SIZE + LOGIC_SIZE; // 16
+// Next Edge State for TransferMgr
+export const NextEdgeState = {
+  EMPTY: 0,
+  PENDING: 1,
+  READY: 2,
+} as const;
 
+// --- ID Generator for Auto-Offsets ---
+let _mPtr = 0;
 export const MovementData = {
-  X: 0,
-  Y: 1,
-  Z: 2,
-  ROTATION: 3,
-  VELOCITY: 4,
-  ACCELERATION: 5,
-  DECELERATION: 6,
-  EDGE_RATIO: 7,
-  MOVING_STATUS: 8, // 0=STOPPED, 1=MOVING, 2=PAUSED
-  CURRENT_EDGE: 9, // Edge index
-  OFFSET: 10,      // Distance from edge start (accumulated or current segment)
+  X: _mPtr++,
+  Y: _mPtr++,
+  Z: _mPtr++,
+  ROTATION: _mPtr++,
+  VELOCITY: _mPtr++,
+  ACCELERATION: _mPtr++,
+  DECELERATION: _mPtr++,
+  EDGE_RATIO: _mPtr++,
+  MOVING_STATUS: _mPtr++, // 0=STOPPED, 1=MOVING, 2=PAUSED
+  CURRENT_EDGE: _mPtr++, // Edge index
+  NEXT_EDGE: _mPtr++,        // Edge index (valid only when NEXT_EDGE_STATE==READY, else -1)
+  NEXT_EDGE_STATE: _mPtr++,  // 0=EMPTY, 1=PENDING, 2=READY
+  OFFSET: _mPtr++,      // Distance from edge start (accumulated or current segment)
 } as const;
+const MOVEMENT_SIZE = _mPtr;
 
+let _sPtr = MOVEMENT_SIZE;
 export const SensorData = {
-  PRESET_IDX: 11, // 0=STRAIGHT, 1=CURVE_LEFT, 2=CURVE_RIGHT, 3=MERGE, 4=BRANCH
-  HIT_ZONE: 12,   // -1=none, 0=approach, 1=brake, 2=stop
+  PRESET_IDX: _sPtr++, // 0=STRAIGHT, 1=CURVE_LEFT, 2=CURVE_RIGHT, 3=MERGE, 4=BRANCH
+  HIT_ZONE: _sPtr++,   // -1=none, 0=approach, 1=brake, 2=stop
 } as const;
+const SENSOR_SIZE = _sPtr - MOVEMENT_SIZE;
+
+let _lPtr = _sPtr;
+export const LogicData = {
+  TRAFFIC_STATE: _lPtr++,
+  STOP_REASON: _lPtr++,
+  JOB_STATE: _lPtr++,
+} as const;
+const LOGIC_SIZE = _lPtr - _sPtr;
+
+export const VEHICLE_DATA_SIZE = _lPtr; // Total Size
 
 export const HitZone = {
   NONE: -1,
   APPROACH: 0,
   BRAKE: 1,
   STOP: 2,
-} as const;
-
-export const LogicData = {
-  TRAFFIC_STATE: 13,
-  STOP_REASON: 14,
-  JOB_STATE: 15,
 } as const;
 
 /**
@@ -174,6 +186,20 @@ class VehicleDataArray {
         },
         set currentEdge(val: number) {
           data[offset + MovementData.CURRENT_EDGE] = val;
+        },
+
+        get nextEdge() {
+          return data[offset + MovementData.NEXT_EDGE];
+        },
+        set nextEdge(val: number) {
+          data[offset + MovementData.NEXT_EDGE] = val;
+        },
+
+        get nextEdgeState() {
+          return data[offset + MovementData.NEXT_EDGE_STATE];
+        },
+        set nextEdgeState(val: number) {
+          data[offset + MovementData.NEXT_EDGE_STATE] = val;
         },
 
         get offset() {

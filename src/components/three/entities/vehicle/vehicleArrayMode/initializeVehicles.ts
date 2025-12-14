@@ -6,7 +6,7 @@ import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed } from "@/config/movementConfig";
 import { calculateVehiclePlacementsOnLoops } from "@/utils/vehicle/vehiclePlacement";
 import { findEdgeLoops, VehicleLoop } from "@/utils/vehicle/loopMaker";
-import { vehicleDataArray, SensorData, VEHICLE_DATA_SIZE, MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { vehicleDataArray, SensorData, MovementData, NextEdgeState, VEHICLE_DATA_SIZE, MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { updateSensorPoints } from "./helpers/sensorPoints";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
@@ -88,6 +88,10 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
     vehData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
     vehData[ptr + SensorData.HIT_ZONE] = -1;
+
+    // Initialize NextEdge State
+    vehData[ptr + MovementData.NEXT_EDGE] = -1;
+    vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
 
     updateSensorPoints(
       placement.vehicleIndex,

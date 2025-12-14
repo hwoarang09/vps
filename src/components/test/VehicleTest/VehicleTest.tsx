@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useVehicleRapierStore } from "@store/vehicle/rapierMode/vehicleStore";
+import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "../../../types/vehicle";
 import { getTestSettings, getDefaultSetting } from "../../../config/testSettingConfig";
@@ -19,6 +20,7 @@ const VehicleTest: React.FC = () => {
   const { activeMainMenu, activeSubMenu } = useMenuStore();
   const { stopTest, isPaused, setPaused } = useVehicleTestStore();
   const { maxPlaceableVehicles } = useVehicleRapierStore();
+  const { transferMode, setTransferMode } = useVehicleArrayStore();
 
   const [selectedSettingId, setSelectedSettingId] = useState<string>(getDefaultSetting());
   const testSettings = getTestSettings();
@@ -125,6 +127,24 @@ const VehicleTest: React.FC = () => {
               {setting.name} ({setting.mapName})
             </option>
           ))}
+        </select>
+
+        {/* Transfer Mode Selector */}
+        <select
+          value={transferMode}
+          onChange={(e) => setTransferMode(e.target.value as TransferMode)}
+          style={{
+            padding: "5px 10px",
+            background: "#333",
+            color: "white",
+            border: "1px solid #9b59b6",
+            borderRadius: "4px",
+            fontSize: "12px",
+            cursor: "pointer",
+          }}
+        >
+          <option value={TransferMode.LOOP}>LOOP</option>
+          <option value={TransferMode.RANDOM}>RANDOM</option>
         </select>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
