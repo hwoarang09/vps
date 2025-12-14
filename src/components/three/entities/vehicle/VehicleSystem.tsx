@@ -6,6 +6,7 @@ import VehiclesRenderer from "../../renderers/VehiclesRenderer/VehiclesRenderer"
 import { VehicleSystemType } from '@/types/vehicle';
 import { getMaxVehicles } from "@/config/vehicleConfig";
 import { getRapierModeConfig } from "@/config/visualizationConfig";
+import VehicleSelector from "../../interaction/VehicleSelector";
 
 /**
  * VehicleSystem
@@ -52,6 +53,7 @@ const VehicleSystem: React.FC<VehicleSystemProps> = ({
             mode={mode}
             numVehicles={numVehicles}
           />
+          <VehicleSelector />
         </>
       )}
 

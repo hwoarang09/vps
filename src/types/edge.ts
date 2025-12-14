@@ -31,7 +31,7 @@ export interface Edge {
    * 'x': East/West
    * 'y': North/South
    */
-  axis?: 'x' | 'y';
+  axis?: 'x' | 'y' | 'z';
 
   // ============================================================================
   // [3] UI & RENDERING (Optional)

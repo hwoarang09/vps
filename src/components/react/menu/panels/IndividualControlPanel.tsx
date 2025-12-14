@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Search, Play, Pause, Settings, RefreshCw, Octagon } from "lucide-react";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
+import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { vehicleDataArray, MovingStatus, SensorData, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
@@ -284,6 +285,7 @@ const IndividualControlPanel: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [foundVehicleIndex, setFoundVehicleIndex] = useState<number | null>(null);
     const vehicles = useVehicleGeneralStore((state) => state.vehicles);
+    const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
     
     // Keep a ref to vehicles to access latest state in debounce without triggering re-runs
     const vehiclesRef = useRef(vehicles);
@@ -316,11 +318,21 @@ const IndividualControlPanel: React.FC = () => {
 
         if (found >= 0) {
             setFoundVehicleIndex(found);
+            // Optionally sync back to store? Maybe not needed if this panel is the "driver"
+            // useVehicleControlStore.getState().selectVehicle(found); 
         } else {
             setFoundVehicleIndex(null);
             alert("Vehicle not found");
         }
     };
+
+    // Effect to sync from store selection to this panel
+    useEffect(() => {
+        if (selectedVehicleId !== null) {
+            setFoundVehicleIndex(selectedVehicleId);
+            setSearchTerm(`VEH${String(selectedVehicleId).padStart(5, '0')}`);
+        }
+    }, [selectedVehicleId]);
 
     return (
         <div className="space-y-6">

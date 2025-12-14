@@ -18,7 +18,7 @@ export const BaseInstancedText = React.memo(({
   color = "#ffffff", 
   bgColor = "transparent",
   font,
-  renderOrder 
+  renderOrder,
 }: BaseInstancedTextProps) => {
   const digitMaterials = useDigitMaterials({ color, bgColor, font });
   const quad = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
