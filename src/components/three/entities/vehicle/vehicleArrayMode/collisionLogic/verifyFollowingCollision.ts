@@ -51,6 +51,6 @@ export function verifyFollowingCollision(edgeIdx: number, edge: Edge, data: Floa
        hitZone = determineLinearHitZone(distance, stopDist, brakeDist, approachDist);
     }
 
-    applyCollisionZoneLogic(hitZone, data, ptrBack);
+    applyCollisionZoneLogic(hitZone, data, ptrBack, frontVehId);
   }
 }

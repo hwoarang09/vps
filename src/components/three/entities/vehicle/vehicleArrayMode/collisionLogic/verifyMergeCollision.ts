@@ -160,13 +160,13 @@ export function verifyMergeZoneCollision(
     // Calculate Position on Edge (Generic: support both Curve and Straight)
     let currentOffset = 0;
     
-    if (edge.vos_rail_type !== "LINEAR") {
-       // Curve: Use OFFSET directly
-       currentOffset = data[ptr + MovementData.OFFSET];
-    } else {
+    if (edge.vos_rail_type === "LINEAR") {
        // Straight: Calculate offset from EDGE_RATIO
        const ratio = data[ptr + MovementData.EDGE_RATIO];
        currentOffset = ratio * edgeLen;
+    } else {
+      // Curve: Use OFFSET directly
+      currentOffset = data[ptr + MovementData.OFFSET];
     }
 
     // [Current Edge Filter Logic]
