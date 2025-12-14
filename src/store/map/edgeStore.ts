@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Edge } from "@/types/edge"; // 분리된 타입 경로
+import { Node, Edge } from "@/types"; // 분리된 타입 경로
 import { useNodeStore } from "./nodeStore";
 
 interface EdgeState {
@@ -22,6 +22,14 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
   // [핵심] 맵 로딩 시 이 함수만 호출하면 됨
   setEdges: (rawEdges) => {
     console.time("EdgeTopologyCalc");
+    const nodeStore = useNodeStore.getState();
+    const nodes = nodeStore.nodes;
+    
+    // Node Lookup Map 생성
+    const nodeMap = new Map<string, Node>();
+    for (const n of nodes) {
+      nodeMap.set(n.node_name, n);
+    }
 
     // 1. 빠른 조회를 위한 임시 맵 생성 (NodeName -> EdgeIndices[])
     const nodeIncoming = new Map<string, number[]>();
@@ -49,6 +57,44 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
       const incomingToEnd = nodeIncoming.get(edge.to_node) || [];
       const outgoingFromEnd = nodeOutgoing.get(edge.to_node) || [];
 
+      // [Curve Direction Auto-Calculation]
+      let curveDirection: "left" | "right" | undefined = edge.curve_direction;
+
+      if (!curveDirection && edge.vos_rail_type?.startsWith("C")) {
+         // waypoints: [A, B, C, D] or at least [A, B, C]
+         if (edge.waypoints && edge.waypoints.length >= 3) {
+            const nA = nodeMap.get(edge.waypoints[0]);
+            const nB = nodeMap.get(edge.waypoints[1]);
+            const nC = nodeMap.get(edge.waypoints[2]);
+
+            if (nA && nB && nC) {
+               // Vector 1: A -> B
+               const dx1 = nB.editor_x - nA.editor_x;
+               const dy1 = nB.editor_y - nA.editor_y;
+
+               // Vector 2: B -> C
+               const dx2 = nC.editor_x - nB.editor_x;
+               const dy2 = nC.editor_y - nB.editor_y;
+
+               // Cross Product in 2D (Z-component)
+               // cp = dx1 * dy2 - dy1 * dx2
+               const crossProduct = dx1 * dy2 - dy1 * dx2;
+
+               // +: Counter-Clockwise (Left), -: Clockwise (Right)
+               // Note: This depends on coordinate system (Y-up vs Y-down).
+               // Assuming Standard Math (Y-up): + is Left.
+               // If Unity/Unreal style (Y-up, Left-Handed?): It varies. 
+               // User said: "+ is Left" or similar implication. Let's assume CP > 0 is Left.
+               if (crossProduct > 0.001) {
+                  curveDirection = "left";
+               } else if (crossProduct < -0.001) {
+                  curveDirection = "right";
+               }
+
+            }
+         }
+      }
+
       return {
         ...edge,
         // [Topology Flags] - 4-Way State
@@ -56,6 +102,8 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
         fromNodeIsDiverge: outgoingFromStart.length > 1,
         toNodeIsMerge: incomingToEnd.length > 1,
         toNodeIsDiverge: outgoingFromEnd.length > 1,
+
+        curve_direction: curveDirection,
 
         // [Indices]
         nextEdgeIndices: outgoingFromEnd, // 다음 갈 수 있는 엣지들

@@ -69,19 +69,29 @@ export function handleEdgeTransition(
   };
 }
 
-/**
- * Update sensor preset based on edge type
- */
+// Helper function to update sensor preset
 function updateSensorPresetForEdge(vehicleIndex: number, edge: Edge): void {
   const data = vehicleDataArray.getData();
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
 
-  let presetIdx: number = PresetIndex.STRAIGHT;
+  let presetIdx: number;
 
-  if (edge.vos_rail_type !== "LINEAR") {
-    // Curve edge - determine left or right based on edge name or properties
-    // For now, default to left curve (you can add more logic here)
-    presetIdx = PresetIndex.CURVE_LEFT as number;
+  if (edge.vos_rail_type === "C180") {
+    // 180도 턴
+    presetIdx = 3; 
+  } else if (edge.vos_rail_type?.startsWith("C")) { // C90 or other curves
+    if (edge.curve_direction === "left") {
+      presetIdx = PresetIndex.CURVE_LEFT; // 1
+    } else if (edge.curve_direction === "right") {
+      presetIdx = PresetIndex.CURVE_RIGHT; // 2
+    } else {
+      // Default to straight or keep previous if unsure? 
+      // User request implies straight is 0. Let's default to Straight if direction is missing.
+      presetIdx = PresetIndex.STRAIGHT; 
+    }
+  } else {
+    // Straight or others
+    presetIdx = PresetIndex.STRAIGHT; // 0
   }
 
   data[ptr + SensorData.PRESET_IDX] = presetIdx;
