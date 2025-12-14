@@ -17,6 +17,7 @@ export function verifyNextPathCollision(edgeIdx: number, edge: Edge, vehicleArra
 
   // 2. Check All Next Edges (Works for 1 or Many)
   let mostCriticalHitZone: number = HitZone.NONE;
+  let targetIdx = -1;
 
   const nextEdges = edge.nextEdgeIndices;
   if (!nextEdges || nextEdges.length === 0) {
@@ -35,12 +36,14 @@ export function verifyNextPathCollision(edgeIdx: number, edge: Edge, vehicleArra
     const tailVehIdx = targetQueue[1 + count - 1]; // Last vehicle (Tail)
 
     // Use SAT Collision Check (Global Coordinates)
+    // Use SAT Collision Check (Global Coordinates)
     // Returns HitZone (0, 1, 2) or -1 (NONE)
     const hitZone = checkSensorCollision(myVehIdx, tailVehIdx);
 
     // Upgrade critical zone
     if (hitZone > mostCriticalHitZone) {
       mostCriticalHitZone = hitZone;
+      targetIdx = tailVehIdx;
     }
 
     // Optimization: If STOP, we can break early as it's the max severity
@@ -48,5 +51,5 @@ export function verifyNextPathCollision(edgeIdx: number, edge: Edge, vehicleArra
   }
 
   // 4. Apply Logic
-  applyCollisionZoneLogic(mostCriticalHitZone, vehicleArrayData, ptrMe);
+  applyCollisionZoneLogic(mostCriticalHitZone, vehicleArrayData, ptrMe, targetIdx);
 }

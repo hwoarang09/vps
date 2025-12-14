@@ -28,7 +28,7 @@ export function verifyFollowingCollision(edgeIdx: number, edge: Edge, data: Floa
     // [핵심 변경점] 엣지 타입에 따라 검사 방식 분기
     let hitZone = -1;
 
-    if (edge.curveType) {
+    if (edge.vos_rail_type) {
        // --- 곡선인 경우: 센서 로직 직접 사용 ---
        // 거리 계산 없이 SAT 등 정밀 센서 로직 수행
        hitZone = checkSensorCollision(backVehId, frontVehId);

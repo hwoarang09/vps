@@ -42,18 +42,23 @@ export function determineLinearHitZone(distance: number, stopDist: number, brake
 export function applyCollisionZoneLogic(
   hitZone: number,
   data: Float32Array,
-  ptrBack: number
+  ptrBack: number,
+  targetVehId: number = -1
 ) {
   // Always update Hit Zone
   data[ptrBack + SensorData.HIT_ZONE] = hitZone;
 
   if (hitZone === HitZone.NONE) {
+    data[ptrBack + SensorData.COLLISION_TARGET] = -1; // Reset target
     data[ptrBack + MovementData.DECELERATION] = 0;
     if (data[ptrBack + MovementData.MOVING_STATUS] === MovingStatus.STOPPED) {
       data[ptrBack + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
     }
     return;
   }
+
+  // Set Collision Target
+  data[ptrBack + SensorData.COLLISION_TARGET] = targetVehId;
 
   // Fetch Data internally
   const velocity = data[ptrBack + MovementData.VELOCITY];

@@ -181,7 +181,7 @@ const parseEdgesCFG = (content: string): Edge[] => {
         rotation: rotation || 0,
         axis: axis,
         color: getEdgeColor(railType), // VOS rail type에 따른 색상 적용
-        opacity: 1.0,
+        opacity: 1,
         readonly: true,
         source: "config",
         rendering_mode: "normal",

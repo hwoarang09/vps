@@ -24,7 +24,7 @@ export interface Edge {
   rotation?: number;         // Rotation angle
   curve_direction?: "right" | "left";
   start_direction?: number;  // 0, 90, 180, 270
-  curveType?: string;        // Logic type for collision (e.g. "C90", "S", etc)
+  vos_rail_trpy?: string;    // Logic type for collision (e.g. "C90", "S", etc)
 
   /*
    * Edge direction axis

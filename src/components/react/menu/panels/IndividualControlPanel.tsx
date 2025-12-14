@@ -4,6 +4,8 @@ import { Search, Play, Pause, Settings, RefreshCw, Octagon } from "lucide-react"
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { vehicleDataArray, MovingStatus, SensorData, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
+import { useEdgeStore } from "@/store/map/edgeStore";
+import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 
 // Helper to decode StopReason bitmask
 const getStopReasons = (reasonMask: number): string[] => {
@@ -97,6 +99,33 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     
     const vehicleInfo = vehicles.get(vehicleIndex);
     const stopReasons = getStopReasons(stopReasonMask);
+    const collisionTarget = vData.sensor.collisionTarget;
+
+    // Debug Info: Self
+    const currentEdgeIdx = vData.movement.currentEdge;
+    const currentEdgeRatio = vData.movement.edgeRatio;
+    const currentEdgeName = useEdgeStore.getState().getEdgeByIndex(currentEdgeIdx)?.edge_name || "Unknown";
+
+    // Debug Info: Target
+    let targetEdgeInfo = "N/A";
+    let targetRatioInfo = "N/A";
+
+    if (collisionTarget !== -1) {
+        const tData = vehicleDataArray.get(collisionTarget);
+        const tEdgeIdx = tData.movement.currentEdge;
+        const tEdgeRatio = tData.movement.edgeRatio;
+        const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
+        targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
+        targetRatioInfo = tEdgeRatio.toFixed(3);
+    }
+
+    // Sensor Points (All 3 Zones)
+    // Zone 0: Approach, 1: Brake, 2: Stop
+    const zones = [0, 1, 2];
+    const zonePoints = zones.map(z => ({
+        name: ["Approach", "Brake", "Stop"][z],
+        pts: sensorPointArray.getPoints(vehicleIndex, z)
+    }));
 
     return (
         <div className="space-y-6">
@@ -180,6 +209,50 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
                             <span className={`font-mono font-bold ${hitZone > 0 ? "text-red-600" : "text-gray-600"}`}>
                             {HitZoneMap[Math.round(hitZone)] || hitZone} ({hitZone.toFixed(0)})
                         </span>
+                    </div>
+
+                    {collisionTarget !== -1 && (
+                        <div className="mt-2 p-2 bg-red-50 rounded border border-red-100 text-xs text-red-800">
+                             <div className="flex justify-between font-bold mb-1">
+                                <span>Collision Target:</span>
+                                <span>VEH{collisionTarget.toString().padStart(5, '0')} (#{collisionTarget})</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">Target Loc:</span>
+                                <span className="font-mono">{targetEdgeInfo} : {targetRatioInfo}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-500">My Loc:</span>
+                                <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx}) : {currentEdgeRatio.toFixed(3)}</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="my-2 border-t border-gray-200"></div>
+
+                    <div className="space-y-2">
+                        <h5 className="font-semibold text-xs text-gray-500">Sensor Points (World)</h5>
+                        <div className="text-[10px] space-y-2">
+                            {/* Common Body */}
+                            <div className="grid grid-cols-2 gap-1 bg-gray-50 p-1 rounded">
+                                <span className="font-bold col-span-2">Body Quad</span>
+                                <span>FL: {zonePoints[0].pts.fl[0].toFixed(2)}, {zonePoints[0].pts.fl[1].toFixed(2)}</span>
+                                <span>FR: {zonePoints[0].pts.fr[0].toFixed(2)}, {zonePoints[0].pts.fr[1].toFixed(2)}</span>
+                                <span>BL: {zonePoints[0].pts.bl[0].toFixed(2)}, {zonePoints[0].pts.bl[1].toFixed(2)}</span>
+                                <span>BR: {zonePoints[0].pts.br[0].toFixed(2)}, {zonePoints[0].pts.br[1].toFixed(2)}</span>
+                            </div>
+
+                            {/* Zones */}
+                            {zonePoints.map((z, idx) => (
+                                <div key={idx} className="bg-gray-50 p-1 rounded border border-gray-100">
+                                    <div className="font-bold mb-1">{z.name} (SL/SR)</div>
+                                    <div className="grid grid-cols-1 gap-1">
+                                         <span>SL: {z.pts.sl[0].toFixed(2)}, {z.pts.sl[1].toFixed(2)}</span>
+                                         <span>SR: {z.pts.sr[0].toFixed(2)}, {z.pts.sr[1].toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="my-2 border-t border-gray-200"></div>

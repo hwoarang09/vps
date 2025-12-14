@@ -1,4 +1,3 @@
-import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { VehicleArrayStore } from "@store/vehicle/arrayMode/vehicleStore";
 import { Edge } from "@/types/edge";
 import { vehicleDataArray, SensorData, VEHICLE_DATA_SIZE, MovementData, NextEdgeState } from "@/store/vehicle/arrayMode/vehicleDataArray";

@@ -26,9 +26,10 @@ function checkCompetitorVehicles(
   data: Float32Array,
   compThreshold: number,
   compEdgeLen: number
-): number {
+): { maxHitZone: number, targetId: number } {
   const compCount = compQueue[0];
   let maxHitZone = currentMaxHitZone;
+  let maxTargetId = -1;
 
   for (let j = 0; j < compCount; j++) {
     const compVehId = compQueue[1 + j];
@@ -36,7 +37,7 @@ function checkCompetitorVehicles(
 
     // Filter by Competitor Position
     // We need competitor's offset. 
-    // If curveType is set, OFFSET is reliable.
+    // If vos_rail_trpy is set, OFFSET is reliable.
     // If straight, verifyLinearCollision updates OFFSET? 
     // Wait, verifyLinearCollision logic still uses Ratio * Length.
     // To be safe, let's use OFFSET if available, else derive from Ratio (fallback).
@@ -57,13 +58,14 @@ function checkCompetitorVehicles(
     
     if (hitZone > maxHitZone) {
       maxHitZone = hitZone;
+      maxTargetId = compVehId;
     }
 
     // Optimization: STOP is the max value, no need to check further if found
     if (maxHitZone === HitZone.STOP) break;
   }
 
-  return maxHitZone;
+  return { maxHitZone, targetId: maxTargetId };
 }
 
 /**
@@ -84,7 +86,10 @@ function checkAgainstCompetitors(
 ) {
   if (!edge.prevEdgeIndices) return;
 
+  if (!edge.prevEdgeIndices) return;
+
   let mostCriticalHitZone: number = HitZone.NONE;
+  let criticalTargetId = -1;
 
   for (const compEdgeIdx of edge.prevEdgeIndices) {
     if (compEdgeIdx === edgeIdx) continue; // Skip self
@@ -97,15 +102,14 @@ function checkAgainstCompetitors(
     if (!compEdge) continue; // Should not happen
 
     // [Competitor Filter Logic]
-    // If Competitor is Curve (Short): Check ALL (threshold = 0)
     // If Competitor is Straight (Long): Check Danger Zone Only
     let compThreshold = 0;
-    if (!compEdge.curveType) {
+    if (compEdge.vos_rail_type === "LINEAR") {
       compThreshold = compEdge.distance - dangerZoneLen;
     }
 
     // Check against relevant vehicles on competitor edge.
-    mostCriticalHitZone = checkCompetitorVehicles(
+    const result = checkCompetitorVehicles(
       vehId, 
       compQueue, 
       mostCriticalHitZone, 
@@ -113,11 +117,16 @@ function checkAgainstCompetitors(
       compThreshold, 
       compEdge.distance
     );
+
+    if (result.maxHitZone > mostCriticalHitZone) {
+        mostCriticalHitZone = result.maxHitZone;
+        criticalTargetId = result.targetId;
+    }
   }
 
   // Apply Logic if collision detected
   if (mostCriticalHitZone !== HitZone.NONE) {
-      applyCollisionZoneLogic(mostCriticalHitZone, data, ptr);
+      applyCollisionZoneLogic(mostCriticalHitZone, data, ptr, criticalTargetId);
   }
 }
 
@@ -151,7 +160,7 @@ export function verifyMergeZoneCollision(
     // Calculate Position on Edge (Generic: support both Curve and Straight)
     let currentOffset = 0;
     
-    if (edge.curveType) {
+    if (edge.vos_rail_type !== "LINEAR") {
        // Curve: Use OFFSET directly
        currentOffset = data[ptr + MovementData.OFFSET];
     } else {
@@ -164,7 +173,7 @@ export function verifyMergeZoneCollision(
     // If Curve: Check ALL (StartOffset = 0 per user req)
     // If Straight: Check Danger Zone Only
     let effectiveStartOffset = dangerStartOffset;
-    if (edge.curveType) {
+    if (edge.vos_rail_type !== "LINEAR") {
         effectiveStartOffset = 0; // Check all on curve
     }
 

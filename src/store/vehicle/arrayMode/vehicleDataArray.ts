@@ -74,6 +74,7 @@ let _sPtr = MOVEMENT_SIZE;
 export const SensorData = {
   PRESET_IDX: _sPtr++, // 0=STRAIGHT, 1=CURVE_LEFT, 2=CURVE_RIGHT, 3=MERGE, 4=BRANCH
   HIT_ZONE: _sPtr++,   // -1=none, 0=approach, 1=brake, 2=stop
+  COLLISION_TARGET: _sPtr++, // Index of the vehicle that caused the stop (-1 if none)
 } as const;
 const SENSOR_SIZE = _sPtr - MOVEMENT_SIZE;
 
@@ -223,6 +224,13 @@ class VehicleDataArray {
         },
         set hitZone(val: number) {
           data[offset + SensorData.HIT_ZONE] = val;
+        },
+
+        get collisionTarget() {
+          return data[offset + SensorData.COLLISION_TARGET];
+        },
+        set collisionTarget(val: number) {
+          data[offset + SensorData.COLLISION_TARGET] = val;
         },
       },
 
