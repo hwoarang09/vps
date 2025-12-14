@@ -6,6 +6,8 @@ import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehic
 import { getVehicleConfigSync } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
 
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
 /**
  * VehicleArrayRenderer
  * - Renders vehicles for array-single mode
@@ -91,7 +93,8 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
       // Convert rotation from degrees to radians (Z-axis rotation)
       const rotRad = (rotation * Math.PI) / 180;
-      tempQuaternion.setFromEuler(new THREE.Euler(0, 0, rotRad));
+      // Optimize: Zero GC (was new THREE.Euler)
+      tempQuaternion.setFromAxisAngle(Z_AXIS, rotRad);
 
       // Set body matrix
       tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
