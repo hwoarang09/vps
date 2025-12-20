@@ -21,6 +21,7 @@ interface VehicleTestRunnerProps {
     position: [number, number, number];
     target: [number, number, number];
   };
+  useVehicleConfig?: boolean; // If true, use vehicles.cfg; if false, use numVehicles
 }
 
 const VehicleTestRunner: React.FC<VehicleTestRunnerProps> = ({
@@ -28,52 +29,41 @@ const VehicleTestRunner: React.FC<VehicleTestRunnerProps> = ({
   mapName,
   numVehicles,
   cameraConfig,
+  useVehicleConfig = false,
 }) => {
   const { setActiveMainMenu } = useMenuStore();
-  const { loadCFGFiles } = useCFGStore();
+  const { loadCFGFiles, getVehicleConfigs } = useCFGStore();
   const { startTest, stopTest, isPanelVisible, setPanelVisible } = useVehicleTestStore();
   const { setCameraView } = useCameraStore();
   const [testState, setTestState] = useState<
     "loading-map" | "initializing" | "running" | "error"
   >("loading-map");
 
-  // Auto-load test map on mount
+  // Start test (map is already loaded by VehicleTest.tsx)
   useEffect(() => {
-    const loadTestMap = async () => {
+    const startTestAsync = async () => {
       try {
-        setTestState("loading-map");
-        console.log(`[VehicleTest] Loading test map: ${mapName} for mode: ${mode}`);
-
-        // Load test map
-        await loadCFGFiles(mapName);
-
-        console.log(`[VehicleTest] Map loaded successfully: ${mapName}`);
         setTestState("initializing");
+        console.log(`[VehicleTestRunner] Starting test: ${mode} with ${numVehicles} vehicles (useVehicleConfig: ${useVehicleConfig})`);
 
-        // Set camera position if configured
-        if (cameraConfig) {
-          setCameraView(cameraConfig.position, cameraConfig.target);
-          console.log(`[VehicleTest] Camera set to:`, cameraConfig);
-        }
-
-        // Wait a bit for map to render
+        // Wait a bit for map to render and settle
         setTimeout(() => {
           setTestState("running");
           // Start the test in the store
-          startTest(mode, numVehicles);
-          console.log(`[VehicleTest] Test started: ${numVehicles} vehicles in ${mode} mode on ${mapName}`);
-        }, 500);
+          startTest(mode, numVehicles, useVehicleConfig);
+          console.log(`[VehicleTestRunner] Test started on ${mapName}`);
+        }, 100);
       } catch (err) {
-        console.error("[VehicleTest] Failed to load test map:", err);
+        console.error("[VehicleTestRunner] Failed to start test:", err);
         setTestState("error");
       }
     };
 
-    loadTestMap();
+    startTestAsync();
 
     // Don't stop test on unmount - let it keep running!
     // User can manually stop with Delete or Stop Test button
-  }, [mode, mapName, numVehicles, cameraConfig, loadCFGFiles, startTest, setCameraView]);
+  }, [mode, mapName, numVehicles, useVehicleConfig, startTest]);
 
   const handleClose = () => {
     // Just hide the panel, don't stop the test

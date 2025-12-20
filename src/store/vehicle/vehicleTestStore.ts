@@ -15,9 +15,10 @@ interface VehicleTestState {
   isPanelVisible: boolean;
   isPaused: boolean; // Simulation pause state
   initialVehicleDistribution: Map<number, number[]> | null; // Edge index -> vehicle indices
+  useVehicleConfig: boolean; // If true, use vehicles.cfg; if false, use numVehicles
 
   // Actions
-  startTest: (mode: VehicleSystemType, numVehicles?: number) => void;
+  startTest: (mode: VehicleSystemType, numVehicles?: number, useVehicleConfig?: boolean) => void;
   stopTest: () => void;
   setNumVehicles: (num: number) => void;
   setPanelVisible: (visible: boolean) => void;
@@ -32,15 +33,16 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
   isPanelVisible: true,
   isPaused: true, // Start paused by default
   initialVehicleDistribution: null,
+  useVehicleConfig: false,
 
-  startTest: (mode: VehicleSystemType, numVehicles = 50) => {
-    console.log(`[VehicleTestStore] Starting test: ${mode} with ${numVehicles} vehicles`);
-    set({ isTestActive: true, testMode: mode, numVehicles, isPanelVisible: true, isPaused: true });
+  startTest: (mode: VehicleSystemType, numVehicles = 50, useVehicleConfig = false) => {
+    console.log(`[VehicleTestStore] Starting test: ${mode} with ${numVehicles} vehicles (useVehicleConfig: ${useVehicleConfig})`);
+    set({ isTestActive: true, testMode: mode, numVehicles, isPanelVisible: true, isPaused: true, useVehicleConfig });
   },
 
   stopTest: () => {
     console.log("[VehicleTestStore] Stopping test");
-    set({ isTestActive: false, testMode: null, isPanelVisible: true, isPaused: true, initialVehicleDistribution: null });
+    set({ isTestActive: false, testMode: null, isPanelVisible: true, isPaused: true, initialVehicleDistribution: null, useVehicleConfig: false });
   },
 
   setNumVehicles: (num: number) => {

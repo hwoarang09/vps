@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { useNodeStore } from "../map/nodeStore";
 import { useEdgeStore } from "../map/edgeStore";
 import { useTextStore, TextPosition } from "../map/textStore";
-import { Node, Edge } from "../../types";
+import { Node, Edge, VehicleConfig } from "../../types";
 import { getNodeColor } from "../../utils/colors/nodeColors";
 import { getEdgeColor } from "../../utils/colors/edgeColors";
 import { PointsCalculator } from "../../components/three/entities/edge/points_calculator";
@@ -12,9 +12,11 @@ import * as THREE from "three";
 interface CFGStore {
   isLoading: boolean;
   error: string | null;
+  vehicleConfigs: VehicleConfig[];
   loadCFGFiles: (mapFolder: string) => Promise<void>;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  getVehicleConfigs: () => VehicleConfig[];
 }
 
 // 간단한 CSV 파싱 헬퍼
@@ -99,6 +101,41 @@ const parseNodesCFG = (content: string): Node[] => {
   }
 
   return nodes;
+};
+
+// vehicles.cfg 파싱
+const parseVehiclesCFG = (content: string): VehicleConfig[] => {
+  const lines = content.split("\n").map((line) => line.trim());
+  const vehicles: VehicleConfig[] = [];
+
+  // 헤더 찾기
+  const headerIndex = lines.findIndex((line) => line.startsWith("vehId,"));
+  if (headerIndex === -1) {
+    console.warn("vehicles.cfg header not found");
+    return [];
+  }
+
+  // 데이터 라인 파싱
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line || line.startsWith("#")) continue;
+
+    const parts = parseCSVLine(line);
+    if (parts.length < 3) continue;
+
+    try {
+      const vehicle: VehicleConfig = {
+        vehId: parts[0],
+        edgeName: parts[1],
+        ratio: parseFloat(parts[2]) || 0,
+      };
+      vehicles.push(vehicle);
+    } catch (error) {
+      console.warn(`Failed to parse vehicle line: ${line}`, error);
+    }
+  }
+
+  return vehicles;
 };
 
 // edges.cfg 파싱
@@ -206,9 +243,10 @@ const loadCFGFile = async (mapFolder: string, filename: string): Promise<string>
 };
 
 // CFG Store
-export const useCFGStore = create<CFGStore>((set) => ({
+export const useCFGStore = create<CFGStore>((set, get) => ({
   isLoading: false,
   error: null,
+  vehicleConfigs: [],
 
   loadCFGFiles: async (mapFolder: string) => {
     set({ isLoading: true, error: null });
@@ -225,6 +263,20 @@ export const useCFGStore = create<CFGStore>((set) => ({
       // 3. Load and parse edges.cfg (now nodes are available for PointsCalculator)
       const edgesContent = await loadCFGFile(mapFolder, "edges.cfg");
       const edges = parseEdgesCFG(edgesContent);
+
+      // Log edges with renderingPoints for debugging
+      const edgesWithPoints = edges.filter(e => e.renderingPoints && e.renderingPoints.length > 0);
+      console.log(`[CFGStore] Parsed ${edges.length} edges, ${edgesWithPoints.length} have renderingPoints`);
+
+      // 4. Load and parse vehicles.cfg (optional - may not exist)
+      let vehicleConfigs: VehicleConfig[] = [];
+      try {
+        const vehiclesContent = await loadCFGFile(mapFolder, "vehicles.cfg");
+        vehicleConfigs = parseVehiclesCFG(vehiclesContent);
+        console.log(`[CFGStore] Loaded ${vehicleConfigs.length} vehicle configurations`);
+      } catch (error) {
+        console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs");
+      }
 
       // 4. Set edges to store (Topology calculation happens here)
       const edgeStore = useEdgeStore.getState();
@@ -351,7 +403,8 @@ export const useCFGStore = create<CFGStore>((set) => ({
         console.log("CFG Store - Force update triggered");
       }, 100);
 
-      set({ isLoading: false });
+      // Save vehicle configs to store
+      set({ vehicleConfigs, isLoading: false });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -363,4 +416,5 @@ export const useCFGStore = create<CFGStore>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
   setError: (error) => set({ error }),
+  getVehicleConfigs: () => get().vehicleConfigs,
 }));

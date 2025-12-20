@@ -222,6 +222,16 @@ export interface Vehicle {
   source?: "config" | "mqtt" | "system"; // Data source
 }
 
+/**
+ * VehicleConfig interface - matches vehicles.cfg format
+ * Used for initial vehicle placement
+ */
+export interface VehicleConfig {
+  vehId: string; // Vehicle ID
+  edgeName: string; // Edge name where vehicle is placed
+  ratio: number; // Position ratio on edge (0.0 ~ 1.0)
+}
+
 // ============================================================================
 // LEGACY TYPE ALIASES (for backward compatibility)
 // ============================================================================

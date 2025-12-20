@@ -1,4 +1,4 @@
-import { Edge } from "../../types";
+import { Edge, VehicleConfig } from "../../types";
 import { EdgeLoop, VehicleLoop } from "./loopMaker";
 import {
   getBodyLength,
@@ -20,6 +20,16 @@ export interface VehiclePlacement {
 }
 
 /**
+ * Position and rotation on an edge
+ */
+export interface EdgePosition {
+  x: number;
+  y: number;
+  z: number;
+  rotation: number; // in degrees
+}
+
+/**
  * Result of vehicle placement calculation
  */
 export interface VehiclePlacementResult {
@@ -27,6 +37,105 @@ export interface VehiclePlacementResult {
   vehicleLoops: VehicleLoop[];
   maxCapacity: number; // Maximum number of vehicles that can be placed
 }
+
+/**
+ * Calculate position and rotation on an edge based on ratio
+ * @param edge The edge to calculate position on
+ * @param ratio Position ratio on edge (0.0 ~ 1.0)
+ * @returns Position and rotation on the edge
+ */
+export const calculatePositionOnEdge = (
+  edge: Edge,
+  ratio: number
+): EdgePosition | null => {
+  const points = edge.renderingPoints || [];
+
+  if (points.length < 2) {
+    console.warn(
+      `[VehiclePlacement] Edge ${edge.edge_name} has insufficient rendering points`
+    );
+    return null;
+  }
+
+  // Clamp ratio to [0, 1]
+  ratio = Math.max(0, Math.min(1, ratio));
+
+  // Interpolate position
+  const startPoint = points[0];
+  const endPoint = points[points.length - 1];
+  const x = startPoint.x + (endPoint.x - startPoint.x) * ratio;
+  const y = startPoint.y + (endPoint.y - startPoint.y) * ratio;
+  const z = startPoint.z + (endPoint.z - startPoint.z) * ratio;
+
+  // Calculate rotation
+  const dx = endPoint.x - startPoint.x;
+  const dy = endPoint.y - startPoint.y;
+  const rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+  return { x, y, z, rotation };
+};
+
+/**
+ * Create vehicle placements from vehicle config file
+ * @param vehicleConfigs Vehicle configurations from vehicles.cfg
+ * @param allEdges All edges in the map
+ * @returns Array of vehicle placements
+ */
+export const createPlacementsFromVehicleConfigs = (
+  vehicleConfigs: VehicleConfig[],
+  allEdges: Edge[]
+): VehiclePlacement[] => {
+  const placements: VehiclePlacement[] = [];
+
+  console.log(`[VehiclePlacement] Creating placements from ${vehicleConfigs.length} vehicle configs`);
+  console.log(`[VehiclePlacement] Available edges: ${allEdges.length}`);
+
+  // Build edge name to edge map
+  const edgeMap = new Map<string, Edge>();
+  allEdges.forEach((edge) => {
+    edgeMap.set(edge.edge_name, edge);
+  });
+
+  let successCount = 0;
+  let edgeNotFoundCount = 0;
+  let positionFailCount = 0;
+
+  vehicleConfigs.forEach((config, index) => {
+    const edge = edgeMap.get(config.edgeName);
+    if (!edge) {
+      console.warn(
+        `[VehiclePlacement] ✗ Edge ${config.edgeName} not found for vehicle ${config.vehId}`
+      );
+      edgeNotFoundCount++;
+      return;
+    }
+
+    const position = calculatePositionOnEdge(edge, config.ratio);
+    if (!position) {
+      console.warn(
+        `[VehiclePlacement] ✗ Failed to calculate position for vehicle ${config.vehId} on edge ${config.edgeName} (no renderingPoints?)`
+      );
+      positionFailCount++;
+      return;
+    }
+
+    placements.push({
+      vehicleIndex: index,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rotation: position.rotation,
+      edgeName: config.edgeName,
+      edgeRatio: config.ratio,
+    });
+    successCount++;
+  });
+
+  console.log(
+    `[VehiclePlacement] ✓ Created ${successCount} placements (${edgeNotFoundCount} edge not found, ${positionFailCount} position calculation failed)`
+  );
+  return placements;
+};
 
 /**
  * Calculate vehicle placements on loops

@@ -4,7 +4,7 @@
 
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed } from "@/config/movementConfig";
-import { calculateVehiclePlacementsOnLoops } from "@/utils/vehicle/vehiclePlacement";
+import { calculateVehiclePlacementsOnLoops, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
 import { findEdgeLoops, VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { vehicleDataArray, SensorData, MovementData, NextEdgeState, VEHICLE_DATA_SIZE, MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
@@ -12,6 +12,7 @@ import { updateSensorPoints } from "./helpers/sensorPoints";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
+import { VehicleConfig } from "@/types";
 
 export interface InitializationResult {
   vehicleLoops: VehicleLoop[];
@@ -25,13 +26,14 @@ export interface InitializeVehiclesParams {
   edges: any[]; // Edge array from useEdgeStore
   numVehicles: number;
   store: any;
+  vehicleConfigs?: VehicleConfig[]; // Optional: if provided, use these instead of auto-placement
 }
 
 /**
  * Initialize all vehicles with placement and data (no rendering)
  */
 export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
-  const { edges, numVehicles, store } = params;
+  const { edges, numVehicles, store, vehicleConfigs } = params;
 
   console.log(`[VehicleArrayMode] Initializing...`);
 
@@ -48,19 +50,32 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     nameToIndex.set(edgeArray[idx].edge_name, idx);
   }
 
-  // 3. Calculate vehicle placements on loops
-  const edgeLoops = findEdgeLoops(edgeArray);
-  const result = calculateVehiclePlacementsOnLoops(edgeLoops, numVehicles, edgeArray);
+  // 3. Calculate vehicle placements
+  let placements: VehiclePlacement[];
+  let vehicleLoops: VehicleLoop[] = [];
+
+  if (vehicleConfigs && vehicleConfigs.length > 0) {
+    // Use vehicle configs from vehicles.cfg
+    console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
+    placements = createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
+  } else {
+    // Auto-placement on loops
+    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles on loops`);
+    const edgeLoops = findEdgeLoops(edgeArray);
+    const result = calculateVehiclePlacementsOnLoops(edgeLoops, numVehicles, edgeArray);
+    placements = result.placements;
+    vehicleLoops = result.vehicleLoops;
+  }
 
   // 4. Build vehicle loop map
   const loopMap = new Map<number, VehicleLoop>();
-  for (const loop of result.vehicleLoops) {
+  for (const loop of vehicleLoops) {
     loopMap.set(loop.vehicleIndex, loop);
   }
 
   // 5. Set vehicle data
   const edgeVehicleCount = new Map<number, number>();
-  for (const placement of result.placements) {
+  for (const placement of placements) {
     const edgeIndex = nameToIndex.get(placement.edgeName);
 
     // edgeIndex가 없으면 건너뜀 (Guard Clause 패턴으로 변경하여 들여쓰기 감소 추천)
@@ -132,11 +147,11 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   }
 
   return {
-    vehicleLoops: result.vehicleLoops,
+    vehicleLoops: vehicleLoops,
     vehicleLoopMap: loopMap,
     edgeNameToIndex: nameToIndex,
     edgeArray: edgeArray,
-    actualNumVehicles: result.placements.length,
+    actualNumVehicles: placements.length,
   };
 }
 

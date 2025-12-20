@@ -9,6 +9,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
+import { useCFGStore } from "@/store/system/cfgStore";
 import { getVehicleConfigSync } from "@/config/vehicleConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions } from "./collisionLogic/collisionCheck";
@@ -38,6 +39,8 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   const initRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const edges = useEdgeStore((state) => state.edges);
+  const vehicleConfigs = useCFGStore((state) => state.vehicleConfigs);
+  const useVehicleConfig = useVehicleTestStore((state) => state.useVehicleConfig);
   const store = useVehicleArrayStore();
 
   const loopsRef = useRef<VehicleLoop[]>([]);
@@ -71,11 +74,29 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   // Initialize vehicles once (prevent double execution in React Strict Mode)
   useEffect(() => {
     if (!initRef.current) {
+      // Check if edges are ready (must have edges with renderingPoints)
+      if (edges.length === 0) {
+        console.warn('[VehicleArrayMode] No edges available, skipping vehicle initialization');
+        return;
+      }
+
+      // Check if edges have renderingPoints
+      const edgesWithPoints = edges.filter(e => e.renderingPoints && e.renderingPoints.length > 0);
+      if (edgesWithPoints.length === 0) {
+        console.warn('[VehicleArrayMode] No edges with renderingPoints, skipping vehicle initialization');
+        return;
+      }
+
+      console.log(`[VehicleArrayMode] Edges ready: ${edges.length} total, ${edgesWithPoints.length} with renderingPoints`);
+
       const result = initializeVehicles({
         edges,
         numVehicles,
         store,
+        vehicleConfigs: (useVehicleConfig && vehicleConfigs.length > 0) ? vehicleConfigs : undefined,
       });
+
+      console.log(`[VehicleArrayMode] Initializing with ${useVehicleConfig ? 'vehicles.cfg' : 'auto-placement'}, ${vehicleConfigs.length} configs available`);
 
       // Store results in refs for use in useFrame
       loopsRef.current = result.vehicleLoops;

@@ -3,10 +3,14 @@ import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useVehicleRapierStore } from "@store/vehicle/rapierMode/vehicleStore";
 import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
+import { useCFGStore } from "@store/system/cfgStore";
+import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "../../../types/vehicle";
 import { getTestSettings, getDefaultSetting } from "../../../config/testSettingConfig";
 import { Play, Pause } from "lucide-react";
+import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/vehicleArrayMode/logic/LockMgr";
+import { useEdgeStore } from "@/store/map/edgeStore";
 
 /**
  * VehicleTest
@@ -21,6 +25,8 @@ const VehicleTest: React.FC = () => {
   const { stopTest, isPaused, setPaused } = useVehicleTestStore();
   const { maxPlaceableVehicles } = useVehicleRapierStore();
   const { transferMode, setTransferMode } = useVehicleArrayStore();
+  const { loadCFGFiles } = useCFGStore();
+  const { setCameraView } = useCameraStore();
 
   const [selectedSettingId, setSelectedSettingId] = useState<string>(getDefaultSetting());
   const testSettings = getTestSettings();
@@ -39,6 +45,9 @@ const VehicleTest: React.FC = () => {
 
   // Control whether test is active (vehicles created)
   const [isTestCreated, setIsTestCreated] = useState<boolean>(false);
+
+  // Flag to determine if we should use vehicles.cfg
+  const [useVehicleConfig, setUseVehicleConfig] = useState<boolean>(false);
 
   // Don't stop test when menu changes - let it keep running!
   // User can manually stop test with Delete button or Stop Test button
@@ -79,12 +88,61 @@ const VehicleTest: React.FC = () => {
     setTestKey(prev => prev + 1); // Force remount to clear vehicles
   };
 
-  // Handle create - create vehicles with current count
+  // Handle create - create vehicles with current count (ignore vehicles.cfg)
   const handleCreate = () => {
     const numVehicles = parseInt(inputValue) || 1;
     setCustomNumVehicles(numVehicles);
+    setUseVehicleConfig(false); // Don't use vehicles.cfg
     setIsTestCreated(true);
     setTestKey(prev => prev + 1); // Force remount to create vehicles
+  };
+
+  // Handle test setting change - load map, set camera, and create vehicles from vehicles.cfg
+  const handleSettingChange = async (newSettingId: string) => {
+    const newSetting = testSettings.find(s => s.id === newSettingId);
+    if (!newSetting) return;
+
+    setSelectedSettingId(newSettingId);
+
+    // Reset LockMgr instance whenever map setting changes (drop-down rerender/reload)
+    resetLockMgr();
+
+    // Stop existing test if any
+    if (isTestCreated) {
+      stopTest();
+      setIsTestCreated(false);
+    }
+
+    try {
+      // Load the new map
+      console.log(`[VehicleTest] Loading map: ${newSetting.mapName}...`);
+      await loadCFGFiles(newSetting.mapName);
+      console.log(`[VehicleTest] ✓ Map loaded successfully: ${newSetting.mapName}`);
+
+      // Wait for "map parsing done" = after loadCFGFiles resolves, edgeStore already has parsed+topology edges.
+      // Initialize LockMgr from the current edges and log its initial table (merge points + incoming edges).
+      const edges = useEdgeStore.getState().edges;
+      getLockMgr().initFromEdges(edges);
+
+      // Set camera position if configured
+      if (newSetting.camera) {
+        setCameraView(newSetting.camera.position, newSetting.camera.target);
+        console.log(`[VehicleTest] ✓ Camera positioned`);
+      }
+
+      // Wait for map to render and edges renderingPoints to be calculated
+      // This is critical for vehicles.cfg positioning to work correctly
+      console.log(`[VehicleTest] Waiting for edges to calculate renderingPoints...`);
+      setTimeout(() => {
+        // Auto-create vehicles using vehicles.cfg
+        console.log(`[VehicleTest] ✓ Creating vehicles from vehicles.cfg`);
+        setUseVehicleConfig(true); // Use vehicles.cfg
+        setIsTestCreated(true);
+        setTestKey(prev => prev + 1); // Force remount to create vehicles
+      }, 800);
+    } catch (error) {
+      console.error("[VehicleTest] ✗ Failed to load map:", error);
+    }
   };
 
   return (
@@ -111,7 +169,7 @@ const VehicleTest: React.FC = () => {
         <label style={{ fontWeight: "bold" }}>TEST SETTING:</label>
         <select
           value={selectedSettingId}
-          onChange={(e) => setSelectedSettingId(e.target.value)}
+          onChange={(e) => handleSettingChange(e.target.value)}
           style={{
             padding: "5px 10px",
             background: "#333",
@@ -261,6 +319,7 @@ const VehicleTest: React.FC = () => {
           mapName={selectedSetting.mapName}
           numVehicles={customNumVehicles}
           cameraConfig={selectedSetting.camera}
+          useVehicleConfig={useVehicleConfig}
         />
       )}
     </>
@@ -268,4 +327,3 @@ const VehicleTest: React.FC = () => {
 };
 
 export default VehicleTest;
-
