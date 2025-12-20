@@ -56,6 +56,9 @@ const VehicleSelector: React.FC = () => {
             position={[0,0,0]}
             onClick={(e) => {
                 e.stopPropagation();
+                // Only allow selection if Ctrl is pressed
+                if (!e.ctrlKey) return;
+                
                 findNearestVehicle(e.point.x, e.point.y);
             }}
         >
