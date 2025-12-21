@@ -58,7 +58,7 @@ const KeyboardShortcutHandler = () => {
       // Handle number keys
       if (!/^[1-9]$/.test(e.key)) return;
 
-      const keyNumber = parseInt(e.key, 10);
+      const keyNumber = Number.parseInt(e.key, 10);
 
       // If Level 1 menu is active, handle Level 2 menu shortcuts
       if (activeMainMenu) {

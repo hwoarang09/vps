@@ -49,9 +49,6 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
       const currentEdge = allEdges[currentIdx];
       loopEdgeNames.push(currentEdge.edge_name);
       loopEdgeIndices.push(currentIdx);
-
-      // console.log(`[LoopMaker]   Step ${iterations}: Edge ${currentIdx} (${currentEdge.edge_name}: ${currentEdge.from_node} -> ${currentEdge.to_node})`);
-
       const toNode = currentEdge.to_node;
 
       // Find next edge that starts from current edge's end node
@@ -62,13 +59,11 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
           if (i === startIdx && loopEdgeIndices.length > 1) {
             nextIdx = i;
             foundLoop = true;
-            // console.log(`[LoopMaker]   Found loop! Next edge ${i} connects back to start`);
             break;
           }
           // Don't revisit edges already in this loop (except start edge)
           if (!loopEdgeIndices.includes(i)) {
             nextIdx = i;
-            // console.log(`[LoopMaker]   Next edge: ${i} (${allEdges[i].edge_name})`);
             break;
           }
         }
@@ -81,7 +76,6 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
 
       // Dead end - no next edge found
       if (nextIdx === -1) {
-        // console.log(`[LoopMaker]   Dead end - no next edge found from node ${toNode}`);
         break;
       }
 
@@ -92,7 +86,6 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
     if (foundLoop && loopEdgeNames.length > 0) {
       loops.push({ edgeNames: loopEdgeNames });
       loopEdgeIndices.forEach(idx => visited.add(idx));
-      // console.log(`[LoopMaker] ✓ Found loop with ${loopEdgeNames.length} edges: [${loopEdgeNames.join(', ')}]`);
     } else {
       console.log(`[LoopMaker] ✗ No loop found starting from edge ${startIdx}`);
     }

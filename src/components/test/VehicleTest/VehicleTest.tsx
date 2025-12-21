@@ -98,7 +98,7 @@ const VehicleTest: React.FC = () => {
 
   // Handle create - create vehicles with current count (ignore vehicles.cfg)
   const handleCreate = () => {
-    const numVehicles = parseInt(inputValue) || 1;
+    const numVehicles = Number.parseInt(inputValue) || 1;
     setCustomNumVehicles(numVehicles);
     setUseVehicleConfig(false); // Don't use vehicles.cfg
     setIsTestCreated(true);

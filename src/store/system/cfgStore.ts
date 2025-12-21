@@ -85,10 +85,10 @@ const parseNodesCFG = (content: string): Node[] => {
 
       const node: Node = {
         node_name: nodeName,
-        barcode: parseInt(parts[1]) || 0,
-        editor_x: parseFloat(parts[2]) || 0,
-        editor_y: parseFloat(parts[3]) || 0,
-        editor_z: parseFloat(parts[4]) || 3.8,
+        barcode: Number.parseInt(parts[1]) || 0,
+        editor_x: Number.parseFloat(parts[2]) || 0,
+        editor_y: Number.parseFloat(parts[3]) || 0,
+        editor_z: Number.parseFloat(parts[4]) || 3.8,
         color: getNodeColor(nodeName), // 노드 이름에 따른 색상 적용
         size: 0.5,
         readonly: true,
@@ -127,7 +127,7 @@ const parseVehiclesCFG = (content: string): VehicleConfig[] => {
       const vehicle: VehicleConfig = {
         vehId: parts[0],
         edgeName: parts[1],
-        ratio: parseFloat(parts[2]) || 0,
+        ratio: Number.parseFloat(parts[2]) || 0,
       };
       vehicles.push(vehicle);
     } catch (error) {
@@ -166,10 +166,10 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
       const edgeName = parts[0];
       const fromNode = parts[1];
       const toNode = parts[2];
-      const distance = parseFloat(parts[3]) || 0;
+      const distance = Number.parseFloat(parts[3]) || 0;
       const railType = parts[4];
-      const radius = parts[5] ? parseFloat(parts[5]) : undefined;
-      const rotation = parts[6] ? parseFloat(parts[6]) : undefined;
+      const radius = parts[5] ? Number.parseFloat(parts[5]) : undefined;
+      const rotation = parts[6] ? Number.parseFloat(parts[6]) : undefined;
 
       // waypoints 파싱 - 인덱스가 유효하면 해당 컬럼에서, 없으면 기본값
       let waypoints: string[] = [fromNode, toNode]; // 기본값

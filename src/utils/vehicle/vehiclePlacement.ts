@@ -91,23 +91,25 @@ export const createPlacementsFromVehicleConfigs = (
   console.log(`[VehiclePlacement] Available edges: ${allEdges.length}`);
 
   // Build edge name to edge map
+  // Build edge name to edge map
   const edgeMap = new Map<string, Edge>();
-  allEdges.forEach((edge) => {
+  for (const edge of allEdges) {
     edgeMap.set(edge.edge_name, edge);
-  });
+  }
 
   let successCount = 0;
   let edgeNotFoundCount = 0;
   let positionFailCount = 0;
 
-  vehicleConfigs.forEach((config, index) => {
+  for (let index = 0; index < vehicleConfigs.length; index++) {
+    const config = vehicleConfigs[index];
     const edge = edgeMap.get(config.edgeName);
     if (!edge) {
       console.warn(
         `[VehiclePlacement] ✗ Edge ${config.edgeName} not found for vehicle ${config.vehId}`
       );
       edgeNotFoundCount++;
-      return;
+      continue;
     }
 
     const position = calculatePositionOnEdge(edge, config.ratio);
@@ -116,7 +118,7 @@ export const createPlacementsFromVehicleConfigs = (
         `[VehiclePlacement] ✗ Failed to calculate position for vehicle ${config.vehId} on edge ${config.edgeName} (no renderingPoints?)`
       );
       positionFailCount++;
-      return;
+      continue;
     }
 
     placements.push({
@@ -129,7 +131,7 @@ export const createPlacementsFromVehicleConfigs = (
       edgeRatio: config.ratio,
     });
     successCount++;
-  });
+  }
 
   console.log(
     `[VehiclePlacement] ✓ Created ${successCount} placements (${edgeNotFoundCount} edge not found, ${positionFailCount} position calculation failed)`
@@ -159,10 +161,11 @@ export const calculateVehiclePlacementsOnLoops = (
   }
 
   // Build edge name to edge map
+  // Build edge name to edge map
   const edgeMap = new Map<string, Edge>();
-  allEdges.forEach((edge) => {
+  for (const edge of allEdges) {
     edgeMap.set(edge.edge_name, edge);
-  });
+  }
 
   // Calculate total vehicle length (body + sensor + spacing)
   const bodyLength = getBodyLength();
@@ -170,36 +173,28 @@ export const calculateVehiclePlacementsOnLoops = (
   const spacing = getVehicleSpacing();
   const totalVehicleLength = bodyLength + sensorLength + spacing;
 
-  // console.log(
-  //   `[VehiclePlacement] Vehicle dimensions: body=${bodyLength}m, sensor=${sensorLength}m, spacing=${spacing}m, total=${totalVehicleLength}m`
-  // );
-
   // Calculate max capacity for each loop
   const loopCapacities: number[] = [];
   const loopStraightEdges: Edge[][] = [];
 
-  loops.forEach((loop, loopIndex) => {
+  for (const loop of loops) {
     const straightEdges: Edge[] = [];
     let totalStraightLength = 0;
 
     // Find all straight edges in this loop
-    loop.edgeNames.forEach((edgeName) => {
+    for (const edgeName of loop.edgeNames) {
       const edge = edgeMap.get(edgeName);
       if (edge && edge.vos_rail_type === "LINEAR") {
         straightEdges.push(edge);
         totalStraightLength += edge.distance;
       }
-    });
+    }
 
     // Calculate how many vehicles can fit on straight edges
     const capacity = Math.floor(totalStraightLength / totalVehicleLength);
     loopCapacities.push(capacity);
     loopStraightEdges.push(straightEdges);
-
-    // console.log(
-    //   `[VehiclePlacement] Loop ${loopIndex}: ${straightEdges.length} straight edges, total length=${totalStraightLength.toFixed(2)}m, capacity=${capacity} vehicles`
-    // );
-  });
+  }
 
   // Calculate total max capacity
   const totalCapacity = loopCapacities.reduce((sum, cap) => sum + cap, 0);
@@ -219,12 +214,13 @@ export const calculateVehiclePlacementsOnLoops = (
   let vehicleIndex = 0;
   let remainingVehicles = actualNumVehicles;
 
-  loops.forEach((loop, loopIndex) => {
+  for (let loopIndex = 0; loopIndex < loops.length; loopIndex++) {
+    const loop = loops[loopIndex];
     const loopCapacity = loopCapacities[loopIndex];
     const straightEdges = loopStraightEdges[loopIndex];
 
     if (loopCapacity === 0 || straightEdges.length === 0) {
-      return; // Skip this loop
+      continue; // Skip this loop
     }
 
     // Calculate how many vehicles to place on this loop
@@ -238,10 +234,6 @@ export const calculateVehiclePlacementsOnLoops = (
           remainingVehicles
         );
 
-    // console.log(
-    //   `[VehiclePlacement] Loop ${loopIndex}: placing ${vehiclesForThisLoop} vehicles (capacity: ${loopCapacity}, remaining: ${remainingVehicles})`
-    // );
-
     // First, calculate how many vehicles will be placed on each edge
     const vehiclesPerEdge = new Array(straightEdges.length).fill(0);
     const vehicleIndexOnEdgeCounter = new Array(straightEdges.length).fill(0);
@@ -250,12 +242,6 @@ export const calculateVehiclePlacementsOnLoops = (
       const edgeIndex = i % straightEdges.length;
       vehiclesPerEdge[edgeIndex]++;
     }
-
-    // console.log(
-    //   `[VehiclePlacement] Distribution: ${straightEdges.map((e, idx) =>
-    //     `${e.edge_name}:${vehiclesPerEdge[idx]}`
-    //   ).join(", ")}`
-    // );
 
     // Place vehicles evenly across straight edges
     for (let i = 0; i < vehiclesForThisLoop; i++) {
@@ -327,7 +313,7 @@ export const calculateVehiclePlacementsOnLoops = (
 
     // Decrease remaining vehicles
     remainingVehicles -= vehiclesForThisLoop;
-  });
+  }
 
   console.log(`[VehiclePlacement] Placed ${placements.length} vehicles total (max capacity: ${totalCapacity})`);
   return { placements, vehicleLoops, maxCapacity: totalCapacity };
