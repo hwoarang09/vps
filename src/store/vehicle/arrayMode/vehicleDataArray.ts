@@ -24,12 +24,15 @@ export const StopReason = {
   OBS_LIDAR: 1,         // Lidar obstacle
   OBS_CAMERA: 1 << 1,        // Camera obstacle
   E_STOP: 1 << 2,            // Emergency Stop Button
-  WAITING_FOR_LOCK: 1 << 3,  // Waiting for Traffic Lock
+  WAITING_FOR_LOCK: 1 << 3,  // Waiting for Traffic Lock (Legacy?) -> Keep for compatibility or replace
+  LOCKED: 1 << 3,            // Alias for WAITING_FOR_LOCK (Wait for lock)
   DESTINATION_REACHED: 1 << 4,
   PATH_BLOCKED: 1 << 5,      // Blocked by vehicle ahead
   LOAD_ON: 1 << 6,           // Loading action in progress
   LOAD_OFF: 1 << 7,          // Unloading action in progress
   NOT_INITIALIZED: 1 << 8,   // System safety start
+  INDIVIDUAL_CONTROL: 1 << 9, // Manual pause/stop via UI
+  SENSORED: 1 << 10,          // Stopped by sensor (HitZone 2)
 } as const;
 
 // High-level Mission Job State

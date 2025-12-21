@@ -113,6 +113,44 @@ export class LockMgr {
   getTable() {
     return this.lockTable;
   }
+
+  /**
+   * 해당 노드가 합류 지점(Merge Node)인지 확인합니다.
+   */
+  isMergeNode(nodeName: string): boolean {
+    return !!this.lockTable[nodeName];
+  }
+
+  /**
+   * 특정 차량이 해당 합류 지점의 권한(Grant)을 가지고 있는지 확인합니다.
+   */
+  checkGrant(nodeName: string, vehId: number): boolean {
+    const node = this.lockTable[nodeName];
+    if (!node) return true; // 합류지점이 아니면 항상 통과 가능(논리적으로)
+    
+    // Grant가 있고, 그 vehicle이 나 자신이면 true
+    return node.granted?.veh === vehId;
+  }
+
+  /**
+   * 합류 지점 진입 전 대기해야 할 거리(Edge Start로부터의 거리)를 반환합니다.
+   * - Curve: 0 (Node 진입 즉시 대기, 실제로는 fromNode)
+   * - Linear >= 2000: toNode - 1000
+   * - Linear < 2000: 0 (fromNode)
+   */
+  getWaitDistance(edge: Edge): number {
+    // 1. 곡선 Edge
+    if (edge.vos_rail_type !== "LINEAR") {
+      return 0; 
+    }
+
+    // 2. 직선 Edge
+    if (edge.distance >= 2000) {
+      return edge.distance - 1000;
+    } else {
+      return 0; 
+    }
+  }
 }
 
 // 싱글톤 인스턴스

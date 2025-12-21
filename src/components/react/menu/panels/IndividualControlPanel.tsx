@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Play, Pause, Settings, RefreshCw, Octagon } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, Play, Pause, Settings, Octagon } from "lucide-react";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
-import { vehicleDataArray, MovingStatus, SensorData, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
@@ -15,12 +15,14 @@ const getStopReasons = (reasonMask: number): string[] => {
     if (reasonMask & StopReason.OBS_LIDAR) reasons.push("LIDAR");
     if (reasonMask & StopReason.OBS_CAMERA) reasons.push("CAMERA");
     if (reasonMask & StopReason.E_STOP) reasons.push("E_STOP");
-    if (reasonMask & StopReason.WAITING_FOR_LOCK) reasons.push("TRAFFIC_LOCK");
-    if (reasonMask & StopReason.DESTINATION_REACHED) reasons.push("DEST_REACHED");
+    if (reasonMask & StopReason.LOCKED) reasons.push("LOCKED");
+    if (reasonMask & StopReason.DESTINATION_REACHED) reasons.push("DEST");
     if (reasonMask & StopReason.PATH_BLOCKED) reasons.push("BLOCKED");
     if (reasonMask & StopReason.LOAD_ON) reasons.push("LOADING");
     if (reasonMask & StopReason.LOAD_OFF) reasons.push("UNLOADING");
-    if (reasonMask & StopReason.NOT_INITIALIZED) reasons.push("NOT_INIT");
+    if (reasonMask & StopReason.NOT_INITIALIZED) reasons.push("INIT");
+    if (reasonMask & StopReason.INDIVIDUAL_CONTROL) reasons.push("MANUAL");
+    if (reasonMask & StopReason.SENSORED) reasons.push("SENSOR");
     return reasons;
 };
 
@@ -64,17 +66,20 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     const handleStop = () => {
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.STOPPED);
         const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
-        vehicleDataArray.setStopReason(vehicleIndex, currentReason | StopReason.E_STOP);
+        vehicleDataArray.setStopReason(vehicleIndex, currentReason | StopReason.INDIVIDUAL_CONTROL);
     };
 
     const handlePause = () => {
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.PAUSED);
+        const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
+        vehicleDataArray.setStopReason(vehicleIndex, currentReason | StopReason.INDIVIDUAL_CONTROL);
     };
 
     const handleResume = () => {
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.MOVING);
         const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
-        vehicleDataArray.setStopReason(vehicleIndex, currentReason & ~StopReason.E_STOP);
+        // Clear E_STOP and INDIVIDUAL_CONTROL
+        vehicleDataArray.setStopReason(vehicleIndex, currentReason & ~(StopReason.E_STOP | StopReason.INDIVIDUAL_CONTROL));
     };
 
     const handleChangeSensor = () => {
@@ -106,6 +111,11 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     const currentEdgeIdx = vData.movement.currentEdge;
     const currentEdgeRatio = vData.movement.edgeRatio;
     const currentEdgeName = useEdgeStore.getState().getEdgeByIndex(currentEdgeIdx)?.edge_name || "Unknown";
+
+    const nextEdgeIdx = vData.movement.nextEdge;
+    const nextEdgeName = nextEdgeIdx !== -1 
+        ? (useEdgeStore.getState().getEdgeByIndex(nextEdgeIdx)?.edge_name || "Unknown") 
+        : "None";
 
     // Debug Info: Target
     let targetEdgeInfo = "N/A";
@@ -198,6 +208,15 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
                         <span className="font-mono">{acceleration.toFixed(2)} / {deceleration.toFixed(2)}</span>
                     </div>
 
+                    <div className="flex justify-between text-xs text-blue-600 font-medium mt-1">
+                        <span>Cur Edge</span>
+                        <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx})</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                         <span>Next Edge</span>
+                         <span className="font-mono">{nextEdgeName} {nextEdgeIdx !== -1 ? `(#${nextEdgeIdx})` : ""}</span>
+                    </div>
+
                     <div className="my-2 border-t border-gray-200"></div>
 
                     <div className="flex justify-between">
@@ -232,28 +251,33 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
                     <div className="my-2 border-t border-gray-200"></div>
 
                     <div className="space-y-2">
-                        <h5 className="font-semibold text-xs text-gray-500">Sensor Points (World)</h5>
-                        <div className="text-[10px] space-y-2">
-                            {/* Common Body */}
-                            <div className="grid grid-cols-2 gap-1 bg-gray-50 p-1 rounded">
-                                <span className="font-bold col-span-2">Body Quad</span>
-                                <span>FL: {zonePoints[0].pts.fl[0].toFixed(2)}, {zonePoints[0].pts.fl[1].toFixed(2)}</span>
-                                <span>FR: {zonePoints[0].pts.fr[0].toFixed(2)}, {zonePoints[0].pts.fr[1].toFixed(2)}</span>
-                                <span>BL: {zonePoints[0].pts.bl[0].toFixed(2)}, {zonePoints[0].pts.bl[1].toFixed(2)}</span>
-                                <span>BR: {zonePoints[0].pts.br[0].toFixed(2)}, {zonePoints[0].pts.br[1].toFixed(2)}</span>
-                            </div>
-
-                            {/* Zones */}
-                            {zonePoints.map((z, idx) => (
-                                <div key={idx} className="bg-gray-50 p-1 rounded border border-gray-100">
-                                    <div className="font-bold mb-1">{z.name} (SL/SR)</div>
-                                    <div className="grid grid-cols-1 gap-1">
-                                         <span>SL: {z.pts.sl[0].toFixed(2)}, {z.pts.sl[1].toFixed(2)}</span>
-                                         <span>SR: {z.pts.sr[0].toFixed(2)}, {z.pts.sr[1].toFixed(2)}</span>
-                                    </div>
+                        <details className="group">
+                             <summary className="font-semibold text-xs text-gray-500 cursor-pointer list-none flex items-center gap-1 select-none">
+                                <span className="group-open:rotate-90 transition-transform">▸</span>
+                                Sensor Points (World)
+                            </summary>
+                            <div className="text-[10px] space-y-2 mt-2 pl-2">
+                                {/* Common Body */}
+                                <div className="grid grid-cols-2 gap-1 bg-gray-50 p-1 rounded">
+                                    <span className="font-bold col-span-2">Body Quad</span>
+                                    <span>FL: {zonePoints[0].pts.fl[0].toFixed(2)}, {zonePoints[0].pts.fl[1].toFixed(2)}</span>
+                                    <span>FR: {zonePoints[0].pts.fr[0].toFixed(2)}, {zonePoints[0].pts.fr[1].toFixed(2)}</span>
+                                    <span>BL: {zonePoints[0].pts.bl[0].toFixed(2)}, {zonePoints[0].pts.bl[1].toFixed(2)}</span>
+                                    <span>BR: {zonePoints[0].pts.br[0].toFixed(2)}, {zonePoints[0].pts.br[1].toFixed(2)}</span>
                                 </div>
-                            ))}
-                        </div>
+
+                                {/* Zones */}
+                                {zonePoints.map((z, idx) => (
+                                    <div key={idx} className="bg-gray-50 p-1 rounded border border-gray-100">
+                                        <div className="font-bold mb-1">{z.name} (SL/SR)</div>
+                                        <div className="grid grid-cols-1 gap-1">
+                                            <span>SL: {z.pts.sl[0].toFixed(2)}, {z.pts.sl[1].toFixed(2)}</span>
+                                            <span>SR: {z.pts.sr[0].toFixed(2)}, {z.pts.sr[1].toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </details>
                     </div>
 
                     <div className="my-2 border-t border-gray-200"></div>
