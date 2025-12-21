@@ -5,7 +5,7 @@ import { vehicleDataArray, MovementData, VEHICLE_DATA_SIZE } from "@/store/vehic
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 
 // Threshold for selection in meters
-const SELECTION_THRESHOLD_SQ = 20 * 20; // 5 meters
+const SELECTION_THRESHOLD_SQ = 20 * 20; 
 
 const VehicleSelector: React.FC = () => {
     // We don't strictly need useThree if we just use the mesh onClick event, 
@@ -53,7 +53,7 @@ const VehicleSelector: React.FC = () => {
         <mesh 
             visible={false} 
             rotation={[0,0,0]} 
-            position={[0,0,0]}
+            position={[0,0,3.8]} // Vehicles are at Z=3.8
             onClick={(e) => {
                 e.stopPropagation();
                 // Only allow selection if Ctrl is pressed
