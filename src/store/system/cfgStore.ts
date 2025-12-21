@@ -139,8 +139,9 @@ const parseVehiclesCFG = (content: string): VehicleConfig[] => {
 };
 
 // edges.cfg 파싱
-const parseEdgesCFG = (content: string): Edge[] => {
+const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
   const lines = content.split("\n").map((line) => line.trim());
+  const nodeMap = new Map(nodes.map((n) => [n.node_name, n]));
   const edges: Edge[] = [];
 
   // 헤더 찾기
@@ -180,10 +181,27 @@ const parseEdgesCFG = (content: string): Edge[] => {
         }
       }
 
-      // axis 파싱
+      // axis 파싱 및 자동 계산
       const axisIndex = headers.indexOf("axis");
-      const axisRaw = (axisIndex >= 0 && parts[axisIndex]) ? parts[axisIndex].trim().toLowerCase() : undefined;
-      const axis = (axisRaw === 'x' || axisRaw === 'y') ? axisRaw : undefined;
+      let axis: "x" | "y" | "z" | undefined;
+
+      const axisRaw =
+        axisIndex >= 0 && parts[axisIndex]
+          ? parts[axisIndex].trim().toLowerCase()
+          : undefined;
+
+      if (axisRaw === "x" || axisRaw === "y" || axisRaw === "z") {
+        axis = axisRaw;
+      } else {
+        // config에 없으면 노드 좌표 기반 자동 계산
+        const nFrom = nodeMap.get(fromNode);
+        const nTo = nodeMap.get(toNode);
+        if (nFrom && nTo) {
+          const dx = Math.abs(nTo.editor_x - nFrom.editor_x);
+          const dy = Math.abs(nTo.editor_y - nFrom.editor_y);
+          axis = dx >= dy ? "x" : "y";
+        }
+      }
 
       // rendering points 계산
       let renderingPoints: THREE.Vector3[] = [];
@@ -262,7 +280,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
 
       // 3. Load and parse edges.cfg (now nodes are available for PointsCalculator)
       const edgesContent = await loadCFGFile(mapFolder, "edges.cfg");
-      const edges = parseEdgesCFG(edgesContent);
+      const edges = parseEdgesCFG(edgesContent, nodes);
 
       // Log edges with renderingPoints for debugging
       const edgesWithPoints = edges.filter(e => e.renderingPoints && e.renderingPoints.length > 0);
