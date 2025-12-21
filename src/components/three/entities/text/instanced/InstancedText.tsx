@@ -91,8 +91,7 @@ export default function InstancedText({
 
       // 빌보드 회전 (그룹당 한번만)
       if (!groupRotation.has(groupIdx)) {
-        const pos = new THREE.Vector3(gx, gy, gz);
-        groupRotation.set(groupIdx, computeBillboardRotation(pos, camera.position));
+        groupRotation.set(groupIdx, computeBillboardRotation(camera.quaternion));
       }
 
       const { quaternion, right } = groupRotation.get(groupIdx)!;

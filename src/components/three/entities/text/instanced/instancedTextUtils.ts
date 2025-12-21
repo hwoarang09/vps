@@ -132,24 +132,13 @@ export function applyHighAltitudeCulling(
 }
 
 /**
- * 빌보드 회전 계산 (Z-up 기준)
+ * 빌보드 회전 계산 (Screen Aligned)
+ * 카메라의 Quaternion을 그대로 사용하여 텍스트가 항상 화면과 평행하게 만듦
  */
 export function computeBillboardRotation(
-  targetPos: THREE.Vector3,
-  cameraPos: THREE.Vector3
+  cameraQuaternion: THREE.Quaternion
 ): { quaternion: THREE.Quaternion; right: THREE.Vector3 } {
-  const lookDir = new THREE.Vector3()
-    .subVectors(cameraPos, targetPos)
-    .normalize();
-
-  const up = new THREE.Vector3(0, 0, 1);
-  const matrix = new THREE.Matrix4().lookAt(
-    new THREE.Vector3(0, 0, 0),
-    lookDir.clone().negate(),
-    up
-  );
-
-  const quaternion = new THREE.Quaternion().setFromRotationMatrix(matrix);
+  const quaternion = cameraQuaternion.clone();
   const right = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
 
   return { quaternion, right };
@@ -184,6 +173,7 @@ export function updateVehicleTextTransforms(
   },
   vehicleData: Float32Array,
   cameraPos: THREE.Vector3,
+  cameraQuaternion: THREE.Quaternion,
   meshes: (THREE.InstancedMesh | null)[],
   params: {
     scale: number;
@@ -237,8 +227,7 @@ export function updateVehicleTextTransforms(
 
     // 빌보드 회전 (차량당 한번만)
     if (!vehicleRotation.has(v)) {
-      const pos = new THREE.Vector3(vx, vy, vz);
-      vehicleRotation.set(v, computeBillboardRotation(pos, cameraPos));
+      vehicleRotation.set(v, computeBillboardRotation(cameraQuaternion));
     }
 
     const { quaternion, right } = vehicleRotation.get(v)!;
