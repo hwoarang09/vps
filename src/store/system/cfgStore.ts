@@ -135,6 +135,136 @@ const parseVehiclesCFG = (content: string): VehicleConfig[] => {
   return vehicles;
 };
 
+// rendering points 계산 헬퍼
+const calculateEdgeRenderingPoints = (
+  railType: string,
+  radius: number | undefined,
+  rotation: number | undefined,
+  edgeName: string,
+  fromNode: string,
+  toNode: string,
+  waypoints: string[]
+): THREE.Vector3[] => {
+  try {
+    const edgeRowData = {
+      vos_rail_type: railType,
+      radius: radius || (railType.startsWith("C") ? 0.5 : undefined),
+      rotation: rotation,
+      edge_name: edgeName,
+      from_node: fromNode,
+      to_node: toNode,
+      waypoints: waypoints,
+    };
+
+    return PointsCalculator.calculateRenderingPoints(edgeRowData);
+  } catch (error) {
+    console.warn(
+      `Failed to calculate rendering points for edge ${edgeName}:`,
+      error
+    );
+    return [];
+  }
+};
+
+// axis 파싱 및 자동 계산 헬퍼
+const calculateEdgeAxis = (
+  parts: string[],
+  headers: string[],
+  fromNode: string,
+  toNode: string,
+  nodeMap: Map<string, Node>
+): "x" | "y" | "z" | undefined => {
+  const axisIndex = headers.indexOf("axis");
+  const axisRaw =
+    axisIndex >= 0 && parts[axisIndex]
+      ? parts[axisIndex].trim().toLowerCase()
+      : undefined;
+
+  if (axisRaw === "x" || axisRaw === "y" || axisRaw === "z") {
+    return axisRaw;
+  }
+
+  // config에 없으면 노드 좌표 기반 자동 계산
+  const nFrom = nodeMap.get(fromNode);
+  const nTo = nodeMap.get(toNode);
+  if (nFrom && nTo) {
+    const dx = Math.abs(nTo.editor_x - nFrom.editor_x);
+    const dy = Math.abs(nTo.editor_y - nFrom.editor_y);
+    return dx >= dy ? "x" : "y";
+  }
+
+  return undefined;
+};
+
+// edges.cfg 라인 파싱 헬퍼
+const parseEdgeLine = (
+  line: string,
+  headers: string[],
+  waypointsIndex: number,
+  nodeMap: Map<string, Node>
+): Edge | null => {
+  if (!line || line.startsWith("#")) return null;
+
+  const parts = parseCSVLine(line);
+  if (parts.length < 5) return null;
+
+  try {
+    const edgeName = parts[0];
+    const fromNode = parts[1];
+    const toNode = parts[2];
+    const distance = Number.parseFloat(parts[3]) || 0;
+    const railType = parts[4];
+    const radius = parts[5] ? Number.parseFloat(parts[5]) : undefined;
+    const rotation = parts[6] ? Number.parseFloat(parts[6]) : undefined;
+
+    // waypoints 파싱 - 인덱스가 유효하면 해당 컬럼에서, 없으면 기본값
+    let waypoints: string[] = [fromNode, toNode]; // 기본값
+
+    if (waypointsIndex >= 0 && parts[waypointsIndex]) {
+      const parsed = parseWaypoints(parts[waypointsIndex]);
+      if (parsed.length > 0) {
+        waypoints = parsed;
+      }
+    }
+
+    // axis 파싱 및 자동 계산
+    const axis = calculateEdgeAxis(parts, headers, fromNode, toNode, nodeMap);
+
+    // rendering points 계산
+    const renderingPoints = calculateEdgeRenderingPoints(
+      railType,
+      radius,
+      rotation,
+      edgeName,
+      fromNode,
+      toNode,
+      waypoints
+    );
+
+    const edge: Edge = {
+      edge_name: edgeName,
+      from_node: fromNode,
+      to_node: toNode,
+      waypoints: waypoints,
+      vos_rail_type: railType,
+      distance: distance,
+      radius: radius || (railType.startsWith("C") ? 0.5 : undefined),
+      rotation: rotation || 0,
+      axis: axis,
+      color: getEdgeColor(railType), // VOS rail type에 따른 색상 적용
+      opacity: 1,
+      readonly: true,
+      source: "config",
+      rendering_mode: "normal",
+      renderingPoints: renderingPoints,
+    };
+    return edge;
+  } catch (error) {
+    console.warn(`Failed to parse edge line: ${line}`, error);
+    return null;
+  }
+};
+
 // edges.cfg 파싱
 const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
   const lines = content.split("\n").map((line) => line.trim());
@@ -153,98 +283,126 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
 
   // 데이터 라인 파싱
   for (const line of lines.slice(headerIndex + 1)) {
-    if (!line || line.startsWith("#")) continue;
-
-    const parts = parseCSVLine(line);
-    if (parts.length < 5) continue;
-
-    try {
-      const edgeName = parts[0];
-      const fromNode = parts[1];
-      const toNode = parts[2];
-      const distance = Number.parseFloat(parts[3]) || 0;
-      const railType = parts[4];
-      const radius = parts[5] ? Number.parseFloat(parts[5]) : undefined;
-      const rotation = parts[6] ? Number.parseFloat(parts[6]) : undefined;
-
-      // waypoints 파싱 - 인덱스가 유효하면 해당 컬럼에서, 없으면 기본값
-      let waypoints: string[] = [fromNode, toNode]; // 기본값
-
-      if (waypointsIndex >= 0 && parts[waypointsIndex]) {
-        const parsed = parseWaypoints(parts[waypointsIndex]);
-        if (parsed.length > 0) {
-          waypoints = parsed;
-        }
-      }
-
-      // axis 파싱 및 자동 계산
-      const axisIndex = headers.indexOf("axis");
-      let axis: "x" | "y" | "z" | undefined;
-
-      const axisRaw =
-        axisIndex >= 0 && parts[axisIndex]
-          ? parts[axisIndex].trim().toLowerCase()
-          : undefined;
-
-      if (axisRaw === "x" || axisRaw === "y" || axisRaw === "z") {
-        axis = axisRaw;
-      } else {
-        // config에 없으면 노드 좌표 기반 자동 계산
-        const nFrom = nodeMap.get(fromNode);
-        const nTo = nodeMap.get(toNode);
-        if (nFrom && nTo) {
-          const dx = Math.abs(nTo.editor_x - nFrom.editor_x);
-          const dy = Math.abs(nTo.editor_y - nFrom.editor_y);
-          axis = dx >= dy ? "x" : "y";
-        }
-      }
-
-      // rendering points 계산
-      let renderingPoints: THREE.Vector3[] = [];
-      try {
-        const edgeRowData = {
-          vos_rail_type: railType,
-          radius: radius || (railType.startsWith("C") ? 0.5 : undefined),
-          rotation: rotation,
-          edge_name: edgeName,
-          from_node: fromNode,
-          to_node: toNode,
-          waypoints: waypoints,
-        };
-
-        renderingPoints =
-          PointsCalculator.calculateRenderingPoints(edgeRowData);
-      } catch (error) {
-        console.warn(
-          `Failed to calculate rendering points for edge ${edgeName}:`,
-          error
-        );
-      }
-
-      const edge: Edge = {
-        edge_name: edgeName,
-        from_node: fromNode,
-        to_node: toNode,
-        waypoints: waypoints,
-        vos_rail_type: railType,
-        distance: distance,
-        radius: radius || (railType.startsWith("C") ? 0.5 : undefined),
-        rotation: rotation || 0,
-        axis: axis,
-        color: getEdgeColor(railType), // VOS rail type에 따른 색상 적용
-        opacity: 1,
-        readonly: true,
-        source: "config",
-        rendering_mode: "normal",
-        renderingPoints: renderingPoints,
-      };
+    const edge = parseEdgeLine(line, headers, waypointsIndex, nodeMap);
+    if (edge) {
       edges.push(edge);
-    } catch (error) {
-      console.warn(`Failed to parse edge line: ${line}`, error);
     }
   }
 
   return edges;
+};
+
+// 노드 텍스트 생성 및 업데이트 헬퍼
+const processNodeTexts = (nodes: Node[], textStore: any) => {
+  if (textStore.mode === VehicleSystemType.RapierDict) {
+    // Dict mode: { 'N001': [x, y, z], ... } (TMP_ 제외)
+    const nodeTexts: Record<string, TextPosition> = {};
+    for (const node of nodes) {
+      // TMP_로 시작하는 노드는 제외
+      if (!node.node_name.startsWith("TMP_")) {
+        nodeTexts[node.node_name] = {
+          x: node.editor_x,
+          y: node.editor_y,
+          z: node.editor_z,
+        };
+      }
+    }
+    textStore.setNodeTexts(nodeTexts);
+    console.log("CFG Store - Generated nodeTexts (dict):", nodeTexts);
+  } else {
+    // Array mode: [{ name: 'N001', position: {x, y, z} }, ...] (TMP_ 제외)
+    const nodeTextsArray = nodes
+      .filter((node) => !node.node_name.startsWith("TMP_"))
+      .map((node) => ({
+        name: node.node_name,
+        position: {
+          x: node.editor_x,
+          y: node.editor_y,
+          z: node.editor_z,
+        },
+      }));
+    textStore.setNodeTextsArray(nodeTextsArray);
+    console.log("CFG Store - Generated nodeTexts (array):", nodeTextsArray.length);
+  }
+};
+
+// 엣지 텍스트 생성 및 업데이트 헬퍼 (Dict Mode)
+const processEdgeTextsDict = (edges: Edge[], nodes: Node[], textStore: any) => {
+  // Dict mode: { 'E001': [midpoint_x, midpoint_y, midpoint_z], ... }
+  const edgeTexts: Record<string, TextPosition> = {};
+  for (const edge of edges) {
+    // TMP_로 시작하는 엣지는 제외
+    if (!edge.edge_name.startsWith("TMP_")) {
+      // waypoints 배열에서 적절한 노드 선택
+      const waypoints = edge.waypoints || [];
+
+      let node1, node2;
+
+      if (waypoints.length >= 4) {
+        // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
+        const node1Name = waypoints[1];
+        const node2Name = waypoints.at(-2)!;
+        node1 = nodes.find((n) => n.node_name === node1Name);
+        node2 = nodes.find((n) => n.node_name === node2Name);
+      } else {
+        // 직선 엣지: from_node와 to_node 사용
+        node1 = nodes.find((n) => n.node_name === edge.from_node);
+        node2 = nodes.find((n) => n.node_name === edge.to_node);
+      }
+
+      if (node1 && node2) {
+        // 중점 계산
+        edgeTexts[edge.edge_name] = {
+          x: (node1.editor_x + node2.editor_x) / 2,
+          y: (node1.editor_y + node2.editor_y) / 2,
+          z: (node1.editor_z + node2.editor_z) / 2,
+        };
+      }
+    }
+  }
+  textStore.setEdgeTexts(edgeTexts);
+  console.log("CFG Store - Generated edgeTexts (dict):", edgeTexts);
+};
+
+// 엣지 텍스트 생성 및 업데이트 헬퍼 (Array Mode)
+const processEdgeTextsArray = (edges: Edge[], nodes: Node[], textStore: any) => {
+  // Array mode: [{ name: 'E001', position: {x, y, z} }, ...]
+  const edgeTextsArray = edges
+    .filter((edge) => !edge.edge_name.startsWith("TMP_"))
+    .map((edge) => {
+      const waypoints = edge.waypoints || [];
+      let node1, node2;
+
+      if (waypoints.length >= 4) {
+        // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
+        const node1Name = waypoints[1];
+        const node2Name = waypoints.at(-2)!;
+        node1 = nodes.find((n) => n.node_name === node1Name);
+        node2 = nodes.find((n) => n.node_name === node2Name);
+      } else {
+        // 직선 엣지: from_node와 to_node 사용
+        node1 = nodes.find((n) => n.node_name === edge.from_node);
+        node2 = nodes.find((n) => n.node_name === edge.to_node);
+      }
+
+      if (node1 && node2) {
+        return {
+          name: edge.edge_name,
+          position: {
+            x: (node1.editor_x + node2.editor_x) / 2,
+            y: (node1.editor_y + node2.editor_y) / 2,
+            z: (node1.editor_z + node2.editor_z) / 2,
+          },
+        };
+      }
+      return null;
+    })
+    .filter((item) => item !== null) as Array<{
+      name: string;
+      position: TextPosition;
+    }>;
+  textStore.setEdgeTextsArray(edgeTextsArray);
+  console.log("CFG Store - Generated edgeTexts (array):", edgeTextsArray.length);
 };
 
 // Load CFG file from specified map folder
@@ -304,111 +462,13 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       const textStore = useTextStore.getState();
       textStore.clearAllTexts();
 
-      if (textStore.mode === VehicleSystemType.RapierDict) {
-        // Dict mode: { 'N001': [x, y, z], ... } (TMP_ 제외)
-        const nodeTexts: Record<string, TextPosition> = {};
-        for (const node of nodes) {
-          // TMP_로 시작하는 노드는 제외
-          if (!node.node_name.startsWith("TMP_")) {
-            nodeTexts[node.node_name] = {
-              x: node.editor_x,
-              y: node.editor_y,
-              z: node.editor_z,
-            };
-          }
-        }
-        textStore.setNodeTexts(nodeTexts);
-        console.log("CFG Store - Generated nodeTexts (dict):", nodeTexts);
-      } else {
-        // Array mode: [{ name: 'N001', position: {x, y, z} }, ...] (TMP_ 제외)
-        const nodeTextsArray = nodes
-          .filter((node) => !node.node_name.startsWith("TMP_"))
-          .map((node) => ({
-            name: node.node_name,
-            position: {
-              x: node.editor_x,
-              y: node.editor_y,
-              z: node.editor_z,
-            },
-          }));
-        textStore.setNodeTextsArray(nodeTextsArray);
-        console.log("CFG Store - Generated nodeTexts (array):", nodeTextsArray.length);
-      }
+      processNodeTexts(nodes, textStore);
 
       // 엣지 텍스트 생성 (TMP_ 제외)
       if (textStore.mode === VehicleSystemType.RapierDict) {
-        // Dict mode: { 'E001': [midpoint_x, midpoint_y, midpoint_z], ... }
-        const edgeTexts: Record<string, TextPosition> = {};
-        for (const edge of edges) {
-          // TMP_로 시작하는 엣지는 제외
-          if (!edge.edge_name.startsWith("TMP_")) {
-            // waypoints 배열에서 적절한 노드 선택
-            const waypoints = edge.waypoints || [];
-
-            let node1, node2;
-
-            if (waypoints.length >= 4) {
-              // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
-              const node1Name = waypoints[1];
-              const node2Name = waypoints.at(-2)!;
-              node1 = nodes.find((n) => n.node_name === node1Name);
-              node2 = nodes.find((n) => n.node_name === node2Name);
-            } else {
-              // 직선 엣지: from_node와 to_node 사용
-              node1 = nodes.find((n) => n.node_name === edge.from_node);
-              node2 = nodes.find((n) => n.node_name === edge.to_node);
-            }
-
-            if (node1 && node2) {
-              // 중점 계산
-              edgeTexts[edge.edge_name] = {
-                x: (node1.editor_x + node2.editor_x) / 2,
-                y: (node1.editor_y + node2.editor_y) / 2,
-                z: (node1.editor_z + node2.editor_z) / 2,
-              };
-            }
-          }
-        }
-        textStore.setEdgeTexts(edgeTexts);
-        console.log("CFG Store - Generated edgeTexts (dict):", edgeTexts);
+        processEdgeTextsDict(edges, nodes, textStore);
       } else {
-        // Array mode: [{ name: 'E001', position: {x, y, z} }, ...]
-        const edgeTextsArray = edges
-          .filter((edge) => !edge.edge_name.startsWith("TMP_"))
-          .map((edge) => {
-            const waypoints = edge.waypoints || [];
-            let node1, node2;
-
-            if (waypoints.length >= 4) {
-              // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
-              const node1Name = waypoints[1];
-              const node2Name = waypoints.at(-2)!;
-              node1 = nodes.find((n) => n.node_name === node1Name);
-              node2 = nodes.find((n) => n.node_name === node2Name);
-            } else {
-              // 직선 엣지: from_node와 to_node 사용
-              node1 = nodes.find((n) => n.node_name === edge.from_node);
-              node2 = nodes.find((n) => n.node_name === edge.to_node);
-            }
-
-            if (node1 && node2) {
-              return {
-                name: edge.edge_name,
-                position: {
-                  x: (node1.editor_x + node2.editor_x) / 2,
-                  y: (node1.editor_y + node2.editor_y) / 2,
-                  z: (node1.editor_z + node2.editor_z) / 2,
-                },
-              };
-            }
-            return null;
-          })
-          .filter((item) => item !== null) as Array<{
-            name: string;
-            position: TextPosition;
-          }>;
-        textStore.setEdgeTextsArray(edgeTextsArray);
-        console.log("CFG Store - Generated edgeTexts (array):", edgeTextsArray.length);
+        processEdgeTextsArray(edges, nodes, textStore);
       }
 
       // 강제 업데이트 트리거 (렌더링 확실히 하기 위해)
