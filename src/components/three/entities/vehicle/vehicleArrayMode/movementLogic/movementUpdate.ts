@@ -130,6 +130,20 @@ export function updateMovement(params: MovementUpdateParams) {
     // Destructure properties from the result object so they can be reassigned
     let { finalEdgeIndex, finalRatio, activeEdge } = transitionResult;
 
+    // --- Lock Release Logic ---
+    // If we changed edges, check if we left a merge node lock
+    if (finalEdgeIndex !== currentEdgeIndex) {
+        // The vehicle has left 'currentEdge'.
+        // If 'currentEdge.to_node' was a merge node, we must release it.
+        // Note: We released it effectively by passing the node.
+        const prevToNode = currentEdge.to_node;
+        if (getLockMgr().isMergeNode(prevToNode)) {
+            console.log(`[LockMgr ${prevToNode} VEH${i}] RELEASE (Movement: Left ${currentEdge.edge_name})`);
+            getLockMgr().releaseLock(prevToNode, i);
+        }
+    }
+    // --------------------------
+
     // 6. Interpolate Position
     if (activeEdge) {
       const posResult = interpolatePosition(activeEdge, finalRatio);
@@ -140,9 +154,12 @@ export function updateMovement(params: MovementUpdateParams) {
     }
 
     // 7. LockMgr Wait Logic (Merge Point Control)
+    // CRITICAL FIX: Use the NEW edge (finalEdgeIndex) for logic, not the old 'currentEdge'
+    const finalEdge = edgeArray[finalEdgeIndex];
+    
     const mergeResult = processMergeLogic(
       getLockMgr(),
-      currentEdge,
+      finalEdge,
       i,
       finalRatio,
       activeEdge,
@@ -280,7 +297,8 @@ function checkAndTriggerTransfer(
   ratio: number
 ) {
   const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
-  if (ratio >= 0.5 && nextEdgeState === NextEdgeState.EMPTY) {
+  // Changed from 0.5 to 0.0 to determine next edge immediately upon entry as requested
+  if (ratio >= 0.0 && nextEdgeState === NextEdgeState.EMPTY) {
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.PENDING;
     enqueueVehicleTransfer(vehIdx);
   }
@@ -320,6 +338,11 @@ function processMergeLogic(
   }
 
   // If IS a merge node, check grant
+  
+  // 1. Register Request (Idempotent)
+  lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
+
+  // 2. Check Grant
   const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
   // Update Logic Data
   let currentReason = data[ptr + LogicData.STOP_REASON];

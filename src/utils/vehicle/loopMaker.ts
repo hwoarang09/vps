@@ -81,7 +81,7 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
 
       // Dead end - no next edge found
       if (nextIdx === -1) {
-        console.log(`[LoopMaker]   Dead end - no next edge found from node ${toNode}`);
+        // console.log(`[LoopMaker]   Dead end - no next edge found from node ${toNode}`);
         break;
       }
 
