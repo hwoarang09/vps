@@ -85,6 +85,14 @@ const VehicleTest: React.FC = () => {
   const handleDelete = () => {
     stopTest(); // Stop the test
     setIsTestCreated(false);
+    
+    // Reset LockMgr to clear previous locks/queues
+    resetLockMgr();
+    // Re-initialize LockMgr with current edges so it's ready for next create or manual use
+    // Note: useEdgeStore.getState().edges should be valid here as map is loaded
+    const edges = useEdgeStore.getState().edges;
+    getLockMgr().initFromEdges(edges);
+
     setTestKey(prev => prev + 1); // Force remount to clear vehicles
   };
 
