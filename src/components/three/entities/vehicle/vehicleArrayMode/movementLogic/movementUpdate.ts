@@ -131,17 +131,7 @@ export function updateMovement(params: MovementUpdateParams) {
     let { finalEdgeIndex, finalRatio, activeEdge } = transitionResult;
 
     // --- Lock Release Logic ---
-    // If we changed edges, check if we left a merge node lock
-    if (finalEdgeIndex !== currentEdgeIndex) {
-        // The vehicle has left 'currentEdge'.
-        // If 'currentEdge.to_node' was a merge node, we must release it.
-        // Note: We released it effectively by passing the node.
-        const prevToNode = currentEdge.to_node;
-        if (getLockMgr().isMergeNode(prevToNode)) {
-            console.log(`[LockMgr ${prevToNode} VEH${i}] RELEASE (Movement: Left ${currentEdge.edge_name})`);
-            getLockMgr().releaseLock(prevToNode, i);
-        }
-    }
+    checkAndReleaseMergeLock(finalEdgeIndex, currentEdgeIndex, currentEdge, i);
     // --------------------------
 
     // 6. Interpolate Position
@@ -298,7 +288,7 @@ function checkAndTriggerTransfer(
 ) {
   const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
   // Changed from 0.5 to 0.0 to determine next edge immediately upon entry as requested
-  if (ratio >= 0.0 && nextEdgeState === NextEdgeState.EMPTY) {
+  if (ratio >= 0 && nextEdgeState === NextEdgeState.EMPTY) {
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.PENDING;
     enqueueVehicleTransfer(vehIdx);
   }
@@ -340,7 +330,11 @@ function processMergeLogic(
   // If IS a merge node, check grant
   
   // 1. Register Request (Idempotent)
-  lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
+  // Optimization: Only request if we are not already waiting or acquired (FREE)
+  const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
+  if (currentTrafficState === TrafficState.FREE) {
+      lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
+  }
 
   // 2. Check Grant
   const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
@@ -403,3 +397,26 @@ function processMergeLogic(
       }
   return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
 }
+
+/**
+ * Checks if the vehicle has changed edges and releases the lock on the previous merge node if applicable.
+ */
+function checkAndReleaseMergeLock(
+  finalEdgeIndex: number,
+  currentEdgeIndex: number,
+  currentEdge: Edge,
+  vehId: number
+) {
+    // If we changed edges, check if we left a merge node lock
+    if (finalEdgeIndex !== currentEdgeIndex) {
+        // The vehicle has left 'currentEdge'.
+        // If 'currentEdge.to_node' was a merge node, we must release it.
+        // Note: We released it effectively by passing the node.
+        const prevToNode = currentEdge.to_node;
+        if (getLockMgr().isMergeNode(prevToNode)) {
+            console.log(`[LockMgr ${prevToNode} VEH${vehId}] RELEASE (Movement: Left ${currentEdge.edge_name})`);
+            getLockMgr().releaseLock(prevToNode, vehId);
+        }
+    }
+}
+

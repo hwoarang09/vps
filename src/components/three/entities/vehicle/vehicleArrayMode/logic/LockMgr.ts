@@ -238,9 +238,7 @@ export class LockMgr {
 
       // 다음 차량에게 기회
       this.tryGrant(nodeName);
-    } else {
-      if (DEBUG) console.warn(`[LockMgr ${nodeName} VEH${vehId}] RELEASE IGNORED (Holder: ${node.granted?.veh})`);
-    }
+    } else if (DEBUG) console.warn(`[LockMgr ${nodeName} VEH${vehId}] RELEASE IGNORED (Holder: ${node.granted?.veh})`);         
   }
 
   /**
@@ -273,7 +271,7 @@ export class LockMgr {
       node.requests = node.requests.filter(r => r.vehId !== decision.veh);
       this.logNodeState(nodeName);
     } else {
-       if (DEBUG) console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
+       console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
     }
   }
 
