@@ -73,7 +73,6 @@ export function updateMovement(params: MovementUpdateParams) {
 
     // Safety check
     const currentEdge = edgeArray[currentEdgeIndex];
-    if (!currentEdge) continue;
 
     // 3. Calculate Speed (accel OR decel, based on hitZone)
     const { appliedAccel, appliedDecel } = calculateAccDec(
@@ -87,7 +86,8 @@ export function updateMovement(params: MovementUpdateParams) {
     if (hitZone === 2) {
       data[ptr + MovementData.VELOCITY] = 0;
       data[ptr + MovementData.DECELERATION] = 0;
-      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+      // Do NOT set STOPPED status, otherwise we can't resume when obstacle clears.
+      // Keeps status as MOVING (but velocity 0) or whatever it was.
       
       // Update Reason: SENSORED
       const currentReason = data[ptr + LogicData.STOP_REASON];
@@ -140,41 +140,23 @@ export function updateMovement(params: MovementUpdateParams) {
     }
 
     // 7. LockMgr Wait Logic (Merge Point Control)
-    if (getLockMgr().isMergeNode(currentEdge.to_node)) {
-       const waitResult = applyMergeWaitLogic(
-         getLockMgr(),
-         currentEdge,
-         i,
-         finalRatio,
-         activeEdge,
-         data,
-         ptr
-       );
-       
-       if (waitResult.shouldWait) {
-          finalRatio = waitResult.newRatio;
-          finalX = waitResult.newX;
-          finalY = waitResult.newY;
-          finalZ = waitResult.newZ;
-          finalRotation = waitResult.newRotation;
-          newVelocity = 0;
-       }
-    } else {
-        // Not a merge node -> Clear LOCKED reason and set ACQUIRED/FREE?
-        // Actually, if we are NOT at a merge node, we are FREE (in terms of merge lock).
-        // But let's be careful not to overwrite other states.
-        // For now, let's just clear the LOCKED bit if present?
-        // Or leave it to applyMergeWaitLogic to return "false" and clear it there?
-        // But applyMergeWaitLogic is only called IF isMergeNode.
-        
-        // If we passed the merge node, we should clear the LOCKED state.
-        // We can check if the bit is set, and if so, clear it.
-        const currentReason = data[ptr + LogicData.STOP_REASON];
-        if ((currentReason & StopReason.LOCKED) !== 0) {
-             data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-        }
-        // If not a merge node, we are generally FREE (unless intersection logic exists, but for now FREE)
-        data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+    const mergeResult = processMergeLogic(
+      getLockMgr(),
+      currentEdge,
+      i,
+      finalRatio,
+      activeEdge,
+      data,
+      ptr
+    );
+
+    if (mergeResult.shouldWait) {
+       finalRatio = mergeResult.newRatio;
+       finalX = mergeResult.newX;
+       finalY = mergeResult.newY;
+       finalZ = mergeResult.newZ;
+       finalRotation = mergeResult.newRotation;
+       newVelocity = 0;
     }
 
     // 8. Write Back (Direct Write)
@@ -315,10 +297,10 @@ interface WaitLogicResult {
 }
 
 /**
- * Helper: Apply LockMgr wait logic
- * Returns modified position/ratio if wait is needed
+ * Helper: Process Merge and Traffic Logic (Section 7)
+ * Checks intersection grants, applies wait logic, and updates TrafficState/StopReason.
  */
-function applyMergeWaitLogic(
+function processMergeLogic(
   lockMgr: ReturnType<typeof getLockMgr>,
   currentEdge: Edge,
   vehId: number,
@@ -327,8 +309,18 @@ function applyMergeWaitLogic(
   data: Float32Array,
   ptr: number
 ): WaitLogicResult {
-  const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
+  // If NOT a merge node, maintain FREE state and clear LOCKED reason
+  if (!lockMgr.isMergeNode(currentEdge.to_node)) {
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
+    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+    return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
+  }
 
+  // If IS a merge node, check grant
+  const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
   // Update Logic Data
   let currentReason = data[ptr + LogicData.STOP_REASON];
 
@@ -381,12 +373,10 @@ function applyMergeWaitLogic(
         newZ,
         newRotation
       };
-  } else {
+  } else if ((currentReason & StopReason.LOCKED) !== 0) {
       // Not yet at wait point -> Clear LOCKED Reason (we are moving, just in WAITING state)
-      if ((currentReason & StopReason.LOCKED) !== 0) {
+      
           data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
       }
-  }
-
   return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
 }
