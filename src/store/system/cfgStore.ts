@@ -25,8 +25,7 @@ const parseCSVLine = (line: string): string[] => {
   let current = "";
   let inQuotes = false;
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  for (const char of line) {
 
     if (char === '"') {
       inQuotes = !inQuotes;
@@ -73,8 +72,7 @@ const parseNodesCFG = (content: string): Node[] => {
   }
 
   // 데이터 라인 파싱
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines.slice(headerIndex + 1)) {
     if (!line || line.startsWith("#")) continue;
 
     const parts = parseCSVLine(line);
@@ -116,8 +114,7 @@ const parseVehiclesCFG = (content: string): VehicleConfig[] => {
   }
 
   // 데이터 라인 파싱
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines.slice(headerIndex + 1)) {
     if (!line || line.startsWith("#")) continue;
 
     const parts = parseCSVLine(line);
@@ -155,8 +152,7 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
   const waypointsIndex = headers.indexOf("waypoints");
 
   // 데이터 라인 파싱
-  for (let i = headerIndex + 1; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines.slice(headerIndex + 1)) {
     if (!line || line.startsWith("#")) continue;
 
     const parts = parseCSVLine(line);
@@ -293,7 +289,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         vehicleConfigs = parseVehiclesCFG(vehiclesContent);
         console.log(`[CFGStore] Loaded ${vehicleConfigs.length} vehicle configurations`);
       } catch (error) {
-        console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs");
+        console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs ", error);
       }
 
       // 4. Set edges to store (Topology calculation happens here)
@@ -311,7 +307,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       if (textStore.mode === VehicleSystemType.RapierDict) {
         // Dict mode: { 'N001': [x, y, z], ... } (TMP_ 제외)
         const nodeTexts: Record<string, TextPosition> = {};
-        nodes.forEach((node) => {
+        for (const node of nodes) {
           // TMP_로 시작하는 노드는 제외
           if (!node.node_name.startsWith("TMP_")) {
             nodeTexts[node.node_name] = {
@@ -320,7 +316,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
               z: node.editor_z,
             };
           }
-        });
+        }
         textStore.setNodeTexts(nodeTexts);
         console.log("CFG Store - Generated nodeTexts (dict):", nodeTexts);
       } else {
@@ -343,7 +339,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       if (textStore.mode === VehicleSystemType.RapierDict) {
         // Dict mode: { 'E001': [midpoint_x, midpoint_y, midpoint_z], ... }
         const edgeTexts: Record<string, TextPosition> = {};
-        edges.forEach((edge) => {
+        for (const edge of edges) {
           // TMP_로 시작하는 엣지는 제외
           if (!edge.edge_name.startsWith("TMP_")) {
             // waypoints 배열에서 적절한 노드 선택
@@ -354,7 +350,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
             if (waypoints.length >= 4) {
               // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
               const node1Name = waypoints[1];
-              const node2Name = waypoints[waypoints.length - 2];
+              const node2Name = waypoints.at(-2)!;
               node1 = nodes.find((n) => n.node_name === node1Name);
               node2 = nodes.find((n) => n.node_name === node2Name);
             } else {
@@ -372,7 +368,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
               };
             }
           }
-        });
+        }
         textStore.setEdgeTexts(edgeTexts);
         console.log("CFG Store - Generated edgeTexts (dict):", edgeTexts);
       } else {
@@ -386,7 +382,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
             if (waypoints.length >= 4) {
               // 곡선 엣지: waypoints[1]과 waypoints[-2] 사용
               const node1Name = waypoints[1];
-              const node2Name = waypoints[waypoints.length - 2];
+              const node2Name = waypoints.at(-2)!;
               node1 = nodes.find((n) => n.node_name === node1Name);
               node2 = nodes.find((n) => n.node_name === node2Name);
             } else {

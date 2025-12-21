@@ -62,7 +62,7 @@ export const calculatePositionOnEdge = (
 
   // Interpolate position
   const startPoint = points[0];
-  const endPoint = points[points.length - 1];
+  const endPoint = points.at(-1)!;
   const x = startPoint.x + (endPoint.x - startPoint.x) * ratio;
   const y = startPoint.y + (endPoint.y - startPoint.y) * ratio;
   const z = startPoint.z + (endPoint.z - startPoint.z) * ratio;
@@ -90,7 +90,6 @@ export const createPlacementsFromVehicleConfigs = (
   console.log(`[VehiclePlacement] Creating placements from ${vehicleConfigs.length} vehicle configs`);
   console.log(`[VehiclePlacement] Available edges: ${allEdges.length}`);
 
-  // Build edge name to edge map
   // Build edge name to edge map
   const edgeMap = new Map<string, Edge>();
   for (const edge of allEdges) {
@@ -140,6 +139,144 @@ export const createPlacementsFromVehicleConfigs = (
 };
 
 /**
+ * Calculate capacity for each loop based on straight edges
+ */
+export const calculateLoopCapacities = (
+  loops: EdgeLoop[],
+  edgeMap: Map<string, Edge>,
+  totalVehicleLength: number
+): { loopCapacities: number[]; loopStraightEdges: Edge[][] } => {
+  const loopCapacities: number[] = [];
+  const loopStraightEdges: Edge[][] = [];
+
+  for (const loop of loops) {
+    const straightEdges: Edge[] = [];
+    let totalStraightLength = 0;
+
+    // Find all straight edges in this loop
+    for (const edgeName of loop.edgeNames) {
+      const edge = edgeMap.get(edgeName);
+      if (edge?.vos_rail_type === "LINEAR") {
+        straightEdges.push(edge);
+        totalStraightLength += edge.distance;
+      }
+    }
+
+    // Calculate how many vehicles can fit on straight edges
+    const capacity = Math.floor(totalStraightLength / totalVehicleLength);
+    loopCapacities.push(capacity);
+    loopStraightEdges.push(straightEdges);
+  }
+
+  return { loopCapacities, loopStraightEdges };
+};
+
+/**
+ * Calculate how many vehicles to place on each edge
+ */
+export const calculateVehiclesPerEdge = (
+  vehiclesForThisLoop: number,
+  numEdges: number
+): number[] => {
+  const vehiclesPerEdge = new Array(numEdges).fill(0);
+  for (let i = 0; i < vehiclesForThisLoop; i++) {
+    const edgeIndex = i % numEdges;
+    vehiclesPerEdge[edgeIndex]++;
+  }
+  return vehiclesPerEdge;
+};
+
+/**
+ * Generate placements for a specific loop
+ */
+export const createLoopPlacements = (
+  vehiclesForThisLoop: number,
+  straightEdges: Edge[],
+  vehiclesPerEdge: number[],
+  vehicleIndex: number,
+  loop: EdgeLoop
+): {
+  placements: VehiclePlacement[];
+  vehicleLoops: VehicleLoop[];
+  nextVehicleIndex: number;
+} => {
+  const placements: VehiclePlacement[] = [];
+  const vehicleLoops: VehicleLoop[] = [];
+  const vehicleIndexOnEdgeCounter = new Array(straightEdges.length).fill(0);
+  let currentVehicleIndex = vehicleIndex;
+
+  // Place vehicles evenly across straight edges
+  for (let i = 0; i < vehiclesForThisLoop; i++) {
+    const edgeIndex = i % straightEdges.length;
+    const edge = straightEdges[edgeIndex];
+    const points = edge.renderingPoints || [];
+
+    if (points.length < 2) {
+      console.warn(
+        `[VehiclePlacement] Edge ${edge.edge_name} has insufficient rendering points`
+      );
+      continue;
+    }
+
+    // Get actual number of vehicles on this edge
+    const vehiclesOnThisEdge = vehiclesPerEdge[edgeIndex];
+    const vehicleIndexOnEdge = vehicleIndexOnEdgeCounter[edgeIndex];
+    vehicleIndexOnEdgeCounter[edgeIndex]++;
+
+    // Calculate ratio based on vehicle spacing
+    const edgeLength = edge.distance;
+
+    let ratio: number;
+    if (vehiclesOnThisEdge <= 1) {
+      ratio = 0.5; // Single vehicle in the middle
+    } else {
+      // Distribute vehicles evenly with spacing
+      // Leave small margin at both ends (10% of edge length)
+      const margin = edgeLength * 0.1;
+      const availableLength = edgeLength - (2 * margin);
+      const spacing = availableLength / (vehiclesOnThisEdge - 1);
+      const distanceFromStart = margin + (vehicleIndexOnEdge * spacing);
+      ratio = distanceFromStart / edgeLength;
+    }
+
+    // Clamp ratio to [0.05, 0.95] to avoid edge boundaries
+    ratio = Math.max(0.05, Math.min(0.95, ratio));
+
+    // Interpolate position
+    const startPoint = points[0];
+    const endPoint = points.at(-1)!;
+    const x = startPoint.x + (endPoint.x - startPoint.x) * ratio;
+    const y = startPoint.y + (endPoint.y - startPoint.y) * ratio;
+    const z = startPoint.z + (endPoint.z - startPoint.z) * ratio;
+
+    // Calculate rotation
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+    placements.push({
+      vehicleIndex: currentVehicleIndex,
+      x,
+      y,
+      z,
+      rotation,
+      edgeName: edge.edge_name,
+      edgeRatio: ratio,
+    });
+
+    // Assign this vehicle to this loop
+    vehicleLoops.push({
+      vehicleIndex: currentVehicleIndex,
+      edgeSequence: [...loop.edgeNames],
+    });
+
+    currentVehicleIndex++;
+  }
+
+  return { placements, vehicleLoops, nextVehicleIndex: currentVehicleIndex };
+};
+
+/**
  * Calculate vehicle placements on loops
  * Places vehicles evenly on straight edges only
  * @param loops Array of edge loops
@@ -174,27 +311,11 @@ export const calculateVehiclePlacementsOnLoops = (
   const totalVehicleLength = bodyLength + sensorLength + spacing;
 
   // Calculate max capacity for each loop
-  const loopCapacities: number[] = [];
-  const loopStraightEdges: Edge[][] = [];
-
-  for (const loop of loops) {
-    const straightEdges: Edge[] = [];
-    let totalStraightLength = 0;
-
-    // Find all straight edges in this loop
-    for (const edgeName of loop.edgeNames) {
-      const edge = edgeMap.get(edgeName);
-      if (edge && edge.vos_rail_type === "LINEAR") {
-        straightEdges.push(edge);
-        totalStraightLength += edge.distance;
-      }
-    }
-
-    // Calculate how many vehicles can fit on straight edges
-    const capacity = Math.floor(totalStraightLength / totalVehicleLength);
-    loopCapacities.push(capacity);
-    loopStraightEdges.push(straightEdges);
-  }
+  const { loopCapacities, loopStraightEdges } = calculateLoopCapacities(
+    loops,
+    edgeMap,
+    totalVehicleLength
+  );
 
   // Calculate total max capacity
   const totalCapacity = loopCapacities.reduce((sum, cap) => sum + cap, 0);
@@ -235,81 +356,23 @@ export const calculateVehiclePlacementsOnLoops = (
         );
 
     // First, calculate how many vehicles will be placed on each edge
-    const vehiclesPerEdge = new Array(straightEdges.length).fill(0);
-    const vehicleIndexOnEdgeCounter = new Array(straightEdges.length).fill(0);
-
-    for (let i = 0; i < vehiclesForThisLoop; i++) {
-      const edgeIndex = i % straightEdges.length;
-      vehiclesPerEdge[edgeIndex]++;
-    }
+    const vehiclesPerEdge = calculateVehiclesPerEdge(
+      vehiclesForThisLoop,
+      straightEdges.length
+    );
 
     // Place vehicles evenly across straight edges
-    for (let i = 0; i < vehiclesForThisLoop; i++) {
-      const edgeIndex = i % straightEdges.length;
-      const edge = straightEdges[edgeIndex];
-      const points = edge.renderingPoints || [];
+    const result = createLoopPlacements(
+      vehiclesForThisLoop,
+      straightEdges,
+      vehiclesPerEdge,
+      vehicleIndex,
+      loop
+    );
 
-      if (points.length < 2) {
-        console.warn(
-          `[VehiclePlacement] Edge ${edge.edge_name} has insufficient rendering points`
-        );
-        continue;
-      }
-
-      // Get actual number of vehicles on this edge
-      const vehiclesOnThisEdge = vehiclesPerEdge[edgeIndex];
-      const vehicleIndexOnEdge = vehicleIndexOnEdgeCounter[edgeIndex];
-      vehicleIndexOnEdgeCounter[edgeIndex]++;
-
-      // Calculate ratio based on vehicle spacing
-      const edgeLength = edge.distance;
-
-      let ratio: number;
-      if (vehiclesOnThisEdge <= 1) {
-        ratio = 0.5; // Single vehicle in the middle
-      } else {
-        // Distribute vehicles evenly with spacing
-        // Leave small margin at both ends (10% of edge length)
-        const margin = edgeLength * 0.1;
-        const availableLength = edgeLength - (2 * margin);
-        const spacing = availableLength / (vehiclesOnThisEdge - 1);
-        const distanceFromStart = margin + (vehicleIndexOnEdge * spacing);
-        ratio = distanceFromStart / edgeLength;
-      }
-
-      // Clamp ratio to [0.05, 0.95] to avoid edge boundaries
-      ratio = Math.max(0.05, Math.min(0.95, ratio));
-
-      // Interpolate position
-      const startPoint = points[0];
-      const endPoint = points[points.length - 1];
-      const x = startPoint.x + (endPoint.x - startPoint.x) * ratio;
-      const y = startPoint.y + (endPoint.y - startPoint.y) * ratio;
-      const z = startPoint.z + (endPoint.z - startPoint.z) * ratio;
-
-      // Calculate rotation
-      const dx = endPoint.x - startPoint.x;
-      const dy = endPoint.y - startPoint.y;
-      const rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-      placements.push({
-        vehicleIndex: vehicleIndex,
-        x,
-        y,
-        z,
-        rotation,
-        edgeName: edge.edge_name,
-        edgeRatio: ratio,
-      });
-
-      // Assign this vehicle to this loop
-      vehicleLoops.push({
-        vehicleIndex: vehicleIndex,
-        edgeSequence: [...loop.edgeNames],
-      });
-
-      vehicleIndex++;
-    }
+    placements.push(...result.placements);
+    vehicleLoops.push(...result.vehicleLoops);
+    vehicleIndex = result.nextVehicleIndex;
 
     // Decrease remaining vehicles
     remainingVehicles -= vehiclesForThisLoop;
