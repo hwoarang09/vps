@@ -27,6 +27,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
       CURVE_90: [],
       CURVE_180: [],
       CURVE_CSC: [],
+      S_CURVE: [],
     };
 
     for (const edge of edges) {
@@ -67,6 +68,12 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
         edges={edgesByType.CURVE_CSC}
         edgeType="CURVE_CSC"
         color={colors.curveCSC}
+        renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+      />
+      <EdgeTypeRenderer
+        edges={edgesByType.S_CURVE}
+        edgeType="S_CURVE"
+        color={colors.sCurve}
         renderOrder={RENDER_ORDER_RAIL_CURVE_90}
       />
     </group>

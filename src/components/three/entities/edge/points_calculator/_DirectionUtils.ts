@@ -54,7 +54,6 @@ export class DirectionUtils {
       const sign = cNode.editor_x > bNode.editor_x ? 1 : -1;
       centerX += sign * radius;
     }
-
     return [centerX, centerY, centerZ];
   }
 

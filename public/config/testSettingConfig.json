@@ -55,8 +55,19 @@
         "position": [10, -10, 30],
         "target": [10, 0, 0]
       }
-    }   
+    },
+    {
+      "id": "simple_s",
+      "name": "simple_s",
+      "description": "simple_s",
+      "mapName": "simple_s",
+      "numVehicles": 10,
+      "camera": {
+        "position": [10, -10, 30],
+        "target": [10, 0, 0]
+      }
+    }      
   ],
-  "DEFAULT_SETTING": "simple_connected"
+  "DEFAULT_SETTING": "simple_s"
 }
 

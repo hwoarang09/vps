@@ -81,9 +81,7 @@ export class EdgePathGenerator {
       } else {
         // CURVE
         // 곡선은 진입하는 직선의 방향이 필요함
-        const direction = lastStraightDirection ?? DirectionUtils.getLineDirection(seg.from, seg.to);
-        
-        const points = DirectionUtils.calculateCurveAreaPoints(
+        const direction = lastStraightDirection ?? DirectionUtils.getLineDirection(seg.from, seg.to);        const points = DirectionUtils.calculateCurveAreaPoints(
           seg.from,
           seg.to,
           direction,
@@ -103,7 +101,6 @@ export class EdgePathGenerator {
         // 하지만 use case상 직선->곡선 패턴이 주류임.
       }
     }
-
     // 5. Z 오프셋 적용
     return allPoints.map(
       (p) => new THREE.Vector3(p.x, p.y, p.z + zOffset)
