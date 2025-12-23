@@ -1,7 +1,7 @@
 {
   "name": "vos_r3f",
   "private": true,
-  "version": "0.1.26",
+  "version": "0.1.27",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,6 +23,7 @@
     "firebase": "^12.0.0",
     "lucide-react": "^0.534.0",
     "mqtt": "^5.10.1",
+    "papaparse": "^5.5.3",
     "r3f-perf": "^7.2.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -36,6 +37,7 @@
     "@eslint/js": "^9.13.0",
     "@svgr/rollup": "^8.1.0",
     "@types/node": "^24.1.0",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
