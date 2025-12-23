@@ -1,5 +1,5 @@
 import { Edge } from "@/types/edge";
-const DEBUG = true;
+const DEBUG = false;
 /**
  * 합류 지점 진입 권한(Grant) 정보
  */

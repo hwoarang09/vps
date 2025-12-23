@@ -6,6 +6,7 @@ import { Curve90EdgePointsCalculator } from "./_Curve90EdgePointsCalculator";
 import { SCurvePointsCalculator } from "./_SCurvePointsCalculator";
 import { CurveCSCEdgePointsCalculator } from "./_CurveCSCEdgePointsCalculator";
 import { Curve180EdgePointsCalculator } from "./_Curve180EdgePointsCalculator";
+import { CurveCSCHomoEdgePointsCalculator } from "./_CurveCSCHomoEdgePointsCalculator";
 
 
 /**
@@ -36,6 +37,9 @@ export class EdgePointsCalculator {
 
       case "CURVE_CSC":
         return CurveCSCEdgePointsCalculator.calculate(edgeRowData, nodes);
+
+      case "CSC_CURVE_HOMO":
+        return CurveCSCHomoEdgePointsCalculator.calculate(edgeRowData, nodes);
 
       case "LINEAR":
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
