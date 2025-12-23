@@ -158,7 +158,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
         const length = startPos.distanceTo(endPos);
         const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x);
 
-        if (length < 1) continue;
+        if (length < 0.01) continue;
 
         position.set(centerX, centerY, centerZ);
         euler.set(0, 0, angle);

@@ -32,8 +32,8 @@ export interface MenuState {
 
 export const useMenuStore = create<MenuState>((set, get) => ({
   // 상태 초기값
-  activeMainMenu: null,
-  activeSubMenu: null,
+  activeMainMenu: "Test",
+  activeSubMenu: "test-rapier-dict",
   activeThirdMenu: null,
   rightPanelOpen: false,
 
@@ -45,7 +45,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
 
   // 현재 최상단 레벨 계산
   getCurrentTopLevel: () => {
-    const { activeMainMenu, activeSubMenu, activeThirdMenu } = get();
+    const { activeSubMenu, activeThirdMenu } = get();
 
     if (activeThirdMenu) return 3; // 3단계 메뉴가 활성화된 경우
     if (activeSubMenu) return 2; // 서브 메뉴가 활성화된 경우
