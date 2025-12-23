@@ -4,7 +4,8 @@
 # Last Modified: 2025-12-18
 # Total Nodes: undefined
 # Total Edges: 874
-edge_name,from_node,to_node,distance,vos_rail_type,vcu_direction,bay_name,nodes,radius,waiting_offset,ole,tle,fle,tmpLen,origin_from_x,origin_from_y,origin_from_z,origin_to_x,origin_to_y,origin_to_z,rail_id
+
+rail_name,from_node,to_node,distance,vos_rail_type,vcu_direction,bay_name,nodes,radius,waiting_offset,ole,tle,fle,tmpLen,origin_from_x,origin_from_y,origin_from_z,origin_to_x,origin_to_y,origin_to_z,rail_id
 EDGE0001,NODE0001,NODE0002,53221,LINEAR,R,BAY26,"['NODE0001', 'TMP_FROM_NODE_EDGE0002', 'TMP_TO_NODE_EDGE0002', 'NODE0002']",-1.0,-1,52361.0,390.00000000000057,470.0,53.221,2.325,0.0,3.8,2.325,54.081,3.8,EDGE0001
 EDGE0002,NODE0002,NODE0003,2480,LINEAR,R,BAY26,"['NODE0002', 'TMP_FROM_NODE_EDGE0003', 'TMP_TO_NODE_EDGE0003', 'NODE0003']",-1.0,1890,1699.999999999999,390.00000000000057,390.00000000000057,2.48,2.325,54.081,3.8,2.325,55.781,3.8,EDGE0002
 EDGE0003,NODE0003,NODE0004,39247,LINEAR,R,BAY26,"['NODE0003', 'TMP_FROM_NODE_EDGE0004', 'TMP_TO_NODE_EDGE0004', 'NODE0004']",-1.0,-1,38387.0,469.99999999999886,390.00000000000057,39.247,2.325,55.781,3.8,2.325,95.888,3.8,EDGE0003
