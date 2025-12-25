@@ -12,7 +12,6 @@ import { calculateNextSpeed } from "./speedCalculator";
 import { handleEdgeTransition, EdgeTransitionResult } from "./edgeTransition";
 import { interpolatePositionTo, PositionResult } from "./positionInterpolator";
 import { updateSensorPoints } from "../helpers/sensorPoints";
-import { logSensorSummary } from "../helpers/sensorDebug";
 import { getCurveAcceleration } from "@/config/movementConfig";
 
 interface MovementUpdateParams {
@@ -24,10 +23,6 @@ interface MovementUpdateParams {
   store: VehicleArrayStore;
   clampedDelta: number;
 }
-
-// Debug flag
-let frameCount = 0;
-const DEBUG_INTERVAL = 300; // Log every 300 frames (~5 seconds at 60fps)
 
 // ============================================================================
 // Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
@@ -52,6 +47,11 @@ const SCRATCH_MERGE_POS: PositionResult = {
   rotation: 0,
 };
 
+const SCRATCH_ACCEL = {
+  accel: 0,
+  decel: 0,
+};
+
 /**
  * Update vehicle movement and positions
  * Zero-GC Optimized: 루프 내 객체 생성 완전 제거
@@ -66,8 +66,6 @@ export function updateMovement(params: MovementUpdateParams) {
     store,
     clampedDelta,
   } = params;
-
-  frameCount++;
 
   // Process Transfer Queue
   processTransferQueue(edgeArray, vehicleLoopMap, edgeNameToIndex, store.transferMode);
@@ -88,13 +86,8 @@ export function updateMovement(params: MovementUpdateParams) {
     const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
 
     // hitZone 계산 (인라인)
-    const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]);
-    let hitZone = -1;
-    if (rawHit === 2) {
-      hitZone = 2;
-    } else if (deceleration !== 0) {
-      hitZone = rawHit;
-    }
+    // hitZone calculation via helper
+    const hitZone = calculateHitZone(data, ptr, deceleration);
 
     let finalX = data[ptr + MovementData.X];
     let finalY = data[ptr + MovementData.Y];
@@ -104,35 +97,20 @@ export function updateMovement(params: MovementUpdateParams) {
     // Safety check
     const currentEdge = edgeArray[currentEdgeIndex];
 
-    // 3. Calculate Speed (Zero-GC: 인라인 처리)
-    let appliedAccel = acceleration;
-    let appliedDecel = 0;
-
-    // Override acceleration for curves if not braking
-    if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
-      appliedAccel = getCurveAcceleration();
-    }
-
-    if (hitZone >= 0) {
-      appliedAccel = 0;
-      appliedDecel = deceleration;
-    }
+    // 3. Calculate Speed (Zero-GC: Helper)
+    calculateAppliedAccelAndDecel(
+      acceleration,
+      deceleration,
+      currentEdge,
+      hitZone,
+      SCRATCH_ACCEL
+    );
+    let appliedAccel = SCRATCH_ACCEL.accel;
+    let appliedDecel = SCRATCH_ACCEL.decel;
 
     // Hard stop for stop-zone contact (Sensor Stop)
-    if (hitZone === 2) {
-      data[ptr + MovementData.VELOCITY] = 0;
-      data[ptr + MovementData.DECELERATION] = 0;
-
-      // Update Reason: SENSORED
-      const currentReason = data[ptr + LogicData.STOP_REASON];
-      data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.SENSORED;
+    if (checkAndProcessSensorStop(hitZone, data, ptr)) {
       continue;
-    } else {
-      // Clear SENSORED bit if moving or not hitZone 2
-      const currentReason = data[ptr + LogicData.STOP_REASON];
-      if ((currentReason & StopReason.SENSORED) !== 0) {
-        data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.SENSORED;
-      }
     }
 
     let newVelocity = calculateNextSpeed(
@@ -184,7 +162,6 @@ export function updateMovement(params: MovementUpdateParams) {
       finalEdge,
       i,
       finalRatio,
-      activeEdge,
       data,
       ptr,
       SCRATCH_MERGE_POS
@@ -216,11 +193,6 @@ export function updateMovement(params: MovementUpdateParams) {
     // 9. Update Sensor Points (Zero-GC)
     const presetIdx = Math.trunc(data[ptr + SensorData.PRESET_IDX]); // float -> int
     updateSensorPoints(i, finalX, finalY, finalRotation, presetIdx);
-  }
-
-  // Debug log every N frames
-  if (frameCount % DEBUG_INTERVAL === 0) {
-    logSensorSummary(actualNumVehicles);
   }
 }
 
@@ -277,7 +249,6 @@ function processMergeLogicInline(
   currentEdge: Edge,
   vehId: number,
   currentRatio: number,
-  activeEdge: Edge | null | undefined,
   data: Float32Array,
   ptr: number,
   target: PositionResult
@@ -358,3 +329,76 @@ function checkAndReleaseMergeLock(
     }
 }
 
+
+/**
+ * Helper: Calculate hitZone based on sensor data and deceleration
+ */
+function calculateHitZone(
+  data: Float32Array,
+  ptr: number,
+  deceleration: number
+): number {
+  const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]);
+  let hitZone = -1;
+  if (rawHit === 2) {
+    hitZone = 2;
+  } else if (deceleration !== 0) {
+    hitZone = rawHit;
+  }
+  return hitZone;
+}
+
+/**
+ * Helper: Calculate applied acceleration and deceleration
+ * Zero-GC: writes to target object
+ */
+function calculateAppliedAccelAndDecel(
+  acceleration: number,
+  deceleration: number,
+  currentEdge: Edge,
+  hitZone: number,
+  target: typeof SCRATCH_ACCEL
+) {
+  let appliedAccel = acceleration;
+  let appliedDecel = 0;
+
+  // Override acceleration for curves if not braking
+  if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
+    appliedAccel = getCurveAcceleration();
+  }
+
+  if (hitZone >= 0) {
+    appliedAccel = 0;
+    appliedDecel = deceleration;
+  }
+
+  target.accel = appliedAccel;
+  target.decel = appliedDecel;
+}
+
+/**
+ * Helper: Check for sensor stop (hitZone === 2)
+ * Returns true if the vehicle should stop immediately
+ */
+function checkAndProcessSensorStop(
+  hitZone: number,
+  data: Float32Array,
+  ptr: number
+): boolean {
+  if (hitZone === 2) {
+    data[ptr + MovementData.VELOCITY] = 0;
+    data[ptr + MovementData.DECELERATION] = 0;
+
+    // Update Reason: SENSORED
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.SENSORED;
+    return true;
+  } else {
+    // Clear SENSORED bit if moving or not hitZone 2
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    if ((currentReason & StopReason.SENSORED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.SENSORED;
+    }
+    return false;
+  }
+}

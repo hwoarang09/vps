@@ -54,8 +54,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
     updateVehicleTextTransforms(
       D as Required<SlotData>,
       vehicleData,
-      camera.position,
-      camera.quaternion,
+      camera,
       instRefs.current,
       {
         scale,

@@ -151,12 +151,8 @@ export function applyHighAltitudeCulling(
  * 결과를 모듈 레벨 캐시에 저장하여 재사용
  */
 export function updateBillboardRotation(cameraQuaternion: THREE.Quaternion): void {
-  if (!_cachedBillboardQuat) {
-    _cachedBillboardQuat = new THREE.Quaternion();
-  }
-  if (!_cachedBillboardRight) {
-    _cachedBillboardRight = new THREE.Vector3();
-  }
+  _cachedBillboardQuat ??= new THREE.Quaternion();
+  _cachedBillboardRight ??= new THREE.Vector3();
 
   _cachedBillboardQuat.copy(cameraQuaternion);
   _cachedBillboardRight.copy(_unitX).applyQuaternion(_cachedBillboardQuat);
@@ -207,8 +203,7 @@ export function updateVehicleTextTransforms(
     slotPosition: Int32Array;
   },
   vehicleData: Float32Array,
-  cameraPos: THREE.Vector3,
-  cameraQuaternion: THREE.Quaternion,
+  camera: THREE.Camera,
   meshes: (THREE.InstancedMesh | null)[],
   params: {
     scale: number;
@@ -229,15 +224,15 @@ export function updateVehicleTextTransforms(
   const { totalCharacters, slotDigit, slotIndex, slotVehicle, slotPosition } = data;
   const { scale, charSpacing, halfLen, zOffset, lodDistSq } = params;
   const { VEHICLE_DATA_SIZE, MovementData_X, MovementData_Y, MovementData_Z } = constants;
-  const cx = cameraPos.x;
-  const cy = cameraPos.y;
-  const cz = cameraPos.z;
+  const cx = camera.position.x;
+  const cy = camera.position.y;
+  const cz = camera.position.z;
 
   // Zero-GC: 스케일 벡터 재사용
   _tempScale.set(scale, scale, 1);
 
   // Zero-GC: 빌보드 회전 한 번만 계산
-  updateBillboardRotation(cameraQuaternion);
+  updateBillboardRotation(camera.quaternion);
   const billboardQuat = getBillboardQuaternion();
   const billboardRight = getBillboardRight();
 
