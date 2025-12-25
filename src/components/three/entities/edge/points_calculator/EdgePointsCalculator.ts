@@ -38,9 +38,6 @@ export class EdgePointsCalculator {
       case "CURVE_CSC":
         return CurveCSCEdgePointsCalculator.calculate(edgeRowData, nodes);
 
-      case "CSC_CURVE_HOMO":
-        return CurveCSCHomoEdgePointsCalculator.calculate(edgeRowData, nodes);
-
       case "LINEAR":
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
       default:
