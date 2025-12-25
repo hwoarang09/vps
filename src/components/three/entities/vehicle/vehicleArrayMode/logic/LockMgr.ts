@@ -181,8 +181,8 @@ export class LockMgr {
     }
 
     // 2. 직선 Edge (m 단위)
-    if (edge.distance >= 3.0) {
-      return edge.distance - 3.0;
+    if (edge.distance >= 3) {
+      return edge.distance - 3;
     } else {
       return 0;
     }

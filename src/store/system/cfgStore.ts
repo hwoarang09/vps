@@ -260,28 +260,67 @@ const processNodeTexts = (nodes: Node[], textStore: any) => {
   }
 };
 
+// renderingPoints 경로의 정확한 중간 지점 계산
+const getEdgeMidpoint = (edge: Edge): TextPosition | null => {
+  const points = edge.renderingPoints;
+  if (!points || points.length === 0) return null;
+
+  if (points.length === 1) {
+    return { x: points[0].x, y: points[0].y, z: points[0].z };
+  }
+
+  // 총 경로 길이 계산
+  let totalLength = 0;
+  const segmentLengths: number[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1].x - points[i].x;
+    const dy = points[i + 1].y - points[i].y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    segmentLengths.push(len);
+    totalLength += len;
+  }
+
+  // 중간 지점 찾기
+  const halfLength = totalLength / 2;
+  let accumulated = 0;
+  for (let i = 0; i < segmentLengths.length; i++) {
+    if (accumulated + segmentLengths[i] >= halfLength) {
+      const remaining = halfLength - accumulated;
+      const t = remaining / segmentLengths[i];
+      return {
+        x: points[i].x + (points[i + 1].x - points[i].x) * t,
+        y: points[i].y + (points[i + 1].y - points[i].y) * t,
+        z: points[i].z + (points[i + 1].z - points[i].z) * t,
+      };
+    }
+    accumulated += segmentLengths[i];
+  }
+
+  // 폴백: 마지막 점
+  const last = points[points.length - 1];
+  return { x: last.x, y: last.y, z: last.z };
+};
+
 // 엣지 텍스트 생성 (Dict Mode)
 const processEdgeTextsDict = (edges: Edge[], nodes: Node[], textStore: any) => {
   const edgeTexts: Record<string, TextPosition> = {};
   for (const edge of edges) {
     if (!edge.edge_name.startsWith("TMP_")) {
-      const waypoints = edge.waypoints || [];
-      let node1, node2;
-
-      if (waypoints.length >= 4) {
-        node1 = nodes.find((n) => n.node_name === waypoints[1]);
-        node2 = nodes.find((n) => n.node_name === waypoints.at(-2));
+      // renderingPoints가 있으면 경로의 정확한 중간점 사용
+      const midpoint = getEdgeMidpoint(edge);
+      if (midpoint) {
+        edgeTexts[edge.edge_name] = midpoint;
       } else {
-        node1 = nodes.find((n) => n.node_name === edge.from_node);
-        node2 = nodes.find((n) => n.node_name === edge.to_node);
-      }
-
-      if (node1 && node2) {
-        edgeTexts[edge.edge_name] = {
-          x: (node1.editor_x + node2.editor_x) / 2,
-          y: (node1.editor_y + node2.editor_y) / 2,
-          z: (node1.editor_z + node2.editor_z) / 2,
-        };
+        // 폴백: from_node와 to_node의 중간점
+        const node1 = nodes.find((n) => n.node_name === edge.from_node);
+        const node2 = nodes.find((n) => n.node_name === edge.to_node);
+        if (node1 && node2) {
+          edgeTexts[edge.edge_name] = {
+            x: (node1.editor_x + node2.editor_x) / 2,
+            y: (node1.editor_y + node2.editor_y) / 2,
+            z: (node1.editor_z + node2.editor_z) / 2,
+          };
+        }
       }
     }
   }
@@ -294,17 +333,18 @@ const processEdgeTextsArray = (edges: Edge[], nodes: Node[], textStore: any) => 
   const edgeTextsArray = edges
     .filter((edge) => !edge.edge_name.startsWith("TMP_"))
     .map((edge) => {
-      const waypoints = edge.waypoints || [];
-      let node1, node2;
-
-      if (waypoints.length >= 4) {
-        node1 = nodes.find((n) => n.node_name === waypoints[1]);
-        node2 = nodes.find((n) => n.node_name === waypoints.at(-2));
-      } else {
-        node1 = nodes.find((n) => n.node_name === edge.from_node);
-        node2 = nodes.find((n) => n.node_name === edge.to_node);
+      // renderingPoints가 있으면 경로의 정확한 중간점 사용
+      const midpoint = getEdgeMidpoint(edge);
+      if (midpoint) {
+        return {
+          name: edge.edge_name,
+          position: midpoint,
+        };
       }
 
+      // 폴백: from_node와 to_node의 중간점
+      const node1 = nodes.find((n) => n.node_name === edge.from_node);
+      const node2 = nodes.find((n) => n.node_name === edge.to_node);
       if (node1 && node2) {
         return {
           name: edge.edge_name,

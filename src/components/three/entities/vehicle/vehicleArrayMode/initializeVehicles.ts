@@ -50,70 +50,11 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   // 3. Calculate vehicle placements
   let placements: VehiclePlacement[];
 
-  if (vehicleConfigs && vehicleConfigs.length > 0) {
-    console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
-    placements = createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
-  } else {
-    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles`);
-    const result = calculateVehiclePlacements(numVehicles, edgeArray);
-    placements = result.placements;
-  }
+  placements = getVehiclePlacements(vehicleConfigs, numVehicles, edgeArray);
 
   // 4. Set vehicle data
   const edgeVehicleCount = new Map<number, number>();
-  for (const placement of placements) {
-    const edgeIndex = nameToIndex.get(placement.edgeName);
-    if (edgeIndex === undefined) continue;
-
-    const edge = edgeArray[edgeIndex];
-    const isCurve = edge.vos_rail_type !== "LINEAR";
-    const initialVelocity = isCurve ? getCurveMaxSpeed() : 0;
-
-    store.addVehicle(placement.vehicleIndex, {
-      x: placement.x,
-      y: placement.y,
-      z: placement.z,
-      edgeIndex: edgeIndex,
-      edgeRatio: placement.edgeRatio,
-      rotation: placement.rotation,
-      velocity: initialVelocity,
-      acceleration: getLinearAcceleration(),
-      deceleration: getLinearDeceleration(),
-      movingStatus: MovingStatus.MOVING,
-    });
-
-    // Initialize sensor preset based on edge type
-    const vehData = vehicleDataArray.getData();
-    const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
-    vehData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
-    vehData[ptr + SensorData.HIT_ZONE] = -1;
-
-    // Initialize NextEdge State
-    vehData[ptr + MovementData.NEXT_EDGE] = -1;
-    vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
-
-    updateSensorPoints(
-      placement.vehicleIndex,
-      placement.x,
-      placement.y,
-      placement.rotation,
-      PresetIndex.STRAIGHT
-    );
-
-    edgeVehicleCount.set(edgeIndex, (edgeVehicleCount.get(edgeIndex) || 0) + 1);
-
-    const idNumber = placement.vehicleIndex;
-    const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
-
-    useVehicleGeneralStore.getState().addVehicle(placement.vehicleIndex, {
-      id: formattedId,
-      name: `Vehicle ${placement.vehicleIndex}`,
-      color: "#ffffff",
-      battery: 100,
-      vehicleType: 0,
-      taskType: 0,
-    });
-  }
+    initializeVehicleState(placements, nameToIndex, edgeArray, store, edgeVehicleCount);
 
   // 5. Sort vehicles in each edge by edgeRatio (front to back)
   for (const [edgeIdx, _] of edgeVehicleCount) {
@@ -121,34 +62,11 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   }
 
   // 6. Verify edgeVehicleQueue
-  let totalInByEdge = 0;
-  for (const [edgeIdx, count] of edgeVehicleCount) {
-    const actualCount = edgeVehicleQueue.getCount(edgeIdx);
-    totalInByEdge += actualCount;
-    if (actualCount !== count) {
-      console.error(`[VehicleArrayMode] Edge ${edgeIdx} mismatch! Expected: ${count}, Got: ${actualCount}`);
-    }
-  }
+  verifyEdgeVehicleCounts(edgeVehicleCount);
 
   // 7. Initial lock requests for vehicles on merge edges
   // Issue lock requests in correct order (front to back) to prevent simultaneous requests
-  const lockMgr = getLockMgr();
-  for (const [edgeIdx, _] of edgeVehicleCount) {
-    const edge = edgeArray[edgeIdx];
-
-    // Check if this edge leads to a merge node
-    if (lockMgr.isMergeNode(edge.to_node)) {
-      // Get vehicles on this edge (already sorted by edgeRatio, front to back)
-      const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
-
-      console.log(`[InitVehicles] Merge edge ${edge.edge_name} -> ${edge.to_node}: Pre-requesting locks for ${vehiclesOnEdge.length} vehicles`);
-
-      // Request lock in order (front to back)
-      for (const vehId of vehiclesOnEdge) {
-        lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
-      }
-    }
-  }
+  processMergeEdgeLocks(edgeVehicleCount, edgeArray);
 
   return {
     edgeNameToIndex: nameToIndex,
@@ -274,4 +192,115 @@ function createVehicleDistribution(
     }
   }
   return distribution;
+}
+
+function getVehiclePlacements(
+  vehicleConfigs: VehicleConfig[] | undefined,
+  numVehicles: number,
+  edgeArray: any[]
+): VehiclePlacement[] {
+  if (vehicleConfigs && vehicleConfigs.length > 0) {
+    console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
+    return createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
+  } else {
+    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles`);
+    const result = calculateVehiclePlacements(numVehicles, edgeArray);
+    return result.placements;
+  }
+}
+
+function initializeVehicleState(
+  placements: VehiclePlacement[],
+  nameToIndex: Map<string, number>,
+  edgeArray: any[],
+  store: any,
+  edgeVehicleCount: Map<number, number>
+) {
+  for (const placement of placements) {
+    const edgeIndex = nameToIndex.get(placement.edgeName);
+    if (edgeIndex === undefined) continue;
+
+    const edge = edgeArray[edgeIndex];
+    const isCurve = edge.vos_rail_type !== "LINEAR";
+    const initialVelocity = isCurve ? getCurveMaxSpeed() : 0;
+
+    store.addVehicle(placement.vehicleIndex, {
+      x: placement.x,
+      y: placement.y,
+      z: placement.z,
+      edgeIndex: edgeIndex,
+      edgeRatio: placement.edgeRatio,
+      rotation: placement.rotation,
+      velocity: initialVelocity,
+      acceleration: getLinearAcceleration(),
+      deceleration: getLinearDeceleration(),
+      movingStatus: MovingStatus.MOVING,
+    });
+
+    // Initialize sensor preset based on edge type
+    const vehData = vehicleDataArray.getData();
+    const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
+    vehData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
+    vehData[ptr + SensorData.HIT_ZONE] = -1;
+
+    // Initialize NextEdge State
+    vehData[ptr + MovementData.NEXT_EDGE] = -1;
+    vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
+
+    updateSensorPoints(
+      placement.vehicleIndex,
+      placement.x,
+      placement.y,
+      placement.rotation,
+      PresetIndex.STRAIGHT
+    );
+
+    edgeVehicleCount.set(edgeIndex, (edgeVehicleCount.get(edgeIndex) || 0) + 1);
+
+    const idNumber = placement.vehicleIndex;
+    const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
+
+    useVehicleGeneralStore.getState().addVehicle(placement.vehicleIndex, {
+      id: formattedId,
+      name: `Vehicle ${placement.vehicleIndex}`,
+      color: "#ffffff",
+      battery: 100,
+      vehicleType: 0,
+      taskType: 0,
+    });
+  }
+}
+
+function verifyEdgeVehicleCounts(edgeVehicleCount: Map<number, number>) {
+  let totalInByEdge = 0;
+  for (const [edgeIdx, count] of edgeVehicleCount) {
+    const actualCount = edgeVehicleQueue.getCount(edgeIdx);
+    totalInByEdge += actualCount;
+    if (actualCount !== count) {
+      console.error(`[VehicleArrayMode] Edge ${edgeIdx} mismatch! Expected: ${count}, Got: ${actualCount}`);
+    }
+  }
+}
+
+function processMergeEdgeLocks(
+  edgeVehicleCount: Map<number, number>,
+  edgeArray: any[]
+) {
+  const lockMgr = getLockMgr();
+  for (const [edgeIdx, _] of edgeVehicleCount) {
+    const edge = edgeArray[edgeIdx];
+
+    // Check if this edge leads to a merge node
+    if (lockMgr.isMergeNode(edge.to_node)) {
+      // Get vehicles on this edge (already sorted by edgeRatio, front to back)
+      const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
+
+      console.log(`[InitVehicles] Merge edge ${edge.edge_name} -> ${edge.to_node}: Pre-requesting locks for ${vehiclesOnEdge.length} vehicles`);
+
+      // Request lock in order (front to back)
+      for (const vehId of vehiclesOnEdge) {
+        lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
+      }
+    }
+  }
 }

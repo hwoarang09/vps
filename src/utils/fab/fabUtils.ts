@@ -93,7 +93,7 @@ export function createFab1BoundingRect(nodes: Node[], padding: number = 0): Boun
  */
 export function addThousandToId(name: string): string {
   // 마지막 숫자 부분을 찾아서 1000을 더함
-  const match = name.match(/^(.*)(\d{4})$/);
+  const match = /^(.*)(\d{4})$/.exec(name);
   if (!match) {
     // 4자리 숫자가 없으면 원본 반환
     return name;
@@ -101,7 +101,7 @@ export function addThousandToId(name: string): string {
 
   const prefix = match[1];
   const numStr = match[2];
-  const num = parseInt(numStr, 10);
+  const num = Number.parseInt(numStr, 10);
   const newNum = num + 1000;
 
   // 4자리로 패딩 (1000을 더했으므로 최소 1000)
@@ -187,14 +187,14 @@ export function createFab2(nodes: Node[], edges: Edge[]): {
  * @returns 오프셋이 적용된 새 이름
  */
 export function addOffsetToId(name: string, offset: number): string {
-  const match = name.match(/^(.*)(\d{4})$/);
+  const match = /^(.*)(\d{4})$/.exec(name);
   if (!match) {
     return name;
   }
 
   const prefix = match[1];
   const numStr = match[2];
-  const num = parseInt(numStr, 10);
+  const num = Number.parseInt(numStr, 10);
   const newNum = num + offset;
 
   return `${prefix}${newNum.toString().padStart(4, '0')}`;
@@ -295,9 +295,9 @@ export interface FabOffset {
  */
 export function convertTo5Digit(id: string): string {
   // Extract prefix (N, E, etc.) and number part
-  const prefix = id.match(/^[A-Z]+/)?.[0] || '';
+  const prefix = /^[A-Z]+/.exec(id)?.[0] || '';
   const numStr = id.slice(prefix.length);
-  const num = parseInt(numStr, 10);
+  const num = Number.parseInt(numStr, 10);
 
   // Convert to 5-digit format with zero-padding
   return `${prefix}${num.toString().padStart(5, '0')}`;
@@ -363,9 +363,9 @@ export function getFabOffset(
  * N00658 + fabIndex 2 → N02658
  */
 export function addFabIdOffset(id: string, fabIndex: number): string {
-  const prefix = id.match(/^[A-Z]+/)?.[0] || '';
+  const prefix = /^[A-Z]+/.exec(id)?.[0] || '';
   const numStr = id.slice(prefix.length);
-  const num = parseInt(numStr, 10);
+  const num = Number.parseInt(numStr, 10);
 
   // Add fab offset (fabIndex * 1000)
   const newNum = num + fabIndex * 1000;
