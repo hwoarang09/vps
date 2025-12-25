@@ -23,8 +23,21 @@ const ThreeScene: React.FC = () => {
       <Canvas
         className="absolute inset-0"
         scene={{ background: new THREE.Color("#1a1a1a") }}
+        camera={{ up: [0, 0, 1], position: [-10, 10, 50] }}
       >
-        <OrbitControls makeDefault enablePan enableZoom enableRotate />
+        <OrbitControls 
+           makeDefault 
+           enablePan 
+           enableZoom 
+           enableRotate 
+           zoomSpeed={3}
+           screenSpacePanning={false} // Pan on XY plane (ground) instead of screen space
+           enableDamping={true}       // Smooth motion
+           dampingFactor={0.1}
+           maxPolarAngle={Math.PI / 2 - 0.05} // Limit rotation to above ground
+           minDistance={1}            // Prevent going too close
+           maxDistance={2000}         // Limit far zoom
+         />
         <CameraController />
 
         {/* Basic lighting for factory environment */}

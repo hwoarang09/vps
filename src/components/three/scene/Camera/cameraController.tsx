@@ -274,6 +274,46 @@ const CameraController: React.FC = () => {
       orbitControls.update();
     }
   });
+ 
+   // Fine zoom adjustment with + and - keys
+   useEffect(() => {
+     if (!controls) return;
+ 
+     const handleKeyDown = (event: KeyboardEvent) => {
+       // Ignore if any input is focused
+       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+         return;
+       }
+ 
+       const orbitControls = controls as OrbitControls;
+       const fineZoomFactor = 0.05; // 5% adjustment per press
+ 
+       if (['=', '+', 'NumpadAdd'].includes(event.key)) {
+         // Zoom In (Decrease distance)
+         const offset = new THREE.Vector3().subVectors(camera.position, orbitControls.target);
+         const dist = offset.length();
+         const newDist = Math.max(orbitControls.minDistance, dist * (1 - fineZoomFactor));
+         
+         offset.setLength(newDist);
+         camera.position.copy(orbitControls.target).add(offset);
+         orbitControls.update();
+       } else if (['-', '_', 'NumpadSubtract'].includes(event.key)) {
+         // Zoom Out (Increase distance)
+         const offset = new THREE.Vector3().subVectors(camera.position, orbitControls.target);
+         const dist = offset.length();
+         const newDist = Math.min(orbitControls.maxDistance, dist * (1 + fineZoomFactor));
+         
+         offset.setLength(newDist);
+         camera.position.copy(orbitControls.target).add(offset);
+         orbitControls.update();
+       }
+     };
+ 
+     globalThis.addEventListener('keydown', handleKeyDown);
+     return () => {
+       globalThis.removeEventListener('keydown', handleKeyDown);
+     };
+   }, [controls, camera]);
 
   return null;
 };
