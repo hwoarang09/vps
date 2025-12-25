@@ -6,10 +6,10 @@ import {
 import { Perf } from "r3f-perf";
 import * as THREE from "three";
 
-import MapRenderer from "./renderers/MapRenderer";
+import MapRenderer from "./entities/renderers/MapRenderer";
 import Floor from "./scene/Floor";
 import AxisHelper from "./scene/AxisHelper";
-import TextRenderer from "./entities/text/TextRenderer";
+import TextRenderer from "./entities/renderers/TextRenderer";
 import VehicleSystem from "./entities/vehicle/VehicleSystem";
 
 import CameraController from "./scene/Camera/cameraController";

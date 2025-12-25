@@ -2,10 +2,10 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge } from "@/types";
-import { colors } from "./colors";
+import { colors } from "../edge/renderers/colors";
 import * as THREE from "three";
-import edgeVertexShader from "../shaders/edgeVertex.glsl?raw";
-import edgeFragmentShader from "../shaders/edgeFragment.glsl?raw";
+import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
+import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
 import {
   RENDER_ORDER_RAIL_CURVE_90,
   RENDER_ORDER_RAIL_LINEAR,

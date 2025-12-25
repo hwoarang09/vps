@@ -1,9 +1,9 @@
 import React from "react";
 import { useTextStore } from "@store/map/textStore";
-import { VehicleSystemType } from "../../../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
-import MapTextRenderer from "./instanced/MapTextRenderer";
-import VehicleTextRenderer from "./instanced/VehicleTextRenderer";
+import MapTextRenderer from "../text/instanced/MapTextRenderer";
+import VehicleTextRenderer from "../text/instanced/VehicleTextRenderer";
 
 interface Props {
   scale?: number;
@@ -14,7 +14,7 @@ interface Props {
 
 const TextRenderer: React.FC<Props> = ({
   scale = 0.6,
-  nodeColor = "#00e5ff",
+  nodeColor = "#ff69b4",
   edgeColor = "#ff9800",
   vehicleColor = "#ffffff",
 }) => {

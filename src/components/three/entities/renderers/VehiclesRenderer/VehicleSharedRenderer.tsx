@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
 import * as THREE from "three";
-import { vehicleSharedMovement } from "../../../../store/vehicle/sharedMode/vehicleMovement";
-import { getSharedMemoryModeConfig } from "../../../../config/visualizationConfig";
+import { vehicleSharedMovement } from "../../../../../store/vehicle/sharedMode/vehicleMovement";
+import { getSharedMemoryModeConfig } from "../../../../../config/visualizationConfig";
 import { BaseVehicleRenderer } from "./BaseVehicleRenderer";
 import type { UpdateTransformFn } from "./BaseVehicleRenderer";
 

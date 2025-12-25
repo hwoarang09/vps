@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
-import { useEdgeStore } from "../../../store/map/edgeStore";
-import { useNodeStore } from "../../../store/map/nodeStore";
-import EdgeRenderer from "../entities/edge/renderers/EdgeRenderer";
+import { useEdgeStore } from "../../../../store/map/edgeStore";
+import { useNodeStore } from "../../../../store/map/nodeStore";
+import EdgeRenderer from "./EdgeRenderer";
 import NodesRenderer from "./NodesRenderer";
-import { useRenderCheck } from "../../../utils/renderDebug";
+import { useRenderCheck } from "../../../../utils/renderDebug";
 
 /**
  * MapRenderer component - Optimized to minimize re-renders

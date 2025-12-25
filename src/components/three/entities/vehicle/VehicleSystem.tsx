@@ -2,7 +2,7 @@ import { Physics } from "@react-three/rapier";
 import VehicleRapierMode from "./vehicleRapierMode/VehicleRapierMode";
 import VehicleArrayMode from "./vehicleArrayMode/vehicleArrayMode";
 import VehicleSharedMemoryMode from "./vehicleSharedMode/VehicleSharedMemoryMode";
-import VehiclesRenderer from "../../renderers/VehiclesRenderer/VehiclesRenderer";
+import VehiclesRenderer from "../renderers/VehiclesRenderer/VehiclesRenderer";
 import { VehicleSystemType } from '@/types/vehicle';
 import { getMaxVehicles } from "@/config/vehicleConfig";
 import { getRapierModeConfig } from "@/config/visualizationConfig";

@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useEffect, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { getVehicleConfigSync, waitForConfig } from "../../../../config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "../../../../../config/vehicleConfig";
 
 // 자식이 구현해야 할 데이터 주입 함수 타입
 export type UpdateTransformFn = (
