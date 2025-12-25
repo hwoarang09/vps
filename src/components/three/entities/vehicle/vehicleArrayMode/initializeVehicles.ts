@@ -4,8 +4,7 @@
 
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed } from "@/config/movementConfig";
-import { calculateVehiclePlacementsOnLoops, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
-import { findEdgeLoops, VehicleLoop } from "@/utils/vehicle/loopMaker";
+import { calculateVehiclePlacements, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
 import { vehicleDataArray, SensorData, MovementData, NextEdgeState, VEHICLE_DATA_SIZE, MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { updateSensorPoints } from "./helpers/sensorPoints";
@@ -15,18 +14,16 @@ import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { VehicleConfig } from "@/types";
 
 export interface InitializationResult {
-  vehicleLoops: VehicleLoop[];
-  vehicleLoopMap: Map<number, VehicleLoop>;
   edgeNameToIndex: Map<string, number>;
   edgeArray: any[];
   actualNumVehicles: number;
 }
 
 export interface InitializeVehiclesParams {
-  edges: any[]; // Edge array from useEdgeStore
+  edges: any[];
   numVehicles: number;
   store: any;
-  vehicleConfigs?: VehicleConfig[]; // Optional: if provided, use these instead of auto-placement
+  vehicleConfigs?: VehicleConfig[];
 }
 
 /**
@@ -40,11 +37,10 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   // 1. Initialize memory
   store.initArrayMemory();
 
-  // Get direct data access
   const directData = vehicleDataArray.getData();
 
   // 2. Build edge array and name-to-index map
-  const edgeArray = edges; // Already an array
+  const edgeArray = edges;
   const nameToIndex = new Map<string, number>();
   for (let idx = 0; idx < edgeArray.length; idx++) {
     nameToIndex.set(edgeArray[idx].edge_name, idx);
@@ -52,33 +48,20 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
 
   // 3. Calculate vehicle placements
   let placements: VehiclePlacement[];
-  let vehicleLoops: VehicleLoop[] = [];
 
   if (vehicleConfigs && vehicleConfigs.length > 0) {
-    // Use vehicle configs from vehicles.cfg
     console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
     placements = createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
   } else {
-    // Auto-placement on loops
-    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles on loops`);
-    const edgeLoops = findEdgeLoops(edgeArray);
-    const result = calculateVehiclePlacementsOnLoops(edgeLoops, numVehicles, edgeArray);
+    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles`);
+    const result = calculateVehiclePlacements(numVehicles, edgeArray);
     placements = result.placements;
-    vehicleLoops = result.vehicleLoops;
   }
 
-  // 4. Build vehicle loop map
-  const loopMap = new Map<number, VehicleLoop>();
-  for (const loop of vehicleLoops) {
-    loopMap.set(loop.vehicleIndex, loop);
-  }
-
-  // 5. Set vehicle data
+  // 4. Set vehicle data
   const edgeVehicleCount = new Map<number, number>();
   for (const placement of placements) {
     const edgeIndex = nameToIndex.get(placement.edgeName);
-
-    // edgeIndex가 없으면 건너뜀 (Guard Clause 패턴으로 변경하여 들여쓰기 감소 추천)
     if (edgeIndex === undefined) continue;
 
     const edge = edgeArray[edgeIndex];
@@ -131,12 +114,12 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     });
   }
 
-  // 7. Sort vehicles in each edge by edgeRatio (front to back)
+  // 5. Sort vehicles in each edge by edgeRatio (front to back)
   for (const [edgeIdx, _] of edgeVehicleCount) {
     edgeVehicleQueue.sortByEdgeRatio(edgeIdx, directData);
   }
 
-  // 8. Verify edgeVehicleQueue
+  // 6. Verify edgeVehicleQueue
   let totalInByEdge = 0;
   for (const [edgeIdx, count] of edgeVehicleCount) {
     const actualCount = edgeVehicleQueue.getCount(edgeIdx);
@@ -147,8 +130,6 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   }
 
   return {
-    vehicleLoops: vehicleLoops,
-    vehicleLoopMap: loopMap,
     edgeNameToIndex: nameToIndex,
     edgeArray: edgeArray,
     actualNumVehicles: placements.length,
@@ -161,7 +142,6 @@ export interface RapierInitializationParams {
   edges: any[];
   setInitialized: (val: boolean) => void;
   onPlacementComplete?: (result: {
-    vehicleLoops: VehicleLoop[];
     edgeNameToIndex: Map<string, number>;
   }) => void;
 }
@@ -184,24 +164,15 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
     nameToIndex.set(edgeArray[idx].edge_name, idx);
   }
 
-  const edgeLoops = findEdgeLoops(edgeArray);
-  console.log(`[initializeRapierVehicles] Found ${edgeLoops.length} loops`);
-
-  const result = calculateVehiclePlacementsOnLoops(
-    edgeLoops,
-    numVehicles,
-    edgeArray
-  );
+  const result = calculateVehiclePlacements(numVehicles, edgeArray);
 
   console.log(`[initializeRapierVehicles] ✅ Placement calculation completed!`);
   console.log(`[initializeRapierVehicles]    - Requested vehicles: ${numVehicles}`);
   console.log(`[initializeRapierVehicles]    - Calculated placements: ${result.placements.length}`);
   console.log(`[initializeRapierVehicles]    - Max capacity: ${result.maxCapacity}`);
-  console.log(`[initializeRapierVehicles]    - Vehicle loops: ${result.vehicleLoops.length}`);
 
   if (onPlacementComplete) {
     onPlacementComplete({
-      vehicleLoops: result.vehicleLoops,
       edgeNameToIndex: nameToIndex
     });
   }
@@ -217,10 +188,7 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
 
     console.log(`[initializeRapierVehicles] 🚗 Creating batch ${batchNumber}/${totalBatches} (vehicles ${startIndex}-${endIndex - 1})`);
 
-    // Collect all vehicles in this batch
     const vehicleBatch = createVehicleBatch(startIndex, endIndex, result.placements, nameToIndex);
-
-    // Single store update = single re-render
     store.batchAddVehicles(vehicleBatch);
 
     if (endIndex < totalPlacements) {
@@ -228,12 +196,9 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
     } else {
       console.log(`[initializeRapierVehicles] ✅ All ${totalPlacements} vehicles initialized!`);
 
-      // Store initial vehicle distribution for UI display and log edge-based arrays
       const distribution = createVehicleDistribution(result.placements, nameToIndex);
-
       useVehicleTestStore.getState().setInitialVehicleDistribution(distribution);
 
-      // Set initialized AFTER all batches are complete
       store.setActualNumVehicles(result.placements.length);
       store.setMaxPlaceableVehicles(result.maxCapacity);
       setInitialized(true);
@@ -249,7 +214,7 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
 function createVehicleBatch(
   startIndex: number,
   endIndex: number,
-  placements: any[],
+  placements: VehiclePlacement[],
   nameToIndex: Map<string, number>
 ) {
   const vehicleBatch = [];
@@ -274,7 +239,7 @@ function createVehicleBatch(
 }
 
 function createVehicleDistribution(
-  placements: any[],
+  placements: VehiclePlacement[],
   nameToIndex: Map<string, number>
 ) {
   const distribution = new Map<number, number[]>();

@@ -62,9 +62,86 @@ let testSettingConfig: TestSettingConfig = {
         position: [5, -2, 10],
         target: [5, 5, 0]
       }
+    },
+    {
+      id: "MEDIUM_LOOP",
+      name: "Medium Loop Test",
+      description: "Medium-sized loop with moderate vehicle count",
+      mapName: "straight_test",
+      numVehicles: 50,
+      camera: {
+        position: [250, -150, 550],
+        target: [250, 150, 0]
+      }
+    },
+    {
+      id: "STRESS_TEST",
+      name: "Stress Test",
+      description: "Maximum vehicles for performance testing",
+      mapName: "stress_test",
+      numVehicles: 1000,
+      camera: {
+        position: [250, -150, 550],
+        target: [250, 150, 0]
+      }
+    },
+    {
+      id: "SIMPLE_CONNECTED",
+      name: "Simple Connected",
+      description: "Simple connected loop test",
+      mapName: "simple_connected",
+      numVehicles: 10,
+      camera: {
+        position: [10, -10, 30],
+        target: [10, 0, 0]
+      }
+    },
+    {
+      id: "SIMPLE_S",
+      name: "Simple S Curve",
+      description: "Simple S-curve test",
+      mapName: "simple_s",
+      numVehicles: 8,
+      camera: {
+        position: [10, -10, 30],
+        target: [10, 0, 0]
+      }
+    },
+    {
+      id: "Y_SHORT",
+      name: "Y Short Switch",
+      description: "Y-switch short track test",
+      mapName: "y_short",
+      numVehicles: 6,
+      camera: {
+        position: [10, -10, 30],
+        target: [10, 0, 0]
+      }
+    },
+    {
+      id: "COP",
+      name: "COP Test",
+      description: "COP track test",
+      mapName: "cop",
+      numVehicles: 10,
+      camera: {
+        position: [10, -10, 30],
+        target: [10, 0, 0]
+      }
+    },
+    {
+      id: "SHORT_EDGE_KEEP",
+      name: "Short Edge Keep",
+      description: "Simple Connected Short Edge Keep test",
+      mapName: "simple_connected_short_edge_keep",
+      numVehicles: 10,
+      camera: {
+        position: [10, -10, 30],
+        target: [10, 0, 0]
+      }
     }
   ],
-  DEFAULT_SETTING: "SMALL_LOOP"
+  DEFAULT_SETTING: "Y_SHORT"
 };
 
 // Load config immediately

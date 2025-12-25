@@ -124,8 +124,6 @@ export class SCurvePointsCalculator {
 
     // Z 오프셋 적용
     const zOffset = 0.001;
-    console.log(`edgeRowData : ${JSON.stringify(edgeRowData,null,2)}`)
-    console.log(`allpoints : ${allPoints}`)
     return allPoints.map((p) => new THREE.Vector3(p.x, p.y, p.z + zOffset));
   }
 }
