@@ -16,8 +16,8 @@ export const SensorPoint = {
 } as const;
 
 class SensorPointArray {
-  private data: Float32Array;
-  private maxVehicles: number;
+  private readonly data: Float32Array;
+  private readonly maxVehicles: number;
 
   constructor(maxVehicles: number) {
     this.maxVehicles = maxVehicles;

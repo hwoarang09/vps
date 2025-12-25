@@ -175,7 +175,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
     batchAddVehicles: (vehicles) => {
       set((state) => {
         const newDict = new Map(state.vehicleDataDict);
-        vehicles.forEach(v => {
+        for (const v of vehicles) {
           newDict.set(v.index, {
             movement: {
               x: v.x,
@@ -194,7 +194,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
               presetIdx: 0, // Default to STRAIGHT
             },
           });
-        });
+        }
         return { vehicleDataDict: newDict };
       });
     },

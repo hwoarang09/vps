@@ -5,7 +5,7 @@ export function calculateStraightDistance(nodeA: Node, nodeB: Node): number {
   const dx = nodeB.editor_x - nodeA.editor_x;
   const dy = nodeB.editor_y - nodeA.editor_y;
   const dz = (nodeB.editor_z || 0) - (nodeA.editor_z || 0);
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  return Math.hypot(dx, dy, dz);
 }
 
 // utils/geometry/calculateCurveLength.ts

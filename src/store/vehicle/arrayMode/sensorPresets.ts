@@ -19,7 +19,6 @@ export interface SensorPreset {
   zones: Record<SensorZoneKey, SensorZone>;
   /**
    * Legacy flat fields for compatibility (uses the "approach" zone values).
-   * TODO: migrate callers to zone-aware access and remove these.
    */
   leftAngle: number;
   rightAngle: number;

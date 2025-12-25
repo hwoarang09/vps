@@ -24,7 +24,9 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
 
   setNodes: (newNodes) => {
     const newMap = new Map<string, number>();
-    newNodes.forEach((n, i) => newMap.set(n.node_name, i));
+    for (const [i, n] of newNodes.entries()) {
+      newMap.set(n.node_name, i);
+    }
     set({ nodes: newNodes, nodeNameToIndex: newMap });
   },
 
@@ -52,10 +54,10 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
     const nodeOutgoingCount = new Map<string, number>();
 
     // Edge를 순회하며 Node의 입출입 차수 계산
-    edges.forEach(edge => {
+    for (const edge of edges) {
       nodeOutgoingCount.set(edge.from_node, (nodeOutgoingCount.get(edge.from_node) || 0) + 1);
       nodeIncomingCount.set(edge.to_node, (nodeIncomingCount.get(edge.to_node) || 0) + 1);
-    });
+    }
 
     // Node 상태 업데이트
     const updatedNodes = nodes.map(node => {
