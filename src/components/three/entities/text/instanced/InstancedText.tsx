@@ -7,7 +7,9 @@ import {
   HIDE_MATRIX,
   buildSlotData,
   applyHighAltitudeCulling,
-  computeBillboardRotation,
+  updateBillboardRotation,
+  getBillboardQuaternion,
+  getBillboardRight,
   distanceSquared,
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
@@ -63,7 +65,11 @@ export default function InstancedText({
     const charSpacing = 0.2 * scale;
 
     const groupLOD = new Map<number, boolean>();
-    const groupRotation = new Map<number, { quaternion: THREE.Quaternion; right: THREE.Vector3 }>();
+    
+    // Zero-GC: Update billboard rotation once per frame
+    updateBillboardRotation(camera.quaternion);
+    const quaternion = getBillboardQuaternion();
+    const right = getBillboardRight();
 
     for (let i = 0; i < totalCharacters; i++) {
       const d = slotDigit[i];
@@ -89,12 +95,8 @@ export default function InstancedText({
         continue;
       }
 
-      // 빌보드 회전 (그룹당 한번만)
-      if (!groupRotation.has(groupIdx)) {
-        groupRotation.set(groupIdx, computeBillboardRotation(camera.quaternion));
-      }
-
-      const { quaternion, right } = groupRotation.get(groupIdx)!;
+      // Billboard rotation is uniform for all groups (camera-facing)
+      // quaternion and right are pre-calculated above
 
       const halfLen = (group.digits.length - 1) / 2;
       const offsetX = (posIdx - halfLen) * charSpacing;

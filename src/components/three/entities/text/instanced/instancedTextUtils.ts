@@ -176,17 +176,7 @@ export function getBillboardRight(): THREE.Vector3 {
   return _cachedBillboardRight || _tempRight;
 }
 
-/**
- * @deprecated Use updateBillboardRotation + getBillboardQuaternion/getBillboardRight for Zero-GC
- */
-export function computeBillboardRotation(
-  cameraQuaternion: THREE.Quaternion
-): { quaternion: THREE.Quaternion; right: THREE.Vector3 } {
-  const quaternion = cameraQuaternion.clone();
-  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
 
-  return { quaternion, right };
-}
 
 /**
  * 거리 제곱 계산
