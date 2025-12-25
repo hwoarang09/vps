@@ -30,8 +30,8 @@ export const SENSOR_PRESETS: SensorPreset[] = [
   // 0: 직진
   {
     zones: {
-      approach: { leftAngle: 0, rightAngle: 0, leftLength: 2.5, rightLength: 2.5, dec: -1 },
-      brake:    { leftAngle: 0, rightAngle: 0, leftLength: 1.5, rightLength: 1.5, dec: -3 },
+      approach: { leftAngle: 0, rightAngle: 0, leftLength: 4.5, rightLength: 4.5, dec: -3 },
+      brake:    { leftAngle: 0, rightAngle: 0, leftLength: 1.5, rightLength: 1.5, dec: -4 },
       stop:     { leftAngle: 0, rightAngle: 0, leftLength: 0.5, rightLength: 0.5, dec: -Infinity }, // force stop
     },
     leftAngle: 0, rightAngle: 0, leftLength: 2.5, rightLength: 2.5,
