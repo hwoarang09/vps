@@ -30,16 +30,6 @@ export class SCurvePointsCalculator {
     const n5 = nodes.find((n) => n.node_name === nodeNames[4]);
     const n6 = nodes.find((n) => n.node_name === nodeNames[5]);
 
-    console.log(`[SCurve Debug] ${edge_name} (${vos_rail_type})`);
-    console.log(`[SCurve Debug] Nodes found:`, {
-      n1: n1?.node_name,
-      n2: n2?.node_name,
-      n3: n3?.node_name,
-      n4: n4?.node_name,
-      n5: n5?.node_name,
-      n6: n6?.node_name,
-    });
-
     if (!n1 || !n2 || !n3 || !n4 || !n5 || !n6) {
       console.warn(
         `${vos_rail_type} waypoint nodes not found for edge: ${edge_name}`
@@ -58,11 +48,6 @@ export class SCurvePointsCalculator {
     const lengths = [len1, len2, len3, len4, len5];
     const totalLength = lengths.reduce((sum, len) => sum + len, 0);
 
-    console.log(`[SCurve Debug] Lengths:`, {
-      len1, len2, len3, len4, len5, totalLength,
-      radius, rotation
-    });
-
     // 세그먼트 개수 배분
     const segmentCounts = lengths.map((len) =>
       Math.max(1, Math.round(totalSegments * (len / totalLength)))
@@ -80,7 +65,6 @@ export class SCurvePointsCalculator {
     }
 
     const [seg1, seg2, seg3, seg4, seg5] = segmentCounts;
-    console.log(`[SCurve Debug] Segment Counts:`, segmentCounts);
 
     // ===== 전반부: n1 → n2 → n3 → n4 (정방향) =====
     const forwardPoints: THREE.Vector3[] = [];
@@ -95,7 +79,6 @@ export class SCurvePointsCalculator {
       n2, n3, dir1, radius, rotation, seg2, "from"
     );
     forwardPoints.push(...pts2);
-    console.log(`[SCurve Debug] Forward Points (n1-n3):`, forwardPoints.length);
 
     // n3 → n4 직선 (마지막 점 제외 - 후반부와 겹침 방지)
     const pts3 = StraightPointsCalculator.calculateSegmentedPoints(n3, n4, seg3);
@@ -114,7 +97,6 @@ export class SCurvePointsCalculator {
       n5, n4, dir5, radius, rotation, seg4, "from"
     );
     backwardPoints.push(...pts4);
-    console.log(`[SCurve Debug] Backward Points (n6-n4):`, backwardPoints.length);
 
     // 역순으로 뒤집기
     backwardPoints.reverse();

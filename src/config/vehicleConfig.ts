@@ -33,7 +33,7 @@ const loadVehicleConfig = async (): Promise<VehicleConfig> => {
     console.error('Error loading vehicle config:', error);
     // Fallback to default values
     return {
-      MAX_VEHICLES: 20000,
+      MAX_VEHICLES: 200000,
       VEHICLE_COLOR: "#4ecdc4",
       EDGE_MARGIN: 0.5,
       VEHICLE_SPACING: 0.6,
@@ -61,7 +61,7 @@ export const getVehicleConfig = loadVehicleConfig;
 
 // For synchronous access (will use default until loaded)
 let vehicleConfig: VehicleConfig = {
-  MAX_VEHICLES: 20000,
+  MAX_VEHICLES: 200000,
   VEHICLE_COLOR: "#4ecdc4",
   EDGE_MARGIN: 0.5,
   VEHICLE_SPACING: 0.6,

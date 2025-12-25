@@ -252,6 +252,6 @@ class EdgeVehicleQueue {
 }
 
 // Singleton instance (1000 edges, 500 vehicles per edge max)
-export const edgeVehicleQueue = new EdgeVehicleQueue(20000);
+export const edgeVehicleQueue = new EdgeVehicleQueue(200000);
 
 export default EdgeVehicleQueue;

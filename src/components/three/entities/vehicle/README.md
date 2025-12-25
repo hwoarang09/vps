@@ -61,7 +61,7 @@ function App() {
       <VehicleSystem
         mode="rapier-array"  // or "rapier-dict" or "shared-memory"
         numVehicles={100}
-        maxVehicles={20000}
+        maxVehicles={200000}
         vehicleSize={1.5}
         vehicleColor="#4ecdc4"
       />

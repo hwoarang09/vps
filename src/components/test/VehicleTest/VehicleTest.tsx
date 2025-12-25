@@ -11,6 +11,8 @@ import { getTestSettings, getDefaultSetting } from "../../../config/testSettingC
 import { Play, Pause } from "lucide-react";
 import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/vehicleArrayMode/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";
+import { useNodeStore } from "@/store/map/nodeStore";
+import { createFabGrid } from "@/utils/fab/fabUtils";
 
 /**
  * VehicleTest
@@ -38,6 +40,9 @@ const VehicleTest: React.FC = () => {
   const [testKey, setTestKey] = useState<number>(0);
   const [isTestCreated, setIsTestCreated] = useState<boolean>(false);
   const [useVehicleConfig, setUseVehicleConfig] = useState<boolean>(false);
+  const [fabCountX, setFabCountX] = useState<number>(2);
+  const [fabCountY, setFabCountY] = useState<number>(1);
+  const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
 
   useEffect(() => {
     setInputValue(selectedSetting.numVehicles.toString());
@@ -49,6 +54,7 @@ const VehicleTest: React.FC = () => {
     if (!setting) return;
 
     resetLockMgr();
+    setIsFabApplied(false); // Reset FAB state when loading new map
     if (isTestCreated) {
       stopTest();
       setIsTestCreated(false);
@@ -137,6 +143,41 @@ const VehicleTest: React.FC = () => {
     setUseVehicleConfig(false); // Don't use vehicles.cfg
     setIsTestCreated(true);
     setTestKey(prev => prev + 1); // Force remount to create vehicles
+  };
+
+  // Handle FAB Create - clone nodes/edges to create X * Y grid of fabs
+  const handleFabCreate = () => {
+    const nodes = useNodeStore.getState().nodes;
+    const edges = useEdgeStore.getState().edges;
+
+    if (nodes.length === 0 || edges.length === 0) {
+      console.warn("[FAB] No nodes or edges to clone");
+      return;
+    }
+
+    const totalFabs = fabCountX * fabCountY;
+    console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes and ${edges.length} edges`);
+
+    // Create grid of fabs
+    const { allNodes, allEdges } = createFabGrid(nodes, edges, fabCountX, fabCountY);
+
+    // Update stores
+    useNodeStore.getState().setNodes(allNodes);
+    useEdgeStore.getState().setEdges(allEdges);
+
+    // Re-initialize LockMgr with new edges
+    resetLockMgr();
+    getLockMgr().initFromEdges(allEdges);
+
+    setIsFabApplied(true);
+    console.log(`[FAB] ✓ Created ${totalFabs} fabs: ${allNodes.length} nodes, ${allEdges.length} edges`);
+  };
+
+  // Handle FAB Clear - reload map to reset to original state
+  const handleFabClear = async () => {
+    console.log("[FAB] Clearing FAB, reloading map...");
+    setIsFabApplied(false);
+    await loadTestSetting(selectedSettingId);
   };
 
 
@@ -268,6 +309,92 @@ const VehicleTest: React.FC = () => {
         >
           Delete
         </button>
+
+        {/* FAB Controls */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginLeft: "15px",
+          paddingLeft: "15px",
+          borderLeft: "1px solid #555",
+        }}>
+          <label style={{ fontWeight: "bold", color: "#f39c12" }}>FAB:</label>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            value={fabCountX}
+            onChange={(e) => setFabCountX(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+            disabled={isFabApplied}
+            style={{
+              width: "40px",
+              padding: "5px 4px",
+              background: isFabApplied ? "#555" : "#333",
+              color: "white",
+              border: "1px solid #f39c12",
+              borderRadius: "4px",
+              fontSize: "12px",
+              textAlign: "center",
+            }}
+            title="가로 개수"
+          />
+          <span style={{ color: "#f39c12", fontWeight: "bold" }}>×</span>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            value={fabCountY}
+            onChange={(e) => setFabCountY(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+            disabled={isFabApplied}
+            style={{
+              width: "40px",
+              padding: "5px 4px",
+              background: isFabApplied ? "#555" : "#333",
+              color: "white",
+              border: "1px solid #f39c12",
+              borderRadius: "4px",
+              fontSize: "12px",
+              textAlign: "center",
+            }}
+            title="세로 개수"
+          />
+          <span style={{ color: "#888", fontSize: "11px" }}>
+            ={fabCountX * fabCountY}
+          </span>
+          <button
+            onClick={handleFabCreate}
+            style={{
+              padding: "5px 12px",
+              background: isFabApplied ? "#7f8c8d" : "#f39c12",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              fontSize: "12px",
+              cursor: isFabApplied ? "not-allowed" : "pointer",
+              fontWeight: "bold",
+            }}
+            disabled={isFabApplied}
+          >
+            Create
+          </button>
+          <button
+            onClick={handleFabClear}
+            style={{
+              padding: "5px 12px",
+              background: isFabApplied ? "#e67e22" : "#7f8c8d",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              fontSize: "12px",
+              cursor: isFabApplied ? "pointer" : "not-allowed",
+              fontWeight: "bold",
+            }}
+            disabled={!isFabApplied}
+          >
+            Clear
+          </button>
+        </div>
 
         {/* Play/Pause buttons */}
         <div style={{ display: "flex", gap: "5px", marginLeft: "10px" }}>

@@ -58,4 +58,4 @@ class SensorPointArray {
 }
 
 // 싱글톤 - 필요시 maxVehicles 조정
-export const sensorPointArray = new SensorPointArray(20000);
+export const sensorPointArray = new SensorPointArray(200000);

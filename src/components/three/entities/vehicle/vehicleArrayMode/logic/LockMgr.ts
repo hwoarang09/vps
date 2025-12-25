@@ -125,9 +125,6 @@ export class LockMgr {
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
-      console.log(`[LockMgr] 🔀 Merge Node: ${mergeName}`);
-      console.log(`          Incoming Edges (${incomingEdgeNames.length}): ${incomingEdgeNames.join(", ")}`);
-
       const edgeQueues: Record<string, number[]> = {};
       for (const edgeName of incomingEdgeNames) {
         edgeQueues[edgeName] = [];
