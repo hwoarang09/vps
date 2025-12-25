@@ -8,8 +8,8 @@ import { Edge } from "@/types/edge";
 
 // Logic modules
 import { calculateNextSpeed } from "./speedCalculator";
-import { handleEdgeTransition } from "./edgeTransition";
-import { interpolatePosition } from "./positionInterpolator";
+import { handleEdgeTransition, EdgeTransitionResult } from "./edgeTransition";
+import { interpolatePositionTo, PositionResult } from "./positionInterpolator";
 import { updateSensorPoints } from "../helpers/sensorPoints";
 import { logSensorSummary } from "../helpers/sensorDebug";
 import { getCurveAcceleration } from "@/config/movementConfig";
@@ -28,9 +28,32 @@ interface MovementUpdateParams {
 let frameCount = 0;
 const DEBUG_INTERVAL = 300; // Log every 300 frames (~5 seconds at 60fps)
 
+// ============================================================================
+// Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
+// ============================================================================
+const SCRATCH_TRANSITION: EdgeTransitionResult = {
+  finalEdgeIndex: 0,
+  finalRatio: 0,
+  activeEdge: null,
+};
+
+const SCRATCH_POS: PositionResult = {
+  x: 0,
+  y: 0,
+  z: 0,
+  rotation: 0,
+};
+
+const SCRATCH_MERGE_POS: PositionResult = {
+  x: 0,
+  y: 0,
+  z: 0,
+  rotation: 0,
+};
+
 /**
  * Update vehicle movement and positions
- * Optimized for Zero-Allocation: Directly accesses Float32Array without creating temporary objects.
+ * Zero-GC Optimized: 루프 내 객체 생성 완전 제거
  */
 export function updateMovement(params: MovementUpdateParams) {
   const {
@@ -56,49 +79,58 @@ export function updateMovement(params: MovementUpdateParams) {
       continue;
     }
 
-    // 2. Data Read (Direct Access)
-    // Extracted to helper for readability (Note: this creates a small object allocation)
-    let {
-      currentEdgeIndex,
-      velocity,
-      acceleration,
-      deceleration,
-      edgeRatio,
-      hitZone,
-      finalX,
-      finalY,
-      finalZ,
-      finalRotation
-    } = readVehicleState(data, ptr);
+    // 2. Data Read (Zero-GC: 직접 로컬 변수로 읽기)
+    const currentEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
+    let velocity = data[ptr + MovementData.VELOCITY];
+    const acceleration = data[ptr + MovementData.ACCELERATION];
+    const deceleration = data[ptr + MovementData.DECELERATION];
+    const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
+
+    // hitZone 계산 (인라인)
+    const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]);
+    let hitZone = -1;
+    if (rawHit === 2) {
+      hitZone = 2;
+    } else if (deceleration !== 0) {
+      hitZone = rawHit;
+    }
+
+    let finalX = data[ptr + MovementData.X];
+    let finalY = data[ptr + MovementData.Y];
+    let finalZ = data[ptr + MovementData.Z];
+    let finalRotation = data[ptr + MovementData.ROTATION];
 
     // Safety check
     const currentEdge = edgeArray[currentEdgeIndex];
 
-    // 3. Calculate Speed (accel OR decel, based on hitZone)
-    const { appliedAccel, appliedDecel } = calculateAccDec(
-       acceleration,
-       deceleration,
-       hitZone,
-       currentEdge
-    );
+    // 3. Calculate Speed (Zero-GC: 인라인 처리)
+    let appliedAccel = acceleration;
+    let appliedDecel = 0;
+
+    // Override acceleration for curves if not braking
+    if (currentEdge.vos_rail_type !== "LINEAR") {
+      appliedAccel = getCurveAcceleration();
+    }
+
+    if (hitZone >= 0) {
+      appliedAccel = 0;
+      appliedDecel = deceleration;
+    }
 
     // Hard stop for stop-zone contact (Sensor Stop)
     if (hitZone === 2) {
       data[ptr + MovementData.VELOCITY] = 0;
       data[ptr + MovementData.DECELERATION] = 0;
-      // Do NOT set STOPPED status, otherwise we can't resume when obstacle clears.
-      // Keeps status as MOVING (but velocity 0) or whatever it was.
-      
+
       // Update Reason: SENSORED
       const currentReason = data[ptr + LogicData.STOP_REASON];
       data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.SENSORED;
-      // TrafficState: Unchanged (Free), but stopped.
       continue;
     } else {
       // Clear SENSORED bit if moving or not hitZone 2
       const currentReason = data[ptr + LogicData.STOP_REASON];
       if ((currentReason & StopReason.SENSORED) !== 0) {
-          data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.SENSORED;
+        data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.SENSORED;
       }
     }
 
@@ -117,53 +149,57 @@ export function updateMovement(params: MovementUpdateParams) {
     checkAndTriggerTransfer(data, ptr, i, rawNewRatio);
     // --------------------------------
 
-    // 5. Handle Edge Transition
-    // Note: handleEdgeTransition still returns a temporary object. 
-    // This is the next optimization target if GC is still high.
-    const transitionResult = handleEdgeTransition(
+    // 5. Handle Edge Transition (Zero-GC: target 객체에 결과 쓰기)
+    handleEdgeTransition(
       i,
       currentEdgeIndex,
       rawNewRatio,
       edgeArray,
-      store
+      store,
+      SCRATCH_TRANSITION
     );
-    // Destructure properties from the result object so they can be reassigned
-    let { finalEdgeIndex, finalRatio, activeEdge } = transitionResult;
+    let finalEdgeIndex = SCRATCH_TRANSITION.finalEdgeIndex;
+    let finalRatio = SCRATCH_TRANSITION.finalRatio;
+    const activeEdge = SCRATCH_TRANSITION.activeEdge;
 
     // --- Lock Release Logic ---
     checkAndReleaseMergeLock(finalEdgeIndex, currentEdgeIndex, currentEdge, i);
     // --------------------------
 
-    // 6. Interpolate Position
+    // 6. Interpolate Position (Zero-GC: target 객체에 결과 쓰기)
     if (activeEdge) {
-      const posResult = interpolatePosition(activeEdge, finalRatio);
-      finalX = posResult.x;
-      finalY = posResult.y;
-      finalZ = posResult.z;
-      finalRotation = posResult.rotation;
+      interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS);
+      finalX = SCRATCH_POS.x;
+      finalY = SCRATCH_POS.y;
+      finalZ = SCRATCH_POS.z;
+      finalRotation = SCRATCH_POS.rotation;
     }
 
     // 7. LockMgr Wait Logic (Merge Point Control)
-    // CRITICAL FIX: Use the NEW edge (finalEdgeIndex) for logic, not the old 'currentEdge'
     const finalEdge = edgeArray[finalEdgeIndex];
-    
-    const mergeResult = processMergeLogic(
+
+    const shouldWait = processMergeLogicInline(
       getLockMgr(),
       finalEdge,
       i,
       finalRatio,
       activeEdge,
       data,
-      ptr
+      ptr,
+      SCRATCH_MERGE_POS
     );
 
-    if (mergeResult.shouldWait) {
-       finalRatio = mergeResult.newRatio;
-       finalX = mergeResult.newX;
-       finalY = mergeResult.newY;
-       finalZ = mergeResult.newZ;
-       finalRotation = mergeResult.newRotation;
-       newVelocity = 0;
+    if (shouldWait) {
+      // newRatio is stored in SCRATCH_MERGE_POS.x
+      finalRatio = SCRATCH_MERGE_POS.x;
+      if (activeEdge) {
+        interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS);
+        finalX = SCRATCH_POS.x;
+        finalY = SCRATCH_POS.y;
+        finalZ = SCRATCH_POS.z;
+        finalRotation = SCRATCH_POS.rotation;
+      }
+      newVelocity = 0;
     }
 
     // 8. Write Back (Direct Write)
@@ -215,69 +251,6 @@ function shouldSkipUpdate(data: Float32Array, ptr: number): boolean {
 }
 
 /**
- * Determines the applied acceleration and deceleration based on edge type and sensor hit status.
- */
-function calculateAccDec(
-  baseAccel: number,
-  baseDecel: number,
-  hitZone: number,
-  currentEdge: Edge
-): { appliedAccel: number; appliedDecel: number } {
-  let appliedAccel = baseAccel;
-  let appliedDecel = 0;
-
-  // Override acceleration for curves if not braking
-  if (currentEdge.vos_rail_type !== "LINEAR") {
-    appliedAccel = getCurveAcceleration();
-  }
-
-  if (hitZone >= 0) {
-    appliedAccel = 0;
-    appliedDecel = baseDecel;
-  }
-
-  return { appliedAccel, appliedDecel };
-}
-
-/**
- * Reads vehicle state from Float32Array into a structured object.
- * Note: Creates a temporary object, but improves readability vs inline access.
- */
-function readVehicleState(data: Float32Array, ptr: number) {
-  const currentEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
-  const velocity = data[ptr + MovementData.VELOCITY];
-  const acceleration = data[ptr + MovementData.ACCELERATION];
-  const deceleration = data[ptr + MovementData.DECELERATION];
-  const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
-
-  const rawHit = Math.trunc(data[ptr + SensorData.HIT_ZONE]);
-  let hitZone = -1;
-  if (rawHit === 2) {
-    hitZone = 2;
-  } else if (deceleration !== 0) {
-    hitZone = rawHit;
-  }
-
-  const finalX = data[ptr + MovementData.X];
-  const finalY = data[ptr + MovementData.Y];
-  const finalZ = data[ptr + MovementData.Z];
-  const finalRotation = data[ptr + MovementData.ROTATION];
-
-  return {
-    currentEdgeIndex,
-    velocity,
-    acceleration,
-    deceleration,
-    edgeRatio,
-    hitZone,
-    finalX,
-    finalY,
-    finalZ,
-    finalRotation
-  };
-}
-
-/**
  * Helper: Check transfer request condition
  */
 function checkAndTriggerTransfer(
@@ -294,29 +267,20 @@ function checkAndTriggerTransfer(
   }
 }
 
-// Helper types for wait logic result
-interface WaitLogicResult {
-  shouldWait: boolean;
-  newRatio: number;
-  newX: number;
-  newY: number;
-  newZ: number;
-  newRotation: number;
-}
-
 /**
- * Helper: Process Merge and Traffic Logic (Section 7)
- * Checks intersection grants, applies wait logic, and updates TrafficState/StopReason.
+ * Zero-GC: Process Merge and Traffic Logic (inline version)
+ * Returns true if should wait, and writes newRatio to target.x
  */
-function processMergeLogic(
+function processMergeLogicInline(
   lockMgr: ReturnType<typeof getLockMgr>,
   currentEdge: Edge,
   vehId: number,
   currentRatio: number,
   activeEdge: Edge | null | undefined,
   data: Float32Array,
-  ptr: number
-): WaitLogicResult {
+  ptr: number,
+  target: PositionResult
+): boolean {
   // If NOT a merge node, maintain FREE state and clear LOCKED reason
   if (!lockMgr.isMergeNode(currentEdge.to_node)) {
     const currentReason = data[ptr + LogicData.STOP_REASON];
@@ -324,39 +288,28 @@ function processMergeLogic(
       data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
     }
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
-    return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
+    return false;
   }
 
   // If IS a merge node, check grant
-  
+
   // 1. Register Request (Idempotent)
-  // Optimization: Only request if we are not already waiting or acquired (FREE)
   const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
   if (currentTrafficState === TrafficState.FREE) {
-      lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
+    lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
   }
 
   // 2. Check Grant
   const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
-  // Update Logic Data
   let currentReason = data[ptr + LogicData.STOP_REASON];
 
-  // Logic: 
-  // 1. If ToNode is Merge -> TrafficState is WAITING by default (unless granted).
-  // 2. If Granted -> TrafficState is ACQUIRED. Clear LOCKED reason.
-  // 3. If Not Granted -> TrafficState is WAITING.
-  //    - If reached wait point -> Stop. Set LOCKED reason.
-  //    - If not reached -> Moving. Clear LOCKED reason.
-
   if (isGranted) {
-     // Granted -> ACQUIRED
-     // Clear LOCKED bit if set
-     if ((currentReason & StopReason.LOCKED) !== 0) {
-        data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-     }
-     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.ACQUIRED;
-     
-     return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
+    // Granted -> ACQUIRED, Clear LOCKED bit if set
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
+    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.ACQUIRED;
+    return false;
   }
 
   // Not Granted -> WAITING
@@ -366,36 +319,20 @@ function processMergeLogic(
   const currentDist = currentRatio * currentEdge.distance;
 
   if (currentDist >= waitDist) {
-      // Reached Wait Point -> Stop & Set LOCKED Reason
-      data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+    // Reached Wait Point -> Stop & Set LOCKED Reason
+    data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
 
-      // Force wait at waitDist
-      const newRatio = waitDist / currentEdge.distance;
-      
-      let newX = 0, newY = 0, newZ = 0, newRotation = 0;
+    // Force wait at waitDist - store newRatio in target.x
+    target.x = waitDist / currentEdge.distance;
+    return true;
+  }
 
-      if (activeEdge) {
-         const posResult = interpolatePosition(activeEdge, newRatio);
-         newX = posResult.x;
-         newY = posResult.y;
-         newZ = posResult.z;
-         newRotation = posResult.rotation;
-      }
+  if ((currentReason & StopReason.LOCKED) !== 0) {
+    // Not yet at wait point -> Clear LOCKED Reason
+    data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+  }
 
-      return {
-        shouldWait: true,
-        newRatio,
-        newX,
-        newY,
-        newZ,
-        newRotation
-      };
-  } else if ((currentReason & StopReason.LOCKED) !== 0) {
-      // Not yet at wait point -> Clear LOCKED Reason (we are moving, just in WAITING state)
-      
-          data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-      }
-  return { shouldWait: false, newRatio: 0, newX: 0, newY: 0, newZ: 0, newRotation: 0 };
+  return false;
 }
 
 /**

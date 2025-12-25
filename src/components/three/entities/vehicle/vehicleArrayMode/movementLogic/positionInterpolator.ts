@@ -2,11 +2,85 @@ import { Edge } from "@/types/edge";
 
 const RAD_TO_DEG = 180 / Math.PI;
 
+// Zero-GC: Reusable result type
+export interface PositionResult {
+  x: number;
+  y: number;
+  z: number;
+  rotation: number;
+}
+
+/**
+ * Zero-GC: Calculates 3D position and rotation, writes to target object.
+ */
+export function interpolatePositionTo(edge: Edge, ratio: number, target: PositionResult): void {
+  const points = edge.renderingPoints;
+
+  // Fast fail
+  if (!points || points.length === 0) {
+    target.x = 0;
+    target.y = 0;
+    target.z = 3.8;
+    target.rotation = (edge as any).axis ?? 0;
+    return;
+  }
+
+  // TYPE 1: LINEAR EDGES
+  if (edge.vos_rail_type === "LINEAR") {
+    const pStart = points[0];
+    const pEnd = points.at(-1)!;
+
+    target.x = pStart.x + (pEnd.x - pStart.x) * ratio;
+    target.y = pStart.y + (pEnd.y - pStart.y) * ratio;
+    target.z = 3.8;
+
+    const dx = pEnd.x - pStart.x;
+    const dy = pEnd.y - pStart.y;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      target.rotation = dx >= 0 ? 0 : 180;
+    } else {
+      target.rotation = dy >= 0 ? 90 : -90;
+    }
+    return;
+  }
+
+  // TYPE 2: CURVE EDGES
+  const safeRatio = ratio < 0 ? 0 : Math.min(ratio, 1);
+
+  const maxIndex = points.length - 1;
+  const floatIndex = safeRatio * maxIndex;
+  const index = Math.floor(floatIndex);
+
+  const nextIndex = index < maxIndex ? index + 1 : maxIndex;
+  const segmentRatio = floatIndex - index;
+
+  const p1 = points[index];
+  const p2 = points[nextIndex];
+
+  target.x = p1.x + (p2.x - p1.x) * segmentRatio;
+  target.y = p1.y + (p2.y - p1.y) * segmentRatio;
+  target.z = 3.8;
+
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+
+  const distSq = dx * dx + dy * dy;
+  let rawRotation = 0;
+
+  if (distSq > 0.000001) {
+    rawRotation = Math.atan2(dy, dx) * RAD_TO_DEG;
+  } else if (index > 0) {
+    const pPrev = points[index - 1];
+    rawRotation = Math.atan2(p1.y - pPrev.y, p1.x - pPrev.x) * RAD_TO_DEG;
+  }
+
+  target.rotation = ((rawRotation) % 360 + 360) % 360;
+}
+
 /**
  * Calculates 3D position and rotation based on edge and ratio.
- * * [수정 사항]
- * - LINEAR: 계산 안 함. Edge에 저장된 axis 값을 차량의 진행 방향(rotation)으로 사용.
- * - CURVE: 곡선은 위치마다 각도가 변하므로 세그먼트 벡터로 계산하여 -90도 보정.
+ * @deprecated Use interpolatePositionTo for Zero-GC
  */
 export function interpolatePosition(edge: Edge, ratio: number) {
   const points = edge.renderingPoints;

@@ -3,6 +3,21 @@ import { CHAR_COUNT, CHAR_MAP } from "./useDigitMaterials";
 
 export const HIDE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
 
+// ============================================================================
+// Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
+// ============================================================================
+const _tempMatrix = new THREE.Matrix4();
+const _tempPos = new THREE.Vector3();
+const _tempOffset = new THREE.Vector3();
+const _tempScale = new THREE.Vector3();
+const _tempQuat = new THREE.Quaternion();
+const _tempRight = new THREE.Vector3();
+const _unitX = new THREE.Vector3(1, 0, 0);
+
+// Billboard rotation cache (차량 수만큼 미리 할당하지 않고, 프레임별로 재사용)
+let _cachedBillboardQuat: THREE.Quaternion | null = null;
+let _cachedBillboardRight: THREE.Vector3 | null = null;
+
 export interface SlotData {
   totalCharacters: number;
   counts: number[];
@@ -132,8 +147,37 @@ export function applyHighAltitudeCulling(
 }
 
 /**
- * 빌보드 회전 계산 (Screen Aligned)
- * 카메라의 Quaternion을 그대로 사용하여 텍스트가 항상 화면과 평행하게 만듦
+ * Zero-GC: 빌보드 회전 계산 (Screen Aligned)
+ * 결과를 모듈 레벨 캐시에 저장하여 재사용
+ */
+export function updateBillboardRotation(cameraQuaternion: THREE.Quaternion): void {
+  if (!_cachedBillboardQuat) {
+    _cachedBillboardQuat = new THREE.Quaternion();
+  }
+  if (!_cachedBillboardRight) {
+    _cachedBillboardRight = new THREE.Vector3();
+  }
+
+  _cachedBillboardQuat.copy(cameraQuaternion);
+  _cachedBillboardRight.copy(_unitX).applyQuaternion(_cachedBillboardQuat);
+}
+
+/**
+ * Zero-GC: Get cached billboard quaternion
+ */
+export function getBillboardQuaternion(): THREE.Quaternion {
+  return _cachedBillboardQuat || _tempQuat;
+}
+
+/**
+ * Zero-GC: Get cached billboard right vector
+ */
+export function getBillboardRight(): THREE.Vector3 {
+  return _cachedBillboardRight || _tempRight;
+}
+
+/**
+ * @deprecated Use updateBillboardRotation + getBillboardQuaternion/getBillboardRight for Zero-GC
  */
 export function computeBillboardRotation(
   cameraQuaternion: THREE.Quaternion
@@ -161,7 +205,8 @@ export function distanceSquared(
 }
 
 /**
- * Update transforms for vehicle text labels
+ * Zero-GC: Update transforms for vehicle text labels
+ * 루프 내 객체 생성 완전 제거
  */
 export function updateVehicleTextTransforms(
   data: {
@@ -187,18 +232,33 @@ export function updateVehicleTextTransforms(
     MovementData_X: number;
     MovementData_Y: number;
     MovementData_Z: number;
-  }
+  },
+  // Zero-GC: 외부에서 관리하는 LOD 캐시 (선택적)
+  vehicleLODCache?: Map<number, boolean>
 ) {
   const { totalCharacters, slotDigit, slotIndex, slotVehicle, slotPosition } = data;
   const { scale, charSpacing, halfLen, zOffset, lodDistSq } = params;
   const { VEHICLE_DATA_SIZE, MovementData_X, MovementData_Y, MovementData_Z } = constants;
-  const { x: cx, y: cy, z: cz } = cameraPos;
+  const cx = cameraPos.x;
+  const cy = cameraPos.y;
+  const cz = cameraPos.z;
 
-  const m = new THREE.Matrix4();
-  const s = new THREE.Vector3(scale, scale, 1);
+  // Zero-GC: 스케일 벡터 재사용
+  _tempScale.set(scale, scale, 1);
 
-  const vehicleLOD = new Map<number, boolean>();
-  const vehicleRotation = new Map<number, { quaternion: THREE.Quaternion; right: THREE.Vector3 }>();
+  // Zero-GC: 빌보드 회전 한 번만 계산
+  updateBillboardRotation(cameraQuaternion);
+  const billboardQuat = getBillboardQuaternion();
+  const billboardRight = getBillboardRight();
+
+  // LOD 캐시 (외부에서 전달받거나 내부 생성)
+  const vehicleLOD = vehicleLODCache || new Map<number, boolean>();
+  if (!vehicleLODCache) {
+    vehicleLOD.clear();
+  }
+
+  let lastVehicle = -1;
+  let lastLODResult = false;
 
   for (let i = 0; i < totalCharacters; i++) {
     const d = slotDigit[i];
@@ -214,30 +274,33 @@ export function updateVehicleTextTransforms(
     const vy = vehicleData[off + MovementData_Y];
     const vz = vehicleData[off + MovementData_Z] + zOffset;
 
-    // LOD 체크 (차량당 한번만)
-    if (!vehicleLOD.has(v)) {
-      const distSq = distanceSquared(cx, cy, cz, vx, vy, vz);
-      vehicleLOD.set(v, distSq > lodDistSq);
+    // LOD 체크 (차량당 한번만 - 연속 접근 최적화)
+    if (v !== lastVehicle) {
+      if (vehicleLOD.has(v)) {
+        lastLODResult = vehicleLOD.get(v)!;
+      } else {
+        const distSq = distanceSquared(cx, cy, cz, vx, vy, vz);
+        lastLODResult = distSq > lodDistSq;
+        vehicleLOD.set(v, lastLODResult);
+      }
+      lastVehicle = v;
     }
 
-    if (vehicleLOD.get(v)) {
+    if (lastLODResult) {
       mesh.setMatrixAt(slot, HIDE_MATRIX);
       continue;
     }
 
-    // 빌보드 회전 (차량당 한번만)
-    if (!vehicleRotation.has(v)) {
-      vehicleRotation.set(v, computeBillboardRotation(cameraQuaternion));
-    }
-
-    const { quaternion, right } = vehicleRotation.get(v)!;
-
+    // Zero-GC: 오프셋 계산 (재사용 객체 사용)
     const offsetX = (posIdx - halfLen) * charSpacing;
-    const offsetVector = right.clone().multiplyScalar(offsetX);
-    const finalPos = new THREE.Vector3(vx, vy, vz).add(offsetVector);
+    _tempOffset.copy(billboardRight).multiplyScalar(offsetX);
 
-    m.compose(finalPos, quaternion, s);
-    mesh.setMatrixAt(slot, m);
+    // Zero-GC: 최종 위치 계산 (재사용 객체 사용)
+    _tempPos.set(vx, vy, vz).add(_tempOffset);
+
+    // Zero-GC: 매트릭스 구성 (재사용 객체 사용)
+    _tempMatrix.compose(_tempPos, billboardQuat, _tempScale);
+    mesh.setMatrixAt(slot, _tempMatrix);
   }
 
   for (const msh of meshes) {
