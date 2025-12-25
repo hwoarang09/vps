@@ -1,6 +1,6 @@
 import { VehicleArrayStore } from "@store/vehicle/arrayMode/vehicleStore";
 import { Edge } from "@/types/edge";
-import { vehicleDataArray, SensorData, VEHICLE_DATA_SIZE, MovementData, NextEdgeState } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { vehicleDataArray, SensorData, VEHICLE_DATA_SIZE, MovementData, NextEdgeState, LogicData, TrafficState, StopReason } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 
 interface TransitionResult {
@@ -52,6 +52,14 @@ export function handleEdgeTransition(
 
     // Update sensor preset based on new edge type
     updateSensorPresetForEdge(vehicleIndex, nextEdge);
+
+    // Reset Traffic State for new edge (CRITICAL FIX for merge lock issue)
+    // When transitioning to a new edge, clear previous merge lock state
+    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
 
     // Consume Next Edge
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;

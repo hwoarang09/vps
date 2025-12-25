@@ -1,9 +1,9 @@
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo, useEffect, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
-import { getVehicleConfigSync } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
@@ -29,8 +29,17 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   const storeActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
   const actualNumVehicles = propActualNumVehicles ?? storeActualNumVehicles;
 
-  // Get vehicle config
-  const config = getVehicleConfigSync();
+  // Get vehicle config - useState로 관리하여 로딩 완료 시 리렌더링
+  const [config, setConfig] = useState(() => getVehicleConfigSync());
+
+  // Wait for config to load from JSON
+  useEffect(() => {
+    waitForConfig().then(loadedConfig => {
+      setConfig(loadedConfig);
+      console.log(`[VehicleArrayRenderer] Config loaded from JSON:`, loadedConfig);
+    });
+  }, []);
+
   const {
     BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
     VEHICLE_COLOR: vehicleColor

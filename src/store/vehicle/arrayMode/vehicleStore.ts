@@ -90,7 +90,7 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
       set({ actualNumVehicles: num });
     },
 
-    transferMode: TransferMode.LOOP,
+    transferMode: TransferMode.RANDOM,
     setTransferMode: (mode) => set({ transferMode: mode }),
 
     // Initialize array memory

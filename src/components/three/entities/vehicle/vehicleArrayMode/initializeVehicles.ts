@@ -12,6 +12,7 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { VehicleConfig } from "@/types";
+import { getLockMgr } from "./logic/LockMgr";
 
 export interface InitializationResult {
   edgeNameToIndex: Map<string, number>;
@@ -126,6 +127,26 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     totalInByEdge += actualCount;
     if (actualCount !== count) {
       console.error(`[VehicleArrayMode] Edge ${edgeIdx} mismatch! Expected: ${count}, Got: ${actualCount}`);
+    }
+  }
+
+  // 7. Initial lock requests for vehicles on merge edges
+  // Issue lock requests in correct order (front to back) to prevent simultaneous requests
+  const lockMgr = getLockMgr();
+  for (const [edgeIdx, _] of edgeVehicleCount) {
+    const edge = edgeArray[edgeIdx];
+
+    // Check if this edge leads to a merge node
+    if (lockMgr.isMergeNode(edge.to_node)) {
+      // Get vehicles on this edge (already sorted by edgeRatio, front to back)
+      const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
+
+      console.log(`[InitVehicles] Merge edge ${edge.edge_name} -> ${edge.to_node}: Pre-requesting locks for ${vehiclesOnEdge.length} vehicles`);
+
+      // Request lock in order (front to back)
+      for (const vehId of vehiclesOnEdge) {
+        lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
+      }
     }
   }
 

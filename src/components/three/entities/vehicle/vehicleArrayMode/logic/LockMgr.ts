@@ -121,10 +121,12 @@ export class LockMgr {
       }
     }
 
+    console.log(`\n========== MAP TOPOLOGY: MERGE NODES ==========`);
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
-      if (DEBUG) console.log(`[LockMgr ${mergeName}] Merge Node Detected (Incoming: ${incomingEdgeNames.join(", ")})`);
+      console.log(`[LockMgr] 🔀 Merge Node: ${mergeName}`);
+      console.log(`          Incoming Edges (${incomingEdgeNames.length}): ${incomingEdgeNames.join(", ")}`);
 
       const edgeQueues: Record<string, number[]> = {};
       for (const edgeName of incomingEdgeNames) {
@@ -140,7 +142,8 @@ export class LockMgr {
         strategyState: {},
       };
     }
-    if (DEBUG) console.log(`[LockMgr] Initialized with ${Object.keys(this.lockTable).length} merge nodes.`);
+    console.log(`[LockMgr] ✅ Total Merge Nodes: ${Object.keys(this.lockTable).length}`);
+    console.log(`===============================================\n`);
   }
 
   /**
@@ -171,20 +174,20 @@ export class LockMgr {
   /**
    * 합류 지점 진입 전 대기해야 할 거리(Edge Start로부터의 거리)를 반환합니다.
    * - Curve: 0 (Node 진입 즉시 대기, 실제로는 fromNode)
-   * - Linear >= 2000: toNode - 1000
-   * - Linear < 2000: 0 (fromNode)
+   * - Linear >= 2m: toNode - 1m
+   * - Linear < 2m: 0 (fromNode)
    */
   getWaitDistance(edge: Edge): number {
     // 1. 곡선 Edge
     if (edge.vos_rail_type !== "LINEAR") {
-      return 0; 
+      return 0;
     }
 
-    // 2. 직선 Edge
-    if (edge.distance >= 2000) {
-      return edge.distance - 1000;
+    // 2. 직선 Edge (m 단위)
+    if (edge.distance >= 3.0) {
+      return edge.distance - 3.0;
     } else {
-      return 0; 
+      return 0;
     }
   }
 

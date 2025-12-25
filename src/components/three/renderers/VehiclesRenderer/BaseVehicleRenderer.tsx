@@ -1,7 +1,7 @@
-import React, { useRef, useMemo, useEffect } from "react";
+import React, { useRef, useMemo, useEffect, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { getVehicleConfigSync } from "../../../../config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "../../../../config/vehicleConfig";
 
 // 자식이 구현해야 할 데이터 주입 함수 타입
 export type UpdateTransformFn = (
@@ -26,8 +26,17 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const sensorMeshRef = useRef<THREE.InstancedMesh>(null);
 
-  // Config 로드 (공통)
-  const config = getVehicleConfigSync();
+  // Config 로드 (공통) - useState로 관리하여 로딩 완료 시 리렌더링
+  const [config, setConfig] = useState(() => getVehicleConfigSync());
+
+  // Wait for config to load from JSON
+  useEffect(() => {
+    waitForConfig().then(loadedConfig => {
+      setConfig(loadedConfig);
+      console.log(`[Vehicle${rendererName}Renderer] Config loaded from JSON:`, loadedConfig);
+    });
+  }, [rendererName]);
+
   const {
     BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
     SENSOR: { LENGTH: sensorLength, WIDTH: sensorWidth, HEIGHT: sensorHeight },

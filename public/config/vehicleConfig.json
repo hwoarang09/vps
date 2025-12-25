@@ -5,13 +5,13 @@
   "VEHICLE_SPACING": 0.3,
   "CROSS_EDGE_SAFE_DISTANCE": 1.0,
   "BODY": {
-    "LENGTH": 1.2,
-    "WIDTH": 0.6,
-    "HEIGHT": 0.3
+    "LENGTH": 0.8,
+    "WIDTH": 0.4,
+    "HEIGHT": 0.2
   },
   "SENSOR": {
     "LENGTH": 0.6,
-    "WIDTH": 0.5,
+    "WIDTH": 0.4,
     "HEIGHT": 0.3
   },
   "LABEL": {

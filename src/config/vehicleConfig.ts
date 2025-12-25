@@ -82,11 +82,18 @@ let vehicleConfig: VehicleConfig = {
   }
 };
 
+// Promise to track config loading
+let configLoadedPromise: Promise<VehicleConfig>;
+
 // Load config immediately
-loadVehicleConfig().then(config => {
+configLoadedPromise = loadVehicleConfig().then(config => {
   vehicleConfig = config;
   console.log('[VehicleConfig] Loaded:', config);
+  return config;
 });
+
+// Export the promise for components that need to wait
+export const waitForConfig = () => configLoadedPromise;
 
 // Export synchronous getters
 export const getMaxVehicles = () => vehicleConfig.MAX_VEHICLES;

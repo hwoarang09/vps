@@ -2,15 +2,18 @@
 
 import { sensorPointArray, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE, SensorPoint } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { SENSOR_PRESETS, getSensorZone } from "@/store/vehicle/arrayMode/sensorPresets";
+import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 
-const HALF_L = 0.6;
-const HALF_W = 0.3;
 const DEG2RAD = Math.PI / 180;
 
 export function updateSensorPoints(vehIdx: number, x: number, y: number, rot: number, presetIdx: number): void {
   const d = sensorPointArray.getData();
   const base = vehIdx * SENSOR_DATA_SIZE;
   const preset = SENSOR_PRESETS[presetIdx] ?? SENSOR_PRESETS[0];
+
+  // Get body dimensions from config
+  const HALF_L = getBodyLength() / 2;
+  const HALF_W = getBodyWidth() / 2;
 
   // rot is in DEGREES, convert to radians
   const rotRad = rot * DEG2RAD;

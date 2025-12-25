@@ -1,9 +1,9 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import type { RapierRigidBody } from "@react-three/rapier";
 import SpriteText from "three-spritetext";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
-import { getVehicleConfigSync } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 
 export interface VehicleRapierModeVehicleProps {
   vehicleIndex: number;
@@ -20,8 +20,16 @@ const VehicleRapierModeVehicle: React.FC<VehicleRapierModeVehicleProps> = ({
     ? [initialPosition.x, initialPosition.y, initialPosition.z]
     : [0, 0, 0];
 
-  // Get vehicle config
-  const config = getVehicleConfigSync();
+  // Get vehicle config - useState로 관리하여 로딩 완료 시 리렌더링
+  const [config, setConfig] = useState(() => getVehicleConfigSync());
+
+  // Wait for config to load from JSON
+  useEffect(() => {
+    waitForConfig().then(loadedConfig => {
+      setConfig(loadedConfig);
+    });
+  }, []);
+
   const {
     BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
     SENSOR: { LENGTH: sensorLength, WIDTH: sensorWidth, HEIGHT: sensorHeight },

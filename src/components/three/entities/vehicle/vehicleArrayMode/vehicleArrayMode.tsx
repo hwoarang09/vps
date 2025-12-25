@@ -3,14 +3,14 @@
 // Only handles coordinate calculation and collision detection
 // Rendering is done by VehiclesRenderer
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
-import { getVehicleConfigSync } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions } from "./collisionLogic/collisionCheck";
 import { updateMovement } from "./movementLogic/movementUpdate";
@@ -49,18 +49,30 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   const edgeArrayRef = useRef<any[]>([]);
   const actualNumVehiclesRef = useRef(0);
 
-  const config = getVehicleConfigSync();
+  // Get vehicle config - useState로 관리하여 로딩 완료 시 리렌더링
+  const [config, setConfig] = useState(() => getVehicleConfigSync());
+
+  // Wait for config to load from JSON
+  useEffect(() => {
+    waitForConfig().then(loadedConfig => {
+      setConfig(loadedConfig);
+      console.log(`[VehicleArrayMode] Config loaded from JSON:`, loadedConfig);
+    });
+  }, []);
+
   const {
     BODY: { LENGTH: bodyLength },
     SENSOR: { LENGTH: sensorLength },
     VEHICLE_SPACING: vehicleSpacing,
   } = config;
 
-  const sameEdgeSafeDistance = (bodyLength + sensorLength );
-  const resumeDistance = sameEdgeSafeDistance * 1;
+  const sameEdgeSafeDistance = useMemo(() => bodyLength + sensorLength, [bodyLength, sensorLength]);
+  const resumeDistance = useMemo(() => sameEdgeSafeDistance * 1, [sameEdgeSafeDistance]);
 
-  // Log safety configuration on mount
-  logSafetyConfig(bodyLength, sensorLength, vehicleSpacing, sameEdgeSafeDistance, resumeDistance);
+  // Log safety configuration when config changes
+  useEffect(() => {
+    logSafetyConfig(bodyLength, sensorLength, vehicleSpacing, sameEdgeSafeDistance, resumeDistance);
+  }, [bodyLength, sensorLength, vehicleSpacing, sameEdgeSafeDistance, resumeDistance]);
 
   // Cleanup on unmount
   useEffect(() => {

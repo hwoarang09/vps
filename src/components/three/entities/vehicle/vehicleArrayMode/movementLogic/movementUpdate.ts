@@ -365,7 +365,7 @@ function processMergeLogic(
   const waitDist = lockMgr.getWaitDistance(currentEdge);
   const currentDist = currentRatio * currentEdge.distance;
 
-  if (currentDist > waitDist) {
+  if (currentDist >= waitDist) {
       // Reached Wait Point -> Stop & Set LOCKED Reason
       data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
 
