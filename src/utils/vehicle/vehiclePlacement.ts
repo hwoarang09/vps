@@ -83,13 +83,14 @@ export const createPlacementsFromVehicleConfigs = (
 
 /**
  * Auto-place vehicles on straight edges
+ * Uses round-robin distribution to evenly distribute vehicles across edges
  */
 export const calculateVehiclePlacements = (
   numVehicles: number,
   allEdges: Edge[]
 ): VehiclePlacementResult => {
-  // 1. 모든 spot 수집
-  const allSpots: { edge: Edge; distance: number }[] = [];
+  // 1. edge별로 spot 목록 생성
+  const edgeSpots: { edge: Edge; spots: number[] }[] = [];
 
   for (const edge of allEdges) {
     const isCurve = [
@@ -99,12 +100,29 @@ export const calculateVehiclePlacements = (
     if (isCurve) continue;
 
     const spots = calculateEdgeSpots(edge.distance);
-    for (const distance of spots) {
-      allSpots.push({ edge, distance });
+    if (spots.length > 0) {
+      edgeSpots.push({ edge, spots });
     }
   }
 
-  // 2. 배치
+  // 2. Round-robin으로 spot 수집
+  const allSpots: { edge: Edge; distance: number }[] = [];
+  let maxSpotsPerEdge = 0;
+
+  for (const { spots } of edgeSpots) {
+    maxSpotsPerEdge = Math.max(maxSpotsPerEdge, spots.length);
+  }
+
+  // 각 position마다 모든 edge를 순회하면서 spot 추가
+  for (let spotIndex = 0; spotIndex < maxSpotsPerEdge; spotIndex++) {
+    for (const { edge, spots } of edgeSpots) {
+      if (spotIndex < spots.length) {
+        allSpots.push({ edge, distance: spots[spotIndex] });
+      }
+    }
+  }
+
+  // 3. 배치
   const placements: VehiclePlacement[] = [];
   const spotsToUse = allSpots.slice(0, numVehicles);
 
