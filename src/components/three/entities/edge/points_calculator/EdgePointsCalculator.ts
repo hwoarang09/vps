@@ -6,8 +6,6 @@ import { Curve90EdgePointsCalculator } from "./_Curve90EdgePointsCalculator";
 import { SCurvePointsCalculator } from "./_SCurvePointsCalculator";
 import { CurveCSCEdgePointsCalculator } from "./_CurveCSCEdgePointsCalculator";
 import { Curve180EdgePointsCalculator } from "./_Curve180EdgePointsCalculator";
-import { CurveCSCHomoEdgePointsCalculator } from "./_CurveCSCHomoEdgePointsCalculator";
-
 
 /**
  * Edge Points Calculator 라우터
