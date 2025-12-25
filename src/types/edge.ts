@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { EdgeType } from "./index";
 
 /**
  * Edge Interface
@@ -13,7 +14,7 @@ export interface Edge {
   edge_name: string;      // Unique Identifier
   from_node: string;      // Start Node Name
   to_node: string;        // End Node Name
-  vos_rail_type: string;  // Rail Type (S, C90, etc.)
+  vos_rail_type: EdgeType;  // Rail Type (S, C90, etc.)
   distance: number;       // Length in meters
   waypoints: string[];    // Full path nodes
 

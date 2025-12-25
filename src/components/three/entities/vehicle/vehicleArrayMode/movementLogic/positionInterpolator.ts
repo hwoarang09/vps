@@ -1,4 +1,5 @@
 import { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
 
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -26,7 +27,7 @@ export function interpolatePositionTo(edge: Edge, ratio: number, target: Positio
   }
 
   // TYPE 1: LINEAR EDGES
-  if (edge.vos_rail_type === "LINEAR") {
+  if (edge.vos_rail_type === EdgeType.LINEAR) {
     const pStart = points[0];
     const pEnd = points.at(-1)!;
 
@@ -95,7 +96,7 @@ export function interpolatePosition(edge: Edge, ratio: number) {
   // TYPE 1: LINEAR EDGES (Direct Access)
   // 이미 로딩 시점에 axis(0, 90, 180, 270)가 결정되었으므로 계산하지 않음.
   // ==================================================================================
-  if (edge.vos_rail_type === "LINEAR") {
+  if (edge.vos_rail_type === EdgeType.LINEAR) {
     const pStart = points[0];
     const pEnd = points.at(-1)!;
 

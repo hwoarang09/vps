@@ -5,6 +5,7 @@ import { getLockMgr } from "../logic/LockMgr";
 import { VehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
 
 // Logic modules
 import { calculateNextSpeed } from "./speedCalculator";
@@ -108,7 +109,7 @@ export function updateMovement(params: MovementUpdateParams) {
     let appliedDecel = 0;
 
     // Override acceleration for curves if not braking
-    if (currentEdge.vos_rail_type !== "LINEAR") {
+    if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
       appliedAccel = getCurveAcceleration();
     }
 

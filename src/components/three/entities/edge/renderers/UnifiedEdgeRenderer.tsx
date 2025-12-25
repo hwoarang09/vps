@@ -4,10 +4,11 @@ import * as THREE from "three";
 import edgeVertexShader from "../shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../shaders/edgeFragment.glsl?raw";
 import { useRenderCheck } from "@/utils/renderDebug";
+import { EdgeType } from "@/types";
 
 export interface UnifiedEdgeRendererProps {
   renderingPoints: THREE.Vector3[];
-  edgeType?: "LINEAR" | "CURVE"; // Default to CURVE if not specified, or infer?
+  edgeType?: EdgeType | string; // Support both Enum and simplified string
   color?: string;
   opacity?: number;
   width?: number;
@@ -17,7 +18,7 @@ export interface UnifiedEdgeRendererProps {
 
 export const UnifiedEdgeRenderer: React.FC<UnifiedEdgeRendererProps> = ({
   renderingPoints = [],
-  edgeType = "CURVE",
+  edgeType = EdgeType.CURVE_90, // Default to a curve type if not specified
   color = "#ff0000",
   opacity = 1,
   width = 0.5,
@@ -30,7 +31,7 @@ export const UnifiedEdgeRenderer: React.FC<UnifiedEdgeRendererProps> = ({
   // Determine instance count
   const instanceCount = useMemo(() => {
     if (renderingPoints.length < 2) return 0;
-    if (edgeType === "LINEAR") return 1;
+    if (edgeType === EdgeType.LINEAR) return 1;
     return renderingPoints.length - 1;
   }, [renderingPoints.length, edgeType]);
 
@@ -73,7 +74,7 @@ export const UnifiedEdgeRenderer: React.FC<UnifiedEdgeRendererProps> = ({
     const scale = new THREE.Vector3();
     const euler = new THREE.Euler();
 
-    if (edgeType === "LINEAR") {
+    if (edgeType === EdgeType.LINEAR) {
       // Linear: One segment from start to end
       const start = renderingPoints[0];
       const end = renderingPoints.at(-1)!;

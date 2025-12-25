@@ -1,8 +1,8 @@
 // EdgeRenderer.tsx - InstancedMesh 통합 버전
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Edge } from "@/types";
-import { colors } from "../edge/renderers/colors";
+import { Edge, EdgeType } from "@/types";
+import { getEdgeColorConfig } from "@/config/mapConfig";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
@@ -20,21 +20,23 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   edges,
   previewEdges = [],
 }) => {
+  const colors = getEdgeColorConfig();
+
   // Group edges by type
   const edgesByType = useMemo(() => {
     const grouped: Record<string, Edge[]> = {
-      LINEAR: [],
-      CURVE_90: [],
-      CURVE_180: [],
-      CURVE_CSC: [],
-      S_CURVE: [],
+      [EdgeType.LINEAR]: [],
+      [EdgeType.CURVE_90]: [],
+      [EdgeType.CURVE_180]: [],
+      [EdgeType.CURVE_CSC]: [],
+      [EdgeType.S_CURVE]: [],
     };
 
     for (const edge of edges) {
       if (edge.rendering_mode === "preview") continue;
 
       if (edge.renderingPoints && edge.renderingPoints.length > 0) {
-        const type = edge.vos_rail_type || "LINEAR";
+        const type = edge.vos_rail_type || EdgeType.LINEAR;
         if (grouped[type]) {
           grouped[type].push(edge);
         }
@@ -47,33 +49,33 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   return (
     <group>
       <EdgeTypeRenderer
-        edges={edgesByType.LINEAR}
-        edgeType="LINEAR"
-        color={colors.linear}
+        edges={edgesByType[EdgeType.LINEAR]}
+        edgeType={EdgeType.LINEAR}
+        color={colors.LINEAR}
         renderOrder={RENDER_ORDER_RAIL_LINEAR}
       />
       <EdgeTypeRenderer
-        edges={edgesByType.CURVE_90}
-        edgeType="CURVE_90"
-        color={colors.curve90}
+        edges={edgesByType[EdgeType.CURVE_90]}
+        edgeType={EdgeType.CURVE_90}
+        color={colors.CURVE_90}
         renderOrder={RENDER_ORDER_RAIL_CURVE_90}
       />
       <EdgeTypeRenderer
-        edges={edgesByType.CURVE_180}
-        edgeType="CURVE_180"
-        color={colors.curve180}
+        edges={edgesByType[EdgeType.CURVE_180]}
+        edgeType={EdgeType.CURVE_180}
+        color={colors.CURVE_180}
         renderOrder={RENDER_ORDER_RAIL_CURVE_90}
       />
       <EdgeTypeRenderer
-        edges={edgesByType.CURVE_CSC}
-        edgeType="CURVE_CSC"
-        color={colors.curveCSC}
+        edges={edgesByType[EdgeType.CURVE_CSC]}
+        edgeType={EdgeType.CURVE_CSC}
+        color={colors.CURVE_CSC}
         renderOrder={RENDER_ORDER_RAIL_CURVE_90}
       />
       <EdgeTypeRenderer
-        edges={edgesByType.S_CURVE}
-        edgeType="S_CURVE"
-        color={colors.sCurve}
+        edges={edgesByType[EdgeType.S_CURVE]}
+        edgeType={EdgeType.S_CURVE}
+        color={colors.S_CURVE}
         renderOrder={RENDER_ORDER_RAIL_CURVE_90}
       />
     </group>
@@ -82,7 +84,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
 
 interface EdgeTypeRendererProps {
   edges: Edge[];
-  edgeType: string;
+  edgeType: EdgeType;
   color: string;
   renderOrder: number;
 }
@@ -97,7 +99,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
 
   // Calculate total instance count based on edge type
   const instanceCount = useMemo(() => {
-    if (edgeType === "LINEAR") {
+    if (edgeType === EdgeType.LINEAR) {
       return edges.length; // 1 instance per edge
     } else {
       // For curves, count segments
@@ -146,7 +148,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       const points = edge.renderingPoints;
       if (!points || points.length === 0) continue;
 
-      if (edgeType === "LINEAR") {
+      if (edgeType === EdgeType.LINEAR) {
         // Straight edge: single instance from first to last point
         const startPos = points[0];
         const endPos = points.at(-1)!;

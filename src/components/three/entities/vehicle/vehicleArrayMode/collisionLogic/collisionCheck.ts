@@ -1,6 +1,7 @@
 
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
 
 import { verifyLinearCollision } from "./verifyLinearCollision";
 import { verifyCurveCollision } from "./verifyCurveCollision";
@@ -26,7 +27,7 @@ export function checkCollisions(params: CollisionCheckParams) {
     const count = edgeVehicleQueue.getCount(edgeIdx);
     if (count === 0) continue;
 
-    if (edge.vos_rail_type === "LINEAR") {
+    if (edge.vos_rail_type === EdgeType.LINEAR) {
       verifyLinearCollision(edgeIdx, edge, vehicleArrayData);
     } else {
       verifyCurveCollision(edgeIdx, edge, vehicleArrayData);

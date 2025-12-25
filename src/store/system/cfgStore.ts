@@ -3,7 +3,7 @@ import Papa from "papaparse";
 import { useNodeStore } from "../map/nodeStore";
 import { useEdgeStore } from "../map/edgeStore";
 import { useTextStore, TextPosition } from "../map/textStore";
-import { Node, Edge, VehicleConfig } from "../../types";
+import { Node, Edge, VehicleConfig, EdgeType } from "../../types";
 import { getNodeColor } from "../../utils/colors/nodeColors";
 import { getEdgeColor } from "../../utils/colors/edgeColors";
 import { PointsCalculator } from "../../components/three/entities/edge/points_calculator";
@@ -212,7 +212,7 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
         from_node: row.from_node,
         to_node: row.to_node,
         waypoints: waypoints,
-        vos_rail_type: railType,
+        vos_rail_type: railType as EdgeType,
         distance: Number.parseFloat(row.distance) || 0,
         radius: radius || (railType.startsWith("C") ? 0.5 : undefined),
         rotation: rotation || 0,

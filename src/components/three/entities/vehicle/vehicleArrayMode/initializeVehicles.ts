@@ -11,7 +11,7 @@ import { updateSensorPoints } from "./helpers/sensorPoints";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
-import { VehicleConfig } from "@/types";
+import { VehicleConfig, EdgeType } from "@/types";
 import { getLockMgr } from "./logic/LockMgr";
 
 export interface InitializationResult {
@@ -221,7 +221,7 @@ function initializeVehicleState(
     if (edgeIndex === undefined) continue;
 
     const edge = edgeArray[edgeIndex];
-    const isCurve = edge.vos_rail_type !== "LINEAR";
+    const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
     const initialVelocity = isCurve ? getCurveMaxSpeed() : 0;
 
     store.addVehicle(placement.vehicleIndex, {

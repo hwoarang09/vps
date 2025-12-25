@@ -7,6 +7,7 @@ import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed } from "@/config/movementConfig";
 import { getNextEdgeInLoop, VehicleLoop } from "@/utils/vehicle/loopMaker";
+import { EdgeType } from "@/types";
 
 interface VehicleRapierModeProps {
   numVehicles?: number;
@@ -72,7 +73,7 @@ const VehicleRapierMode: React.FC<VehicleRapierModeProps> = ({
       let edge = edgeArray[currentEdgeIndex];
       if (!edge?.renderingPoints?.length) continue;
 
-      const isCurve = edge.vos_rail_type !== "LINEAR";
+      const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
       const { currentSpeed } = calculateMovementParameters(
         isCurve,
         velocity,

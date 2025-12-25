@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { getRendererConfig } from "@/config/mapConfig";
 import { useTextStore } from "@store/map/textStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
@@ -11,12 +12,14 @@ interface Props {
   edgeColor?: string;
 }
 
-const MapTextRenderer: React.FC<Props> = ({
-  mode,
-  scale = 0.6,
-  nodeColor = "#00e5ff",
-  edgeColor = "#ff9800",
-}) => {
+const MapTextRenderer: React.FC<Props> = (props) => {
+  const config = getRendererConfig();
+  const {
+    mode,
+    scale = config.SCALE,
+    nodeColor = config.NODE_COLOR,
+    edgeColor = config.EDGE_COLOR,
+  } = props;
   const {
     nodeTexts, edgeTexts,
     nodeTextsArray, edgeTextsArray,

@@ -1,3 +1,4 @@
+import { EdgeType } from "@/types";
 import { Edge } from "@/types/edge";
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { MovementData, VEHICLE_DATA_SIZE, HitZone } from "@/store/vehicle/arrayMode/vehicleDataArray";
@@ -104,7 +105,7 @@ function checkAgainstCompetitors(
     // [Competitor Filter Logic]
     // If Competitor is Straight (Long): Check Danger Zone Only
     let compThreshold = 0;
-    if (compEdge.vos_rail_type === "LINEAR") {
+    if (compEdge.vos_rail_type === EdgeType.LINEAR) {
       compThreshold = compEdge.distance - dangerZoneLen;
     }
 
@@ -160,7 +161,7 @@ export function verifyMergeZoneCollision(
     // Calculate Position on Edge (Generic: support both Curve and Straight)
     let currentOffset = 0;
     
-    if (edge.vos_rail_type === "LINEAR") {
+    if (edge.vos_rail_type === EdgeType.LINEAR) {
        // Straight: Calculate offset from EDGE_RATIO
        const ratio = data[ptr + MovementData.EDGE_RATIO];
        currentOffset = ratio * edgeLen;
@@ -173,7 +174,7 @@ export function verifyMergeZoneCollision(
     // If Curve: Check ALL (StartOffset = 0 per user req)
     // If Straight: Check Danger Zone Only
     let effectiveStartOffset = dangerStartOffset;
-    if (edge.vos_rail_type !== "LINEAR") {
+    if (edge.vos_rail_type !== EdgeType.LINEAR) {
         effectiveStartOffset = 0; // Check all on curve
     }
 

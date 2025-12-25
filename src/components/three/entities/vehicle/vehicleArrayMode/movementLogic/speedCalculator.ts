@@ -1,5 +1,5 @@
 import { getLinearMaxSpeed, getCurveMaxSpeed } from "@/config/movementConfig";
-import { Edge } from "@/types/edge"; // Edge 타입 가정
+import { Edge, EdgeType } from "@/types"; // Edge 타입 가정
 
 export function calculateNextSpeed(
   currentVelocity: number,
@@ -8,7 +8,7 @@ export function calculateNextSpeed(
   edge: Edge,
   delta: number
 ): number {
-  const isCurve = edge.vos_rail_type !== "LINEAR";
+  const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
   const linearMax = getLinearMaxSpeed();
   const curveMax = getCurveMaxSpeed();
 

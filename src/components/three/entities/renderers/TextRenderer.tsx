@@ -1,4 +1,5 @@
 import React from "react";
+import { getRendererConfig } from "@/config/mapConfig";
 import { useTextStore } from "@store/map/textStore";
 import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
@@ -12,12 +13,15 @@ interface Props {
   vehicleColor?: string;
 }
 
-const TextRenderer: React.FC<Props> = ({
-  scale = 0.6,
-  nodeColor = "#ff69b4",
-  edgeColor = "#ff9800",
-  vehicleColor = "#ffffff",
-}) => {
+const TextRenderer: React.FC<Props> = (props) => {
+  const config = getRendererConfig();
+  
+  const {
+    scale = config.SCALE,
+    nodeColor = config.NODE_COLOR,
+    edgeColor = config.EDGE_COLOR,
+    vehicleColor = config.VEHICLE_COLOR,
+  } = props;
   const { mode } = useTextStore();
   const {  numVehicles } = useVehicleTestStore();
 

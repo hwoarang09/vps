@@ -12,7 +12,27 @@ const loadMapConfig = async () => {
     return {
       RAIL_CONFIG_PATH: 'railConfig',
       AVAILABLE_MAPS: ['dismantle'],
-      AUTO_LOAD_MAP: ''
+      AUTO_LOAD_MAP: '',
+      MARKERS: {
+        Z: 3.8,
+        SEGMENTS: 6,
+        NORMAL: { RADIUS: 0.05, COLOR: "#ff69b4" },
+        TMP: { RADIUS: 0.025, COLOR: "#888888" }
+      },
+      RENDERER: {
+        SCALE: 0.6,
+        NODE_COLOR: "#ff69b4",
+        EDGE_COLOR: "#ff9800",
+        VEHICLE_COLOR: "#ffffff"
+      },
+      EDGE_COLORS: {
+        LINEAR: "#0066ff",
+        CURVE_90: "#ff69b4",
+        CURVE_180: "#ff69b4",
+        CURVE_CSC: "#ff69b4",
+        S_CURVE: "#0066ff",
+        DEFAULT: "#888888"
+      }
     };
   }
 };
@@ -24,7 +44,27 @@ export const getMapConfig = loadMapConfig;
 let mapConfig = {
   RAIL_CONFIG_PATH: 'railConfig',
   AVAILABLE_MAPS: ['dismantle'],
-  AUTO_LOAD_MAP: ''
+  AUTO_LOAD_MAP: '',
+  MARKERS: {
+    Z: 3.8,
+    SEGMENTS: 6,
+    NORMAL: { RADIUS: 0.05, COLOR: "#ff69b4" },
+    TMP: { RADIUS: 0.025, COLOR: "#888888" }
+  },
+  RENDERER: {
+    SCALE: 0.6,
+    NODE_COLOR: "#ff69b4",
+    EDGE_COLOR: "#ff9800",
+    VEHICLE_COLOR: "#ffffff"
+  },
+  EDGE_COLORS: {
+    LINEAR: "#0066ff",
+    CURVE_90: "#ff69b4",
+    CURVE_180: "#ff69b4",
+    CURVE_CSC: "#ff69b4",
+    S_CURVE: "#0066ff",
+    DEFAULT: "#888888"
+  }
 };
 
 // Load config immediately
@@ -57,4 +97,10 @@ export const getAutoLoadMap = async (): Promise<string | null> => {
   const autoLoadMap = config.AUTO_LOAD_MAP || '';
   return autoLoadMap.trim() === '' ? null : autoLoadMap;
 };
+
+// Config Getters
+export const getMarkerConfig = () => mapConfig.MARKERS;
+export const getRendererConfig = () => mapConfig.RENDERER;
+export const getEdgeColorConfig = () => mapConfig.EDGE_COLORS;
+export const getMapConfigSync = () => mapConfig; // Full sync access
 

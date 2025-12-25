@@ -10,6 +10,26 @@
     "stress_test",
     "y_short"
   ],
-  "AUTO_LOAD_MAP": ""
+  "AUTO_LOAD_MAP": "",
+  "MARKERS": {
+    "Z": 3.8,
+    "SEGMENTS": 6,
+    "NORMAL": { "RADIUS": 0.05, "COLOR": "#ff69b4" },
+    "TMP": { "RADIUS": 0.025, "COLOR": "#888888" }
+  },
+  "RENDERER": {
+    "SCALE": 0.6,
+    "NODE_COLOR": "#ff69b4",
+    "EDGE_COLOR": "#ff9800",
+    "VEHICLE_COLOR": "#ffffff"
+  },
+  "EDGE_COLORS": {
+    "LINEAR": "#0066ff",
+    "CURVE_90": "#ff69b4",
+    "CURVE_180": "#ff69b4",
+    "CURVE_CSC": "#ff69b4",
+    "S_CURVE": "#0066ff",
+    "DEFAULT": "#888888"
+  }
 }
 

@@ -1,4 +1,5 @@
 import { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
 const DEBUG = false;
 /**
  * 합류 지점 진입 권한(Grant) 정보
@@ -176,7 +177,7 @@ export class LockMgr {
    */
   getWaitDistance(edge: Edge): number {
     // 1. 곡선 Edge
-    if (edge.vos_rail_type !== "LINEAR") {
+    if (edge.vos_rail_type !== EdgeType.LINEAR) {
       return 0;
     }
 

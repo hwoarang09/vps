@@ -1,5 +1,6 @@
 import { useNodeStore } from "@/store/map/nodeStore";
 import * as THREE from "three";
+import { EdgeType } from "@/types";
 
 import { StraightPointsCalculator } from "./_StraightPointsCalculator";
 import { Curve90EdgePointsCalculator } from "./_Curve90EdgePointsCalculator";
@@ -36,7 +37,7 @@ export class EdgePointsCalculator {
       case "CURVE_CSC":
         return CurveCSCEdgePointsCalculator.calculate(edgeRowData, nodes);
 
-      case "LINEAR":
+      case EdgeType.LINEAR:
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
       default:
         console.log(

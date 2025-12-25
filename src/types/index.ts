@@ -32,6 +32,17 @@ export interface Node {
 // ============================================================================
 
 /**
+ * Edge Types Enum
+ */
+export enum EdgeType {
+  LINEAR = "LINEAR",
+  CURVE_90 = "CURVE_90",
+  CURVE_180 = "CURVE_180",
+  CURVE_CSC = "CURVE_CSC",
+  S_CURVE = "S_CURVE",
+}
+
+/**
  * Edge interface - matches edges.cfg format
  * CFG 필수 데이터 + 렌더링용 옵셔널 데이터
  */
@@ -41,7 +52,7 @@ export interface Edge {
   from_node: string; // 시작 노드 이름 (waypoints[0]과 같음)
   to_node: string; // 끝 노드 이름 (waypoints[-1]과 같음)
   waypoints: string[]; // 전체 경로 노드들 (from_node부터 to_node까지)
-  vos_rail_type: string; // 레일 타입 (S, C90, C180 등)
+  vos_rail_type: EdgeType; // 레일 타입 (S, C90, C180 등)
   distance: number; // 거리
   radius?: number; // 곡선 반지름 (m 단위, 기본값 0.5m)
   rotation?: number; // 회전각 (도 단위, C90=90도, C180=180도 등)

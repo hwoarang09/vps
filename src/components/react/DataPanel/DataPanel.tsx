@@ -4,6 +4,7 @@ import { useNodeStore } from "../../../store/map/nodeStore";
 import { useEdgeStore } from "../../../store/map/edgeStore";
 import { useCameraStore } from "../../../store/ui/cameraStore";
 import { cn } from "@/lib/utils";
+import { EdgeType } from "@/types";
 
 import {
   Table,
@@ -34,26 +35,26 @@ function fmtNum(v: unknown, d = 1) {
 
 function typeColor(type?: string) {
   switch (type) {
-    case "LINEAR":
+    case EdgeType.LINEAR:
     case "S":
       return {
         bg: "linear-gradient(135deg, #3B82F6, #1E40AF)",
         fg: "#fff",
         shadow: "shadow-blue-500/20",
       };
-    case "CURVE_90":
+    case EdgeType.CURVE_90:
       return {
         bg: "linear-gradient(135deg, #A855F7, #7C3AED)",
         fg: "#fff",
         shadow: "shadow-purple-500/20",
       };
-    case "CURVE_180":
+    case EdgeType.CURVE_180:
       return {
         bg: "linear-gradient(135deg, #EC4899, #BE185D)",
         fg: "#fff",
         shadow: "shadow-pink-500/20",
       };
-    case "CURVE_CSC":
+    case EdgeType.CURVE_CSC:
       return {
         bg: "linear-gradient(135deg, #F97316, #EA580C)",
         fg: "#fff",
