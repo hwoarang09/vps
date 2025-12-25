@@ -18,7 +18,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
 
   sendMessage: ({ topic, message }) => {
     const client = get().client;
-    // console.log("sendMessage", { topic, message });
+
     if (!client) {
       console.error("MQTT client is not initialized.");
       return;
@@ -50,9 +50,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         client.subscribe(SUB_TOPIC, (err) => {
           if (err) {
             console.error("Failed to subscribe to topic", err);
-          } else {
-            // console.log("Subscribed to topic");
-          }
+          } 
         });
       }
     });

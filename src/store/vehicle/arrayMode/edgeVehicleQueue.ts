@@ -7,8 +7,8 @@ const MAX_VEHICLES_PER_EDGE = 500;
 const EDGE_LIST_SIZE = MAX_VEHICLES_PER_EDGE + 1; // count + vehicles
 
 class EdgeVehicleQueue {
-  private dataArrays: Int32Array[];
-  private maxEdges: number;
+  private readonly dataArrays: Int32Array[];
+  private readonly maxEdges: number;
 
   constructor(maxEdges: number) {
     this.maxEdges = maxEdges;
@@ -55,10 +55,6 @@ class EdgeVehicleQueue {
     data[1 + count] = vehicleIndex;
     data[0] = count + 1;
 
-    // // Debug log (sample 1%)
-    // if (Math.random() < 0.01) {
-    //   console.log(`[EdgeList] Added VEH${vehicleIndex} to Edge${edgeIndex} (count: ${count + 1})`);
-    // }
   }
 
   /**
@@ -224,24 +220,10 @@ class EdgeVehicleQueue {
     // Use imported VEHICLE_DATA_SIZE and MovementData.EDGE_RATIO
     const EDGE_RATIO_OFFSET = MovementData.EDGE_RATIO;
 
-    // DEBUG: Log before sort
-    // console.log(`  [EdgeQueue] Edge${edgeIndex} BEFORE sort:`);
-    vehicles.forEach((vehIdx, i) => {
-      const ratio = vehicleData[vehIdx * VEHICLE_DATA_SIZE + EDGE_RATIO_OFFSET];
-      // console.log(`    [${i}] VEH${vehIdx}: ratio=${ratio.toFixed(3)}`);
-    });
-
     vehicles.sort((a, b) => {
       const ratioA = vehicleData[a * VEHICLE_DATA_SIZE + EDGE_RATIO_OFFSET];
       const ratioB = vehicleData[b * VEHICLE_DATA_SIZE + EDGE_RATIO_OFFSET];
       return ratioB - ratioA; // Descending order
-    });
-
-    // DEBUG: Log after sort
-    // console.log(`  [EdgeQueue] Edge${edgeIndex} AFTER sort:`);
-    vehicles.forEach((vehIdx, i) => {
-      const ratio = vehicleData[vehIdx * VEHICLE_DATA_SIZE + EDGE_RATIO_OFFSET];
-      // console.log(`    [${i}] VEH${vehIdx}: ratio=${ratio.toFixed(3)}`);
     });
 
     // Write sorted vehicles back to array

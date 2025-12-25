@@ -22,6 +22,84 @@ const NORMAL_MARKER_COLOR = "#ff69b4"; // 분홍색
 const TMP_MARKER_RADIUS = 0.025;
 const TMP_MARKER_COLOR = "#888888"; // 회색
 
+// 메인 노드 메시 초기화
+const initNodeMesh = (
+  mesh: THREE.InstancedMesh,
+  nodeIds: string[],
+  getNodeByName: (name: string) => any
+) => {
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3(1, 1, 1);
+
+  for (let index = 0; index < nodeIds.length; index++) {
+    const nodeId = nodeIds[index];
+    const node = getNodeByName(nodeId);
+    if (!node) continue;
+
+    position.set(node.editor_x, node.editor_y, node.editor_z);
+    const size = node.size ?? 1;
+    scale.set(size, size, size);
+
+    matrix.compose(position, quaternion, scale);
+    mesh.setMatrixAt(index, matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+};
+
+// 공통 마커 초기화 (일반/TMP 공용)
+const initMarkers = (
+  mesh: THREE.InstancedMesh,
+  nodeIds: string[],
+  getNodeByName: (name: string) => any
+) => {
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3(1, 1, 1);
+
+  for (let index = 0; index < nodeIds.length; index++) {
+    const nodeId = nodeIds[index];
+    const node = getNodeByName(nodeId);
+    if (!node) continue;
+
+    position.set(node.editor_x, node.editor_y, MARKER_Z);
+    matrix.compose(position, quaternion, scale);
+    mesh.setMatrixAt(index, matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+};
+
+// 마커 업데이트 헬퍼
+const updateMarkerForNode = (
+  nodeId: string,
+  markerMatrix: THREE.Matrix4,
+  normalMarker: THREE.InstancedMesh | null,
+  tmpMarker: THREE.InstancedMesh | null,
+  normalNodeMap: Map<string, number>,
+  tmpNodeMap: Map<string, number>
+) => {
+  let normalUpdated = false;
+  let tmpUpdated = false;
+
+  if (nodeId.startsWith("TMP_")) {
+    const tmpIndex = tmpNodeMap.get(nodeId);
+    if (tmpMarker && tmpIndex !== undefined) {
+      tmpMarker.setMatrixAt(tmpIndex, markerMatrix);
+      tmpUpdated = true;
+    }
+  } else {
+    const normalIndex = normalNodeMap.get(nodeId);
+    if (normalMarker && normalIndex !== undefined) {
+      normalMarker.setMatrixAt(normalIndex, markerMatrix);
+      normalUpdated = true;
+    }
+  }
+
+  return { normalUpdated, tmpUpdated };
+};
+
 /**
  * NodesRenderer - Renders all nodes using a single InstancedMesh
  * - Much more efficient than individual NodeInstance components
@@ -133,58 +211,20 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
     const tmpMarker = tmpMarkerRef.current;
     if (!mesh || instanceCount === 0) return;
 
-    const matrix = new THREE.Matrix4();
-    const markerMatrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-    const markerPosition = new THREE.Vector3();
-    const quaternion = new THREE.Quaternion();
-    const scale = new THREE.Vector3(1, 1, 1);
-    const markerScale = new THREE.Vector3(1, 1, 1);
-
     const getNodeByName = useNodeStore.getState().getNodeByName;
 
-    for (let index = 0; index < nodeIds.length; index++) {
-      const nodeId = nodeIds[index];
-      const node = getNodeByName(nodeId);
-      if (!node) continue;
-
-      position.set(node.editor_x, node.editor_y, node.editor_z);
-      const size = node.size ?? 1;
-      scale.set(size, size, size);
-
-      matrix.compose(position, quaternion, scale);
-      mesh.setMatrixAt(index, matrix);
-    }
+    // 메인 노드 메시 초기화
+    initNodeMesh(mesh, nodeIds, getNodeByName);
 
     // 일반 노드 마커 초기화
     if (normalMarker) {
-      for (let index = 0; index < normalNodeIds.length; index++) {
-        const nodeId = normalNodeIds[index];
-        const node = getNodeByName(nodeId);
-        if (!node) continue;
-
-        markerPosition.set(node.editor_x, node.editor_y, MARKER_Z);
-        markerMatrix.compose(markerPosition, quaternion, markerScale);
-        normalMarker.setMatrixAt(index, markerMatrix);
-      }
-      normalMarker.instanceMatrix.needsUpdate = true;
+      initMarkers(normalMarker, normalNodeIds, getNodeByName);
     }
 
     // TMP_ 노드 마커 초기화
     if (tmpMarker) {
-      for (let index = 0; index < tmpNodeIds.length; index++) {
-        const nodeId = tmpNodeIds[index];
-        const node = getNodeByName(nodeId);
-        if (!node) continue;
-
-        markerPosition.set(node.editor_x, node.editor_y, MARKER_Z);
-        markerMatrix.compose(markerPosition, quaternion, markerScale);
-        tmpMarker.setMatrixAt(index, markerMatrix);
-      }
-      tmpMarker.instanceMatrix.needsUpdate = true;
+      initMarkers(tmpMarker, tmpNodeIds, getNodeByName);
     }
-
-    mesh.instanceMatrix.needsUpdate = true;
   }, [nodeIds, instanceCount, normalNodeIds, tmpNodeIds]);
 
   // Subscribe to node store changes and update matrices
@@ -225,19 +265,17 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
         markerPosition.set(node.editor_x, node.editor_y, MARKER_Z);
         markerMatrix.compose(markerPosition, quaternion, markerScale);
 
-        if (nodeId.startsWith("TMP_")) {
-          const tmpIndex = tmpNodeMapRef.current.get(nodeId);
-          if (tmpMarker && tmpIndex !== undefined) {
-            tmpMarker.setMatrixAt(tmpIndex, markerMatrix);
-            tmpMarkerNeedsUpdate = true;
-          }
-        } else {
-          const normalIndex = normalNodeMapRef.current.get(nodeId);
-          if (normalMarker && normalIndex !== undefined) {
-            normalMarker.setMatrixAt(normalIndex, markerMatrix);
-            normalMarkerNeedsUpdate = true;
-          }
-        }
+        const { normalUpdated, tmpUpdated } = updateMarkerForNode(
+          nodeId,
+          markerMatrix,
+          normalMarker,
+          tmpMarker,
+          normalNodeMapRef.current,
+          tmpNodeMapRef.current
+        );
+
+        if (normalUpdated) normalMarkerNeedsUpdate = true;
+        if (tmpUpdated) tmpMarkerNeedsUpdate = true;
       }
 
       if (needsUpdate) {

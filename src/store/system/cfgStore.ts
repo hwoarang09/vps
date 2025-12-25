@@ -275,7 +275,7 @@ const getEdgeMidpoint = (edge: Edge): TextPosition | null => {
   for (let i = 0; i < points.length - 1; i++) {
     const dx = points[i + 1].x - points[i].x;
     const dy = points[i + 1].y - points[i].y;
-    const len = Math.sqrt(dx * dx + dy * dy);
+    const len = Math.hypot(dx, dy);
     segmentLengths.push(len);
     totalLength += len;
   }
@@ -297,7 +297,7 @@ const getEdgeMidpoint = (edge: Edge): TextPosition | null => {
   }
 
   // 폴백: 마지막 점
-  const last = points[points.length - 1];
+  const last = points.at(-1)!;
   return { x: last.x, y: last.y, z: last.z };
 };
 

@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { useNodeStore } from '@/store/map/nodeStore';
-import { Node } from '@/types';
 
 /**
  * Floor component - Creates a factory floor at z=0
