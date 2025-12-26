@@ -5,22 +5,23 @@ import * as THREE from "three";
 import { useNodeStore } from "@/store/map/nodeStore";
 import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
 import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 interface NodesRendererProps {
   nodeIds: string[];
 }
 
 // 마커 공통 상수
-const MARKER_Z = 3.8;          // rail과 같은 높이
-const MARKER_SEGMENTS = 6;     // 너무 둥글지 않게
+const MARKER_Z = getMarkerConfig().Z;          // rail과 같은 높이
+const MARKER_SEGMENTS = getMarkerConfig().SEGMENTS;     // 너무 둥글지 않게
 
 // 일반 노드 마커 (분홍색, 큰 크기)
-const NORMAL_MARKER_RADIUS = 0.05;
-const NORMAL_MARKER_COLOR = "#ff69b4"; // 분홍색
+const NORMAL_MARKER_RADIUS = getMarkerConfig().NORMAL.RADIUS;
+const NORMAL_MARKER_COLOR = getMarkerConfig().NORMAL.COLOR; // 분홍색
 
 // TMP_ 노드 마커 (회색, 작은 크기)
-const TMP_MARKER_RADIUS = 0.025;
-const TMP_MARKER_COLOR = "#888888"; // 회색
+const TMP_MARKER_RADIUS = getMarkerConfig().TMP.RADIUS;
+const TMP_MARKER_COLOR = getMarkerConfig().TMP.COLOR; // 회색
 
 // 메인 노드 메시 초기화
 const initNodeMesh = (
@@ -261,7 +262,7 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
         mesh.setMatrixAt(instanceIndex, matrix);
         needsUpdate = true;
 
-        // 마커 위치도 업데이트 (z=3.8 고정)
+        // 마커 위치도 업데이트 (Z 고정)
         markerPosition.set(node.editor_x, node.editor_y, MARKER_Z);
         markerMatrix.compose(markerPosition, quaternion, markerScale);
 

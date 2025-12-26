@@ -8,6 +8,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed } from "@/config/movementConfig";
 import { getNextEdgeInLoop, VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { EdgeType } from "@/types";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 interface VehicleRapierModeProps {
   numVehicles?: number;
@@ -113,7 +114,7 @@ const VehicleRapierMode: React.FC<VehicleRapierModeProps> = ({
 
       const x = p1.x + (p2.x - p1.x) * localRatio;
       const y = p1.y + (p2.y - p1.y) * localRatio;
-      const z = 3.8; // Fixed vehicle height (all nodes have z=3.8)
+      const z = getMarkerConfig().Z; // Fixed vehicle height
 
       let dx = p2.x - p1.x;
       let dy = p2.y - p1.y;

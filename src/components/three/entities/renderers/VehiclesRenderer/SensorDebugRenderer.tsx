@@ -4,6 +4,7 @@ import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 interface SensorDebugRendererProps {
   readonly numVehicles: number;
@@ -86,31 +87,31 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
         // Sensor quad: FL -> SL -> SR -> FR -> FL
         target[sensorIdx + 0] = flx;
         target[sensorIdx + 1] = fly;
-        target[sensorIdx + 2] = 3.8;
+        target[sensorIdx + 2] = getMarkerConfig().Z;
         target[sensorIdx + 3] = slx;
         target[sensorIdx + 4] = sly;
-        target[sensorIdx + 5] = 3.8;
+        target[sensorIdx + 5] = getMarkerConfig().Z;
 
         target[sensorIdx + 6] = slx;
         target[sensorIdx + 7] = sly;
-        target[sensorIdx + 8] = 3.8;
+        target[sensorIdx + 8] = getMarkerConfig().Z;
         target[sensorIdx + 9] = srx;
         target[sensorIdx + 10] = sry;
-        target[sensorIdx + 11] = 3.8;
+        target[sensorIdx + 11] = getMarkerConfig().Z;
 
         target[sensorIdx + 12] = srx;
         target[sensorIdx + 13] = sry;
-        target[sensorIdx + 14] = 3.8;
+        target[sensorIdx + 14] = getMarkerConfig().Z;
         target[sensorIdx + 15] = frx;
         target[sensorIdx + 16] = fry;
-        target[sensorIdx + 17] = 3.8;
+        target[sensorIdx + 17] = getMarkerConfig().Z;
 
         target[sensorIdx + 18] = frx;
         target[sensorIdx + 19] = fry;
-        target[sensorIdx + 20] = 3.8;
+        target[sensorIdx + 20] = getMarkerConfig().Z;
         target[sensorIdx + 21] = flx;
         target[sensorIdx + 22] = fly;
-        target[sensorIdx + 23] = 3.8;
+        target[sensorIdx + 23] = getMarkerConfig().Z;
       };
 
       // Zones: 0=outer(approach),1=middle(brake),2=inner(stop)
@@ -133,34 +134,34 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
       // Line 1: FL -> BL
       bodyPositions[bodyIdx + 0] = flx;
       bodyPositions[bodyIdx + 1] = fly;
-      bodyPositions[bodyIdx + 2] = 3.8;
+      bodyPositions[bodyIdx + 2] = getMarkerConfig().Z;
       bodyPositions[bodyIdx + 3] = blx;
       bodyPositions[bodyIdx + 4] = bly;
-      bodyPositions[bodyIdx + 5] = 3.8;
+      bodyPositions[bodyIdx + 5] = getMarkerConfig().Z;
 
       // Line 2: BL -> BR
       bodyPositions[bodyIdx + 6] = blx;
       bodyPositions[bodyIdx + 7] = bly;
-      bodyPositions[bodyIdx + 8] = 3.8;
+      bodyPositions[bodyIdx + 8] = getMarkerConfig().Z;
       bodyPositions[bodyIdx + 9] = brx;
       bodyPositions[bodyIdx + 10] = bry;
-      bodyPositions[bodyIdx + 11] = 3.8;
+      bodyPositions[bodyIdx + 11] = getMarkerConfig().Z;
 
       // Line 3: BR -> FR
       bodyPositions[bodyIdx + 12] = brx;
       bodyPositions[bodyIdx + 13] = bry;
-      bodyPositions[bodyIdx + 14] = 3.8;
+      bodyPositions[bodyIdx + 14] = getMarkerConfig().Z;
       bodyPositions[bodyIdx + 15] = frx;
       bodyPositions[bodyIdx + 16] = fry;
-      bodyPositions[bodyIdx + 17] = 3.8;
+      bodyPositions[bodyIdx + 17] = getMarkerConfig().Z;
 
       // Line 4: FR -> FL
       bodyPositions[bodyIdx + 18] = frx;
       bodyPositions[bodyIdx + 19] = fry;
-      bodyPositions[bodyIdx + 20] = 3.8;
+      bodyPositions[bodyIdx + 20] = getMarkerConfig().Z;
       bodyPositions[bodyIdx + 21] = flx;
       bodyPositions[bodyIdx + 22] = fly;
-      bodyPositions[bodyIdx + 23] = 3.8;
+      bodyPositions[bodyIdx + 23] = getMarkerConfig().Z;
     }
 
     outerGeometry.attributes.position.needsUpdate = true;

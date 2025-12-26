@@ -3,6 +3,7 @@ import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovementData, VEHICLE_DATA_SIZE } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 // Threshold for selection in meters
 const SELECTION_THRESHOLD_SQ = 20 * 20; 
@@ -53,7 +54,7 @@ const VehicleSelector: React.FC = () => {
         <mesh 
             visible={false} 
             rotation={[0,0,0]} 
-            position={[0,0,3.8]} // Vehicles are at Z=3.8
+            position={[0,0,getMarkerConfig().Z]} // Vehicles are at Z height
             onClick={(e) => {
                 e.stopPropagation();
                 // Only allow selection if Ctrl is pressed

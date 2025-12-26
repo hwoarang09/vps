@@ -9,6 +9,7 @@ import { getEdgeColor } from "@/utils/colors/edgeColors";
 import { PointsCalculator } from "@/components/three/entities/edge/points_calculator";
 import { VehicleSystemType } from "@/types/vehicle";
 import * as THREE from "three";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 interface CFGStore {
   isLoading: boolean;
@@ -98,7 +99,7 @@ const parseNodesCFG = (content: string): Node[] => {
       barcode: Number.parseInt(row.barcode) || 0,
       editor_x: Number.parseFloat(row.editor_x) || 0,
       editor_y: Number.parseFloat(row.editor_y) || 0,
-      editor_z: Number.parseFloat(row.editor_z || "3.8") || 3.8,
+      editor_z: Number.parseFloat(row.editor_z || String(getMarkerConfig().Z)) || getMarkerConfig().Z,
       color: getNodeColor(row.node_name),
       size: 0.5,
       readonly: true,
