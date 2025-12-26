@@ -7,7 +7,7 @@ export {
   HIDE_MATRIX, 
   buildSlotData, 
   applyHighAltitudeCulling, 
-  computeBillboardRotation, 
+  updateBillboardRotation, 
   distanceSquared,
   type TextGroup,
   type SlotData,

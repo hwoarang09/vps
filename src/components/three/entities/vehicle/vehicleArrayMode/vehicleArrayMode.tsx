@@ -111,8 +111,6 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
       console.log(`[VehicleArrayMode] Initializing with ${useVehicleConfig ? 'vehicles.cfg' : 'auto-placement'}, ${vehicleConfigs.length} configs available`);
 
       // Store results in refs for use in useFrame
-      loopsRef.current = result.vehicleLoops;
-      vehicleLoopMapRef.current = result.vehicleLoopMap;
       edgeNameToIndexRef.current = result.edgeNameToIndex;
       edgeArrayRef.current = result.edgeArray;
       actualNumVehiclesRef.current = result.actualNumVehicles;
