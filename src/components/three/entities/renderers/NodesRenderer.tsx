@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useNodeStore } from "../../../../store/map/nodeStore";
+import { useNodeStore } from "@/store/map/nodeStore";
 import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
 import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
 

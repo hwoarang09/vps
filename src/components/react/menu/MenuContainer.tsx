@@ -6,9 +6,9 @@ import MenuLevel2 from "./MenuLevel2";
 import MapLoader from "../MapLoader/MapLoader";
 import ConfigDataPanel from "../DataPanel/DataPanel";
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
-import { useMenuStore } from "../../../store/ui/menuStore";
-import { useMqttStore } from "../../../store/system/mqttStore";
-import { mqttUrl } from "../../../config/mqttConfig";
+import { useMenuStore } from "@/store/ui/menuStore";
+import { useMqttStore } from "@/store/system/mqttStore";
+import { mqttUrl } from "@/config/mqttConfig";
 import { MenuTooltip } from "./MenuTooltip";
 
 const MenuContainer: React.FC = () => {

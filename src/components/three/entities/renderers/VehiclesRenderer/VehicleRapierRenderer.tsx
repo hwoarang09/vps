@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
-import { useVehicleRapierStore } from "../../../../../store/vehicle/rapierMode/vehicleStore";
-import { getRapierModeConfig } from "../../../../../config/visualizationConfig";
+import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
+import { getRapierModeConfig } from "@/config/visualizationConfig";
 import { BaseVehicleRenderer } from "./BaseVehicleRenderer";
 import type { UpdateTransformFn } from "./BaseVehicleRenderer";
 

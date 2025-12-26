@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { VehicleSystemType } from "../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 
 // Text position data structure
 export interface TextPosition {

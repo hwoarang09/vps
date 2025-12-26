@@ -1,8 +1,8 @@
-import { useVehicleRapierStore } from "../../../../../store/vehicle/rapierMode/vehicleStore";
+import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import VehicleRapierRenderer from "./VehicleRapierRenderer";
 import VehicleArrayRenderer from "./VehicleArrayRenderer";
 import VehicleSharedRenderer from "./VehicleSharedRenderer";
-import { VehicleSystemType } from "../../../../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 
 /**
  * VehiclesRenderer

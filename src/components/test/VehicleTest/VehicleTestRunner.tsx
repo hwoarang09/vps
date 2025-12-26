@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
-import { VehicleSystemType } from "../../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 
 
 /**

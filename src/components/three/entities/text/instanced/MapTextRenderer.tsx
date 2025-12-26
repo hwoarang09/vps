@@ -3,7 +3,7 @@ import { getRendererConfig } from "@/config/mapConfig";
 import { useTextStore } from "@store/map/textStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
-import { VehicleSystemType } from "../../../../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 
 interface Props {
   mode: VehicleSystemType;

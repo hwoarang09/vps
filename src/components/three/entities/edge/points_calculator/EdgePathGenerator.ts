@@ -1,4 +1,4 @@
-import { Node } from "../../../../../types";
+import { Node } from "@/types";
 import { DirectionUtils, Direction } from "./_DirectionUtils";
 import { StraightPointsCalculator } from "./_StraightPointsCalculator";
 import * as THREE from "three";

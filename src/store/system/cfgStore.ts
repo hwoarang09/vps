@@ -3,11 +3,11 @@ import Papa from "papaparse";
 import { useNodeStore } from "../map/nodeStore";
 import { useEdgeStore } from "../map/edgeStore";
 import { useTextStore, TextPosition } from "../map/textStore";
-import { Node, Edge, VehicleConfig, EdgeType } from "../../types";
-import { getNodeColor } from "../../utils/colors/nodeColors";
-import { getEdgeColor } from "../../utils/colors/edgeColors";
-import { PointsCalculator } from "../../components/three/entities/edge/points_calculator";
-import { VehicleSystemType } from "../../types/vehicle";
+import { Node, Edge, VehicleConfig, EdgeType } from "@/types";
+import { getNodeColor } from "@/utils/colors/nodeColors";
+import { getEdgeColor } from "@/utils/colors/edgeColors";
+import { PointsCalculator } from "@/components/three/entities/edge/points_calculator";
+import { VehicleSystemType } from "@/types/vehicle";
 import * as THREE from "three";
 
 interface CFGStore {

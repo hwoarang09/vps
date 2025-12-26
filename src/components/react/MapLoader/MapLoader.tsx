@@ -1,5 +1,5 @@
 import React from 'react';
-import { useMenuStore } from '../../../store/ui/menuStore';
+import { useMenuStore } from '@/store/ui/menuStore';
 import CFGLoader from './CFGLoader';
 
 /**

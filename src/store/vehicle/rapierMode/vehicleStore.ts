@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getMaxVehicles } from "../../../config/vehicleConfig";
+import { getMaxVehicles } from "@/config/vehicleConfig";
 import type { RapierRigidBody } from "@react-three/rapier";
 
 // Vehicle data structure matching shared memory layout

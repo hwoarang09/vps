@@ -1,4 +1,4 @@
-import { getMaxVehicles } from "../../../config/vehicleConfig";
+import { getMaxVehicles } from "@/config/vehicleConfig";
 
 // Vehicle status enum (only using 0, 1 for now)
 export const VehicleStatus = {

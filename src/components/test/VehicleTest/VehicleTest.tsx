@@ -6,8 +6,8 @@ import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/veh
 import { useCFGStore } from "@store/system/cfgStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
-import { VehicleSystemType } from "../../../types/vehicle";
-import { getTestSettings, getDefaultSetting } from "../../../config/testSettingConfig";
+import { VehicleSystemType } from "@/types/vehicle";
+import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
 import { Play, Pause } from "lucide-react";
 import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/vehicleArrayMode/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";

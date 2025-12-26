@@ -1,4 +1,4 @@
-import { Edge } from "../../types";
+import { Edge } from "@/types";
 
 /**
  * Loop definition for vehicle movement

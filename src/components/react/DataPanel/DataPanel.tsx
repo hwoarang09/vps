@@ -1,8 +1,8 @@
 // src/components/ConfigDataPanel.tsx
 import React, { useMemo, useState, useEffect } from "react";
-import { useNodeStore } from "../../../store/map/nodeStore";
-import { useEdgeStore } from "../../../store/map/edgeStore";
-import { useCameraStore } from "../../../store/ui/cameraStore";
+import { useNodeStore } from "@/store/map/nodeStore";
+import { useEdgeStore } from "@/store/map/edgeStore";
+import { useCameraStore } from "@/store/ui/cameraStore";
 import { cn } from "@/lib/utils";
 import { EdgeType } from "@/types";
 

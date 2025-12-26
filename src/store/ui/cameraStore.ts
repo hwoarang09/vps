@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as THREE from "three";
-import { getDefaultCameraPosition, getDefaultCameraTarget } from "../../config/cameraConfig";
+import { getDefaultCameraPosition, getDefaultCameraTarget } from "@/config/cameraConfig";
 
 type CameraState = {
   position: THREE.Vector3;

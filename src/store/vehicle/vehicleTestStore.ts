@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { VehicleSystemType } from "../../types/vehicle";
+import { VehicleSystemType } from "@/types/vehicle";
 
 /**
  * Vehicle Test Store

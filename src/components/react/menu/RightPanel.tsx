@@ -1,6 +1,6 @@
 // components/react/menu/RightPanel.tsx
 import React from "react";
-import { useMenuStore } from "../../../store/ui/menuStore";
+import { useMenuStore } from "@/store/ui/menuStore";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 
 const RightPanel: React.FC = () => {

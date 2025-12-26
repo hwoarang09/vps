@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { useCameraStore } from "@store/ui/cameraStore";
 import { useMenuStore } from "@store/ui/menuStore";
 import { OrbitControls } from 'three-stdlib';
-import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "../../../../config/cameraConfig";
+import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "@/config/cameraConfig";
 
 const CameraController: React.FC = () => {
   const { camera, controls } = useThree(); // controls는 drei가 set해줌

@@ -1,4 +1,4 @@
-import { Edge, VehicleConfig } from "../../types";
+import { Edge, VehicleConfig } from "@/types";
 
 const EDGE_MIN_LENGTH = 5;
 const NODE_MARGIN = 2;
