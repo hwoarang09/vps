@@ -1,5 +1,6 @@
 import { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
+import { getMarkerConfig } from "@/config/mapConfig";
 
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -21,7 +22,7 @@ export function interpolatePositionTo(edge: Edge, ratio: number, target: Positio
   if (!points || points.length === 0) {
     target.x = 0;
     target.y = 0;
-    target.z = 3.8;
+    target.z = getMarkerConfig().Z;
     target.rotation = (edge as any).axis ?? 0;
     return;
   }
@@ -33,7 +34,7 @@ export function interpolatePositionTo(edge: Edge, ratio: number, target: Positio
 
     target.x = pStart.x + (pEnd.x - pStart.x) * ratio;
     target.y = pStart.y + (pEnd.y - pStart.y) * ratio;
-    target.z = 3.8;
+    target.z = getMarkerConfig().Z;
 
     const dx = pEnd.x - pStart.x;
     const dy = pEnd.y - pStart.y;
@@ -61,7 +62,7 @@ export function interpolatePositionTo(edge: Edge, ratio: number, target: Positio
 
   target.x = p1.x + (p2.x - p1.x) * segmentRatio;
   target.y = p1.y + (p2.y - p1.y) * segmentRatio;
-  target.z = 3.8;
+  target.z = getMarkerConfig().Z;
 
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;
@@ -89,7 +90,7 @@ export function interpolatePosition(edge: Edge, ratio: number) {
   // Fast fail
   if (!points || points.length === 0) {
     // axis가 없으면 0도
-    return { x: 0, y: 0, z: 3.8, rotation: (edge as any).axis ?? 0 };
+    return { x: 0, y: 0, z: getMarkerConfig().Z, rotation: (edge as any).axis ?? 0 };
   }
 
   // ==================================================================================
@@ -103,7 +104,7 @@ export function interpolatePosition(edge: Edge, ratio: number) {
     // Position Interpolation (Lerp)
     const x = pStart.x + (pEnd.x - pStart.x) * ratio;
     const y = pStart.y + (pEnd.y - pStart.y) * ratio;
-    const z = 3.8;
+    const z = getMarkerConfig().Z;
 
     // Calculate rotation from vector (Support all 4 directions)
     const dx = pEnd.x - pStart.x;
@@ -141,7 +142,7 @@ export function interpolatePosition(edge: Edge, ratio: number) {
   // Interpolate Position
   const x = p1.x + (p2.x - p1.x) * segmentRatio;
   const y = p1.y + (p2.y - p1.y) * segmentRatio;
-  const z = 3.8;
+  const z = getMarkerConfig().Z;
 
   // Calculate Rotation for Curve
   const dx = p2.x - p1.x;

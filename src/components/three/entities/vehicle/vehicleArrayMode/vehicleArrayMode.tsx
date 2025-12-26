@@ -42,8 +42,6 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   const vehicleConfigs = useCFGStore((state) => state.vehicleConfigs);
   const useVehicleConfig = useVehicleTestStore((state) => state.useVehicleConfig);
   const store = useVehicleArrayStore();
-
-  const loopsRef = useRef<VehicleLoop[]>([]);
   const vehicleLoopMapRef = useRef<Map<number, VehicleLoop>>(new Map());
   const edgeNameToIndexRef = useRef<Map<string, number>>(new Map());
   const edgeArrayRef = useRef<any[]>([]);
