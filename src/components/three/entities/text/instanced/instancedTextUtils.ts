@@ -13,6 +13,7 @@ const _tempScale = new THREE.Vector3();
 const _tempQuat = new THREE.Quaternion();
 const _tempRight = new THREE.Vector3();
 const _unitX = new THREE.Vector3(1, 0, 0);
+const _lodCheckPos = { x: 0, y: 0, z: 0 }; // LOD 체크용
 
 // Billboard rotation cache (차량 수만큼 미리 할당하지 않고, 프레임별로 재사용)
 let _cachedBillboardQuat: THREE.Quaternion | null = null;
@@ -177,9 +178,6 @@ export function getBillboardRight(): THREE.Vector3 {
 /**
  * 거리 제곱 계산
  */
-/**
- * 거리 제곱 계산
- */
 export function distanceSquared(
   x1: number, y1: number, z1: number,
   x2: number, y2: number, z2: number
@@ -188,6 +186,38 @@ export function distanceSquared(
   const dy = y1 - y2;
   const dz = z1 - z2;
   return dx * dx + dy * dy + dz * dz;
+}
+
+interface Vec3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * LOD 체크 (거리 기반 컬링)
+ * early exit: 각 축별 거리로 먼저 필터링 후 거리 제곱 계산
+ * @returns true면 LOD 컬링됨 (숨김)
+ */
+export function checkLODCulling(
+  pos: Vec3Like,
+  camPos: Vec3Like,
+  lodDist: number,
+  lodDistSq: number
+): boolean {
+  const dx = pos.x - camPos.x;
+  const dy = pos.y - camPos.y;
+  const dz = pos.z - camPos.z;
+
+  // early exit: 각 축별 거리로 먼저 필터링 (곱셈 연산 절약)
+  if (dz > lodDist || dz < -lodDist ||
+      dx > lodDist || dx < -lodDist ||
+      dy > lodDist || dy < -lodDist) {
+    return true;
+  }
+
+  const distSq = dx * dx + dy * dy + dz * dz;
+  return distSq > lodDistSq;
 }
 
 /**
@@ -224,9 +254,6 @@ export function updateVehicleTextTransforms(
   const { totalCharacters, slotDigit, slotIndex, slotVehicle, slotPosition } = data;
   const { scale, charSpacing, halfLen, zOffset, lodDistSq } = params;
   const { VEHICLE_DATA_SIZE, MovementData_X, MovementData_Y, MovementData_Z } = constants;
-  const cx = camera.position.x;
-  const cy = camera.position.y;
-  const cz = camera.position.z;
   const lodDist = Math.sqrt(lodDistSq); // early exit용
 
   // Zero-GC: 스케일 벡터 재사용
@@ -265,18 +292,10 @@ export function updateVehicleTextTransforms(
       if (vehicleLOD.has(v)) {
         lastLODResult = vehicleLOD.get(v)!;
       } else {
-        // early exit: 각 축별 거리로 먼저 필터링 (곱셈 연산 절약)
-        const dx = vx - cx;
-        const dy = vy - cy;
-        const dz = vz - cz;
-        if (dz > lodDist || dz < -lodDist ||
-            dx > lodDist || dx < -lodDist ||
-            dy > lodDist || dy < -lodDist) {
-          lastLODResult = true;
-        } else {
-          const distSq = dx * dx + dy * dy + dz * dz;
-          lastLODResult = distSq > lodDistSq;
-        }
+        _lodCheckPos.x = vx;
+        _lodCheckPos.y = vy;
+        _lodCheckPos.z = vz;
+        lastLODResult = checkLODCulling(_lodCheckPos, camera.position, lodDist, lodDistSq);
         vehicleLOD.set(v, lastLODResult);
       }
       lastVehicle = v;

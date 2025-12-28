@@ -271,8 +271,8 @@ export class LockMgr {
       // 그러니 여기서 빼는게 맞음.
       node.requests = node.requests.filter(r => r.vehId !== decision.veh);
       this.logNodeState(nodeName);
-    } else {
-       if (DEBUG) console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
+    } else if (DEBUG) {
+       console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
     }
   }
 

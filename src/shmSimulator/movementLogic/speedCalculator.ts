@@ -1,9 +1,17 @@
 // shmSimulator/movementLogic/speedCalculator.ts
+// Re-export shared implementation with SimulationConfig adapter
 
 import type { Edge } from "@/types/edge";
-import { EdgeType } from "@/types";
 import type { SimulationConfig } from "../types";
+import {
+  calculateNextSpeed as sharedCalculateNextSpeed,
+  type SpeedConfig
+} from "@/shared/vehicle/physics/speedCalculator";
 
+/**
+ * Adapter function for shmSimulator
+ * Converts SimulationConfig to SpeedConfig and delegates to shared implementation
+ */
 export function calculateNextSpeed(
   currentVelocity: number,
   acceleration: number,
@@ -12,18 +20,18 @@ export function calculateNextSpeed(
   delta: number,
   config: SimulationConfig
 ): number {
-  const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
-  const maxSpeed = isCurve ? config.curveMaxSpeed : config.linearMaxSpeed;
+  // Adapt SimulationConfig to SpeedConfig
+  const speedConfig: SpeedConfig = {
+    linearMaxSpeed: config.linearMaxSpeed,
+    curveMaxSpeed: config.curveMaxSpeed,
+  };
 
-  if (deceleration === -Infinity) {
-    return 0;
-  }
-
-  const appliedAccel = deceleration < 0 ? deceleration : acceleration;
-  let nextVelocity = currentVelocity + appliedAccel * delta;
-
-  if (nextVelocity > maxSpeed) nextVelocity = maxSpeed;
-  if (nextVelocity < 0) nextVelocity = 0;
-
-  return nextVelocity;
+  return sharedCalculateNextSpeed(
+    currentVelocity,
+    acceleration,
+    deceleration,
+    edge,
+    delta,
+    speedConfig
+  );
 }
