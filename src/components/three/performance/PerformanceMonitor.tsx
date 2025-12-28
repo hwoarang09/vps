@@ -99,6 +99,9 @@ export const PerformanceMonitorUI: React.FC = () => {
         <div style={{ fontSize: "14px", color: "#9acd32" }}>
           {avgMs.toFixed(2)} ms
         </div>
+        <div style={{ fontSize: "14px", color: "#9acd32" }}>
+          {avgCpu.toFixed(2)} ms
+        </div>        
       </div>
       {/* Row 2: Worker Thread */}
       <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>

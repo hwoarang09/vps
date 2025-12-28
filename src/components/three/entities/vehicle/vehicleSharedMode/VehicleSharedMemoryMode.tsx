@@ -35,8 +35,6 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
 
   const {
     init: initSimulator,
-    start: startSimulator,
-    stop: stopSimulator,
     pause: pauseSimulator,
     resume: resumeSimulator,
     dispose: disposeSimulator,
@@ -96,11 +94,9 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       if (isRunning) {
         pauseSimulator();
       }
-    } else {
-      if (!isRunning) {
+    } else if (!isRunning) {
         resumeSimulator();
-      }
-    }
+      }    
   }, [isPaused, isInitialized, isRunning, pauseSimulator, resumeSimulator]);
 
   // This component doesn't render anything - rendering is done by VehiclesRenderer

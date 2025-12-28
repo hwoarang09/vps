@@ -48,7 +48,7 @@ let visualizationConfig: VisualizationConfig = {
     SHOW_SENSOR_EDGES: false
   },
   ARRAY_MODE: {
-    SHOW_SENSOR_EDGES: true
+    SHOW_SENSOR_EDGES: false
   },
   SHARED_MEMORY_MODE: {
     SHOW_SENSOR_EDGES: false

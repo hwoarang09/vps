@@ -227,6 +227,7 @@ export function updateVehicleTextTransforms(
   const cx = camera.position.x;
   const cy = camera.position.y;
   const cz = camera.position.z;
+  const lodDist = Math.sqrt(lodDistSq); // early exit용
 
   // Zero-GC: 스케일 벡터 재사용
   _tempScale.set(scale, scale, 1);
@@ -264,8 +265,18 @@ export function updateVehicleTextTransforms(
       if (vehicleLOD.has(v)) {
         lastLODResult = vehicleLOD.get(v)!;
       } else {
-        const distSq = distanceSquared(cx, cy, cz, vx, vy, vz);
-        lastLODResult = distSq > lodDistSq;
+        // early exit: 각 축별 거리로 먼저 필터링 (곱셈 연산 절약)
+        const dx = vx - cx;
+        const dy = vy - cy;
+        const dz = vz - cz;
+        if (dz > lodDist || dz < -lodDist ||
+            dx > lodDist || dx < -lodDist ||
+            dy > lodDist || dy < -lodDist) {
+          lastLODResult = true;
+        } else {
+          const distSq = dx * dx + dy * dy + dz * dz;
+          lastLODResult = distSq > lodDistSq;
+        }
         vehicleLOD.set(v, lastLODResult);
       }
       lastVehicle = v;

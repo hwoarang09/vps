@@ -1,9 +1,8 @@
-import React, { useCallback } from "react";
+import { useRef, useMemo, useEffect, useState } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
-import { getSharedMemoryModeConfig } from "@/config/visualizationConfig";
-import { BaseVehicleRenderer } from "./BaseVehicleRenderer";
-import type { UpdateTransformFn } from "./BaseVehicleRenderer";
+import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { ShmSensorDebugRenderer } from "./ShmSensorDebugRenderer";
 import ShmVehicleTextRenderer from "@/components/three/entities/text/instanced/ShmVehicleTextRenderer";
 import {
@@ -11,12 +10,13 @@ import {
   MovementData,
 } from "@/shmSimulator/memory/vehicleDataArray";
 
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
 /**
  * VehicleSharedRenderer
  * - Renders vehicles for shared-memory mode (SHM Simulator)
  * - Reads from ShmSimulatorController's SharedArrayBuffer
  * - Uses InstancedMesh for performance
- * - Sensor visibility controlled by visualizationConfig
  */
 
 interface VehicleSharedRendererProps {
@@ -26,57 +26,99 @@ interface VehicleSharedRendererProps {
 const VehicleSharedRenderer: React.FC<VehicleSharedRendererProps> = ({
   numVehicles,
 }) => {
-  // Get visualization config
-  const vizConfig = getSharedMemoryModeConfig();
-  const showSensor = vizConfig.SHOW_SENSOR_EDGES;
+  const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
 
   // Get actual vehicle count from store
   const actualNumVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
   const isInitialized = useShmSimulatorStore((state) => state.isInitialized);
 
-  const onUpdate: UpdateTransformFn = useCallback(
-    (index, position, quaternion) => {
-      // Get vehicle data directly from store (avoids re-render on every frame)
-      const data = useShmSimulatorStore.getState().getVehicleData();
-      if (!data) return false;
+  // Use actual vehicle count if available, otherwise use prop
+  const renderCount = isInitialized && actualNumVehicles > 0 ? actualNumVehicles : numVehicles;
 
-      const ptr = index * VEHICLE_DATA_SIZE;
+  // Get vehicle config
+  const [config, setConfig] = useState(() => getVehicleConfigSync());
 
-      // Read position from Float32Array
+  useEffect(() => {
+    waitForConfig().then(loadedConfig => {
+      setConfig(loadedConfig);
+    });
+  }, []);
+
+  const {
+    BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
+    VEHICLE_COLOR: vehicleColor
+  } = config;
+
+  // Create body geometry
+  const bodyGeometry = useMemo(() => {
+    return new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
+  }, [bodyLength, bodyWidth, bodyHeight]);
+
+  // Create material for body
+  const bodyMaterial = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(vehicleColor),
+    });
+  }, [vehicleColor]);
+
+  // Temporary objects for matrix calculations (Zero GC)
+  const tempMatrix = useMemo(() => new THREE.Matrix4(), []);
+  const tempPosition = useMemo(() => new THREE.Vector3(), []);
+  const tempQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  const tempScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
+
+  // Initialize instance matrices
+  useEffect(() => {
+    const bodyMesh = bodyMeshRef.current;
+    if (!bodyMesh) return;
+
+    for (let i = 0; i < renderCount; i++) {
+      tempMatrix.identity();
+      bodyMesh.setMatrixAt(i, tempMatrix);
+    }
+    bodyMesh.instanceMatrix.needsUpdate = true;
+  }, [renderCount, tempMatrix]);
+
+  // Update instance matrices every frame (Zero GC)
+  useFrame(() => {
+    const bodyMesh = bodyMeshRef.current;
+    if (!bodyMesh) return;
+
+    const data = useShmSimulatorStore.getState().getVehicleData();
+    if (!data) return;
+
+    for (let i = 0; i < renderCount; i++) {
+      const ptr = i * VEHICLE_DATA_SIZE;
+
       const x = data[ptr + MovementData.X];
       const y = data[ptr + MovementData.Y];
       const z = data[ptr + MovementData.Z];
       const rotation = data[ptr + MovementData.ROTATION];
 
-      // Skip if position is zero (uninitialized vehicle)
-      if (x === 0 && y === 0 && z === 0) return false;
+      tempPosition.set(x, y, z);
 
-      // Body position
-      position.set(x, y, z);
-
-      // Convert rotation from degrees to radians (Z-axis rotation)
       const rotRad = (rotation * Math.PI) / 180;
-      quaternion.setFromEuler(new THREE.Euler(0, 0, rotRad));
+      tempQuaternion.setFromAxisAngle(Z_AXIS, rotRad);
 
-      return true;
-    },
-    []
-  );
+      tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+      bodyMesh.setMatrixAt(i, tempMatrix);
+    }
 
-  // Use actual vehicle count if available, otherwise use prop
-  const renderCount = isInitialized && actualNumVehicles > 0 ? actualNumVehicles : numVehicles;
+    bodyMesh.instanceMatrix.needsUpdate = true;
+  });
+
+  if (renderCount <= 0) {
+    return null;
+  }
 
   return (
     <>
-      <BaseVehicleRenderer
-        numVehicles={renderCount}
-        showSensor={showSensor}
-        rendererName="SHM"
-        onUpdate={onUpdate}
+      <instancedMesh
+        ref={bodyMeshRef}
+        args={[bodyGeometry, bodyMaterial, renderCount]}
+        frustumCulled={false}
       />
-      {/* Sensor Debug Wireframes */}
       <ShmSensorDebugRenderer numVehicles={renderCount} />
-      {/* Vehicle ID Labels */}
       <ShmVehicleTextRenderer numVehicles={renderCount} />
     </>
   );

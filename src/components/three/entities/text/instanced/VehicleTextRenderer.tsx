@@ -11,7 +11,7 @@ import {
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
 
-const LOD_DIST_SQ = 400 * 400;
+const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
 const LABEL_LENGTH = 8; // VEH00001
 
