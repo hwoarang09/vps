@@ -1,13 +1,17 @@
 // components/react/menu/RightPanel.tsx
 import React from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
+import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
+  const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
 
   const handleClose = () => {
     setRightPanelOpen(false);
+    // Clear vehicle selection when closing panel
+    useVehicleControlStore.getState().closePanel();
   };
 
   const renderContent = () => {
@@ -103,8 +107,8 @@ const RightPanel: React.FC = () => {
       );
     }
 
-    // Vehicle Individual Control
-    if (activeSubMenu === "vehicle-menu-individual") {
+    // Vehicle Individual Control (either from menu or from Ctrl+Click selection)
+    if (activeSubMenu === "vehicle-menu-individual" || selectedVehicleId !== null) {
       return (
         <div className="h-full flex flex-col">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">

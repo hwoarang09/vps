@@ -3,7 +3,18 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, Play, Pause, Settings, Octagon } from "lucide-react";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
+import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import {
+    MovingStatus as ShmMovingStatus,
+    StopReason as ShmStopReason,
+    TrafficState as ShmTrafficState,
+    VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
+    MovementData as ShmMovementData,
+    SensorData as ShmSensorData,
+    LogicData as ShmLogicData,
+} from "@/shmSimulator/memory/vehicleDataArray";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
@@ -44,12 +55,38 @@ const HitZoneMap: Record<number, string> = {
 interface VehicleMonitorProps {
     vehicleIndex: number;
     // We pass vehiclesmap just for ID lookup, or we can look it up from store.
-    // Passing it as prop prevents Monitor from subscribing to store updates directly if we want, 
+    // Passing it as prop prevents Monitor from subscribing to store updates directly if we want,
     // but Monitor depends on "vehicles" to look up ID.
-    vehicles: Map<number, any>; 
+    vehicles: Map<number, any>;
+    isShmMode: boolean;
 }
 
-const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles }) => {
+// Helper to read vehicle data from SHM buffer
+const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
+    const ptr = vehicleIndex * SHM_VEHICLE_DATA_SIZE;
+    return {
+        movement: {
+            movingStatus: data[ptr + ShmMovementData.MOVING_STATUS],
+            velocity: data[ptr + ShmMovementData.VELOCITY],
+            acceleration: data[ptr + ShmMovementData.ACCELERATION],
+            deceleration: data[ptr + ShmMovementData.DECELERATION],
+            currentEdge: data[ptr + ShmMovementData.CURRENT_EDGE],
+            nextEdge: data[ptr + ShmMovementData.NEXT_EDGE],
+            edgeRatio: data[ptr + ShmMovementData.EDGE_RATIO],
+        },
+        sensor: {
+            presetIdx: data[ptr + ShmSensorData.PRESET_IDX],
+            hitZone: data[ptr + ShmSensorData.HIT_ZONE],
+            collisionTarget: data[ptr + ShmSensorData.COLLISION_TARGET],
+        },
+        logic: {
+            trafficState: data[ptr + ShmLogicData.TRAFFIC_STATE],
+            stopReason: data[ptr + ShmLogicData.STOP_REASON],
+        },
+    };
+};
+
+const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles, isShmMode }) => {
     const [tick, setTick] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -64,18 +101,31 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     }, []);
 
     const handleStop = () => {
+        if (isShmMode) {
+            // SHM mode: read-only (worker controls state)
+            console.warn("[IndividualControl] Control not supported in SHM mode");
+            return;
+        }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.STOPPED);
         const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
         vehicleDataArray.setStopReason(vehicleIndex, currentReason | StopReason.INDIVIDUAL_CONTROL);
     };
 
     const handlePause = () => {
+        if (isShmMode) {
+            console.warn("[IndividualControl] Control not supported in SHM mode");
+            return;
+        }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.PAUSED);
         const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
         vehicleDataArray.setStopReason(vehicleIndex, currentReason | StopReason.INDIVIDUAL_CONTROL);
     };
 
     const handleResume = () => {
+        if (isShmMode) {
+            console.warn("[IndividualControl] Control not supported in SHM mode");
+            return;
+        }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.MOVING);
         const currentReason = vehicleDataArray.getStopReason(vehicleIndex);
         // Clear E_STOP and INDIVIDUAL_CONTROL
@@ -83,38 +133,70 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     };
 
     const handleChangeSensor = () => {
+        if (isShmMode) {
+            console.warn("[IndividualControl] Control not supported in SHM mode");
+            return;
+        }
         const vehicleData = vehicleDataArray.get(vehicleIndex);
         const currentSensor = vehicleData.sensor.presetIdx;
         vehicleData.sensor.presetIdx = (currentSensor + 1) % 5;
     };
 
     const getCurrentSensorPreset = () => {
+        if (isShmMode) {
+            const data = useShmSimulatorStore.getState().getVehicleData();
+            if (!data) return 0;
+            return data[vehicleIndex * SHM_VEHICLE_DATA_SIZE + ShmSensorData.PRESET_IDX];
+        }
         return vehicleDataArray.get(vehicleIndex).sensor.presetIdx;
     };
 
-    // Force read data
-    const vData = vehicleDataArray.get(vehicleIndex);
-    const status = vData.movement.movingStatus;
-    const velocity = vData.movement.velocity;
-    const acceleration = vData.movement.acceleration;
-    const deceleration = vData.movement.deceleration;
-    const sensorPreset = vData.sensor.presetIdx;
-    const hitZone = vData.sensor.hitZone;
-    const trafficState = vData.logic.trafficState;
-    const stopReasonMask = vData.logic.stopReason;
+    // Force read data - choose data source based on mode
+    let status: number, velocity: number, acceleration: number, deceleration: number;
+    let sensorPreset: number, hitZone: number, trafficState: number, stopReasonMask: number;
+    let currentEdgeIdx: number, currentEdgeRatio: number, nextEdgeIdx: number, collisionTarget: number;
+
+    if (isShmMode) {
+        const data = useShmSimulatorStore.getState().getVehicleData();
+        if (!data) {
+            return <div className="text-gray-500">No SHM data available</div>;
+        }
+        const vData = readShmVehicleData(data, vehicleIndex);
+        status = vData.movement.movingStatus;
+        velocity = vData.movement.velocity;
+        acceleration = vData.movement.acceleration;
+        deceleration = vData.movement.deceleration;
+        sensorPreset = vData.sensor.presetIdx;
+        hitZone = vData.sensor.hitZone;
+        trafficState = vData.logic.trafficState;
+        stopReasonMask = vData.logic.stopReason;
+        currentEdgeIdx = vData.movement.currentEdge;
+        currentEdgeRatio = vData.movement.edgeRatio;
+        nextEdgeIdx = vData.movement.nextEdge;
+        collisionTarget = vData.sensor.collisionTarget;
+    } else {
+        const vData = vehicleDataArray.get(vehicleIndex);
+        status = vData.movement.movingStatus;
+        velocity = vData.movement.velocity;
+        acceleration = vData.movement.acceleration;
+        deceleration = vData.movement.deceleration;
+        sensorPreset = vData.sensor.presetIdx;
+        hitZone = vData.sensor.hitZone;
+        trafficState = vData.logic.trafficState;
+        stopReasonMask = vData.logic.stopReason;
+        currentEdgeIdx = vData.movement.currentEdge;
+        currentEdgeRatio = vData.movement.edgeRatio;
+        nextEdgeIdx = vData.movement.nextEdge;
+        collisionTarget = vData.sensor.collisionTarget;
+    }
     
     const vehicleInfo = vehicles.get(vehicleIndex);
     const stopReasons = getStopReasons(stopReasonMask);
-    const collisionTarget = vData.sensor.collisionTarget;
 
     // Debug Info: Self
-    const currentEdgeIdx = vData.movement.currentEdge;
-    const currentEdgeRatio = vData.movement.edgeRatio;
     const currentEdgeName = useEdgeStore.getState().getEdgeByIndex(currentEdgeIdx)?.edge_name || "Unknown";
-
-    const nextEdgeIdx = vData.movement.nextEdge;
-    const nextEdgeName = nextEdgeIdx !== -1 
-        ? (useEdgeStore.getState().getEdgeByIndex(nextEdgeIdx)?.edge_name || "Unknown") 
+    const nextEdgeName = nextEdgeIdx !== -1
+        ? (useEdgeStore.getState().getEdgeByIndex(nextEdgeIdx)?.edge_name || "Unknown")
         : "None";
 
     // Debug Info: Target
@@ -122,18 +204,29 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
     let targetRatioInfo = "N/A";
 
     if (collisionTarget !== -1) {
-        const tData = vehicleDataArray.get(collisionTarget);
-        const tEdgeIdx = tData.movement.currentEdge;
-        const tEdgeRatio = tData.movement.edgeRatio;
-        const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
-        targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
-        targetRatioInfo = tEdgeRatio.toFixed(3);
+        if (isShmMode) {
+            const data = useShmSimulatorStore.getState().getVehicleData();
+            if (data) {
+                const tData = readShmVehicleData(data, collisionTarget);
+                const tEdgeIdx = tData.movement.currentEdge;
+                const tEdgeRatio = tData.movement.edgeRatio;
+                const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
+                targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
+                targetRatioInfo = tEdgeRatio.toFixed(3);
+            }
+        } else {
+            const tData = vehicleDataArray.get(collisionTarget);
+            const tEdgeIdx = tData.movement.currentEdge;
+            const tEdgeRatio = tData.movement.edgeRatio;
+            const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
+            targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
+            targetRatioInfo = tEdgeRatio.toFixed(3);
+        }
     }
 
-    // Sensor Points (All 3 Zones)
-    // Zone 0: Approach, 1: Brake, 2: Stop
+    // Sensor Points (All 3 Zones) - only available in array mode
     const zones = [0, 1, 2];
-    const zonePoints = zones.map(z => ({
+    const zonePoints = isShmMode ? null : zones.map(z => ({
         name: ["Approach", "Brake", "Stop"][z],
         pts: sensorPointArray.getPoints(vehicleIndex, z)
     }));
@@ -250,6 +343,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
 
                     <div className="my-2 border-t border-gray-200"></div>
 
+                    {zonePoints && (
                     <div className="space-y-2">
                         <details className="group">
                              <summary className="font-semibold text-xs text-gray-500 cursor-pointer list-none flex items-center gap-1 select-none">
@@ -279,6 +373,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles 
                             </div>
                         </details>
                     </div>
+                    )}
 
                     <div className="my-2 border-t border-gray-200"></div>
 
@@ -310,7 +405,11 @@ const IndividualControlPanel: React.FC = () => {
     const [foundVehicleIndex, setFoundVehicleIndex] = useState<number | null>(null);
     const vehicles = useVehicleGeneralStore((state) => state.vehicles);
     const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
-    
+    const activeSubMenu = useMenuStore((state) => state.activeSubMenu);
+
+    // Detect SHM mode based on active submenu
+    const isShmMode = activeSubMenu === "test-shared-memory";
+
     // Keep a ref to vehicles to access latest state in debounce without triggering re-runs
     const vehiclesRef = useRef(vehicles);
     vehiclesRef.current = vehicles;
@@ -378,9 +477,10 @@ const IndividualControlPanel: React.FC = () => {
 
             {/* Monitor Area - Isolated Re-renders */}
             {foundVehicleIndex !== null && (
-                <VehicleMonitor 
-                    vehicleIndex={foundVehicleIndex} 
-                    vehicles={vehicles} 
+                <VehicleMonitor
+                    vehicleIndex={foundVehicleIndex}
+                    vehicles={vehicles}
+                    isShmMode={isShmMode}
                 />
             )}
         </div>

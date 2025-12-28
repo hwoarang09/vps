@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useVehicleRapierStore } from "@store/vehicle/rapierMode/vehicleStore";
 import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
+import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCFGStore } from "@store/system/cfgStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
@@ -27,8 +28,10 @@ const VehicleTest: React.FC = () => {
   const { stopTest, isPaused, setPaused } = useVehicleTestStore();
   const { maxPlaceableVehicles } = useVehicleRapierStore();
   const { transferMode, setTransferMode } = useVehicleArrayStore();
+  const { dispose: disposeShmSimulator } = useShmSimulatorStore();
   const { loadCFGFiles } = useCFGStore();
   const { setCameraView } = useCameraStore();
+  const prevModeRef = useRef<string | null>(null);
 
   const [selectedSettingId, setSelectedSettingId] = useState<string>(getDefaultSetting());
   const testSettings = getTestSettings();
@@ -53,7 +56,9 @@ const VehicleTest: React.FC = () => {
     const setting = testSettings.find(s => s.id === settingId);
     if (!setting) return;
 
+    // Cleanup all simulators before loading new map
     resetLockMgr();
+    disposeShmSimulator(); // Dispose SHM simulator
     setIsFabApplied(false); // Reset FAB state when loading new map
     if (isTestCreated) {
       stopTest();
@@ -97,6 +102,27 @@ const VehicleTest: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
 
+  // Cleanup on mode change
+  useEffect(() => {
+    if (prevModeRef.current && prevModeRef.current !== activeSubMenu) {
+      // Mode changed - cleanup previous mode
+      console.log(`[VehicleTest] Mode changed: ${prevModeRef.current} -> ${activeSubMenu}`);
+
+      // Dispose SHM simulator if switching away from shared-memory mode
+      if (prevModeRef.current === "test-shared-memory") {
+        disposeShmSimulator();
+      }
+
+      // Reset test state
+      if (isTestCreated) {
+        stopTest();
+        setIsTestCreated(false);
+        setTestKey((prev) => prev + 1);
+      }
+    }
+    prevModeRef.current = activeSubMenu;
+  }, [activeSubMenu, isTestCreated, stopTest, disposeShmSimulator]);
+
   // Only render UI when Test menu is active
   // But test keeps running in background even when menu is closed
   // Move early return to AFTER effects
@@ -125,9 +151,12 @@ const VehicleTest: React.FC = () => {
   const handleDelete = () => {
     stopTest(); // Stop the test
     setIsTestCreated(false);
-    
+
     // Reset LockMgr to clear previous locks/queues
     resetLockMgr();
+    // Dispose SHM simulator
+    disposeShmSimulator();
+
     // Re-initialize LockMgr with current edges so it's ready for next create or manual use
     // Note: useEdgeStore.getState().edges should be valid here as map is loaded
     const edges = useEdgeStore.getState().edges;
@@ -154,6 +183,13 @@ const VehicleTest: React.FC = () => {
       console.warn("[FAB] No nodes or edges to clone");
       return;
     }
+
+    // Stop existing test and dispose simulator before FAB creation
+    if (isTestCreated) {
+      stopTest();
+      setIsTestCreated(false);
+    }
+    disposeShmSimulator();
 
     const totalFabs = fabCountX * fabCountY;
     console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes and ${edges.length} edges`);

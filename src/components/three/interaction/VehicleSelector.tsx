@@ -3,28 +3,56 @@ import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovementData, VEHICLE_DATA_SIZE } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import {
+    VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
+    MovementData as ShmMovementData,
+} from "@/shmSimulator/memory/vehicleDataArray";
 import { getMarkerConfig } from "@/config/mapConfig";
 
 // Threshold for selection in meters
-const SELECTION_THRESHOLD_SQ = 20 * 20; 
+const SELECTION_THRESHOLD_SQ = 20 * 20;
 
 const VehicleSelector: React.FC = () => {
-    // We don't strictly need useThree if we just use the mesh onClick event, 
+    // We don't strictly need useThree if we just use the mesh onClick event,
     // which provides the intersection point directly.
 
     const findNearestVehicle = (clickX: number, clickY: number) => {
-        const actualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
-        if (actualNumVehicles === 0) return;
+        // Detect mode from activeSubMenu in store
+        const activeSubMenu = useMenuStore.getState().activeSubMenu;
+        const isShmMode = activeSubMenu === "test-shared-memory";
 
-        const data = vehicleDataArray.getData();
-        
+        let actualNumVehicles: number;
+        let data: Float32Array | null;
+        let dataSize: number;
+        let xOffset: number;
+        let yOffset: number;
+
+        if (isShmMode) {
+            // SHM mode: use shmSimulatorStore
+            actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
+            data = useShmSimulatorStore.getState().getVehicleData();
+            dataSize = SHM_VEHICLE_DATA_SIZE;
+            xOffset = ShmMovementData.X;
+            yOffset = ShmMovementData.Y;
+        } else {
+            // Array mode: use vehicleArrayStore
+            actualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
+            data = vehicleDataArray.getData();
+            dataSize = VEHICLE_DATA_SIZE;
+            xOffset = MovementData.X;
+            yOffset = MovementData.Y;
+        }
+
+        if (actualNumVehicles === 0 || !data) return;
+
         let minDistSq = Infinity;
         let nearestVehicleId = -1;
 
         for (let i = 0; i < actualNumVehicles; i++) {
-            const ptr = i * VEHICLE_DATA_SIZE;
-            const x = data[ptr + MovementData.X];
-            const y = data[ptr + MovementData.Y];
+            const ptr = i * dataSize;
+            const x = data[ptr + xOffset];
+            const y = data[ptr + yOffset];
 
             const dx = x - clickX;
             const dy = y - clickY;
@@ -39,13 +67,11 @@ const VehicleSelector: React.FC = () => {
         if (nearestVehicleId !== -1 && minDistSq <= SELECTION_THRESHOLD_SQ) {
              // Select the vehicle
             useVehicleControlStore.getState().selectVehicle(nearestVehicleId);
-            
-             // Open menu
+
+             // Open right panel only (don't change activeSubMenu to avoid unmounting VehicleTest)
             const menuStore = useMenuStore.getState();
-            menuStore.setActiveMainMenu('Vehicle');
-            menuStore.setActiveSubMenu('vehicle-menu-individual');
             menuStore.setRightPanelOpen(true);
-            
+
             console.log(`[VehicleSelector] Selected Vehicle #${nearestVehicleId} (Dist: ${Math.sqrt(minDistSq).toFixed(2)}m)`);
         }
     };

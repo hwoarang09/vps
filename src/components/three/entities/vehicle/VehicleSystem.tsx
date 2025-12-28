@@ -65,6 +65,7 @@ const VehicleSystem: React.FC<VehicleSystemProps> = ({
             mode={mode}
             numVehicles={numVehicles}
           />
+          <VehicleSelector />
         </>
       )}
     </>
