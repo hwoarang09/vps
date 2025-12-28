@@ -272,7 +272,7 @@ export class LockMgr {
       node.requests = node.requests.filter(r => r.vehId !== decision.veh);
       this.logNodeState(nodeName);
     } else {
-       console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
+       if (DEBUG) console.log(`[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`);
     }
   }
 
@@ -281,7 +281,7 @@ export class LockMgr {
       if(!node) return;
       const queue = node.requests.map(r => r.vehId).join(", ");
       const cur = node.granted ? `[${node.granted.veh}]` : "[FREE]";
-      console.log(`[LockMgr ${nodeName}] STATE: Holder=${cur}, Queue={${queue}}`);
+      if (DEBUG) console.log(`[LockMgr ${nodeName}] STATE: Holder=${cur}, Queue={${queue}}`);
   }
 }
 

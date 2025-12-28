@@ -14,6 +14,8 @@ import { interpolatePositionTo, PositionResult } from "./positionInterpolator";
 import { updateSensorPoints } from "../helpers/sensorPoints";
 import { getCurveAcceleration } from "@/config/movementConfig";
 
+const DEBUG = false;
+
 interface MovementUpdateParams {
   data: Float32Array;
   edgeArray: Edge[];
@@ -323,7 +325,7 @@ function checkAndReleaseMergeLock(
         // Note: We released it effectively by passing the node.
         const prevToNode = currentEdge.to_node;
         if (getLockMgr().isMergeNode(prevToNode)) {
-            console.log(`[LockMgr ${prevToNode} VEH${vehId}] RELEASE (Movement: Left ${currentEdge.edge_name})`);
+            if (DEBUG) console.log(`[LockMgr ${prevToNode} VEH${vehId}] RELEASE (Movement: Left ${currentEdge.edge_name})`);
             getLockMgr().releaseLock(prevToNode, vehId);
         }
     }

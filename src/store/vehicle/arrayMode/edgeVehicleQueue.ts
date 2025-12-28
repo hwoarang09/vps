@@ -5,6 +5,7 @@ import { VEHICLE_DATA_SIZE, MovementData } from "./vehicleDataArray";
 
 const MAX_VEHICLES_PER_EDGE = 500;
 const EDGE_LIST_SIZE = MAX_VEHICLES_PER_EDGE + 1; // count + vehicles
+const DEBUG = false;
 
 class EdgeVehicleQueue {
   private readonly dataArrays: Int32Array[];
@@ -80,7 +81,7 @@ class EdgeVehicleQueue {
         data[0] = count - 1; // Decrease count
 
         // Debug log (sample 1%)
-        if (Math.random() < 0.01) {
+        if (DEBUG) {
           console.log(`[EdgeList] Removed VEH${vehicleIndex} from Edge${edgeIndex} (count: ${count - 1})`);
         }
         return;
