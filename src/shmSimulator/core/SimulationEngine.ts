@@ -40,6 +40,14 @@ export class SimulationEngine {
   private actualNumVehicles: number = 0;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
 
+  // === Performance Monitoring ===
+  private stepTimes: number[] = [];
+  private lastPerfReportTime: number = 0;
+  private readonly PERF_REPORT_INTERVAL = 5000; // 5 seconds
+
+  // === Timing ===
+  private lastStepTime: number = 0;
+
   constructor() {
     // Use default config initially, will be overwritten by init()
     this.config = createDefaultConfig();
@@ -90,9 +98,6 @@ export class SimulationEngine {
     // Debug: Log diverge edges and their nextEdgeIndices
     const divergeEdges = this.edges.filter(e => e.toNodeIsDiverge);
     console.log(`[SimulationEngine] Found ${divergeEdges.length} diverge edges:`);
-    for (const edge of divergeEdges.slice(0, 10)) { // First 10 only
-      console.log(`  ${edge.edge_name} -> ${edge.to_node}: nextEdgeIndices=[${edge.nextEdgeIndices?.join(', ') || 'NONE'}]`);
-    }
 
     // Initialize LockMgr from edges
     this.lockMgr.initFromEdges(this.edges);
@@ -170,8 +175,14 @@ export class SimulationEngine {
 
     console.log(`[SimulationEngine] Starting simulation loop (${this.config.targetFps} FPS)`);
 
+    // Initialize timing
+    this.lastStepTime = performance.now();
+
     this.loopHandle = setInterval(() => {
-      this.step(1 / this.config.targetFps);
+      const now = performance.now();
+      const realDelta = (now - this.lastStepTime) / 1000; // Convert to seconds
+      this.lastStepTime = now;
+      this.step(realDelta);
     }, targetInterval);
   }
 
@@ -196,6 +207,8 @@ export class SimulationEngine {
    */
   step(delta: number): void {
     if (!this.isRunning) return;
+
+    const stepStart = performance.now();
 
     const clampedDelta = Math.min(delta, 0.1);
 
@@ -224,6 +237,31 @@ export class SimulationEngine {
       config: this.config,
     };
     updateMovement(movementCtx);
+
+    // Measure step time
+    const stepEnd = performance.now();
+    this.stepTimes.push(stepEnd - stepStart);
+
+    // Report performance stats periodically
+    if (stepEnd - this.lastPerfReportTime >= this.PERF_REPORT_INTERVAL) {
+      this.reportPerfStats();
+      this.lastPerfReportTime = stepEnd;
+    }
+  }
+
+  /**
+   * Report performance statistics to main thread
+   */
+  private reportPerfStats(): void {
+    if (this.stepTimes.length === 0) return;
+
+    const avgStepMs = this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length;
+    this.stepTimes = [];
+
+    self.postMessage({
+      type: "PERF_STATS",
+      avgStepMs,
+    });
   }
 
   /**

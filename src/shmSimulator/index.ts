@@ -27,8 +27,16 @@ export class ShmSimulatorController {
 
   private onReadyCallback: (() => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
+  private onPerfStatsCallback: ((avgStepMs: number) => void) | null = null;
 
   constructor() {}
+
+  /**
+   * Set callback for worker performance stats
+   */
+  onPerfStats(callback: (avgStepMs: number) => void): void {
+    this.onPerfStatsCallback = callback;
+  }
 
   /**
    * Initialize the simulator with map data and config
@@ -141,6 +149,12 @@ export class ShmSimulatorController {
 
       case "STATS":
         // Handle stats if needed
+        break;
+
+      case "PERF_STATS":
+        if (this.onPerfStatsCallback) {
+          this.onPerfStatsCallback(message.avgStepMs);
+        }
         break;
     }
   }

@@ -132,10 +132,6 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     if (lockMgr.isMergeNode(edge.to_node)) {
       const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
 
-      console.log(
-        `[shmSimulator] Merge edge ${edge.edge_name} -> ${edge.to_node}: Pre-requesting locks for ${vehiclesOnEdge.length} vehicles`
-      );
-
       for (const vehId of vehiclesOnEdge) {
         lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
       }

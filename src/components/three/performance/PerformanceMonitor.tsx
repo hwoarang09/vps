@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 
 /**
@@ -14,6 +15,9 @@ export const PerformanceMonitorUI: React.FC = () => {
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(performance.now());
   const UPDATE_INTERVAL = 5000; // 5 seconds in milliseconds
+
+  // Get worker performance stats from store
+  const workerAvgMs = useShmSimulatorStore((state) => state.workerAvgMs);
 
   useEffect(() => {
     const updatePerformance = (currentTime: number) => {
@@ -82,19 +86,26 @@ export const PerformanceMonitorUI: React.FC = () => {
         pointerEvents: "none",
         userSelect: "none",
         display: "flex",
-        flexDirection: "row",
-        gap: "12px",
-        alignItems: "center",
+        flexDirection: "column",
+        gap: "4px",
       }}
     >
-      <div style={{ fontSize: "16px", color: "#4ecdc4" }}>
-        {avgFps.toFixed(1)} FPS
+      {/* Row 1: Main Thread */}
+      <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
+        <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Main</div>
+        <div style={{ fontSize: "16px", color: "#4ecdc4" }}>
+          {avgFps.toFixed(1)} FPS
+        </div>
+        <div style={{ fontSize: "14px", color: "#9acd32" }}>
+          {avgMs.toFixed(2)} ms
+        </div>
       </div>
-      <div style={{ fontSize: "14px", color: "#9acd32" }}>
-        {avgMs.toFixed(2)} ms
-      </div>
-      <div style={{ fontSize: "13px", color: "#aaa" }}>
-        CPU: {avgCpu.toFixed(1)}%
+      {/* Row 2: Worker Thread */}
+      <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
+        <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Worker</div>
+        <div style={{ fontSize: "14px", color: "#ff9f43" }}>
+          {workerAvgMs.toFixed(2)} ms
+        </div>
       </div>
     </div>
   );

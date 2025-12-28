@@ -100,7 +100,8 @@ export type MainMessage =
   | { type: "READY" }
   | { type: "INITIALIZED"; actualNumVehicles: number }
   | { type: "ERROR"; error: string }
-  | { type: "STATS"; fps: number; vehicleCount: number };
+  | { type: "STATS"; fps: number; vehicleCount: number }
+  | { type: "PERF_STATS"; avgStepMs: number };
 
 // ============================================================================
 // [4] TRANSFER MODE
