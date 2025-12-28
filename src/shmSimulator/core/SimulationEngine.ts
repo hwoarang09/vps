@@ -68,6 +68,7 @@ export class SimulationEngine {
 
     // Update transfer mode
     this.store.setTransferMode(payload.transferMode);
+    console.log(`[SimulationEngine] TransferMode: ${payload.transferMode === 0 ? 'LOOP' : 'RANDOM'} (${payload.transferMode})`);
 
     // Store edges and build lookup map
     this.edges = payload.edges;
@@ -85,6 +86,13 @@ export class SimulationEngine {
 
     console.log(`[SimulationEngine] Loaded ${this.edges.length} edges, ${this.nodes.length} nodes`);
     console.log(`[SimulationEngine] Config: linearMaxSpeed=${this.config.linearMaxSpeed}, curveMaxSpeed=${this.config.curveMaxSpeed}`);
+
+    // Debug: Log diverge edges and their nextEdgeIndices
+    const divergeEdges = this.edges.filter(e => e.toNodeIsDiverge);
+    console.log(`[SimulationEngine] Found ${divergeEdges.length} diverge edges:`);
+    for (const edge of divergeEdges.slice(0, 10)) { // First 10 only
+      console.log(`  ${edge.edge_name} -> ${edge.to_node}: nextEdgeIndices=[${edge.nextEdgeIndices?.join(', ') || 'NONE'}]`);
+    }
 
     // Initialize LockMgr from edges
     this.lockMgr.initFromEdges(this.edges);

@@ -127,7 +127,7 @@ export class LockMgr {
         requestTime: Date.now(),
       });
       node.edgeQueues[edgeName]?.push(vehId);
-      this.logNodeState(nodeName);
+      if (DEBUG) this.logNodeState(nodeName);
     }
 
     this.tryGrant(nodeName);
@@ -147,7 +147,7 @@ export class LockMgr {
         node.edgeQueues[key] = node.edgeQueues[key].filter((id) => id !== vehId);
       }
 
-      this.logNodeState(nodeName);
+      if (DEBUG) this.logNodeState(nodeName);
       this.tryGrant(nodeName);
     } else if (DEBUG)
       console.warn(
@@ -158,8 +158,8 @@ export class LockMgr {
   tryGrant(nodeName: string) {
     const node = this.lockTable[nodeName];
     if (!node) return;
-    if (node.granted && DEBUG) {
-      console.log(`[LockMgr ${nodeName}] TryGrant: Blocked by ${node.granted.veh}`);
+    if (node.granted) {
+      if (DEBUG) console.log(`[LockMgr ${nodeName}] TryGrant: Blocked by ${node.granted.veh}`);
       return;
     }
 
@@ -170,8 +170,8 @@ export class LockMgr {
         console.log(`[LockMgr ${nodeName} VEH${decision.veh}] GRANT`);
       node.granted = decision;
       node.requests = node.requests.filter((r) => r.vehId !== decision.veh);
-      this.logNodeState(nodeName);
-    } else {
+      if (DEBUG) this.logNodeState(nodeName);
+    } else if (DEBUG) {
       console.log(
         `[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`
       );
@@ -179,6 +179,7 @@ export class LockMgr {
   }
 
   logNodeState(nodeName: string) {
+    if (!DEBUG) return;
     const node = this.lockTable[nodeName];
     if (!node) return;
     const queue = node.requests.map((r) => r.vehId).join(", ");

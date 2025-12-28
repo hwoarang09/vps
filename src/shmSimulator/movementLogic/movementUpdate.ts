@@ -298,9 +298,6 @@ function checkAndReleaseMergeLock(
   if (finalEdgeIndex !== currentEdgeIndex) {
     const prevToNode = currentEdge.to_node;
     if (lockMgr.isMergeNode(prevToNode)) {
-      console.log(
-        `[LockMgr ${prevToNode} VEH${vehId}] RELEASE (Movement: Left ${currentEdge.edge_name})`
-      );
       lockMgr.releaseLock(prevToNode, vehId);
     }
   }

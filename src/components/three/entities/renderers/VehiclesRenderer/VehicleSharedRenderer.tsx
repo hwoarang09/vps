@@ -65,7 +65,6 @@ const VehicleSharedRenderer: React.FC<VehicleSharedRendererProps> = ({
 
   // Use actual vehicle count if available, otherwise use prop
   const renderCount = isInitialized && actualNumVehicles > 0 ? actualNumVehicles : numVehicles;
-  console.log(`[VehicleSharedRenderer] Rendering ${renderCount} vehicles (SHM)`);
 
   return (
     <>

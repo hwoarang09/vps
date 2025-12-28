@@ -84,6 +84,11 @@ export class TransferMgr {
     edgeNameToIndex: Map<string, number>,
     mode: TransferMode
   ): number {
+    // Debug: Log diverge points for first few vehicles
+    if (vehicleIndex < 5 && currentEdge.toNodeIsDiverge) {
+      console.log(`[TransferMgr] VEH${vehicleIndex} at DIVERGE: ${currentEdge.edge_name} -> ${currentEdge.to_node}, nextEdgeIndices: [${currentEdge.nextEdgeIndices?.join(', ') || 'NONE'}]`);
+    }
+
     if (this.canDirectlyTransition(currentEdge)) {
       return currentEdge.nextEdgeIndices![0];
     }

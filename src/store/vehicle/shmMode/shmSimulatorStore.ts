@@ -2,7 +2,7 @@
 // Zustand store for managing ShmSimulatorController instance
 
 import { create } from "zustand";
-import { ShmSimulatorController, createDefaultConfig } from "@/shmSimulator";
+import { ShmSimulatorController, createDefaultConfig, TransferMode } from "@/shmSimulator";
 import type { SimulationConfig, VehicleInitConfig } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
@@ -27,6 +27,7 @@ interface ShmSimulatorState {
     numVehicles: number;
     vehicleConfigs?: VehicleInitConfig[];
     config?: Partial<SimulationConfig>;
+    transferMode?: typeof TransferMode[keyof typeof TransferMode]; // LOOP=0, RANDOM=1
   }) => Promise<void>;
 
   start: () => void;
@@ -48,7 +49,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   actualNumVehicles: 0,
 
   init: async (params) => {
-    const { edges, nodes, numVehicles, vehicleConfigs = [], config = {} } = params;
+    const { edges, nodes, numVehicles, vehicleConfigs = [], config = {}, transferMode = TransferMode.RANDOM } = params;
 
     // Dispose existing controller if any
     const existing = get().controller;
@@ -57,7 +58,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       existing.dispose();
     }
 
-    console.log("[ShmSimulatorStore] Creating new controller...");
+    console.log(`[ShmSimulatorStore] Creating new controller... (transferMode=${transferMode === 0 ? 'LOOP' : 'RANDOM'})`);
     const controller = new ShmSimulatorController();
 
     try {
@@ -67,7 +68,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         numVehicles,
         vehicleConfigs,
         config: { ...createDefaultConfig(), ...config },
-        transferMode: 0, // LOOP
+        transferMode,
       });
 
       set({

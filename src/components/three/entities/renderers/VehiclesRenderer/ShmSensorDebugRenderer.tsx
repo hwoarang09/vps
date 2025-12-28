@@ -70,13 +70,6 @@ export function ShmSensorDebugRenderer({ numVehicles }: ShmSensorDebugRendererPr
     const data = getShmSensorPointData();
     if (!data) return;
 
-    // Debug: log sensor data every 60 frames
-    if (Math.floor(state.clock.elapsedTime * 60) % 120 === 0 && numVehicles > 0) {
-      const base = 0 * SENSOR_DATA_SIZE; // first vehicle
-      const offset = base + 0 * SENSOR_POINT_SIZE; // outer zone
-      console.log(`[ShmSensorDebug] Vehicle 0 FL: (${data[offset + SensorPoint.FL_X].toFixed(2)}, ${data[offset + SensorPoint.FL_Y].toFixed(2)})`);
-    }
-
     const outerPositions = outerGeometry.attributes.position.array as Float32Array;
     const middlePositions = middleGeometry.attributes.position.array as Float32Array;
     const innerPositions = innerGeometry.attributes.position.array as Float32Array;
@@ -184,12 +177,7 @@ export function ShmSensorDebugRenderer({ numVehicles }: ShmSensorDebugRendererPr
     middleGeometry.attributes.position.needsUpdate = true;
     innerGeometry.attributes.position.needsUpdate = true;
     bodyGeometry.attributes.position.needsUpdate = true;
-
-    // Recompute bounding sphere for frustum culling
-    outerGeometry.computeBoundingSphere();
-    middleGeometry.computeBoundingSphere();
-    innerGeometry.computeBoundingSphere();
-    bodyGeometry.computeBoundingSphere();
+    // Note: computeBoundingSphere removed - arrayMode doesn't have it either
   });
 
   return (
