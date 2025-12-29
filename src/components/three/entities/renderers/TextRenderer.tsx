@@ -37,14 +37,14 @@ const TextRenderer: React.FC<Props> = (props) => {
         edgeColor={edgeColor}
       />
 
-      {/* Vehicle texts (only in array mode test) */}
-      { 
+      {/* Vehicle texts (only in rapier mode - arrayMode renders its own) */}
+      {!isArrayMode && numVehicles > 0 && (
         <VehicleTextRenderer
           numVehicles={numVehicles}
           scale={scale * 1.8}
           color={vehicleColor}
         />
-      }
+      )}
     </group>
   );
 };
