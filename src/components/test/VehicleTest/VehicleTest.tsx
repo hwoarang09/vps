@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
-import { useVehicleRapierStore } from "@store/vehicle/rapierMode/vehicleStore";
 import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCFGStore } from "@store/system/cfgStore";
@@ -14,6 +13,7 @@ import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/ve
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { createFabGrid } from "@/utils/fab/fabUtils";
+import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 
 /**
  * VehicleTest
@@ -26,8 +26,14 @@ import { createFabGrid } from "@/utils/fab/fabUtils";
 const VehicleTest: React.FC = () => {
   const { activeMainMenu, activeSubMenu } = useMenuStore();
   const { stopTest, isPaused, setPaused } = useVehicleTestStore();
-  const { maxPlaceableVehicles } = useVehicleRapierStore();
+  const edges = useEdgeStore((state) => state.edges);
   const { transferMode, setTransferMode } = useVehicleArrayStore();
+
+  // Calculate max vehicle capacity from edges
+  const maxVehicleCapacity = React.useMemo(() => {
+    if (edges.length === 0) return 0;
+    return getMaxVehicleCapacity(edges);
+  }, [edges]);
   const { dispose: disposeShmSimulator } = useShmSimulatorStore();
   const { loadCFGFiles } = useCFGStore();
   const { setCameraView } = useCameraStore();
@@ -310,7 +316,7 @@ const VehicleTest: React.FC = () => {
             }}
           />
           <span style={{ color: "#aaa", fontSize: "11px" }}>
-            / {maxPlaceableVehicles || "---"}
+            / {maxVehicleCapacity || "---"}
           </span>
         </div>
 

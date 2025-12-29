@@ -21,7 +21,7 @@ export interface VehiclePlacementResult {
 
 const calculateEdgeSpots = (edgeLength: number): number[] => {
   if (edgeLength < EDGE_MIN_LENGTH) return [];
-  
+
   const startPos = NODE_MARGIN;
   const endPos = edgeLength - NODE_MARGIN;
   if (startPos > endPos) return [];
@@ -31,6 +31,58 @@ const calculateEdgeSpots = (edgeLength: number): number[] => {
     spots.push(pos);
   }
   return spots;
+};
+
+export interface EdgeSpot {
+  edge: Edge;
+  distance: number;
+}
+
+/**
+ * Calculate all available spots for vehicle placement
+ * Returns spots in round-robin order across edges
+ */
+export const calculateAllSpots = (allEdges: Edge[]): EdgeSpot[] => {
+  // 1. edge별로 spot 목록 생성
+  const edgeSpots: { edge: Edge; spots: number[] }[] = [];
+
+  for (const edge of allEdges) {
+    const isCurve = [
+      "CURVE_90", "CURVE_180", "S_CURVE", "CURVE_CSC", "CSC_CURVE_HOMO",
+    ].includes(edge.vos_rail_type || "");
+
+    if (isCurve) continue;
+
+    const spots = calculateEdgeSpots(edge.distance);
+    if (spots.length > 0) {
+      edgeSpots.push({ edge, spots });
+    }
+  }
+
+  // 2. Round-robin으로 spot 수집
+  const allSpots: EdgeSpot[] = [];
+  let maxSpotsPerEdge = 0;
+
+  for (const { spots } of edgeSpots) {
+    maxSpotsPerEdge = Math.max(maxSpotsPerEdge, spots.length);
+  }
+
+  for (let spotIndex = 0; spotIndex < maxSpotsPerEdge; spotIndex++) {
+    for (const { edge, spots } of edgeSpots) {
+      if (spotIndex < spots.length) {
+        allSpots.push({ edge, distance: spots[spotIndex] });
+      }
+    }
+  }
+
+  return allSpots;
+};
+
+/**
+ * Get maximum vehicle capacity for given edges
+ */
+export const getMaxVehicleCapacity = (allEdges: Edge[]): number => {
+  return calculateAllSpots(allEdges).length;
 };
 
 /**
@@ -89,42 +141,10 @@ export const calculateVehiclePlacements = (
   numVehicles: number,
   allEdges: Edge[]
 ): VehiclePlacementResult => {
-  // 1. edge별로 spot 목록 생성
-  const edgeSpots: { edge: Edge; spots: number[] }[] = [];
-
-  for (const edge of allEdges) {
-    const isCurve = [
-      "CURVE_90", "CURVE_180", "S_CURVE", "CURVE_CSC", "CSC_CURVE_HOMO",
-    ].includes(edge.vos_rail_type || "");
-
-    if (isCurve) continue;
-
-    const spots = calculateEdgeSpots(edge.distance);
-    if (spots.length > 0) {
-      edgeSpots.push({ edge, spots });
-    }
-  }
-
-  // 2. Round-robin으로 spot 수집
-  const allSpots: { edge: Edge; distance: number }[] = [];
-  let maxSpotsPerEdge = 0;
-
-  for (const { spots } of edgeSpots) {
-    maxSpotsPerEdge = Math.max(maxSpotsPerEdge, spots.length);
-  }
-
-  // 각 position마다 모든 edge를 순회하면서 spot 추가
-  for (let spotIndex = 0; spotIndex < maxSpotsPerEdge; spotIndex++) {
-    for (const { edge, spots } of edgeSpots) {
-      if (spotIndex < spots.length) {
-        allSpots.push({ edge, distance: spots[spotIndex] });
-      }
-    }
-  }
-
-  // 3. 배치
-  const placements: VehiclePlacement[] = [];
+  const allSpots = calculateAllSpots(allEdges);
   const spotsToUse = allSpots.slice(0, numVehicles);
+
+  const placements: VehiclePlacement[] = [];
 
   for (let i = 0; i < spotsToUse.length; i++) {
     const { edge, distance } = spotsToUse[i];
