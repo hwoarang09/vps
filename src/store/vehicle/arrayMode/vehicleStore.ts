@@ -4,8 +4,9 @@
 import { create } from "zustand";
 import { vehicleDataArray } from "./vehicleDataArray";
 import { edgeVehicleQueue } from "./edgeVehicleQueue";
+import type { IVehicleStore, IEdgeVehicleQueue } from "@/common/vehicle/initialize";
 
-export interface VehicleArrayStore {
+export interface VehicleArrayStore extends IVehicleStore {
   // Array references
   vehicleDataRef: Float32Array | null;
   edgeVehicleListRef: typeof edgeVehicleQueue | null;
@@ -52,6 +53,10 @@ export interface VehicleArrayStore {
 
   clearVehicleData: (vehicleIndex: number) => void;
   clearAllVehicles: () => void;
+
+  // IVehicleStore interface methods
+  getVehicleData: () => Float32Array;
+  getEdgeVehicleQueue: () => IEdgeVehicleQueue;
 
   // Integrated methods
   addVehicle: (
@@ -208,6 +213,10 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
     clearVehicleData: (vehicleIndex) => {
       vehicleDataArray.clearVehicle(vehicleIndex);
     },
+
+    // IVehicleStore interface methods
+    getVehicleData: () => vehicleDataArray.getData(),
+    getEdgeVehicleQueue: () => edgeVehicleQueue,
 
     // Add vehicle (integrated)
     addVehicle: (vehicleIndex, data) => {

@@ -1,213 +1,106 @@
 // shmSimulator/core/initializeVehicles.ts
+// Uses shared initialization logic from common module
 
-import VehicleDataArray, {
-  SensorData,
-  MovementData,
-  NextEdgeState,
-  VEHICLE_DATA_SIZE,
-  MovingStatus,
-} from "../memory/vehicleDataArray";
-import SensorPointArray from "../memory/sensorPointArray";
-import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
 import { EngineStore } from "./EngineStore";
 import { LockMgr } from "../logic/LockMgr";
-import { PresetIndex } from "../memory/sensorPresets";
+import SensorPointArray from "../memory/sensorPointArray";
 import { updateSensorPoints } from "../helpers/sensorPoints";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import { EdgeType } from "@/types";
-import type { SimulationConfig, VehicleInitConfig } from "../types";
+import type { SimulationConfig, VehicleInitConfig as SimVehicleInitConfig } from "../types";
+import {
+  initializeVehicles as initializeVehiclesCommon,
+  VehiclePlacement,
+  InitializationResult,
+  ILockMgr,
+  VehicleInitConfig,
+} from "@/common/vehicle/initialize";
+import { calculateVehiclePlacements } from "@/utils/vehicle/vehiclePlacement";
 
-export interface VehiclePlacement {
-  vehicleIndex: number;
-  edgeName: string;
-  x: number;
-  y: number;
-  z: number;
-  rotation: number;
-  edgeRatio: number;
-}
-
-export interface InitializationResult {
-  edgeNameToIndex: Map<string, number>;
-  edgeArray: Edge[];
-  actualNumVehicles: number;
-}
+export type { VehiclePlacement, InitializationResult };
 
 export interface InitializeVehiclesParams {
   edges: Edge[];
   nodes: Node[];
   numVehicles: number;
-  vehicleConfigs: VehicleInitConfig[];
+  vehicleConfigs: SimVehicleInitConfig[];
   store: EngineStore;
   lockMgr: LockMgr;
   sensorPointArray: SensorPointArray;
   config: SimulationConfig;
 }
 
-export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
-  const { edges, nodes, numVehicles, vehicleConfigs, store, lockMgr, sensorPointArray, config } = params;
-
-  console.log(`[shmSimulator] Initializing ${numVehicles} vehicles...`);
-
-  const vehicleDataArray = store.getVehicleDataArray();
-  const edgeVehicleQueue = store.getEdgeVehicleQueue();
-  const directData = vehicleDataArray.getData();
-
-  const edgeArray = edges;
-  const nameToIndex = new Map<string, number>();
-  for (let idx = 0; idx < edgeArray.length; idx++) {
-    nameToIndex.set(edgeArray[idx].edge_name, idx);
-  }
-
-  // Calculate placements (simple auto-placement)
-  const placements = calculateSimplePlacements(numVehicles, edgeArray, config.vehicleZOffset);
-
-  // Initialize vehicle state
-  const edgeVehicleCount = new Map<number, number>();
-
-  // Build node lookup map
-  const nodeNameToIndex = new Map<string, number>();
-  for (let idx = 0; idx < nodes.length; idx++) {
-    nodeNameToIndex.set(nodes[idx].node_name, idx);
-  }
-
-  for (const placement of placements) {
-    const edgeIndex = nameToIndex.get(placement.edgeName);
-    if (edgeIndex === undefined) continue;
-
-    const edge = edgeArray[edgeIndex];
-    const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
-    const initialVelocity = isCurve ? config.curveMaxSpeed : 0;
-
-    // Use vehicleConfigs if provided, otherwise use config defaults
-    const vehConfig = vehicleConfigs[placement.vehicleIndex] || vehicleConfigs[0] || {
-      acceleration: config.linearAcceleration,
-      deceleration: config.linearDeceleration,
-      maxSpeed: config.linearMaxSpeed,
-    };
-
-    store.addVehicle(placement.vehicleIndex, {
-      x: placement.x,
-      y: placement.y,
-      z: placement.z,
-      edgeIndex: edgeIndex,
-      edgeRatio: placement.edgeRatio,
-      rotation: placement.rotation,
-      velocity: initialVelocity,
-      acceleration: vehConfig.acceleration,
-      deceleration: vehConfig.deceleration,
-      movingStatus: MovingStatus.MOVING,
-    });
-
-    // Initialize sensor preset
-    const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
-    directData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
-    directData[ptr + SensorData.HIT_ZONE] = -1;
-    directData[ptr + MovementData.NEXT_EDGE] = -1;
-    directData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
-
-    updateSensorPoints(
-      sensorPointArray,
-      placement.vehicleIndex,
-      placement.x,
-      placement.y,
-      placement.rotation,
-      PresetIndex.STRAIGHT,
-      config
-    );
-
-    edgeVehicleCount.set(edgeIndex, (edgeVehicleCount.get(edgeIndex) || 0) + 1);
-  }
-
-  // Sort vehicles in each edge by edgeRatio
-  for (const [edgeIdx, _] of edgeVehicleCount) {
-    edgeVehicleQueue.sortByEdgeRatio(edgeIdx, directData);
-  }
-
-  // Process merge edge locks
-  for (const [edgeIdx, _] of edgeVehicleCount) {
-    const edge = edgeArray[edgeIdx];
-
-    if (lockMgr.isMergeNode(edge.to_node)) {
-      const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
-
-      for (const vehId of vehiclesOnEdge) {
-        lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
-      }
-    }
-  }
-
-  store.setActualNumVehicles(placements.length);
-
-  console.log(`[shmSimulator] Initialized ${placements.length} vehicles`);
-
+/**
+ * Create adapter for LockMgr to implement ILockMgr
+ */
+function createLockMgrAdapter(lockMgr: LockMgr): ILockMgr {
   return {
-    edgeNameToIndex: nameToIndex,
-    edgeArray: edgeArray,
-    actualNumVehicles: placements.length,
+    isMergeNode: lockMgr.isMergeNode.bind(lockMgr),
+    requestLock: lockMgr.requestLock.bind(lockMgr),
   };
 }
 
-function calculateSimplePlacements(
-  numVehicles: number,
-  edges: Edge[],
-  vehicleZOffset: number
-): VehiclePlacement[] {
-  const placements: VehiclePlacement[] = [];
-  let vehicleIndex = 0;
+/**
+ * Create config from SimulationConfig
+ */
+function createVehicleInitConfig(config: SimulationConfig): VehicleInitConfig {
+  return {
+    linearAcceleration: config.linearAcceleration,
+    linearDeceleration: config.linearDeceleration,
+    linearMaxSpeed: config.linearMaxSpeed,
+    curveMaxSpeed: config.curveMaxSpeed,
+    vehicleZOffset: config.vehicleZOffset,
+  };
+}
 
-  // Simple placement: distribute vehicles evenly across LINEAR edges
-  const linearEdges = edges.filter((e) => e.vos_rail_type === EdgeType.LINEAR);
+/**
+ * Create updateSensorPoints wrapper with sensorPointArray and config
+ */
+function createUpdateSensorPointsWrapper(
+  sensorPointArray: SensorPointArray,
+  config: SimulationConfig
+) {
+  return (
+    vehicleIndex: number,
+    x: number,
+    y: number,
+    rotation: number,
+    presetIndex: number
+  ): void => {
+    updateSensorPoints(
+      sensorPointArray,
+      vehicleIndex,
+      x,
+      y,
+      rotation,
+      presetIndex,
+      config
+    );
+  };
+}
 
-  if (linearEdges.length === 0) {
-    console.warn("[shmSimulator] No LINEAR edges found for placement");
-    return placements;
-  }
+export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
+  const { edges, numVehicles, store, lockMgr, sensorPointArray, config } = params;
 
-  const vehiclesPerEdge = Math.ceil(numVehicles / linearEdges.length);
+  console.log(`[shmSimulator] Initializing ${numVehicles} vehicles...`);
 
-  for (const edge of linearEdges) {
-    if (vehicleIndex >= numVehicles) break;
+  // Use shared placement calculation (same as arrayMode)
+  const placementResult = calculateVehiclePlacements(numVehicles, edges);
+  const placements = placementResult.placements;
 
-    const points = edge.renderingPoints;
-    if (!points || points.length < 2) continue;
+  console.log(`[shmSimulator] Placement: requested=${numVehicles}, actual=${placements.length}, maxCapacity=${placementResult.maxCapacity}`);
 
-    const startPoint = points[0];
-    const endPoint = points[points.length - 1];
+  // Use common initialization logic
+  const result = initializeVehiclesCommon({
+    edges,
+    placements,
+    store,
+    lockMgr: createLockMgrAdapter(lockMgr),
+    config: createVehicleInitConfig(config),
+    updateSensorPoints: createUpdateSensorPointsWrapper(sensorPointArray, config),
+  });
 
-    const edgeCapacity = Math.min(vehiclesPerEdge, numVehicles - vehicleIndex);
-    const spacing = 1.0 / (edgeCapacity + 1);
+  console.log(`[shmSimulator] Initialized ${placements.length} vehicles`);
 
-    for (let j = 0; j < edgeCapacity; j++) {
-      const ratio = spacing * (j + 1);
-
-      const x = startPoint.x + (endPoint.x - startPoint.x) * ratio;
-      const y = startPoint.y + (endPoint.y - startPoint.y) * ratio;
-      const z = vehicleZOffset;
-
-      const dx = endPoint.x - startPoint.x;
-      const dy = endPoint.y - startPoint.y;
-      let rotation = 0;
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        rotation = dx >= 0 ? 0 : 180;
-      } else {
-        rotation = dy >= 0 ? 90 : -90;
-      }
-
-      placements.push({
-        vehicleIndex,
-        edgeName: edge.edge_name,
-        x,
-        y,
-        z,
-        rotation,
-        edgeRatio: ratio,
-      });
-
-      vehicleIndex++;
-    }
-  }
-
-  return placements;
+  return result;
 }

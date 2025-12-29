@@ -1,30 +1,100 @@
 // initializeVehicles.ts
 // Vehicle initialization logic separated from main component
-// Only handles data initialization, no rendering
+// Uses shared initialization logic from common module
 
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
-import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed } from "@/config/movementConfig";
+import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed, getLinearMaxSpeed } from "@/config/movementConfig";
 import { calculateVehiclePlacements, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
-import { vehicleDataArray, SensorData, MovementData, NextEdgeState, VEHICLE_DATA_SIZE, MovingStatus } from "@/store/vehicle/arrayMode/vehicleDataArray";
-import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
+import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { updateSensorPoints } from "./helpers/sensorPoints";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
-import { VehicleConfig, EdgeType } from "@/types";
+import { VehicleConfig } from "@/types";
 import { getLockMgr } from "./logic/LockMgr";
+import {
+  initializeVehicles as initializeVehiclesCommon,
+  buildEdgeNameToIndex,
+  VehiclePlacement as CommonVehiclePlacement,
+  InitializationResult,
+  IVehicleStore,
+  ILockMgr,
+  VehicleInitConfig,
+} from "@/common/vehicle/initialize";
 
-export interface InitializationResult {
-  edgeNameToIndex: Map<string, number>;
-  edgeArray: any[];
-  actualNumVehicles: number;
-}
+export type { InitializationResult };
 
 export interface InitializeVehiclesParams {
   edges: any[];
   numVehicles: number;
   store: any;
   vehicleConfigs?: VehicleConfig[];
+}
+
+/**
+ * Create adapter for arrayMode store to implement IVehicleStore
+ */
+function createStoreAdapter(store: any): IVehicleStore {
+  return {
+    addVehicle: store.addVehicle.bind(store),
+    setActualNumVehicles: store.setActualNumVehicles.bind(store),
+    getVehicleData: () => vehicleDataArray.getData(),
+    getEdgeVehicleQueue: () => edgeVehicleQueue,
+  };
+}
+
+/**
+ * Create adapter for LockMgr to implement ILockMgr
+ */
+function createLockMgrAdapter(): ILockMgr {
+  const lockMgr = getLockMgr();
+  return {
+    isMergeNode: lockMgr.isMergeNode.bind(lockMgr),
+    requestLock: lockMgr.requestLock.bind(lockMgr),
+  };
+}
+
+/**
+ * Create config from movement config
+ */
+function createVehicleInitConfig(): VehicleInitConfig {
+  return {
+    linearAcceleration: getLinearAcceleration(),
+    linearDeceleration: getLinearDeceleration(),
+    linearMaxSpeed: getLinearMaxSpeed(),
+    curveMaxSpeed: getCurveMaxSpeed(),
+    vehicleZOffset: 0, // arrayMode doesn't use zOffset
+  };
+}
+
+/**
+ * Callback for vehicle creation - adds to UI store
+ */
+function onVehicleCreated(placement: CommonVehiclePlacement, _edgeIndex: number): void {
+  const idNumber = placement.vehicleIndex;
+  const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
+
+  useVehicleGeneralStore.getState().addVehicle(placement.vehicleIndex, {
+    id: formattedId,
+    name: `Vehicle ${placement.vehicleIndex}`,
+    color: "#ffffff",
+    battery: 100,
+    vehicleType: 0,
+    taskType: 0,
+  });
+}
+
+/**
+ * Wrapper for updateSensorPoints to match common interface
+ */
+function updateSensorPointsWrapper(
+  vehicleIndex: number,
+  x: number,
+  y: number,
+  rotation: number,
+  presetIndex: number
+): void {
+  updateSensorPoints(vehicleIndex, x, y, rotation, presetIndex);
 }
 
 /**
@@ -38,41 +108,21 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   // 1. Initialize memory
   store.initArrayMemory();
 
-  const directData = vehicleDataArray.getData();
+  // 2. Calculate vehicle placements
+  const placements = getVehiclePlacements(vehicleConfigs, numVehicles, edges);
 
-  // 2. Build edge array and name-to-index map
-  const edgeArray = edges;
-  const nameToIndex = new Map<string, number>();
-  for (let idx = 0; idx < edgeArray.length; idx++) {
-    nameToIndex.set(edgeArray[idx].edge_name, idx);
-  }
+  // 3. Use common initialization logic
+  const result = initializeVehiclesCommon({
+    edges,
+    placements,
+    store: createStoreAdapter(store),
+    lockMgr: createLockMgrAdapter(),
+    config: createVehicleInitConfig(),
+    updateSensorPoints: updateSensorPointsWrapper,
+    onVehicleCreated,
+  });
 
-  // 3. Calculate vehicle placements
-  let placements: VehiclePlacement[];
-
-  placements = getVehiclePlacements(vehicleConfigs, numVehicles, edgeArray);
-
-  // 4. Set vehicle data
-  const edgeVehicleCount = new Map<number, number>();
-    initializeVehicleState(placements, nameToIndex, edgeArray, store, edgeVehicleCount);
-
-  // 5. Sort vehicles in each edge by edgeRatio (front to back)
-  for (const [edgeIdx, _] of edgeVehicleCount) {
-    edgeVehicleQueue.sortByEdgeRatio(edgeIdx, directData);
-  }
-
-  // 6. Verify edgeVehicleQueue
-  verifyEdgeVehicleCounts(edgeVehicleCount);
-
-  // 7. Initial lock requests for vehicles on merge edges
-  // Issue lock requests in correct order (front to back) to prevent simultaneous requests
-  processMergeEdgeLocks(edgeVehicleCount, edgeArray);
-
-  return {
-    edgeNameToIndex: nameToIndex,
-    edgeArray: edgeArray,
-    actualNumVehicles: placements.length,
-  };
+  return result;
 }
 
 export interface RapierInitializationParams {
@@ -97,11 +147,7 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
   store.initRapierMode();
 
   const edgeArray = Array.from(edges.values());
-
-  const nameToIndex = new Map<string, number>();
-  for (let idx = 0; idx < edgeArray.length; idx++) {
-    nameToIndex.set(edgeArray[idx].edge_name, idx);
-  }
+  const nameToIndex = buildEdgeNameToIndex(edgeArray);
 
   const result = calculateVehiclePlacements(numVehicles, edgeArray);
 
@@ -198,7 +244,7 @@ function getVehiclePlacements(
   vehicleConfigs: VehicleConfig[] | undefined,
   numVehicles: number,
   edgeArray: any[]
-): VehiclePlacement[] {
+): CommonVehiclePlacement[] {
   if (vehicleConfigs && vehicleConfigs.length > 0) {
     console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
     return createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
@@ -206,101 +252,5 @@ function getVehiclePlacements(
     console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles`);
     const result = calculateVehiclePlacements(numVehicles, edgeArray);
     return result.placements;
-  }
-}
-
-function initializeVehicleState(
-  placements: VehiclePlacement[],
-  nameToIndex: Map<string, number>,
-  edgeArray: any[],
-  store: any,
-  edgeVehicleCount: Map<number, number>
-) {
-  for (const placement of placements) {
-    const edgeIndex = nameToIndex.get(placement.edgeName);
-    if (edgeIndex === undefined) continue;
-
-    const edge = edgeArray[edgeIndex];
-    const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
-    const initialVelocity = isCurve ? getCurveMaxSpeed() : 0;
-
-    store.addVehicle(placement.vehicleIndex, {
-      x: placement.x,
-      y: placement.y,
-      z: placement.z,
-      edgeIndex: edgeIndex,
-      edgeRatio: placement.edgeRatio,
-      rotation: placement.rotation,
-      velocity: initialVelocity,
-      acceleration: getLinearAcceleration(),
-      deceleration: getLinearDeceleration(),
-      movingStatus: MovingStatus.MOVING,
-    });
-
-    // Initialize sensor preset based on edge type
-    const vehData = vehicleDataArray.getData();
-    const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
-    vehData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
-    vehData[ptr + SensorData.HIT_ZONE] = -1;
-
-    // Initialize NextEdge State
-    vehData[ptr + MovementData.NEXT_EDGE] = -1;
-    vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
-
-    updateSensorPoints(
-      placement.vehicleIndex,
-      placement.x,
-      placement.y,
-      placement.rotation,
-      PresetIndex.STRAIGHT
-    );
-
-    edgeVehicleCount.set(edgeIndex, (edgeVehicleCount.get(edgeIndex) || 0) + 1);
-
-    const idNumber = placement.vehicleIndex;
-    const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
-
-    useVehicleGeneralStore.getState().addVehicle(placement.vehicleIndex, {
-      id: formattedId,
-      name: `Vehicle ${placement.vehicleIndex}`,
-      color: "#ffffff",
-      battery: 100,
-      vehicleType: 0,
-      taskType: 0,
-    });
-  }
-}
-
-function verifyEdgeVehicleCounts(edgeVehicleCount: Map<number, number>) {
-  let totalInByEdge = 0;
-  for (const [edgeIdx, count] of edgeVehicleCount) {
-    const actualCount = edgeVehicleQueue.getCount(edgeIdx);
-    totalInByEdge += actualCount;
-    if (actualCount !== count) {
-      console.error(`[VehicleArrayMode] Edge ${edgeIdx} mismatch! Expected: ${count}, Got: ${actualCount}`);
-    }
-  }
-}
-
-function processMergeEdgeLocks(
-  edgeVehicleCount: Map<number, number>,
-  edgeArray: any[]
-) {
-  const lockMgr = getLockMgr();
-  for (const [edgeIdx, _] of edgeVehicleCount) {
-    const edge = edgeArray[edgeIdx];
-
-    // Check if this edge leads to a merge node
-    if (lockMgr.isMergeNode(edge.to_node)) {
-      // Get vehicles on this edge (already sorted by edgeRatio, front to back)
-      const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);
-
-      console.log(`[InitVehicles] Merge edge ${edge.edge_name} -> ${edge.to_node}: Pre-requesting locks for ${vehiclesOnEdge.length} vehicles`);
-
-      // Request lock in order (front to back)
-      for (const vehId of vehiclesOnEdge) {
-        lockMgr.requestLock(edge.to_node, edge.edge_name, vehId);
-      }
-    }
   }
 }

@@ -4,8 +4,9 @@
 import VehicleDataArray from "../memory/vehicleDataArray";
 import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
 import { TransferMode } from "../types";
+import type { IVehicleStore, IEdgeVehicleQueue } from "@/common/vehicle/initialize";
 
-export class EngineStore {
+export class EngineStore implements IVehicleStore {
   private vehicleDataArray: VehicleDataArray;
   private edgeVehicleQueue: EdgeVehicleQueue;
 
@@ -35,6 +36,11 @@ export class EngineStore {
   }
 
   getVehicleDataRef(): Float32Array {
+    return this.vehicleDataArray.getData();
+  }
+
+  // IVehicleStore interface method
+  getVehicleData(): Float32Array {
     return this.vehicleDataArray.getData();
   }
 
