@@ -6,7 +6,7 @@ import type { SimulationConfig } from "../types";
 import {
   calculateNextSpeed as sharedCalculateNextSpeed,
   type SpeedConfig
-} from "@/shared/vehicle/physics/speedCalculator";
+} from "@/common/vehicle/physics/speedCalculator";
 
 /**
  * Adapter function for shmSimulator
