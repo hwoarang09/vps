@@ -32,9 +32,6 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
   for (let startIdx = 0; startIdx < allEdges.length; startIdx++) {
     if (visited.has(startIdx)) continue;
 
-    const startEdge = allEdges[startIdx];
-    // console.log(`[LoopMaker] Trying to build loop starting from edge ${startIdx}: ${startEdge.edge_name} (${startEdge.from_node} -> ${startEdge.to_node})`);
-
     const loopEdgeNames: string[] = [];
     const loopEdgeIndices: number[] = [];
     let currentIdx = startIdx;
@@ -85,7 +82,9 @@ export const findEdgeLoops = (allEdges: Edge[]): EdgeLoop[] => {
     // Only add if we found a valid loop
     if (foundLoop && loopEdgeNames.length > 0) {
       loops.push({ edgeNames: loopEdgeNames });
-      loopEdgeIndices.forEach(idx => visited.add(idx));
+      for (const idx of loopEdgeIndices) {
+        visited.add(idx);
+      }
     } else {
       console.log(`[LoopMaker] ✗ No loop found starting from edge ${startIdx}`);
     }

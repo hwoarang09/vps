@@ -1,0 +1,44 @@
+// common/vehicle/collision/collisionCheck.ts
+// Shared collision check logic for vehicleArrayMode and shmSimulator
+
+import type { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
+import type { CollisionConfig } from "./collisionCommon";
+import { verifyLinearCollision } from "./verifyLinearCollision";
+import { verifyCurveCollision } from "./verifyCurveCollision";
+
+// Interfaces for dependency injection
+export interface IEdgeVehicleQueue {
+  getData(edgeIdx: number): Int32Array | Uint16Array | null;
+  getCount(edgeIdx: number): number;
+}
+
+export interface ISensorPointArray {
+  getData(): Float32Array;
+}
+
+export interface CollisionCheckContext {
+  vehicleArrayData: Float32Array;
+  edgeArray: Edge[];
+  edgeVehicleQueue: IEdgeVehicleQueue;
+  sensorPointArray: ISensorPointArray;
+  config: CollisionConfig;
+}
+
+export function checkCollisions(ctx: CollisionCheckContext) {
+  const { edgeArray, edgeVehicleQueue } = ctx;
+
+  for (let edgeIdx = 0; edgeIdx < edgeArray.length; edgeIdx++) {
+    const edge = edgeArray[edgeIdx];
+    if (!edge) continue;
+
+    const count = edgeVehicleQueue.getCount(edgeIdx);
+    if (count === 0) continue;
+
+    if (edge.vos_rail_type === EdgeType.LINEAR) {
+      verifyLinearCollision(edgeIdx, edge, ctx);
+    } else {
+      verifyCurveCollision(edgeIdx, edge, ctx);
+    }
+  }
+}

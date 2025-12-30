@@ -8,6 +8,30 @@ export const MovingStatus = {
   PAUSED: 2,
 } as const;
 
+// Traffic Regulation State (Intersection/Merge control)
+export const TrafficState = {
+  FREE: 0,
+  WAITING: 1,
+  ACQUIRED: 2,
+} as const;
+
+// Stop Reason Bitmask
+export const StopReason = {
+  NONE: 0,
+  OBS_LIDAR: 1,
+  OBS_CAMERA: 1 << 1,
+  E_STOP: 1 << 2,
+  WAITING_FOR_LOCK: 1 << 3,
+  LOCKED: 1 << 3,
+  DESTINATION_REACHED: 1 << 4,
+  PATH_BLOCKED: 1 << 5,
+  LOAD_ON: 1 << 6,
+  LOAD_OFF: 1 << 7,
+  NOT_INITIALIZED: 1 << 8,
+  INDIVIDUAL_CONTROL: 1 << 9,
+  SENSORED: 1 << 10,
+} as const;
+
 // Next Edge State for TransferMgr
 export const NextEdgeState = {
   EMPTY: 0,
@@ -50,4 +74,18 @@ export const SensorData = {
   COLLISION_TARGET: _sPtr++,
 } as const;
 
-export const VEHICLE_DATA_SIZE = _sPtr + 3; // +3 for LogicData (TRAFFIC_STATE, STOP_REASON, JOB_STATE)
+let _lPtr = _sPtr;
+export const LogicData = {
+  TRAFFIC_STATE: _lPtr++,
+  STOP_REASON: _lPtr++,
+  JOB_STATE: _lPtr++,
+} as const;
+
+export const VEHICLE_DATA_SIZE = _lPtr;
+
+export const HitZone = {
+  NONE: -1,
+  APPROACH: 0,
+  BRAKE: 1,
+  STOP: 2,
+} as const;
