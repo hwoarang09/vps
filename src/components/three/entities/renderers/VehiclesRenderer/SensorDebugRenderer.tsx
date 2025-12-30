@@ -4,21 +4,26 @@ import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
+import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { getMarkerConfig } from "@/config/mapConfig";
+import { VehicleSystemType } from "@/types/vehicle";
 
 interface SensorDebugRendererProps {
   readonly numVehicles: number;
+  readonly mode: VehicleSystemType;
 }
 
 /**
  * Render sensor wireframes for debugging
  * Shows 3-zone sensor quads (outer/approach, middle/brake, inner/stop) and body quad
  */
-export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
+export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererProps) {
   const outerLinesRef = useRef<THREE.LineSegments>(null);
   const middleLinesRef = useRef<THREE.LineSegments>(null);
   const innerLinesRef = useRef<THREE.LineSegments>(null);
   const bodyLinesRef = useRef<THREE.LineSegments>(null);
+
+  const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
   // Create geometry for sensor quads (4 lines per vehicle)
   const outerGeometry = useMemo(() => {
@@ -62,11 +67,15 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
     const bodyLines = bodyLinesRef.current;
     if (!outerLines || !middleLines || !innerLines || !bodyLines) return;
 
-    const data = sensorPointArray.getData();
+    const data = isSharedMemory ? getShmSensorPointData() : sensorPointArray.getData();
+    if (!data) return;
+
     const outerPositions = outerGeometry.attributes.position.array as Float32Array;
     const middlePositions = middleGeometry.attributes.position.array as Float32Array;
     const innerPositions = innerGeometry.attributes.position.array as Float32Array;
     const bodyPositions = bodyGeometry.attributes.position.array as Float32Array;
+
+    const zHeight = getMarkerConfig().Z;
 
     for (let i = 0; i < numVehicles; i++) {
       const base = i * SENSOR_DATA_SIZE;
@@ -87,31 +96,31 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
         // Sensor quad: FL -> SL -> SR -> FR -> FL
         target[sensorIdx + 0] = flx;
         target[sensorIdx + 1] = fly;
-        target[sensorIdx + 2] = getMarkerConfig().Z;
+        target[sensorIdx + 2] = zHeight;
         target[sensorIdx + 3] = slx;
         target[sensorIdx + 4] = sly;
-        target[sensorIdx + 5] = getMarkerConfig().Z;
+        target[sensorIdx + 5] = zHeight;
 
         target[sensorIdx + 6] = slx;
         target[sensorIdx + 7] = sly;
-        target[sensorIdx + 8] = getMarkerConfig().Z;
+        target[sensorIdx + 8] = zHeight;
         target[sensorIdx + 9] = srx;
         target[sensorIdx + 10] = sry;
-        target[sensorIdx + 11] = getMarkerConfig().Z;
+        target[sensorIdx + 11] = zHeight;
 
         target[sensorIdx + 12] = srx;
         target[sensorIdx + 13] = sry;
-        target[sensorIdx + 14] = getMarkerConfig().Z;
+        target[sensorIdx + 14] = zHeight;
         target[sensorIdx + 15] = frx;
         target[sensorIdx + 16] = fry;
-        target[sensorIdx + 17] = getMarkerConfig().Z;
+        target[sensorIdx + 17] = zHeight;
 
         target[sensorIdx + 18] = frx;
         target[sensorIdx + 19] = fry;
-        target[sensorIdx + 20] = getMarkerConfig().Z;
+        target[sensorIdx + 20] = zHeight;
         target[sensorIdx + 21] = flx;
         target[sensorIdx + 22] = fly;
-        target[sensorIdx + 23] = getMarkerConfig().Z;
+        target[sensorIdx + 23] = zHeight;
       };
 
       // Zones: 0=outer(approach),1=middle(brake),2=inner(stop)
@@ -134,34 +143,34 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
       // Line 1: FL -> BL
       bodyPositions[bodyIdx + 0] = flx;
       bodyPositions[bodyIdx + 1] = fly;
-      bodyPositions[bodyIdx + 2] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 2] = zHeight;
       bodyPositions[bodyIdx + 3] = blx;
       bodyPositions[bodyIdx + 4] = bly;
-      bodyPositions[bodyIdx + 5] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 5] = zHeight;
 
       // Line 2: BL -> BR
       bodyPositions[bodyIdx + 6] = blx;
       bodyPositions[bodyIdx + 7] = bly;
-      bodyPositions[bodyIdx + 8] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 8] = zHeight;
       bodyPositions[bodyIdx + 9] = brx;
       bodyPositions[bodyIdx + 10] = bry;
-      bodyPositions[bodyIdx + 11] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 11] = zHeight;
 
       // Line 3: BR -> FR
       bodyPositions[bodyIdx + 12] = brx;
       bodyPositions[bodyIdx + 13] = bry;
-      bodyPositions[bodyIdx + 14] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 14] = zHeight;
       bodyPositions[bodyIdx + 15] = frx;
       bodyPositions[bodyIdx + 16] = fry;
-      bodyPositions[bodyIdx + 17] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 17] = zHeight;
 
       // Line 4: FR -> FL
       bodyPositions[bodyIdx + 18] = frx;
       bodyPositions[bodyIdx + 19] = fry;
-      bodyPositions[bodyIdx + 20] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 20] = zHeight;
       bodyPositions[bodyIdx + 21] = flx;
       bodyPositions[bodyIdx + 22] = fly;
-      bodyPositions[bodyIdx + 23] = getMarkerConfig().Z;
+      bodyPositions[bodyIdx + 23] = zHeight;
     }
 
     outerGeometry.attributes.position.needsUpdate = true;
@@ -171,21 +180,21 @@ export function SensorDebugRenderer({ numVehicles }: SensorDebugRendererProps) {
   });
 
   return (
-    <group>
+    <group renderOrder={999}>
       {/* Sensor wireframes */}
-      <lineSegments ref={outerLinesRef} geometry={outerGeometry}>
-        <lineBasicMaterial color={"#ffff00"} linewidth={4} />
+      <lineSegments ref={outerLinesRef} geometry={outerGeometry} frustumCulled={false} renderOrder={999}>
+        <lineBasicMaterial color={"#ffff00"} linewidth={4} depthTest={false} transparent depthWrite={false} />
       </lineSegments>
-      <lineSegments ref={middleLinesRef} geometry={middleGeometry}>
-        <lineBasicMaterial color="#ff8800" linewidth={2} />
+      <lineSegments ref={middleLinesRef} geometry={middleGeometry} frustumCulled={false} renderOrder={999}>
+        <lineBasicMaterial color="#ff8800" linewidth={2} depthTest={false} transparent depthWrite={false} />
       </lineSegments>
-      <lineSegments ref={innerLinesRef} geometry={innerGeometry}>
-        <lineBasicMaterial color="#ff0000" linewidth={6} />
+      <lineSegments ref={innerLinesRef} geometry={innerGeometry} frustumCulled={false} renderOrder={999}>
+        <lineBasicMaterial color="#ff0000" linewidth={6} depthTest={false} transparent depthWrite={false} />
       </lineSegments>
 
       {/* Body wireframes (cyan) */}
-      <lineSegments ref={bodyLinesRef} geometry={bodyGeometry}>
-        <lineBasicMaterial color="#00ffff" linewidth={1} />
+      <lineSegments ref={bodyLinesRef} geometry={bodyGeometry} frustumCulled={false} renderOrder={999}>
+        <lineBasicMaterial color="#00ffff" linewidth={1} depthTest={false} transparent depthWrite={false} />
       </lineSegments>
     </group>
   );

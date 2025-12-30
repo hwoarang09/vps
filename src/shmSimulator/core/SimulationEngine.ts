@@ -16,25 +16,25 @@ import { createDefaultConfig } from "../types";
 
 export class SimulationEngine {
   // === Internal Store ===
-  private store: EngineStore;
+  private readonly store: EngineStore;
 
   // === Memory ===
-  private vehicleDataArray: VehicleDataArray;
-  private sensorPointArray: SensorPointArray;
-  private edgeVehicleQueue: EdgeVehicleQueue;
+  private readonly vehicleDataArray: VehicleDataArray;
+  private readonly sensorPointArray: SensorPointArray;
+  private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   // === Map Data ===
   private edges: Edge[] = [];
   private nodes: Node[] = [];
   private edgeNameToIndex: Map<string, number> = new Map();
-  private nodeNameToIndex: Map<string, number> = new Map();
+  private readonly nodeNameToIndex: Map<string, number> = new Map();
 
   // === Logic Managers ===
-  private lockMgr: LockMgr;
-  private transferMgr: TransferMgr;
+  private readonly lockMgr: LockMgr;
+  private readonly transferMgr: TransferMgr;
 
   // === Runtime ===
-  private vehicleLoopMap: Map<number, VehicleLoop> = new Map();
+  private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
   private config: SimulationConfig;
   private isRunning: boolean = false;
   private actualNumVehicles: number = 0;
@@ -129,38 +129,25 @@ export class SimulationEngine {
   private buildVehicleLoopMap(): void {
     this.vehicleLoopMap.clear();
 
-    // For now, create simple loops based on edge connectivity
     for (let i = 0; i < this.actualNumVehicles; i++) {
       const currentEdgeIndex = this.store.getVehicleCurrentEdge(i);
       const currentEdge = this.edges[currentEdgeIndex];
+      if (!currentEdge) continue;
 
-      if (currentEdge) {
-        // Simple: just follow next edges
-        const sequence: string[] = [currentEdge.edge_name];
-        let edge = currentEdge;
+      const sequence: string[] = [currentEdge.edge_name];
+      let edge = currentEdge;
 
-        // Build a loop by following next edges (max 100 edges)
-        for (let j = 0; j < 100; j++) {
-          if (edge.nextEdgeIndices && edge.nextEdgeIndices.length > 0) {
-            const nextIdx = edge.nextEdgeIndices[0];
-            const nextEdge = this.edges[nextIdx];
+      for (let j = 0; j < 100; j++) {
+        if (!edge.nextEdgeIndices?.length) break;
 
-            if (!nextEdge) break;
+        const nextEdge = this.edges[edge.nextEdgeIndices[0]];
+        if (!nextEdge || nextEdge.edge_name === currentEdge.edge_name) break;
 
-            if (nextEdge.edge_name === currentEdge.edge_name) {
-              // Found loop
-              break;
-            }
-
-            sequence.push(nextEdge.edge_name);
-            edge = nextEdge;
-          } else {
-            break;
-          }
-        }
-
-        this.vehicleLoopMap.set(i, { edgeSequence: sequence });
+        sequence.push(nextEdge.edge_name);
+        edge = nextEdge;
       }
+
+      this.vehicleLoopMap.set(i, { edgeSequence: sequence });
     }
   }
 

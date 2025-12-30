@@ -18,7 +18,7 @@ export interface CollisionCheckContext {
 }
 
 export function checkCollisions(ctx: CollisionCheckContext) {
-  const { vehicleArrayData, edgeArray, edgeVehicleQueue } = ctx;
+  const { edgeArray, edgeVehicleQueue } = ctx;
 
   for (let edgeIdx = 0; edgeIdx < edgeArray.length; edgeIdx++) {
     const edge = edgeArray[edgeIdx];

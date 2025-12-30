@@ -4,11 +4,11 @@
 import VehicleDataArray from "../memory/vehicleDataArray";
 import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
 import { TransferMode } from "../types";
-import type { IVehicleStore, IEdgeVehicleQueue } from "@/common/vehicle/initialize";
+import type { IVehicleStore } from "@/common/vehicle/initialize";
 
 export class EngineStore implements IVehicleStore {
-  private vehicleDataArray: VehicleDataArray;
-  private edgeVehicleQueue: EdgeVehicleQueue;
+  private readonly vehicleDataArray: VehicleDataArray;
+  private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   public actualNumVehicles: number = 0;
   public transferMode: TransferMode = 0; // LOOP

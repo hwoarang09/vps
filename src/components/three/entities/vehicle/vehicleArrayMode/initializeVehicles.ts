@@ -16,13 +16,13 @@ import {
   initializeVehicles as initializeVehiclesCommon,
   buildEdgeNameToIndex,
   VehiclePlacement as CommonVehiclePlacement,
-  InitializationResult,
   IVehicleStore,
   ILockMgr,
   VehicleInitConfig,
+  type InitializationResult,
 } from "@/common/vehicle/initialize";
 
-export type { InitializationResult };
+export type { InitializationResult } from "@/common/vehicle/initialize";
 
 export interface InitializeVehiclesParams {
   edges: any[];

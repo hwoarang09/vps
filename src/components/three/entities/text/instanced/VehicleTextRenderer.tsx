@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { CHAR_COUNT } from "./useDigitMaterials";
 import {
   applyHighAltitudeCulling,
@@ -10,6 +11,7 @@ import {
   SlotData
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
+import { VehicleSystemType } from "@/types/vehicle";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
@@ -17,6 +19,7 @@ const LABEL_LENGTH = 8; // VEH00001
 
 interface Props {
   numVehicles: number;
+  mode: VehicleSystemType;
   scale?: number;
   color?: string;
   zOffset?: number;
@@ -24,10 +27,13 @@ interface Props {
 
 const VehicleTextRenderer: React.FC<Props> = ({
   numVehicles,
+  mode,
   scale = 0.5,
   color = "#ffffff",
   zOffset = 1,
 }) => {
+  const isSharedMemory = mode === VehicleSystemType.SharedMemory;
+
   // 슬롯 데이터 계산 (Render Phase)
   const slotData = React.useMemo(() => {
     return buildVehicleSlotData(numVehicles, LABEL_LENGTH);
@@ -40,7 +46,11 @@ const VehicleTextRenderer: React.FC<Props> = ({
     const D = slotData;
     if (!D || numVehicles === 0) return;
 
-    const vehicleData = vehicleDataArray.getData();
+    const vehicleData = isSharedMemory
+      ? useShmSimulatorStore.getState().getVehicleData()
+      : vehicleDataArray.getData();
+    if (!vehicleData) return;
+
     const { z: cz } = camera.position;
 
     // 고도 컬링

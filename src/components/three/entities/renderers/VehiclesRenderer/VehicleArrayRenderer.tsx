@@ -2,32 +2,37 @@ import { useRef, useMemo, useEffect, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
 import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
+import { VehicleSystemType } from "@/types/vehicle";
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 /**
  * VehicleArrayRenderer
- * - Renders vehicles for array-single mode
- * - Reads from vehicleDataArray (Float32Array)
+ * - Unified renderer for array-single and shared-memory modes
+ * - Reads from appropriate data source based on mode
  * - Uses InstancedMesh for performance
  */
 
 interface VehicleArrayRendererProps {
-  actualNumVehicles?: number; // Optional - will read from store if not provided
+  mode: VehicleSystemType;
 }
 
 const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
-  actualNumVehicles: propActualNumVehicles,
+  mode,
 }) => {
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
 
-  // Get actualNumVehicles from store if not provided as prop
-  const storeActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
-  const actualNumVehicles = propActualNumVehicles ?? storeActualNumVehicles;
+  const isSharedMemory = mode === VehicleSystemType.SharedMemory;
+
+  // Get actualNumVehicles from appropriate store based on mode
+  const arrayActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
+  const shmActualNumVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
+  const actualNumVehicles = isSharedMemory ? shmActualNumVehicles : arrayActualNumVehicles;
 
   // Get vehicle config
   const [config, setConfig] = useState(() => getVehicleConfigSync());
@@ -78,7 +83,10 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const bodyMesh = bodyMeshRef.current;
     if (!bodyMesh) return;
 
-    const data = vehicleDataArray.getData();
+    const data = isSharedMemory
+      ? useShmSimulatorStore.getState().getVehicleData()
+      : vehicleDataArray.getData();
+    if (!data) return;
 
     for (let i = 0; i < actualNumVehicles; i++) {
       const ptr = i * VEHICLE_DATA_SIZE;
@@ -111,8 +119,8 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         args={[bodyGeometry, bodyMaterial, actualNumVehicles]}
         frustumCulled={false}
       />
-      <SensorDebugRenderer numVehicles={actualNumVehicles} />
-      <VehicleTextRenderer numVehicles={actualNumVehicles} />
+      <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
+      <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} />
     </>
   );
 };

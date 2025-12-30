@@ -41,6 +41,7 @@ const TextRenderer: React.FC<Props> = (props) => {
       {!isArrayMode && numVehicles > 0 && (
         <VehicleTextRenderer
           numVehicles={numVehicles}
+          mode={VehicleSystemType.RapierDict}
           scale={scale * 1.8}
           color={vehicleColor}
         />

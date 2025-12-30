@@ -50,8 +50,8 @@ export function applyCollisionZoneLogic(
   targetVehId: number = -1,
   config?: { approachMinSpeed: number; brakeMinSpeed: number }
 ) {
-  const approachMinSpeed = config?.approachMinSpeed ?? 2.0;
-  const brakeMinSpeed = config?.brakeMinSpeed ?? 1.0;
+  const approachMinSpeed = config?.approachMinSpeed ?? 2;
+  const brakeMinSpeed = config?.brakeMinSpeed ?? 1;
   data[ptrBack + SensorData.HIT_ZONE] = hitZone;
 
   if (hitZone === HitZone.NONE) {
