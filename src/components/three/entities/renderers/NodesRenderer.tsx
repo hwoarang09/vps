@@ -11,61 +11,49 @@ interface NodesRendererProps {
   nodeIds: string[];
 }
 
-// 마커 공통 상수
-const MARKER_Z = getMarkerConfig().Z;          // rail과 같은 높이
-const MARKER_SEGMENTS = getMarkerConfig().SEGMENTS;     // 너무 둥글지 않게
+// 마커 설정
+const MARKER_CONFIG = getMarkerConfig();
+const MARKER_Z = MARKER_CONFIG.Z;
+const MARKER_SEGMENTS = MARKER_CONFIG.SEGMENTS;
 
-// 일반 노드 마커 (분홍색, 큰 크기)
-const NORMAL_MARKER_RADIUS = getMarkerConfig().NORMAL.RADIUS;
-const NORMAL_MARKER_COLOR = getMarkerConfig().NORMAL.COLOR; // 분홍색
+// 마커 타입별 설정
+const MARKER_TYPES = {
+  normal: { radius: MARKER_CONFIG.NORMAL.RADIUS, color: MARKER_CONFIG.NORMAL.COLOR },
+  tmp: { radius: MARKER_CONFIG.TMP.RADIUS, color: MARKER_CONFIG.TMP.COLOR },
+} as const;
 
-// TMP_ 노드 마커 (회색, 작은 크기)
-const TMP_MARKER_RADIUS = getMarkerConfig().TMP.RADIUS;
-const TMP_MARKER_COLOR = getMarkerConfig().TMP.COLOR; // 회색
+// 인덱스 맵 생성 헬퍼
+const buildIndexMap = (ids: string[]) => new Map(ids.map((id, i) => [id, i]));
 
-// 메인 노드 메시 초기화
-const initNodeMesh = (
-  mesh: THREE.InstancedMesh,
-  nodeIds: string[],
-  getNodeByName: (name: string) => any
-) => {
-  const matrix = new THREE.Matrix4();
-  const position = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const scale = new THREE.Vector3(1, 1, 1);
-
-  for (let index = 0; index < nodeIds.length; index++) {
-    const nodeId = nodeIds[index];
-    const node = getNodeByName(nodeId);
-    if (!node) continue;
-
-    position.set(node.editor_x, node.editor_y, node.editor_z);
-    const size = node.size ?? 1;
-    scale.set(size, size, size);
-
-    matrix.compose(position, quaternion, scale);
-    mesh.setMatrixAt(index, matrix);
-  }
-  mesh.instanceMatrix.needsUpdate = true;
+// 통합 InstancedMesh 초기화 함수
+type InitOptions = {
+  useNodeZ?: boolean;      // true: node.editor_z 사용, false: MARKER_Z 고정
+  useDynamicScale?: boolean; // true: node.size 사용, false: 1 고정
 };
 
-// 공통 마커 초기화 (일반/TMP 공용)
-const initMarkers = (
+const initInstancedMesh = (
   mesh: THREE.InstancedMesh,
   nodeIds: string[],
-  getNodeByName: (name: string) => any
+  getNodeByName: (name: string) => any,
+  options: InitOptions = {}
 ) => {
+  const { useNodeZ = false, useDynamicScale = false } = options;
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const quaternion = new THREE.Quaternion();
   const scale = new THREE.Vector3(1, 1, 1);
 
   for (let index = 0; index < nodeIds.length; index++) {
-    const nodeId = nodeIds[index];
-    const node = getNodeByName(nodeId);
+    const node = getNodeByName(nodeIds[index]);
     if (!node) continue;
 
-    position.set(node.editor_x, node.editor_y, MARKER_Z);
+    position.set(node.editor_x, node.editor_y, useNodeZ ? node.editor_z : MARKER_Z);
+
+    if (useDynamicScale) {
+      const size = node.size ?? 1;
+      scale.set(size, size, size);
+    }
+
     matrix.compose(position, quaternion, scale);
     mesh.setMatrixAt(index, matrix);
   }
@@ -138,27 +126,21 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
 
   const geometry = useMemo(() => new THREE.SphereGeometry(0.2, 16, 16), []);
 
-  // 일반 노드 마커 지오메트리 (분홍색, 큰 크기)
+  // 마커 geometry/material (MARKER_TYPES 기반)
   const normalMarkerGeometry = useMemo(
-    () => new THREE.SphereGeometry(NORMAL_MARKER_RADIUS, MARKER_SEGMENTS, MARKER_SEGMENTS),
+    () => new THREE.SphereGeometry(MARKER_TYPES.normal.radius, MARKER_SEGMENTS, MARKER_SEGMENTS),
     []
   );
-
-  // TMP_ 노드 마커 지오메트리 (회색, 작은 크기)
   const tmpMarkerGeometry = useMemo(
-    () => new THREE.SphereGeometry(TMP_MARKER_RADIUS, MARKER_SEGMENTS, MARKER_SEGMENTS),
+    () => new THREE.SphereGeometry(MARKER_TYPES.tmp.radius, MARKER_SEGMENTS, MARKER_SEGMENTS),
     []
   );
-
-  // 일반 노드 마커 머티리얼 (분홍색)
   const normalMarkerMaterial = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: NORMAL_MARKER_COLOR }),
+    () => new THREE.MeshBasicMaterial({ color: MARKER_TYPES.normal.color }),
     []
   );
-
-  // TMP_ 노드 마커 머티리얼 (회색)
   const tmpMarkerMaterial = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: TMP_MARKER_COLOR }),
+    () => new THREE.MeshBasicMaterial({ color: MARKER_TYPES.tmp.color }),
     []
   );
 
@@ -184,25 +166,9 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
 
   // Build nodeId -> instanceIndex mapping
   useEffect(() => {
-    const newMap = new Map<string, number>();
-    for (let index = 0; index < nodeIds.length; index++) {
-      newMap.set(nodeIds[index], index);
-    }
-    nodeDataRef.current = newMap;
-
-    // 일반 노드 매핑
-    const normalMap = new Map<string, number>();
-    for (let index = 0; index < normalNodeIds.length; index++) {
-      normalMap.set(normalNodeIds[index], index);
-    }
-    normalNodeMapRef.current = normalMap;
-
-    // TMP_ 노드 매핑
-    const tmpMap = new Map<string, number>();
-    for (let index = 0; index < tmpNodeIds.length; index++) {
-      tmpMap.set(tmpNodeIds[index], index);
-    }
-    tmpNodeMapRef.current = tmpMap;
+    nodeDataRef.current = buildIndexMap(nodeIds);
+    normalNodeMapRef.current = buildIndexMap(normalNodeIds);
+    tmpNodeMapRef.current = buildIndexMap(tmpNodeIds);
   }, [nodeIds, normalNodeIds, tmpNodeIds]);
 
   // Initialize instance matrices and colors
@@ -214,18 +180,12 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
 
     const getNodeByName = useNodeStore.getState().getNodeByName;
 
-    // 메인 노드 메시 초기화
-    initNodeMesh(mesh, nodeIds, getNodeByName);
+    // 메인 노드 메시 초기화 (node.editor_z, 동적 scale 사용)
+    initInstancedMesh(mesh, nodeIds, getNodeByName, { useNodeZ: true, useDynamicScale: true });
 
-    // 일반 노드 마커 초기화
-    if (normalMarker) {
-      initMarkers(normalMarker, normalNodeIds, getNodeByName);
-    }
-
-    // TMP_ 노드 마커 초기화
-    if (tmpMarker) {
-      initMarkers(tmpMarker, tmpNodeIds, getNodeByName);
-    }
+    // 마커 초기화 (MARKER_Z 고정, scale 1 고정)
+    if (normalMarker) initInstancedMesh(normalMarker, normalNodeIds, getNodeByName);
+    if (tmpMarker) initInstancedMesh(tmpMarker, tmpNodeIds, getNodeByName);
   }, [nodeIds, instanceCount, normalNodeIds, tmpNodeIds]);
 
   // Subscribe to node store changes and update matrices
