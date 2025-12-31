@@ -7,6 +7,7 @@ interface MovementConfig {
   APPROACH_MIN_SPEED: number;    // Minimum speed in approach zone (m/s)
   BRAKE_MIN_SPEED: number;       // Minimum speed in brake zone (m/s)
   CURVE_ACCELERATION: number;    // Acceleration on curved sections (m/s²)
+  MAX_DELTA: number;             // Maximum delta time per frame (s)
 }
 
 // Load movement configuration from JSON file
@@ -27,7 +28,8 @@ const loadMovementConfig = async (): Promise<MovementConfig> => {
       CURVE_MAX_SPEED: 1.0,
       APPROACH_MIN_SPEED: 1.0,
       BRAKE_MIN_SPEED: 0.5,
-      CURVE_ACCELERATION: 0.0
+      CURVE_ACCELERATION: 0.0,
+      MAX_DELTA: 0.1
     };
   }
 };
@@ -43,7 +45,8 @@ let movementConfig: MovementConfig = {
   CURVE_MAX_SPEED: 1,
   APPROACH_MIN_SPEED: 2,
   BRAKE_MIN_SPEED: 1,
-  CURVE_ACCELERATION: 0
+  CURVE_ACCELERATION: 0,
+  MAX_DELTA: 0.1
 };
 
 // Load config immediately
@@ -60,6 +63,7 @@ export const getCurveMaxSpeed = () => movementConfig.CURVE_MAX_SPEED;
 export const getApproachMinSpeed = () => movementConfig.APPROACH_MIN_SPEED;
 export const getBrakeMinSpeed = () => movementConfig.BRAKE_MIN_SPEED;
 export const getCurveAcceleration = () => movementConfig.CURVE_ACCELERATION;
+export const getMaxDelta = () => movementConfig.MAX_DELTA;
 
 // Export the config object itself
 export const getMovementConfigSync = () => movementConfig;

@@ -64,10 +64,7 @@ export default function InstancedText({
     const D = slotData;
     if (!D || groups.length === 0 || !spatialGrid) return;
 
-    const { slotDigit, slotIndex, slotPosition, groupStart } = D;
     const { x: cx, y: cy, z: cz } = camera.position;
-
-    if (!groupStart) return;
 
     // Early exit 1: Camera too high
     if (applyHighAltitudeCulling(cz, camHeightCutoff, D, instRefs.current)) {
@@ -90,7 +87,7 @@ export default function InstancedText({
     }
 
     // Hide newly culled groups
-    hideGroupCharacters(newlyCulled, groupStart, slotDigit, slotIndex, instRefs.current);
+    hideGroupCharacters(newlyCulled, D, instRefs.current);
 
     // Early exit if no visible groups
     if (visibleGroups.length === 0) {
@@ -107,10 +104,7 @@ export default function InstancedText({
     renderVisibleGroups(
       visibleGroups,
       groups,
-      groupStart,
-      slotDigit,
-      slotIndex,
-      slotPosition,
+      D,
       instRefs.current,
       {
         scale,

@@ -160,11 +160,12 @@ export function findNewlyCulledGroups(
  */
 export function hideGroupCharacters(
   groupIndices: number[],
-  groupStart: Int32Array,
-  slotDigit: Int8Array,
-  slotIndex: Int32Array,
+  slotData: SlotData,
   meshes: (THREE.InstancedMesh | null)[]
 ): void {
+  const { groupStart, slotDigit, slotIndex } = slotData;
+  if (!groupStart) return;
+
   for (const groupIdx of groupIndices) {
     const start = groupStart[groupIdx];
     const end = groupStart[groupIdx + 1];
@@ -192,10 +193,7 @@ export function updateInstanceMatrices(meshes: (THREE.InstancedMesh | null)[]): 
 export function renderVisibleGroups(
   visibleGroups: number[],
   groups: TextGroup[],
-  groupStart: Int32Array,
-  slotDigit: Int8Array,
-  slotIndex: Int32Array,
-  slotPosition: Int32Array,
+  slotData: SlotData,
   meshes: (THREE.InstancedMesh | null)[],
   params: {
     scale: number;
@@ -205,6 +203,9 @@ export function renderVisibleGroups(
     right: THREE.Vector3;
   }
 ): void {
+  const { groupStart, slotDigit, slotIndex, slotPosition } = slotData;
+  if (!groupStart) return;
+
   const { scale, charSpacing, zOffset, quaternion, right } = params;
 
   // Zero-GC: Reuse scratchpads

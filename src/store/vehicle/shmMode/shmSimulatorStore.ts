@@ -10,6 +10,7 @@ import {
   VEHICLE_DATA_SIZE,
   MovementData,
 } from "@/shmSimulator/memory/vehicleDataArray";
+import { getMaxDelta } from "@/config/movementConfig";
 
 interface ShmSimulatorState {
   // Controller instance
@@ -74,7 +75,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         nodes,
         numVehicles,
         vehicleConfigs,
-        config: { ...createDefaultConfig(), ...config },
+        config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
         transferMode,
       });
 

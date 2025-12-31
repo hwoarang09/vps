@@ -34,6 +34,7 @@ export interface SimulationConfig {
 
   // Simulation
   targetFps: number;
+  maxDelta: number;
 }
 
 export interface VehicleInitConfig {
@@ -63,6 +64,7 @@ export function createDefaultConfig(): SimulationConfig {
     vehicleSpacing: 0.6,
     crossEdgeSafeDistance: 1,
     targetFps: 60,
+    maxDelta: 0.1,
   };
 }
 

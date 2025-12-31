@@ -5,7 +5,7 @@ import { initializeRapierVehicles } from "../vehicleArrayMode/initializeVehicles
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useEdgeStore } from "@/store/map/edgeStore";
-import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed } from "@/config/movementConfig";
+import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed, getMaxDelta } from "@/config/movementConfig";
 import { getNextEdgeInLoop, VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { EdgeType } from "@/types";
 import { getMarkerConfig } from "@/config/mapConfig";
@@ -43,8 +43,7 @@ const VehicleRapierMode: React.FC<VehicleRapierModeProps> = ({
   }, [numVehicles, edges, mode]);
 
   useFrame((_state, delta) => {
-    const MAX_DELTA = 1 / 30;
-    const clampedDelta = Math.min(delta, MAX_DELTA);
+    const clampedDelta = Math.min(delta, getMaxDelta());
 
     // Check if simulation is paused
     const isPaused = useVehicleTestStore.getState().isPaused;

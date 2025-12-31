@@ -197,7 +197,7 @@ export class SimulationEngine {
 
     const stepStart = performance.now();
 
-    const clampedDelta = Math.min(delta, 0.1);
+    const clampedDelta = Math.min(delta, this.config.maxDelta);
 
     // 1. Collision Check
     const collisionCtx: CollisionCheckContext = {

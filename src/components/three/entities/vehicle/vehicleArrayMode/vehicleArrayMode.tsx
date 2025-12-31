@@ -11,14 +11,13 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
+import { getMaxDelta } from "@/config/movementConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions } from "./collisionLogic/collisionCheck";
 import { updateMovement } from "./movementLogic/movementUpdate";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 
-// Constants
-const MAX_DELTA = 1 / 30;
 
 /**
  * Log safety configuration on mount
@@ -135,7 +134,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   // Real-time Loop - Coordinate Calculation Only
   // ==================================================================================
   useFrame((_state, delta) => {
-    const clampedDelta = Math.min(delta, MAX_DELTA);
+    const clampedDelta = Math.min(delta, getMaxDelta());
 
     // Check if simulation is paused
     const isPaused = useVehicleTestStore.getState().isPaused;
