@@ -29,8 +29,6 @@ export class ShmSimulatorController {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onPerfStatsCallback: ((avgStepMs: number) => void) | null = null;
 
-  constructor() {}
-
   /**
    * Set callback for worker performance stats
    */
@@ -85,7 +83,7 @@ export class ShmSimulatorController {
     this.worker.onerror = (error) => {
       console.error("[ShmSimulatorController] Worker error:", error);
       if (this.onErrorCallback) {
-        this.onErrorCallback(String(error));
+        this.onErrorCallback(error.message);
       }
     };
 

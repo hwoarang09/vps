@@ -10,7 +10,7 @@ import {
   type IEdgeTransitionStore,
 } from "@/common/vehicle/movement/edgeTransition";
 
-export type { EdgeTransitionResult };
+export type { EdgeTransitionResult } from "@/common/vehicle/movement/edgeTransition";
 
 /**
  * Zero-GC: Handles edge transition, writes result to target object.

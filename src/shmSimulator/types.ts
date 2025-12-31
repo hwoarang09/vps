@@ -118,4 +118,5 @@ export type TransferMode = (typeof TransferMode)[keyof typeof TransferMode];
 // [5] RE-EXPORTS
 // ============================================================================
 
-export type { Edge, Node };
+export type { Edge } from "@/types/edge";
+export type { Node } from "@/types";

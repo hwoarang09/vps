@@ -3,8 +3,8 @@
 
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 
-export { EdgeVehicleQueue };
-export default EdgeVehicleQueue;
+export { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
+export { EdgeVehicleQueue as default } from "@/common/vehicle/memory/EdgeVehicleQueue";
 
 // Singleton instance (200000 edges max)
 export const edgeVehicleQueue = new EdgeVehicleQueue(200000);
