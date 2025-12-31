@@ -3,6 +3,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import EdgeRenderer from "./EdgeRenderer";
 import NodesRenderer from "./NodesRenderer";
+import StationRenderer from "./StationRenderer";
 import { useRenderCheck } from "@/utils/renderDebug";
 
 /**
@@ -28,6 +29,9 @@ const MapRenderer: React.FC = () => {
 
       {/* Render all edges using InstancedMesh (grouped by type) */}
       <EdgeRenderer edges={edges} />
+
+      {/* Render all stations using InstancedMesh (grouped by type) */}
+      <StationRenderer />
 
       {/* Basic lighting for better visibility */}
       <ambientLight intensity={0.6} />

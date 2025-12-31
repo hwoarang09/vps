@@ -22,10 +22,12 @@ interface TextStore {
   // Dict mode data
   nodeTexts: Record<string, TextPosition>;
   edgeTexts: Record<string, TextPosition>;
+  stationTexts: Record<string, TextPosition>;
 
   // Array mode data
   nodeTextsArray: TextItem[];
   edgeTextsArray: TextItem[];
+  stationTextsArray: TextItem[];
 
   // Force update trigger
   updateTrigger: number;
@@ -37,18 +39,24 @@ interface TextStore {
   // Dict mode actions
   setNodeTexts: (nodeTexts: Record<string, TextPosition>) => void;
   setEdgeTexts: (edgeTexts: Record<string, TextPosition>) => void;
+  setStationTexts: (stationTexts: Record<string, TextPosition>) => void;
   addNodeText: (nodeName: string, position: TextPosition) => void;
   addEdgeText: (edgeName: string, position: TextPosition) => void;
+  addStationText: (stationName: string, position: TextPosition) => void;
   removeNodeText: (nodeName: string) => void;
   removeEdgeText: (edgeName: string) => void;
+  removeStationText: (stationName: string) => void;
 
   // Array mode actions
   setNodeTextsArray: (nodeTexts: TextItem[]) => void;
   setEdgeTextsArray: (edgeTexts: TextItem[]) => void;
+  setStationTextsArray: (stationTexts: TextItem[]) => void;
   addNodeTextArray: (item: TextItem) => void;
   addEdgeTextArray: (item: TextItem) => void;
+  addStationTextArray: (item: TextItem) => void;
   removeNodeTextArray: (nodeName: string) => void;
   removeEdgeTextArray: (edgeName: string) => void;
+  removeStationTextArray: (stationName: string) => void;
 
   // Common actions
   clearAllTexts: () => void;
@@ -64,8 +72,10 @@ export const useTextStore = create<TextStore>((set, get) => ({
   mode: VehicleSystemType.ArraySingle,
   nodeTexts: {},
   edgeTexts: {},
+  stationTexts: {},
   nodeTextsArray: [],
   edgeTextsArray: [],
+  stationTextsArray: [],
   updateTrigger: 0,
 
   // Mode initialization
@@ -74,6 +84,7 @@ export const useTextStore = create<TextStore>((set, get) => ({
       mode: VehicleSystemType.RapierDict,
       nodeTextsArray: [],
       edgeTextsArray: [],
+      stationTextsArray: [],
     });
   },
 
@@ -82,6 +93,7 @@ export const useTextStore = create<TextStore>((set, get) => ({
       mode: VehicleSystemType.ArraySingle,
       nodeTexts: {},
       edgeTexts: {},
+      stationTexts: {},
     });
   },
 
@@ -95,6 +107,12 @@ export const useTextStore = create<TextStore>((set, get) => ({
   setEdgeTexts: (edgeTexts) =>
     set((state) => ({
       edgeTexts,
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
+  setStationTexts: (stationTexts) =>
+    set((state) => ({
+      stationTexts,
       updateTrigger: state.updateTrigger + 1,
     })),
 
@@ -112,6 +130,15 @@ export const useTextStore = create<TextStore>((set, get) => ({
       edgeTexts: {
         ...state.edgeTexts,
         [edgeName]: position,
+      },
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
+  addStationText: (stationName, position) =>
+    set((state) => ({
+      stationTexts: {
+        ...state.stationTexts,
+        [stationName]: position,
       },
       updateTrigger: state.updateTrigger + 1,
     })),
@@ -134,6 +161,15 @@ export const useTextStore = create<TextStore>((set, get) => ({
       };
     }),
 
+  removeStationText: (stationName) =>
+    set((state) => {
+      const { [stationName]: removed, ...rest } = state.stationTexts;
+      return {
+        stationTexts: rest,
+        updateTrigger: state.updateTrigger + 1,
+      };
+    }),
+
   // Array mode actions
   setNodeTextsArray: (nodeTexts) =>
     set((state) => ({
@@ -144,6 +180,12 @@ export const useTextStore = create<TextStore>((set, get) => ({
   setEdgeTextsArray: (edgeTexts) =>
     set((state) => ({
       edgeTextsArray: edgeTexts,
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
+  setStationTextsArray: (stationTexts) =>
+    set((state) => ({
+      stationTextsArray: stationTexts,
       updateTrigger: state.updateTrigger + 1,
     })),
 
@@ -159,6 +201,12 @@ export const useTextStore = create<TextStore>((set, get) => ({
       updateTrigger: state.updateTrigger + 1,
     })),
 
+  addStationTextArray: (item) =>
+    set((state) => ({
+      stationTextsArray: [...state.stationTextsArray, item],
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
   removeNodeTextArray: (nodeName) =>
     set((state) => ({
       nodeTextsArray: state.nodeTextsArray.filter((item) => item.name !== nodeName),
@@ -171,13 +219,21 @@ export const useTextStore = create<TextStore>((set, get) => ({
       updateTrigger: state.updateTrigger + 1,
     })),
 
+  removeStationTextArray: (stationName) =>
+    set((state) => ({
+      stationTextsArray: state.stationTextsArray.filter((item) => item.name !== stationName),
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
   // Common actions
   clearAllTexts: () =>
     set((state) => ({
       nodeTexts: {},
       edgeTexts: {},
+      stationTexts: {},
       nodeTextsArray: [],
       edgeTextsArray: [],
+      stationTextsArray: [],
       updateTrigger: state.updateTrigger + 1,
     })),
 
@@ -192,11 +248,12 @@ export const useTextStore = create<TextStore>((set, get) => ({
     return {
       ...state.nodeTexts,
       ...state.edgeTexts,
+      ...state.stationTexts,
     };
   },
 
   getAllTextsArray: () => {
     const state = get();
-    return [...state.nodeTextsArray, ...state.edgeTextsArray];
+    return [...state.nodeTextsArray, ...state.edgeTextsArray, ...state.stationTextsArray];
   },
 }));

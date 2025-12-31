@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { getRendererConfig } from "@/config/mapConfig";
+import { getStationTextConfig } from "@/config/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
@@ -10,19 +11,22 @@ interface Props {
   scale?: number;
   nodeColor?: string;
   edgeColor?: string;
+  stationColor?: string;
 }
 
 const MapTextRenderer: React.FC<Props> = (props) => {
   const config = getRendererConfig();
+  const stationTextConfig = getStationTextConfig();
   const {
     mode,
     scale = config.SCALE,
     nodeColor = config.NODE_COLOR,
     edgeColor = config.EDGE_COLOR,
+    stationColor = stationTextConfig.COLOR,
   } = props;
   const {
-    nodeTexts, edgeTexts,
-    nodeTextsArray, edgeTextsArray,
+    nodeTexts, edgeTexts, stationTexts,
+    nodeTextsArray, edgeTextsArray, stationTextsArray,
     updateTrigger,
   } = useTextStore();
 
@@ -60,6 +64,23 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     }));
   }, [mode, edgeTexts, edgeTextsArray, updateTrigger]);
 
+  const stationGroups = useMemo((): TextGroup[] => {
+    if (mode === VehicleSystemType.ArraySingle) {
+      return stationTextsArray.map(item => ({
+        x: item.position.x,
+        y: item.position.y,
+        z: item.position.z,
+        digits: textToDigits(item.name),
+      }));
+    }
+    return Object.entries(stationTexts).map(([name, pos]) => ({
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      digits: textToDigits(name),
+    }));
+  }, [mode, stationTexts, stationTextsArray, updateTrigger]);
+
   return (
     <group name="map-text">
       {nodeGroups.length > 0 && (
@@ -67,6 +88,9 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       )}
       {edgeGroups.length > 0 && (
         <InstancedText groups={edgeGroups} scale={scale} color={edgeColor} />
+      )}
+      {stationGroups.length > 0 && (
+        <InstancedText groups={stationGroups} scale={scale} color={stationColor} />
       )}
     </group>
   );

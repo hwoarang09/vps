@@ -2,14 +2,17 @@ import { create } from "zustand";
 import Papa from "papaparse";
 import { useNodeStore } from "../map/nodeStore";
 import { useEdgeStore } from "../map/edgeStore";
+import { useStationStore } from "../map/stationStore";
 import { useTextStore, TextPosition } from "../map/textStore";
 import { Node, Edge, VehicleConfig, EdgeType } from "@/types";
+import { StationRawData } from "@/types/station";
 import { getNodeColor } from "@/utils/colors/nodeColors";
 import { getEdgeColor } from "@/utils/colors/edgeColors";
 import { PointsCalculator } from "@/components/three/entities/edge/points_calculator";
 import { VehicleSystemType } from "@/types/vehicle";
 import * as THREE from "three";
 import { getMarkerConfig } from "@/config/mapConfig";
+import { getStationTextConfig } from "@/config/stationConfig";
 
 interface CFGStore {
   isLoading: boolean;
@@ -87,6 +90,36 @@ interface VehicleRow {
   edgeName: string;
   ratio: string;
 }
+
+interface StationRow {
+  station_name: string;
+  editor_x: string;
+  editor_y: string;
+  barcode_x: string;
+  barcode_y: string;
+  barcode_z: string;
+  barcode_r: string;
+  bay_name: string;
+  station_type: string;
+  port_id: string;
+  port_type_code: string;
+  direction_code: string;
+  link_sc_id: string;
+  buffer_size: string;
+  mode_type: string;
+  floor: string;
+  zone_id: string;
+  rail_index: string;
+  sc_id: string;
+  e84: string;
+  teached: string;
+  look_down: string;
+  nearest_edge: string;
+  nearest_edge_distance: string;
+  eq_id: string;
+}
+
+
 
 // nodes.cfg 파싱
 const parseNodesCFG = (content: string): Node[] => {
@@ -230,6 +263,41 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
     });
 };
 
+// station.map 파싱
+const parseStationMap = (content: string): StationRawData[] => {
+  const rows = parseCSV<StationRow>(content);
+
+  return rows
+    .filter((row) => row.station_name)
+    .map((row) => ({
+      station_name: row.station_name,
+      editor_x: row.editor_x,
+      editor_y: row.editor_y,
+      barcode_x: Number.parseFloat(row.barcode_x) || 0,
+      barcode_y: Number.parseFloat(row.barcode_y) || 0,
+      barcode_z: Number.parseFloat(row.barcode_z) || 0,
+      barcode_r: Number.parseFloat(row.barcode_r) || 0,
+      bay_name: row.bay_name,
+      station_type: row.station_type,
+      port_id: row.port_id,
+      port_type_code: row.port_type_code,
+      direction_code: row.direction_code,
+      link_sc_id: row.link_sc_id,
+      buffer_size: row.buffer_size,
+      mode_type: row.mode_type,
+      floor: row.floor,
+      zone_id: row.zone_id,
+      rail_index: row.rail_index,
+      sc_id: row.sc_id,
+      e84: row.e84,
+      teached: row.teached,
+      look_down: row.look_down,
+      nearest_edge: row.nearest_edge,
+      nearest_edge_distance: row.nearest_edge_distance,
+      eq_id: row.eq_id,
+    }));
+};
+
 // 노드 텍스트 생성 및 업데이트 헬퍼
 const processNodeTexts = (nodes: Node[], textStore: any) => {
   if (textStore.mode === VehicleSystemType.RapierDict) {
@@ -364,6 +432,22 @@ const processEdgeTextsArray = (edges: Edge[], nodes: Node[], textStore: any) => 
   console.log("CFG Store - Generated edgeTexts (array):", edgeTextsArray.length);
 };
 
+// Station texts 생성 및 업데이트 (Array mode)
+const processStationTextsArray = (stations: any[], textStore: any) => {
+  const textConfig = getStationTextConfig();
+  const stationTextsArray = stations.map((station) => ({
+    name: station.station_name,
+    position: {
+      x: station.position.x,
+      y: station.position.y,
+      z: station.position.z + textConfig.Z_OFFSET,
+    },
+  }));
+
+  textStore.setStationTextsArray(stationTextsArray);
+  console.log("CFG Store - Generated stationTexts (array):", stationTextsArray.length);
+};
+
 // Load CFG file from specified map folder
 const loadCFGFile = async (mapFolder: string, filename: string): Promise<string> => {
   const response = await fetch(`/railConfig/${mapFolder}/${filename}`);
@@ -408,15 +492,32 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs ", error);
       }
 
-      // 5. Set edges to store
+      // 5. Load and parse station.map (optional)
+      let stationRawData: StationRawData[] = [];
+      try {
+        const stationContent = await loadCFGFile(mapFolder, "station.map");
+        stationRawData = parseStationMap(stationContent);
+        console.log(`[CFGStore] Loaded ${stationRawData.length} stations`);
+      } catch (error) {
+        console.warn("[CFGStore] No station.map found or failed to parse, skipping stations ", error);
+      }
+
+      // 6. Set edges to store
       const edgeStore = useEdgeStore.getState();
       edgeStore.setEdges(edges);
 
-      // 6. Update node topology
+      // 7. Update node topology
       const calculatedEdges = edgeStore.edges;
       nodeStore.updateTopology(calculatedEdges);
 
-      // 7. 텍스트 데이터 생성 및 업데이트
+      // 8. Load stations to stationStore (if data exists)
+      let stations: any[] = [];
+      if (stationRawData.length > 0) {
+        const stationStore = useStationStore.getState();
+        stations = stationStore.loadStations(stationRawData);
+      }
+
+      // 9. 텍스트 데이터 생성 및 업데이트
       const textStore = useTextStore.getState();
       textStore.clearAllTexts();
 
@@ -426,6 +527,11 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         processEdgeTextsDict(edges, nodes, textStore);
       } else {
         processEdgeTextsArray(edges, nodes, textStore);
+      }
+
+      // Process station texts
+      if (stations.length > 0) {
+        processStationTextsArray(stations, textStore);
       }
 
       setTimeout(() => {

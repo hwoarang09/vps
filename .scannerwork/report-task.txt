@@ -2,5 +2,5 @@ projectKey=vosui
 serverUrl=http://127.0.0.1:9000
 serverVersion=25.11.0.114957
 dashboardUrl=http://127.0.0.1:9000/dashboard?id=vosui
-ceTaskId=6d391e73-742e-4d62-a946-1e018308f706
-ceTaskUrl=http://127.0.0.1:9000/api/ce/task?id=6d391e73-742e-4d62-a946-1e018308f706
+ceTaskId=b4b12562-9318-4be1-b37c-2b8ab7b203cb
+ceTaskUrl=http://127.0.0.1:9000/api/ce/task?id=b4b12562-9318-4be1-b37c-2b8ab7b203cb

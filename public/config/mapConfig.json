@@ -25,9 +25,9 @@
   },
   "EDGE_COLORS": {
     "LINEAR": "#0066ff",
-    "CURVE_90": "#ff69b4",
-    "CURVE_180": "#ff69b4",
-    "CURVE_CSC": "#ff69b4",
+    "CURVE_90": "#0066ff",
+    "CURVE_180": "#0066ff",
+    "CURVE_CSC": "#0066ff",
     "S_CURVE": "#0066ff",
     "DEFAULT": "#888888"
   }
