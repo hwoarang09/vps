@@ -6,6 +6,59 @@ import { EdgeType } from "@/types";
 
 const DEBUG = false;
 
+// Ring buffer for O(1) enqueue/dequeue
+export class RingBuffer<T> {
+  private buffer: (T | undefined)[];
+  private head = 0; // 다음에 읽을 위치
+  private tail = 0; // 다음에 쓸 위치
+  private count = 0;
+  private capacity: number;
+
+  constructor(initialCapacity = 16) {
+    this.capacity = initialCapacity;
+    this.buffer = new Array(initialCapacity);
+  }
+
+  get size(): number {
+    return this.count;
+  }
+
+  enqueue(item: T): void {
+    if (this.count === this.capacity) {
+      this.grow();
+    }
+    this.buffer[this.tail] = item;
+    this.tail = (this.tail + 1) % this.capacity;
+    this.count++;
+  }
+
+  dequeue(): T | undefined {
+    if (this.count === 0) return undefined;
+    const item = this.buffer[this.head];
+    this.buffer[this.head] = undefined;
+    this.head = (this.head + 1) % this.capacity;
+    this.count--;
+    return item;
+  }
+
+  peek(): T | undefined {
+    if (this.count === 0) return undefined;
+    return this.buffer[this.head];
+  }
+
+  private grow(): void {
+    const newCapacity = this.capacity * 2;
+    const newBuffer = new Array<T | undefined>(newCapacity);
+    for (let i = 0; i < this.count; i++) {
+      newBuffer[i] = this.buffer[(this.head + i) % this.capacity];
+    }
+    this.buffer = newBuffer;
+    this.head = 0;
+    this.tail = this.count;
+    this.capacity = newCapacity;
+  }
+}
+
 export type Grant = {
   edge: string;
   veh: number;
@@ -20,7 +73,7 @@ export type LockRequest = {
 export type MergeLockNode = {
   name: string;
   requests: LockRequest[];
-  edgeQueues: Record<string, number[]>;
+  edgeQueues: Record<string, RingBuffer<number>>;
   mergedQueue: number[];
   granted: Grant;
   strategyState: Record<string, unknown>;
@@ -70,9 +123,9 @@ export class LockMgr {
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
-      const edgeQueues: Record<string, number[]> = {};
+      const edgeQueues: Record<string, RingBuffer<number>> = {};
       for (const edgeName of incomingEdgeNames) {
-        edgeQueues[edgeName] = [];
+        edgeQueues[edgeName] = new RingBuffer<number>();
       }
 
       this.lockTable[mergeName] = {
@@ -127,7 +180,7 @@ export class LockMgr {
         edgeName,
         requestTime: Date.now(),
       });
-      node.edgeQueues[edgeName]?.push(vehId);
+      node.edgeQueues[edgeName]?.enqueue(vehId);
       if (DEBUG) this.logNodeState(nodeName);
     }
 
@@ -140,13 +193,13 @@ export class LockMgr {
 
     if (node.granted?.veh === vehId) {
       if (DEBUG) console.log(`[LockMgr ${nodeName} VEH${vehId}] RELEASE`);
+      const grantedEdge = node.granted.edge;
       node.granted = null;
 
       node.requests = node.requests.filter((r) => r.vehId !== vehId);
 
-      for (const key in node.edgeQueues) {
-        node.edgeQueues[key] = node.edgeQueues[key].filter((id) => id !== vehId);
-      }
+      // grant 받은 veh는 해당 edge queue의 맨 앞에 있으므로 dequeue로 O(1) 제거
+      node.edgeQueues[grantedEdge]?.dequeue();
 
       if (DEBUG) this.logNodeState(nodeName);
       this.tryGrant(nodeName);
