@@ -12,8 +12,12 @@ import { Play, Pause } from "lucide-react";
 import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/vehicleArrayMode/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
-import { createFabGrid } from "@/utils/fab/fabUtils";
+import { useStationStore } from "@/store/map/stationStore";
+import { useTextStore } from "@/store/map/textStore";
+import { createFabGrid, createFabGridStations, getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
+import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
+import { getStationTextConfig } from "@/config/stationConfig";
 
 /**
  * VehicleTest
@@ -180,10 +184,11 @@ const VehicleTest: React.FC = () => {
     setTestKey(prev => prev + 1); // Force remount to create vehicles
   };
 
-  // Handle FAB Create - clone nodes/edges to create X * Y grid of fabs
+  // Handle FAB Create - clone nodes/edges/stations to create X * Y grid of fabs
   const handleFabCreate = () => {
     const nodes = useNodeStore.getState().nodes;
     const edges = useEdgeStore.getState().edges;
+    const stations = useStationStore.getState().stations;
 
     if (nodes.length === 0 || edges.length === 0) {
       console.warn("[FAB] No nodes or edges to clone");
@@ -198,21 +203,131 @@ const VehicleTest: React.FC = () => {
     disposeShmSimulator();
 
     const totalFabs = fabCountX * fabCountY;
-    console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes and ${edges.length} edges`);
+    console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes, ${edges.length} edges, ${stations.length} stations`);
 
-    // Create grid of fabs
+    // Get bounds for offset calculation
+    const bounds = getNodeBounds(nodes);
+
+    // Create fab infos and save to fabStore
+    const fabInfos = createFabInfos(fabCountX, fabCountY, bounds);
+    useFabStore.getState().setFabGrid(fabCountX, fabCountY, fabInfos);
+    console.log(`[FAB] Created ${fabInfos.length} fab infos`);
+
+    // Create grid of fabs for nodes and edges
     const { allNodes, allEdges } = createFabGrid(nodes, edges, fabCountX, fabCountY);
+
+    // Create grid of fabs for stations
+    const allStations = createFabGridStations(stations, fabCountX, fabCountY, bounds);
 
     // Update stores
     useNodeStore.getState().setNodes(allNodes);
     useEdgeStore.getState().setEdges(allEdges);
+    useStationStore.getState().setStations(allStations);
+
+    // Update text store with fab-separated texts
+    updateTextsForFab(allNodes, allEdges, allStations, fabCountX, fabCountY, bounds);
 
     // Re-initialize LockMgr with new edges
     resetLockMgr();
     getLockMgr().initFromEdges(allEdges);
 
     setIsFabApplied(true);
-    console.log(`[FAB] ✓ Created ${totalFabs} fabs: ${allNodes.length} nodes, ${allEdges.length} edges`);
+    console.log(`[FAB] ✓ Created ${totalFabs} fabs: ${allNodes.length} nodes, ${allEdges.length} edges, ${allStations.length} stations`);
+  };
+
+  // Update text store with fab-separated data
+  const updateTextsForFab = (
+    nodes: ReturnType<typeof useNodeStore.getState>["nodes"],
+    edges: ReturnType<typeof useEdgeStore.getState>["edges"],
+    stations: ReturnType<typeof useStationStore.getState>["stations"],
+    gridX: number,
+    gridY: number,
+    bounds: ReturnType<typeof getNodeBounds>
+  ) => {
+    const textStore = useTextStore.getState();
+    const fabInfos = useFabStore.getState().fabs;
+    textStore.clearAllTexts();
+
+    const totalFabs = gridX * gridY;
+    const stationTextConfig = getStationTextConfig();
+
+    // 각 텍스트가 어느 fab에 속하는지 판별하는 함수
+    const getFabIndex = (x: number, y: number): number => {
+      for (let i = 0; i < fabInfos.length; i++) {
+        const fab = fabInfos[i];
+        if (x >= fab.xMin && x <= fab.xMax && y >= fab.yMin && y <= fab.yMax) {
+          return i;
+        }
+      }
+      return 0; // fallback
+    };
+
+    // Fab별 텍스트 배열 초기화
+    const textsByFab: import("@/store/map/textStore").FabTextData[] = [];
+    for (let i = 0; i < totalFabs; i++) {
+      textsByFab.push({ nodeTexts: [], edgeTexts: [], stationTexts: [] });
+    }
+
+    // Node texts - fab별 분리
+    const nodeMap = new Map(nodes.map(n => [n.node_name, n]));
+    for (const node of nodes) {
+      if (node.node_name.startsWith("TMP_")) continue;
+      const fabIdx = getFabIndex(node.editor_x, node.editor_y);
+      textsByFab[fabIdx].nodeTexts.push({
+        name: node.node_name,
+        position: { x: node.editor_x, y: node.editor_y, z: node.editor_z },
+      });
+    }
+
+    // Edge texts - fab별 분리
+    for (const edge of edges) {
+      if (edge.edge_name.startsWith("TMP_")) continue;
+      const fromNode = nodeMap.get(edge.from_node);
+      const toNode = nodeMap.get(edge.to_node);
+      if (!fromNode || !toNode) continue;
+
+      const midX = (fromNode.editor_x + toNode.editor_x) / 2;
+      const midY = (fromNode.editor_y + toNode.editor_y) / 2;
+      const midZ = (fromNode.editor_z + toNode.editor_z) / 2;
+      const fabIdx = getFabIndex(midX, midY);
+
+      textsByFab[fabIdx].edgeTexts.push({
+        name: edge.edge_name,
+        position: { x: midX, y: midY, z: midZ },
+      });
+    }
+
+    // Station texts - fab별 분리
+    for (const station of stations) {
+      const fabIdx = getFabIndex(station.position.x, station.position.y);
+      textsByFab[fabIdx].stationTexts.push({
+        name: station.station_name,
+        position: {
+          x: station.position.x,
+          y: station.position.y,
+          z: station.position.z + stationTextConfig.Z_OFFSET,
+        },
+      });
+    }
+
+    // Store에 저장
+    textStore.setTextsByFab(textsByFab);
+
+    // 기존 array도 업데이트 (호환성)
+    const allNodes = textsByFab.flatMap(f => f.nodeTexts);
+    const allEdges = textsByFab.flatMap(f => f.edgeTexts);
+    const allStations = textsByFab.flatMap(f => f.stationTexts);
+    textStore.setNodeTextsArray(allNodes);
+    textStore.setEdgeTextsArray(allEdges);
+    textStore.setStationTextsArray(allStations);
+
+    textStore.forceUpdate();
+
+    // 로그
+    for (let i = 0; i < totalFabs; i++) {
+      const f = textsByFab[i];
+      console.log(`[FAB ${i}] nodes: ${f.nodeTexts.length}, edges: ${f.edgeTexts.length}, stations: ${f.stationTexts.length}`);
+    }
   };
 
   // Handle FAB Clear - reload map to reset to original state

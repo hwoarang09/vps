@@ -27,6 +27,8 @@ export interface SlotData {
   slotGroup?: Int32Array;
   slotVehicle?: Int32Array;
   slotPosition: Int32Array;
+  // Group range for efficient iteration (groupStart[i] to groupStart[i+1])
+  groupStart?: Int32Array;
 }
 
 export interface TextGroup {
@@ -36,16 +38,119 @@ export interface TextGroup {
   digits: number[];
 }
 
+// ============================================================================
+// Spatial Grid - 공간 분할로 LOD 체크 최적화
+// ============================================================================
+
+/**
+ * 공간 그리드 데이터 구조
+ * - cellSize 단위로 월드를 분할
+ * - 각 셀에 해당하는 그룹 인덱스 저장
+ */
+export interface SpatialGridData {
+  cellSize: number;
+  cells: Map<string, number[]>; // "x,y" -> group indices
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * 셀 키 생성 (x, y 좌표를 셀 좌표로 변환)
+ */
+function getCellKey(x: number, y: number, cellSize: number): string {
+  const cx = Math.floor(x / cellSize);
+  const cy = Math.floor(y / cellSize);
+  return `${cx},${cy}`;
+}
+
+/**
+ * TextGroup 배열에서 SpatialGrid 생성
+ * @param groups - TextGroup 배열
+ * @param cellSize - 셀 크기 (lodDistance와 동일하게 설정 권장)
+ */
+export function buildSpatialGrid(groups: TextGroup[], cellSize: number): SpatialGridData {
+  const cells = new Map<string, number[]>();
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
+
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const key = getCellKey(g.x, g.y, cellSize);
+
+    let arr = cells.get(key);
+    if (!arr) {
+      arr = [];
+      cells.set(key, arr);
+    }
+    arr.push(i);
+
+    // Bounds tracking
+    if (g.x < minX) minX = g.x;
+    if (g.x > maxX) maxX = g.x;
+    if (g.y < minY) minY = g.y;
+    if (g.y > maxY) maxY = g.y;
+  }
+
+  return { cellSize, cells, minX, minY, maxX, maxY };
+}
+
+/**
+ * 카메라 위치 기반으로 visible 그룹 인덱스 수집 (그리드 활용)
+ * @param grid - SpatialGridData
+ * @param cx - 카메라 X
+ * @param cy - 카메라 Y
+ * @param lodDist - LOD 거리
+ * @param visibleOut - 출력 배열 (재사용)
+ */
+export function getVisibleGroupsFromGrid(
+  grid: SpatialGridData,
+  cx: number,
+  cy: number,
+  lodDist: number,
+  visibleOut: number[]
+): void {
+  visibleOut.length = 0;
+
+  const { cellSize, cells } = grid;
+
+  // 카메라 위치의 셀 좌표
+  const camCellX = Math.floor(cx / cellSize);
+  const camCellY = Math.floor(cy / cellSize);
+
+  // lodDist 범위 내 셀 개수 (양쪽으로)
+  const cellRange = Math.ceil(lodDist / cellSize);
+
+  // 주변 셀들 순회
+  for (let dx = -cellRange; dx <= cellRange; dx++) {
+    for (let dy = -cellRange; dy <= cellRange; dy++) {
+      const key = `${camCellX + dx},${camCellY + dy}`;
+      const groupIndices = cells.get(key);
+      if (groupIndices) {
+        for (const idx of groupIndices) {
+          visibleOut.push(idx);
+        }
+      }
+    }
+  }
+}
+
 /**
  * TextGroup 배열에서 인스턴싱 슬롯 데이터 생성
  */
 export function buildSlotData(groups: TextGroup[]): SlotData | null {
   if (!groups || groups.length === 0) return null;
 
+  // Build groupStart array for efficient group-based iteration
+  // groupStart[i] = start index of group i, groupStart[groups.length] = total
+  const groupStart = new Int32Array(groups.length + 1);
   let totalCharacters = 0;
-  for (const group of groups) {
-    totalCharacters += group.digits.length;
+  for (let i = 0; i < groups.length; i++) {
+    groupStart[i] = totalCharacters;
+    totalCharacters += groups[i].digits.length;
   }
+  groupStart[groups.length] = totalCharacters;
 
   const counts = new Array(CHAR_COUNT).fill(0);
   const slotDigit = new Int8Array(totalCharacters);
@@ -74,7 +179,7 @@ export function buildSlotData(groups: TextGroup[]): SlotData | null {
     currentSlot[digit]++;
   }
 
-  return { totalCharacters, counts, slotIndex, slotDigit, slotGroup, slotPosition };
+  return { totalCharacters, counts, slotIndex, slotDigit, slotGroup, slotPosition, groupStart };
 }
 
 /**
@@ -122,8 +227,11 @@ export function buildVehicleSlotData(numVehicles: number, labelLength: number): 
   };
 }
 
+// Track previous culling state per component instance (use WeakMap to avoid memory leak)
+const cullingStateCache = new WeakMap<SlotData, boolean>();
+
 /**
- * 카메라 고도 기반 전체 컬링
+ * 카메라 고도 기반 전체 컬링 (최적화: 이전 상태와 동일하면 스킵)
  * @returns true면 컬링됨 (렌더링 스킵)
  */
 export function applyHighAltitudeCulling(
@@ -132,19 +240,99 @@ export function applyHighAltitudeCulling(
   data: SlotData,
   meshes: (THREE.InstancedMesh | null)[]
 ): boolean {
-  if (cameraZ <= cutoff) return false;
+  const shouldCull = cameraZ > cutoff;
+  const wasCulled = cullingStateCache.get(data) ?? false;
 
-  const { totalCharacters, slotDigit, slotIndex } = data;
-  for (let i = 0; i < totalCharacters; i++) {
-    const d = slotDigit[i];
-    const slot = slotIndex[i];
-    const mesh = meshes[d];
-    if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
+  // If state hasn't changed, skip expensive matrix updates
+  if (shouldCull === wasCulled) {
+    return shouldCull;
   }
-  for (const msh of meshes) {
-    if (msh) msh.instanceMatrix.needsUpdate = true;
+
+  // State changed - update cache
+  cullingStateCache.set(data, shouldCull);
+
+  if (shouldCull) {
+    // Transition to culled: hide all
+    const { totalCharacters, slotDigit, slotIndex } = data;
+    for (let i = 0; i < totalCharacters; i++) {
+      const d = slotDigit[i];
+      const slot = slotIndex[i];
+      const mesh = meshes[d];
+      if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
+    }
+    for (const msh of meshes) {
+      if (msh) msh.instanceMatrix.needsUpdate = true;
+    }
   }
-  return true;
+  // If transitioning from culled to visible, the next frame's normal update will handle it
+
+  return shouldCull;
+}
+
+// Track LOD culling state per component instance
+const lodCullingStateCache = new WeakMap<SlotData, boolean>();
+
+/**
+ * Fast LOD check using simple x/y distance (no sqrt, no z)
+ */
+function isOutsideLOD(cx: number, cy: number, gx: number, gy: number, lodDist: number): boolean {
+  const dx = cx - gx;
+  const dy = cy - gy;
+  return dx > lodDist || dx < -lodDist || dy > lodDist || dy < -lodDist;
+}
+
+/**
+ * LOD 기반 컬링 - visible 그룹 인덱스 배열 반환
+ * @param lodDist - LOD distance (NOT squared)
+ * @param visibleGroupsOut - Output: will be filled with visible group indices
+ * @returns true if ALL groups are culled (early exit)
+ */
+export function applyLODCulling(
+  cameraX: number,
+  cameraY: number,
+  _cameraZ: number,
+  lodDist: number,
+  groups: TextGroup[],
+  data: SlotData,
+  meshes: (THREE.InstancedMesh | null)[],
+  visibleGroupsOut: number[] // Output: visible group indices
+): boolean {
+  // Clear and collect visible groups
+  visibleGroupsOut.length = 0;
+
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+    if (!isOutsideLOD(cameraX, cameraY, group.x, group.y, lodDist)) {
+      visibleGroupsOut.push(i);
+    }
+  }
+
+  const shouldCull = visibleGroupsOut.length === 0;
+  const wasCulled = lodCullingStateCache.get(data) ?? false;
+
+  // If all culled and state hasn't changed, skip expensive matrix updates
+  if (shouldCull && shouldCull === wasCulled) {
+    return true;
+  }
+
+  // Update cache
+  lodCullingStateCache.set(data, shouldCull);
+
+  if (shouldCull) {
+    // Transition to all culled: hide all
+    const { totalCharacters, slotDigit, slotIndex } = data;
+    for (let i = 0; i < totalCharacters; i++) {
+      const d = slotDigit[i];
+      const slot = slotIndex[i];
+      const mesh = meshes[d];
+      if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
+    }
+    for (const msh of meshes) {
+      if (msh) msh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  return shouldCull;
 }
 
 /**

@@ -44,6 +44,7 @@ export interface Station {
 interface StationStore {
   stations: Station[];
   loadStations: (rawData: StationRawData[]) => Station[];
+  setStations: (stations: Station[]) => void;
   clearStations: () => void;
 }
 
@@ -109,7 +110,7 @@ const calculateStationPosition = (
   // Calculate perpendicular vector to edge direction
   const edgeDx = toNode.editor_x - fromNode.editor_x;
   const edgeDy = toNode.editor_y - fromNode.editor_y;
-  const edgeLength = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+  const edgeLength = Math.hypot(edgeDx, edgeDy);
 
   let x_final = x_base;
   let y_final = y_base;
@@ -153,6 +154,11 @@ export const useStationStore = create<StationStore>((set) => ({
     console.log(`[StationStore] Loaded ${stations.length} stations`);
     set({ stations });
     return stations;
+  },
+
+  setStations: (stations: Station[]) => {
+    console.log(`[StationStore] Setting ${stations.length} stations`);
+    set({ stations });
   },
 
   clearStations: () => set({ stations: [] }),

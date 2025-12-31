@@ -1,14 +1,22 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 
-// 0-9, N, E, V, H (14개)
-export const ALL_CHARS = ["0","1","2","3","4","5","6","7","8","9","N","E","V","H"] as const;
+// 0-9, N, E, V, H, _, F, A, B, S, T, L, O, P, C, D, I, K, G, M, R, U, W, X, Y, Z (26 letters + 10 digits + underscore)
+export const ALL_CHARS = [
+  "0","1","2","3","4","5","6","7","8","9",
+  "A","B","C","D","E","F","G","H","I","J","K","L","M",
+  "N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+  "_","-",".",
+] as const;
 export const CHAR_COUNT = ALL_CHARS.length;
 
-export const CHAR_MAP: Record<string, number> = {
-  "0":0,"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,
-  "N":10,"E":11,"V":12,"H":13,
-};
+export const CHAR_MAP: Record<string, number> = (() => {
+  const map: Record<string, number> = {};
+  ALL_CHARS.forEach((char, index) => {
+    map[char] = index;
+  });
+  return map;
+})();
 
 export function textToDigits(text: string): number[] {
   return text.split("").map(c => CHAR_MAP[c.toUpperCase()] ?? 0);

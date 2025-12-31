@@ -6,16 +6,23 @@ import { CHAR_COUNT } from "./useDigitMaterials";
 import {
   HIDE_MATRIX,
   buildSlotData,
+  buildSpatialGrid,
   applyHighAltitudeCulling,
+  getVisibleGroupsFromGrid,
   updateBillboardRotation,
   getBillboardQuaternion,
   getBillboardRight,
-  distanceSquared,
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
 
 import type { TextGroup } from "./instancedTextUtils";
 export type { TextGroup } from "./instancedTextUtils";
+
+// Zero-GC: Module-level scratchpads (allocated once)
+const _tempMatrix = new THREE.Matrix4();
+const _tempScale = new THREE.Vector3();
+const _tempOffset = new THREE.Vector3();
+const _tempFinalPos = new THREE.Vector3();
 
 interface Props {
   readonly groups?: TextGroup[];
@@ -35,76 +42,118 @@ export default function InstancedText({
   color = "#ffffff",
   bgColor = "transparent",
   zOffset = 0.5,
-  lodDistance = 50,
+  lodDistance = 10,
   camHeightCutoff = 60,
 }: Props) {
-  const LOD_DIST_SQ = lodDistance * lodDistance;
-
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
   const slotData = React.useMemo(() => {
     return buildSlotData(groups);
   }, [groups]);
 
+  // Spatial Grid 빌드 (LOD 최적화용 - 한 번만 계산)
+  const spatialGrid = React.useMemo(() => {
+    if (groups.length === 0) return null;
+    return buildSpatialGrid(groups, lodDistance);
+  }, [groups, lodDistance]);
+
   const instRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(CHAR_COUNT).fill(null));
+
+  // Zero-GC: Persistent arrays (reused every frame)
+  const visibleGroupsRef = useRef<number[]>([]);
+  const prevVisibleSetRef = useRef<Set<number>>(new Set());
+  const newlyCulledRef = useRef<number[]>([]);
 
   useFrame(({ camera }) => {
     const D = slotData;
-    if (!D || groups.length === 0) return;
+    if (!D || groups.length === 0 || !spatialGrid) return;
 
-    const { slotDigit, slotIndex, slotGroup, slotPosition, totalCharacters } = D;
+    const { slotDigit, slotIndex, slotPosition, groupStart } = D;
     const { x: cx, y: cy, z: cz } = camera.position;
 
-    if (!slotGroup) return; // 필수 데이터 체크
+    if (!groupStart) return;
 
+    // Early exit 1: Camera too high
     if (applyHighAltitudeCulling(cz, camHeightCutoff, D, instRefs.current)) {
       return;
     }
 
-    const m = new THREE.Matrix4();
-    const s = new THREE.Vector3(scale, scale, 1);
+    // Grid-based LOD: 수십만개 전체 순회 → 근처 셀만 체크
+    const visibleGroups = visibleGroupsRef.current;
+    getVisibleGroupsFromGrid(spatialGrid, cx, cy, lodDistance, visibleGroups);
+
+    // Find newly culled groups (was visible last frame, now culled)
+    const prevVisible = prevVisibleSetRef.current;
+    const newlyCulled = newlyCulledRef.current;
+    newlyCulled.length = 0;
+
+    // Build current visible set and find newly culled
+    const currentVisibleSet = new Set(visibleGroups);
+    for (const groupIdx of prevVisible) {
+      if (!currentVisibleSet.has(groupIdx)) {
+        newlyCulled.push(groupIdx);
+      }
+    }
+
+    // Update prevVisible for next frame
+    prevVisible.clear();
+    for (const groupIdx of visibleGroups) {
+      prevVisible.add(groupIdx);
+    }
+
+    // Hide newly culled groups
+    for (const groupIdx of newlyCulled) {
+      const start = groupStart[groupIdx];
+      const end = groupStart[groupIdx + 1];
+      for (let i = start; i < end; i++) {
+        const d = slotDigit[i];
+        const slot = slotIndex[i];
+        const mesh = instRefs.current[d];
+        if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
+      }
+    }
+
+    // Early exit if no visible groups (after hiding culled ones)
+    if (visibleGroups.length === 0) {
+      for (const msh of instRefs.current) {
+        if (msh) msh.instanceMatrix.needsUpdate = true;
+      }
+      return;
+    }
+
+    // Zero-GC: Reuse scratchpads
+    _tempScale.set(scale, scale, 1);
     const charSpacing = 0.2 * scale;
 
-    const groupLOD = new Map<number, boolean>();
-    
     // Zero-GC: Update billboard rotation once per frame
     updateBillboardRotation(camera.quaternion);
     const quaternion = getBillboardQuaternion();
     const right = getBillboardRight();
 
-    for (let i = 0; i < totalCharacters; i++) {
-      const d = slotDigit[i];
-      const slot = slotIndex[i];
-      const groupIdx = slotGroup[i];
-      const posIdx = slotPosition[i];
-      const mesh = instRefs.current[d];
-      if (!mesh) continue;
-
+    // Only iterate over VISIBLE groups
+    for (const groupIdx of visibleGroups) {
       const group = groups[groupIdx];
       const gx = group.x;
       const gy = group.y;
       const gz = group.z + zOffset;
 
-      // LOD 체크 (그룹당 한번만)
-      if (!groupLOD.has(groupIdx)) {
-        const distSq = distanceSquared(cx, cy, cz, gx, gy, gz);
-        groupLOD.set(groupIdx, distSq > LOD_DIST_SQ);
+      const start = groupStart[groupIdx];
+      const end = groupStart[groupIdx + 1];
+
+      for (let i = start; i < end; i++) {
+        const d = slotDigit[i];
+        const slot = slotIndex[i];
+        const posIdx = slotPosition[i];
+        const mesh = instRefs.current[d];
+        if (!mesh) continue;
+
+        const halfLen = (group.digits.length - 1) / 2;
+        const offsetX = (posIdx - halfLen) * charSpacing;
+        _tempOffset.copy(right).multiplyScalar(offsetX);
+        _tempFinalPos.set(gx, gy, gz).add(_tempOffset);
+
+        _tempMatrix.compose(_tempFinalPos, quaternion, _tempScale);
+        mesh.setMatrixAt(slot, _tempMatrix);
       }
-
-      if (groupLOD.get(groupIdx)) {
-        mesh.setMatrixAt(slot, HIDE_MATRIX);
-        continue;
-      }
-
-      // Billboard rotation is uniform for all groups (camera-facing)
-      // quaternion and right are pre-calculated above
-
-      const halfLen = (group.digits.length - 1) / 2;
-      const offsetX = (posIdx - halfLen) * charSpacing;
-      const offsetVector = right.clone().multiplyScalar(offsetX);
-      const finalPos = new THREE.Vector3(gx, gy, gz).add(offsetVector);
-
-      m.compose(finalPos, quaternion, s);
-      mesh.setMatrixAt(slot, m);
     }
 
     for (const msh of instRefs.current) {

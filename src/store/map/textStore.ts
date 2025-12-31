@@ -14,6 +14,13 @@ export interface TextItem {
   position: TextPosition;
 }
 
+// Fab-separated text data
+export interface FabTextData {
+  nodeTexts: TextItem[];
+  edgeTexts: TextItem[];
+  stationTexts: TextItem[];
+}
+
 // Text store interface
 interface TextStore {
   // Mode: dict or array
@@ -28,6 +35,9 @@ interface TextStore {
   nodeTextsArray: TextItem[];
   edgeTextsArray: TextItem[];
   stationTextsArray: TextItem[];
+
+  // Fab-separated mode data (fab index -> texts)
+  textsByFab: FabTextData[];
 
   // Force update trigger
   updateTrigger: number;
@@ -62,6 +72,10 @@ interface TextStore {
   clearAllTexts: () => void;
   forceUpdate: () => void;
 
+  // Fab-separated mode actions
+  setTextsByFab: (textsByFab: FabTextData[]) => void;
+  getTextsByFabIndex: (fabIndex: number) => FabTextData | null;
+
   // Utility functions
   getAllTexts: () => Record<string, TextPosition>; // Combined node + edge texts (dict mode)
   getAllTextsArray: () => TextItem[]; // Combined node + edge texts (array mode)
@@ -76,6 +90,7 @@ export const useTextStore = create<TextStore>((set, get) => ({
   nodeTextsArray: [],
   edgeTextsArray: [],
   stationTextsArray: [],
+  textsByFab: [],
   updateTrigger: 0,
 
   // Mode initialization
@@ -234,6 +249,7 @@ export const useTextStore = create<TextStore>((set, get) => ({
       nodeTextsArray: [],
       edgeTextsArray: [],
       stationTextsArray: [],
+      textsByFab: [],
       updateTrigger: state.updateTrigger + 1,
     })),
 
@@ -241,6 +257,19 @@ export const useTextStore = create<TextStore>((set, get) => ({
     set((state) => ({
       updateTrigger: state.updateTrigger + 1,
     })),
+
+  // Fab-separated mode actions
+  setTextsByFab: (textsByFab) =>
+    set((state) => ({
+      textsByFab,
+      updateTrigger: state.updateTrigger + 1,
+    })),
+
+  getTextsByFabIndex: (fabIndex) => {
+    const { textsByFab } = get();
+    if (fabIndex < 0 || fabIndex >= textsByFab.length) return null;
+    return textsByFab[fabIndex];
+  },
 
   // Utility functions
   getAllTexts: () => {

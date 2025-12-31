@@ -2,6 +2,7 @@
 // Fab (Fabrication) system utilities for creating multiple map instances
 
 import { Node, Edge } from "@/types";
+import { Station } from "@/store/map/stationStore";
 import * as THREE from "three";
 
 export interface MapBounds {
@@ -288,6 +289,54 @@ export interface FabOffset {
   offsetY: number;
 }
 
+// FabInfo는 fabStore에서 정의
+export type { FabInfo } from "@/store/map/fabStore";
+
+/**
+ * Fab grid 생성 시 각 fab의 정보 배열 생성
+ * @param gridX - 가로 fab 개수
+ * @param gridY - 세로 fab 개수
+ * @param bounds - 원본 맵의 bounds
+ * @param spacingPercent - fab 간격 (기본 10%)
+ */
+export function createFabInfos(
+  gridX: number,
+  gridY: number,
+  bounds: MapBounds,
+  spacingPercent: number = 10
+): import("@/store/map/fabStore").FabInfo[] {
+  const fabInfos: import("@/store/map/fabStore").FabInfo[] = [];
+  const spacing = 1 + spacingPercent / 100; // 1.1 for 10%
+
+  for (let row = 0; row < gridY; row++) {
+    for (let col = 0; col < gridX; col++) {
+      const fabIndex = row * gridX + col;
+
+      const offsetX = col * bounds.width * spacing;
+      const offsetY = row * bounds.height * spacing;
+
+      const xMin = bounds.xMin + offsetX;
+      const xMax = bounds.xMax + offsetX;
+      const yMin = bounds.yMin + offsetY;
+      const yMax = bounds.yMax + offsetY;
+
+      fabInfos.push({
+        fabIndex,
+        col,
+        row,
+        xMin,
+        xMax,
+        yMin,
+        yMax,
+        centerX: (xMin + xMax) / 2,
+        centerY: (yMin + yMax) / 2,
+      });
+    }
+  }
+
+  return fabInfos;
+}
+
 /**
  * Convert 4-digit ID to 5-digit ID format
  * N0001 → N00001
@@ -466,4 +515,113 @@ export function cloneFabEdges(
   offset?: FabOffset
 ): Edge[] {
   return originalEdges.map(edge => cloneFabEdge(edge, fabIndex, offset));
+}
+
+// ============================================================================
+// [7] Station Clone Functions for FAB Grid
+// ============================================================================
+
+/**
+ * Create station name with fab suffix (fab_col_row format)
+ * @param originalName - Original station name
+ * @param col - Column index (0-based)
+ * @param row - Row index (0-based)
+ * @returns New station name with fab suffix
+ */
+function createFabStationName(originalName: string, col: number, row: number): string {
+  // fab_0_0 is original (no suffix), others get fab_col_row suffix
+  if (col === 0 && row === 0) {
+    return originalName;
+  }
+  return `${originalName}_fab_${col}_${row}`;
+}
+
+/**
+ * Create edge name with fab suffix for station's nearest_edge
+ * @param originalEdgeName - Original edge name
+ * @param fabIndex - Fab index (0 for original)
+ * @returns New edge name with offset
+ */
+function createFabEdgeName(originalEdgeName: string, fabIndex: number): string {
+  if (fabIndex === 0) {
+    return originalEdgeName;
+  }
+  // Use the same offset logic as edges
+  const idOffset = fabIndex * 1000;
+  return addOffsetToId(originalEdgeName, idOffset);
+}
+
+/**
+ * Clone a single station for fab grid
+ * @param station - Original station
+ * @param col - Column index
+ * @param row - Row index
+ * @param fabIndex - Fab index (row * gridX + col)
+ * @param xOffset - X coordinate offset
+ * @param yOffset - Y coordinate offset
+ * @returns Cloned station
+ */
+export function cloneFabStation(
+  station: Station,
+  col: number,
+  row: number,
+  fabIndex: number,
+  xOffset: number,
+  yOffset: number
+): Station {
+  return {
+    ...station,
+    station_name: createFabStationName(station.station_name, col, row),
+    nearest_edge: createFabEdgeName(station.nearest_edge, fabIndex),
+    position: {
+      x: station.position.x + xOffset,
+      y: station.position.y + yOffset,
+      z: station.position.z,
+    },
+  };
+}
+
+/**
+ * Create FAB Grid for stations
+ * @param stations - Original station array
+ * @param gridX - Number of columns
+ * @param gridY - Number of rows
+ * @param bounds - Map bounds for offset calculation
+ * @returns All stations including originals and clones
+ */
+export function createFabGridStations(
+  stations: Station[],
+  gridX: number,
+  gridY: number,
+  bounds: MapBounds
+): Station[] {
+  if (stations.length === 0) {
+    return [];
+  }
+
+  const xOffset = bounds.width * 1.1;
+  const yOffset = bounds.height * 1.1;
+
+  const allStations: Station[] = [];
+
+  for (let row = 0; row < gridY; row++) {
+    for (let col = 0; col < gridX; col++) {
+      const fabIndex = row * gridX + col;
+      const currentXOffset = col * xOffset;
+      const currentYOffset = row * yOffset;
+
+      if (fabIndex === 0) {
+        // Original stations
+        allStations.push(...stations);
+      } else {
+        // Cloned stations
+        const clonedStations = stations.map(station =>
+          cloneFabStation(station, col, row, fabIndex, currentXOffset, currentYOffset)
+        );
+        allStations.push(...clonedStations);
+      }
+    }
+  }
+
+  return allStations;
 }
