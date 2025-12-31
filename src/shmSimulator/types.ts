@@ -56,7 +56,7 @@ export function createDefaultConfig(): SimulationConfig {
     linearAcceleration: 3,
     linearDeceleration: 5,
     curveMaxSpeed: 1,
-    curveAcceleration: 0,
+    curveAcceleration: 1,
     approachMinSpeed: 2,
     brakeMinSpeed: 1,
     edgeMargin: 0.5,

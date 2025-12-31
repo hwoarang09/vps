@@ -7,7 +7,7 @@ import { EngineStore } from "./EngineStore";
 import { LockMgr } from "../logic/LockMgr";
 import { TransferMgr, VehicleLoop } from "../logic/TransferMgr";
 import { checkCollisions, CollisionCheckContext } from "../collisionLogic/collisionCheck";
-import { updateMovement, MovementUpdateContext } from "../movementLogic/movementUpdate";
+import { updateMovement, MovementUpdateContextLocal } from "../movementLogic/movementUpdate";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
@@ -210,7 +210,7 @@ export class SimulationEngine {
     checkCollisions(collisionCtx);
 
     // 2. Movement Update
-    const movementCtx: MovementUpdateContext = {
+    const movementCtx: MovementUpdateContextLocal = {
       vehicleDataArray: this.vehicleDataArray,
       sensorPointArray: this.sensorPointArray,
       edgeArray: this.edges,

@@ -123,8 +123,6 @@ export function updateMovement(ctx: MovementUpdateContext) {
       deceleration,
       currentEdge,
       hitZone,
-      velocity,
-      config.curveMaxSpeed,
       config.curveAcceleration,
       SCRATCH_ACCEL
     );
@@ -330,20 +328,15 @@ function calculateAppliedAccelAndDecel(
   deceleration: number,
   currentEdge: Edge,
   hitZone: number,
-  currentVelocity: number,
-  curveMaxSpeed: number,
   curveAcceleration: number,
   target: typeof SCRATCH_ACCEL
 ) {
   let appliedAccel = acceleration;
   let appliedDecel = 0;
 
+  // Override acceleration for curves
   if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
-    if (currentVelocity >= curveMaxSpeed) {
-      appliedAccel = 0;
-    } else {
-      appliedAccel = curveAcceleration;
-    }
+    appliedAccel = curveAcceleration;
   }
 
   if (hitZone >= 0) {
