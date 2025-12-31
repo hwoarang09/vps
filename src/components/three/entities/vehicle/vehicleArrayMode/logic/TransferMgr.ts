@@ -1,18 +1,25 @@
+// vehicleArrayMode/logic/TransferMgr.ts
 // Wrapper using global vehicleDataArray
+
 import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
-import { Edge } from "@/types/edge";
+import type { Edge } from "@/types/edge";
 import { VehicleLoop, getNextEdgeInLoop } from "@/utils/vehicle/loopMaker";
 import { TransferMode } from "@/store/vehicle/arrayMode/vehicleStore";
 import {
-  TransferMgr as TransferMgrBase,
+  TransferMgr,
   type TransferMode as TransferModeBase,
 } from "@/common/vehicle/logic/TransferMgr";
 
-// Re-export getNextEdgeInLoop for compatibility
-export { getNextEdgeInLoop } from "@/utils/vehicle/loopMaker";
+// Re-export types and functions
+export { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
+export { getNextEdgeInLoop, type VehicleLoop } from "@/utils/vehicle/loopMaker";
 
 // Singleton instance
-const _transferMgr = new TransferMgrBase();
+const _transferMgr = new TransferMgr();
+
+export function getTransferMgr() {
+  return _transferMgr;
+}
 
 export function enqueueVehicleTransfer(vehicleIndex: number) {
   _transferMgr.enqueueVehicleTransfer(vehicleIndex);
