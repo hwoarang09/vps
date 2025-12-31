@@ -8,6 +8,7 @@ export const HIDE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
 // ============================================================================
 const _tempMatrix = new THREE.Matrix4();
 const _tempPos = new THREE.Vector3();
+const _tempFinalPos = new THREE.Vector3();
 const _tempOffset = new THREE.Vector3();
 const _tempScale = new THREE.Vector3();
 const _tempQuat = new THREE.Quaternion();
@@ -132,6 +133,106 @@ export function getVisibleGroupsFromGrid(
           visibleOut.push(idx);
         }
       }
+    }
+  }
+}
+
+/**
+ * Find newly culled groups (was visible last frame, now culled)
+ */
+export function findNewlyCulledGroups(
+  prevVisible: Set<number>,
+  currentVisible: number[],
+  newlyCulledOut: number[]
+): void {
+  newlyCulledOut.length = 0;
+  const currentVisibleSet = new Set(currentVisible);
+
+  for (const groupIdx of prevVisible) {
+    if (!currentVisibleSet.has(groupIdx)) {
+      newlyCulledOut.push(groupIdx);
+    }
+  }
+}
+
+/**
+ * Hide characters for culled groups
+ */
+export function hideGroupCharacters(
+  groupIndices: number[],
+  groupStart: Int32Array,
+  slotDigit: Int8Array,
+  slotIndex: Int32Array,
+  meshes: (THREE.InstancedMesh | null)[]
+): void {
+  for (const groupIdx of groupIndices) {
+    const start = groupStart[groupIdx];
+    const end = groupStart[groupIdx + 1];
+    for (let i = start; i < end; i++) {
+      const d = slotDigit[i];
+      const slot = slotIndex[i];
+      const mesh = meshes[d];
+      if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
+    }
+  }
+}
+
+/**
+ * Update instance matrices for all meshes
+ */
+export function updateInstanceMatrices(meshes: (THREE.InstancedMesh | null)[]): void {
+  for (const msh of meshes) {
+    if (msh) msh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/**
+ * Render visible group characters with billboard transforms
+ */
+export function renderVisibleGroups(
+  visibleGroups: number[],
+  groups: TextGroup[],
+  groupStart: Int32Array,
+  slotDigit: Int8Array,
+  slotIndex: Int32Array,
+  slotPosition: Int32Array,
+  meshes: (THREE.InstancedMesh | null)[],
+  params: {
+    scale: number;
+    charSpacing: number;
+    zOffset: number;
+    quaternion: THREE.Quaternion;
+    right: THREE.Vector3;
+  }
+): void {
+  const { scale, charSpacing, zOffset, quaternion, right } = params;
+
+  // Zero-GC: Reuse scratchpads
+  _tempScale.set(scale, scale, 1);
+
+  for (const groupIdx of visibleGroups) {
+    const group = groups[groupIdx];
+    const gx = group.x;
+    const gy = group.y;
+    const gz = group.z + zOffset;
+
+    const start = groupStart[groupIdx];
+    const end = groupStart[groupIdx + 1];
+
+    for (let i = start; i < end; i++) {
+      const d = slotDigit[i];
+      const slot = slotIndex[i];
+      const posIdx = slotPosition[i];
+      const mesh = meshes[d];
+      if (!mesh) continue;
+
+      const halfLen = (group.digits.length - 1) / 2;
+      const offsetX = (posIdx - halfLen) * charSpacing;
+      _tempOffset.copy(right).multiplyScalar(offsetX);
+      _tempFinalPos.set(gx, gy, gz).add(_tempOffset);
+
+      _tempMatrix.compose(_tempFinalPos, quaternion, _tempScale);
+      mesh.setMatrixAt(slot, _tempMatrix);
     }
   }
 }
@@ -269,72 +370,6 @@ export function applyHighAltitudeCulling(
   return shouldCull;
 }
 
-// Track LOD culling state per component instance
-const lodCullingStateCache = new WeakMap<SlotData, boolean>();
-
-/**
- * Fast LOD check using simple x/y distance (no sqrt, no z)
- */
-function isOutsideLOD(cx: number, cy: number, gx: number, gy: number, lodDist: number): boolean {
-  const dx = cx - gx;
-  const dy = cy - gy;
-  return dx > lodDist || dx < -lodDist || dy > lodDist || dy < -lodDist;
-}
-
-/**
- * LOD 기반 컬링 - visible 그룹 인덱스 배열 반환
- * @param lodDist - LOD distance (NOT squared)
- * @param visibleGroupsOut - Output: will be filled with visible group indices
- * @returns true if ALL groups are culled (early exit)
- */
-export function applyLODCulling(
-  cameraX: number,
-  cameraY: number,
-  _cameraZ: number,
-  lodDist: number,
-  groups: TextGroup[],
-  data: SlotData,
-  meshes: (THREE.InstancedMesh | null)[],
-  visibleGroupsOut: number[] // Output: visible group indices
-): boolean {
-  // Clear and collect visible groups
-  visibleGroupsOut.length = 0;
-
-  for (let i = 0; i < groups.length; i++) {
-    const group = groups[i];
-    if (!isOutsideLOD(cameraX, cameraY, group.x, group.y, lodDist)) {
-      visibleGroupsOut.push(i);
-    }
-  }
-
-  const shouldCull = visibleGroupsOut.length === 0;
-  const wasCulled = lodCullingStateCache.get(data) ?? false;
-
-  // If all culled and state hasn't changed, skip expensive matrix updates
-  if (shouldCull && shouldCull === wasCulled) {
-    return true;
-  }
-
-  // Update cache
-  lodCullingStateCache.set(data, shouldCull);
-
-  if (shouldCull) {
-    // Transition to all culled: hide all
-    const { totalCharacters, slotDigit, slotIndex } = data;
-    for (let i = 0; i < totalCharacters; i++) {
-      const d = slotDigit[i];
-      const slot = slotIndex[i];
-      const mesh = meshes[d];
-      if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
-    }
-    for (const msh of meshes) {
-      if (msh) msh.instanceMatrix.needsUpdate = true;
-    }
-  }
-
-  return shouldCull;
-}
-
 /**
  * Zero-GC: 빌보드 회전 계산 (Screen Aligned)
  * 결과를 모듈 레벨 캐시에 저장하여 재사용
@@ -362,19 +397,6 @@ export function getBillboardRight(): THREE.Vector3 {
 }
 
 
-
-/**
- * 거리 제곱 계산
- */
-export function distanceSquared(
-  x1: number, y1: number, z1: number,
-  x2: number, y2: number, z2: number
-): number {
-  const dx = x1 - x2;
-  const dy = y1 - y2;
-  const dz = z1 - z2;
-  return dx * dx + dy * dy + dz * dz;
-}
 
 interface Vec3Like {
   x: number;

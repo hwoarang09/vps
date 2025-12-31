@@ -12,9 +12,9 @@ export const CHAR_COUNT = ALL_CHARS.length;
 
 export const CHAR_MAP: Record<string, number> = (() => {
   const map: Record<string, number> = {};
-  ALL_CHARS.forEach((char, index) => {
+  for (const [index, char] of ALL_CHARS.entries()) {
     map[char] = index;
-  });
+  }
   return map;
 })();
 

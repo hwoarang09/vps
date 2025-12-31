@@ -4,11 +4,14 @@ import { useFrame } from "@react-three/fiber";
 import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
 import { CHAR_COUNT } from "./useDigitMaterials";
 import {
-  HIDE_MATRIX,
   buildSlotData,
   buildSpatialGrid,
   applyHighAltitudeCulling,
   getVisibleGroupsFromGrid,
+  findNewlyCulledGroups,
+  hideGroupCharacters,
+  updateInstanceMatrices,
+  renderVisibleGroups,
   updateBillboardRotation,
   getBillboardQuaternion,
   getBillboardRight,
@@ -17,12 +20,6 @@ import { BaseInstancedText } from "./BaseInstancedText";
 
 import type { TextGroup } from "./instancedTextUtils";
 export type { TextGroup } from "./instancedTextUtils";
-
-// Zero-GC: Module-level scratchpads (allocated once)
-const _tempMatrix = new THREE.Matrix4();
-const _tempScale = new THREE.Vector3();
-const _tempOffset = new THREE.Vector3();
-const _tempFinalPos = new THREE.Vector3();
 
 interface Props {
   readonly groups?: TextGroup[];
@@ -81,18 +78,10 @@ export default function InstancedText({
     const visibleGroups = visibleGroupsRef.current;
     getVisibleGroupsFromGrid(spatialGrid, cx, cy, lodDistance, visibleGroups);
 
-    // Find newly culled groups (was visible last frame, now culled)
+    // Find newly culled groups
     const prevVisible = prevVisibleSetRef.current;
     const newlyCulled = newlyCulledRef.current;
-    newlyCulled.length = 0;
-
-    // Build current visible set and find newly culled
-    const currentVisibleSet = new Set(visibleGroups);
-    for (const groupIdx of prevVisible) {
-      if (!currentVisibleSet.has(groupIdx)) {
-        newlyCulled.push(groupIdx);
-      }
-    }
+    findNewlyCulledGroups(prevVisible, visibleGroups, newlyCulled);
 
     // Update prevVisible for next frame
     prevVisible.clear();
@@ -101,64 +90,38 @@ export default function InstancedText({
     }
 
     // Hide newly culled groups
-    for (const groupIdx of newlyCulled) {
-      const start = groupStart[groupIdx];
-      const end = groupStart[groupIdx + 1];
-      for (let i = start; i < end; i++) {
-        const d = slotDigit[i];
-        const slot = slotIndex[i];
-        const mesh = instRefs.current[d];
-        if (mesh) mesh.setMatrixAt(slot, HIDE_MATRIX);
-      }
-    }
+    hideGroupCharacters(newlyCulled, groupStart, slotDigit, slotIndex, instRefs.current);
 
-    // Early exit if no visible groups (after hiding culled ones)
+    // Early exit if no visible groups
     if (visibleGroups.length === 0) {
-      for (const msh of instRefs.current) {
-        if (msh) msh.instanceMatrix.needsUpdate = true;
-      }
+      updateInstanceMatrices(instRefs.current);
       return;
     }
 
-    // Zero-GC: Reuse scratchpads
-    _tempScale.set(scale, scale, 1);
-    const charSpacing = 0.2 * scale;
-
-    // Zero-GC: Update billboard rotation once per frame
+    // Update billboard rotation once per frame
     updateBillboardRotation(camera.quaternion);
     const quaternion = getBillboardQuaternion();
     const right = getBillboardRight();
 
-    // Only iterate over VISIBLE groups
-    for (const groupIdx of visibleGroups) {
-      const group = groups[groupIdx];
-      const gx = group.x;
-      const gy = group.y;
-      const gz = group.z + zOffset;
-
-      const start = groupStart[groupIdx];
-      const end = groupStart[groupIdx + 1];
-
-      for (let i = start; i < end; i++) {
-        const d = slotDigit[i];
-        const slot = slotIndex[i];
-        const posIdx = slotPosition[i];
-        const mesh = instRefs.current[d];
-        if (!mesh) continue;
-
-        const halfLen = (group.digits.length - 1) / 2;
-        const offsetX = (posIdx - halfLen) * charSpacing;
-        _tempOffset.copy(right).multiplyScalar(offsetX);
-        _tempFinalPos.set(gx, gy, gz).add(_tempOffset);
-
-        _tempMatrix.compose(_tempFinalPos, quaternion, _tempScale);
-        mesh.setMatrixAt(slot, _tempMatrix);
+    // Render visible groups
+    renderVisibleGroups(
+      visibleGroups,
+      groups,
+      groupStart,
+      slotDigit,
+      slotIndex,
+      slotPosition,
+      instRefs.current,
+      {
+        scale,
+        charSpacing: 0.2 * scale,
+        zOffset,
+        quaternion,
+        right,
       }
-    }
+    );
 
-    for (const msh of instRefs.current) {
-      if (msh) msh.instanceMatrix.needsUpdate = true;
-    }
+    updateInstanceMatrices(instRefs.current);
   });
 
   return (

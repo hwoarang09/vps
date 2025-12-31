@@ -19,6 +19,29 @@ export type { Foo } from "./foo";
 export { Foo as default } from "./foo";
 ```
 
+## 반복문
+
+### forEach 대신 for...of 사용
+
+`.forEach(…)` 대신 `for…of`를 사용하세요.
+
+```typescript
+// Bad
+items.forEach((item) => {
+  process(item);
+});
+
+// Good
+for (const item of items) {
+  process(item);
+}
+
+// index가 필요한 경우
+for (const [index, item] of items.entries()) {
+  process(index, item);
+}
+```
+
 ## 불필요한 코드 제거
 
 ### 빈 constructor 금지
