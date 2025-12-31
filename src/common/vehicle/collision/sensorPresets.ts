@@ -99,6 +99,15 @@ export const SENSOR_PRESETS: SensorPreset[] = [
   },
 ];
 
+export const PresetIndex = {
+  STRAIGHT: 0,
+  CURVE_LEFT: 1,
+  CURVE_RIGHT: 2,
+  U_TURN: 3,
+  MERGE: 4,
+  BRANCH: 5,
+} as const;
+
 export function getSensorZone(
   preset: SensorPreset,
   zone: SensorZoneKey = "approach"
