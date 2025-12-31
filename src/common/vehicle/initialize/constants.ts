@@ -15,6 +15,17 @@ export const TrafficState = {
   ACQUIRED: 2,
 } as const;
 
+// High-level Mission Job State
+export const JobState = {
+  INITIALIZING: 0,
+  IDLE: 1,
+  MOVE_TO_LOAD: 2,
+  LOADING: 3,
+  MOVE_TO_UNLOAD: 4,
+  UNLOADING: 5,
+  ERROR: 6,
+} as const;
+
 // Stop Reason Bitmask
 export const StopReason = {
   NONE: 0,
