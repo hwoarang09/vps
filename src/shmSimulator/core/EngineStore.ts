@@ -5,6 +5,7 @@ import VehicleDataArray from "../memory/vehicleDataArray";
 import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
 import { TransferMode } from "../types";
 import type { IVehicleStore } from "@/common/vehicle/initialize";
+import * as ops from "@/common/vehicle/store";
 
 export class EngineStore implements IVehicleStore {
   private readonly vehicleDataArray: VehicleDataArray;
@@ -57,10 +58,7 @@ export class EngineStore implements IVehicleStore {
   // === Vehicle Position/Rotation ===
 
   setVehiclePosition(vehicleIndex: number, x: number, y: number, z: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.x = x;
-    vehicle.movement.y = y;
-    vehicle.movement.z = z;
+    ops.setVehiclePosition(this.vehicleDataArray, vehicleIndex, x, y, z);
   }
 
   getVehiclePosition(vehicleIndex: number): { x: number; y: number; z: number } {
@@ -68,8 +66,7 @@ export class EngineStore implements IVehicleStore {
   }
 
   setVehicleRotation(vehicleIndex: number, rotation: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.rotation = rotation;
+    ops.setVehicleRotation(this.vehicleDataArray, vehicleIndex, rotation);
   }
 
   getVehicleRotation(vehicleIndex: number): number {
@@ -79,8 +76,7 @@ export class EngineStore implements IVehicleStore {
   // === Vehicle Velocity ===
 
   setVehicleVelocity(vehicleIndex: number, velocity: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.velocity = velocity;
+    ops.setVehicleVelocity(this.vehicleDataArray, vehicleIndex, velocity);
   }
 
   getVehicleVelocity(vehicleIndex: number): number {
@@ -90,45 +86,39 @@ export class EngineStore implements IVehicleStore {
   // === Vehicle Status ===
 
   setVehicleMovingStatus(vehicleIndex: number, status: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.movingStatus = status;
+    ops.setVehicleMovingStatus(this.vehicleDataArray, vehicleIndex, status);
   }
 
   getVehicleMovingStatus(vehicleIndex: number): number {
-    return this.vehicleDataArray.getMovingStatus(vehicleIndex);
+    return ops.getVehicleMovingStatus(this.vehicleDataArray, vehicleIndex);
   }
 
   // === Vehicle Acceleration/Deceleration ===
 
   setVehicleAcceleration(vehicleIndex: number, acceleration: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.acceleration = acceleration;
+    ops.setVehicleAcceleration(this.vehicleDataArray, vehicleIndex, acceleration);
   }
 
   setVehicleDeceleration(vehicleIndex: number, deceleration: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.deceleration = deceleration;
+    ops.setVehicleDeceleration(this.vehicleDataArray, vehicleIndex, deceleration);
   }
 
   // === Vehicle Edge ===
 
   setVehicleEdgeRatio(vehicleIndex: number, edgeRatio: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.edgeRatio = edgeRatio;
+    ops.setVehicleEdgeRatio(this.vehicleDataArray, vehicleIndex, edgeRatio);
   }
 
   getVehicleEdgeRatio(vehicleIndex: number): number {
-    return this.vehicleDataArray.getEdgeRatio(vehicleIndex);
+    return ops.getVehicleEdgeRatio(this.vehicleDataArray, vehicleIndex);
   }
 
   setVehicleCurrentEdge(vehicleIndex: number, edgeIndex: number): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    vehicle.movement.currentEdge = edgeIndex;
+    ops.setVehicleCurrentEdge(this.vehicleDataArray, vehicleIndex, edgeIndex);
   }
 
   getVehicleCurrentEdge(vehicleIndex: number): number {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    return vehicle.movement.currentEdge;
+    return ops.getVehicleCurrentEdge(this.vehicleDataArray, vehicleIndex);
   }
 
   // === Edge Vehicle Queue ===
@@ -156,51 +146,18 @@ export class EngineStore implements IVehicleStore {
   }
 
   clearAllVehicles(): void {
-    this.edgeVehicleQueue.clearAll();
-    this.vehicleDataArray.clearAll();
-    console.log("[EngineStore] All vehicles cleared");
+    ops.clearAllVehicles(this.vehicleDataArray, this.edgeVehicleQueue, "[EngineStore]");
   }
 
   addVehicle(
     vehicleIndex: number,
-    data: {
-      x: number;
-      y: number;
-      z: number;
-      edgeIndex: number;
-      edgeRatio?: number;
-      rotation?: number;
-      velocity?: number;
-      acceleration?: number;
-      deceleration?: number;
-      movingStatus?: number;
-    }
+    data: ops.AddVehicleData
   ): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-
-    vehicle.movement.x = data.x;
-    vehicle.movement.y = data.y;
-    vehicle.movement.z = data.z;
-    vehicle.movement.rotation = data.rotation ?? 0;
-    vehicle.movement.velocity = data.velocity ?? 0;
-    vehicle.movement.acceleration = data.acceleration ?? 0;
-    vehicle.movement.deceleration = data.deceleration ?? 0;
-    vehicle.movement.edgeRatio = data.edgeRatio ?? 0;
-    vehicle.movement.movingStatus = data.movingStatus ?? 0;
-    vehicle.movement.currentEdge = data.edgeIndex;
-    vehicle.sensor.hitZone = -1;
-
-    this.edgeVehicleQueue.addVehicle(data.edgeIndex, vehicleIndex);
+    ops.addVehicle(this.vehicleDataArray, this.edgeVehicleQueue, vehicleIndex, data);
   }
 
   removeVehicle(vehicleIndex: number): void {
-    const currentEdge = this.vehicleDataArray.get(vehicleIndex).movement.currentEdge;
-
-    if (currentEdge !== -1) {
-      this.removeVehicleFromEdgeList(currentEdge, vehicleIndex);
-    }
-
-    this.clearVehicleData(vehicleIndex);
+    ops.removeVehicle(this.vehicleDataArray, this.edgeVehicleQueue, vehicleIndex);
   }
 
   moveVehicleToEdge(
@@ -208,15 +165,6 @@ export class EngineStore implements IVehicleStore {
     newEdgeIndex: number,
     edgeRatio: number = 0
   ): void {
-    const vehicle = this.vehicleDataArray.get(vehicleIndex);
-    const oldEdge = vehicle.movement.currentEdge;
-
-    if (oldEdge !== -1) {
-      this.removeVehicleFromEdgeList(oldEdge, vehicleIndex);
-    }
-
-    this.addVehicleToEdgeList(newEdgeIndex, vehicleIndex);
-    vehicle.movement.currentEdge = newEdgeIndex;
-    vehicle.movement.edgeRatio = edgeRatio;
+    ops.moveVehicleToEdge(this.vehicleDataArray, this.edgeVehicleQueue, vehicleIndex, newEdgeIndex, edgeRatio);
   }
 }

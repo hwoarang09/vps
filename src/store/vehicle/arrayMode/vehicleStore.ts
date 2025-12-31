@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { vehicleDataArray } from "./vehicleDataArray";
 import { edgeVehicleQueue } from "./edgeVehicleQueue";
 import type { IVehicleStore, IEdgeVehicleQueue } from "@/common/vehicle/initialize";
+import * as ops from "@/common/vehicle/store";
 
 export interface VehicleArrayStore extends IVehicleStore {
   // Array references
@@ -108,52 +109,42 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
 
     // Set vehicle position
     setVehiclePosition: (vehicleIndex, x, y, z) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.x = x;
-      vehicle.movement.y = y;
-      vehicle.movement.z = z;
+      ops.setVehiclePosition(vehicleDataArray, vehicleIndex, x, y, z);
     },
 
     // Set vehicle velocity
     setVehicleVelocity: (vehicleIndex, velocity) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.velocity = velocity;
+      ops.setVehicleVelocity(vehicleDataArray, vehicleIndex, velocity);
     },
 
     // Set vehicle rotation
     setVehicleRotation: (vehicleIndex, rotation) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.rotation = rotation;
+      ops.setVehicleRotation(vehicleDataArray, vehicleIndex, rotation);
     },
 
     // Set vehicle status
     setVehicleMovingStatus: (vehicleIndex, status) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.movingStatus = status;
+      ops.setVehicleMovingStatus(vehicleDataArray, vehicleIndex, status);
     },
 
     // Set vehicle acceleration
     setVehicleAcceleration: (vehicleIndex, acceleration) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.acceleration = acceleration;
+      ops.setVehicleAcceleration(vehicleDataArray, vehicleIndex, acceleration);
     },
 
     // Set vehicle deceleration
     setVehicleDeceleration: (vehicleIndex, deceleration) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.deceleration = deceleration;
+      ops.setVehicleDeceleration(vehicleDataArray, vehicleIndex, deceleration);
     },
 
     // Set vehicle edge ratio
     setVehicleEdgeRatio: (vehicleIndex, edgeRatio) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.edgeRatio = edgeRatio;
+      ops.setVehicleEdgeRatio(vehicleDataArray, vehicleIndex, edgeRatio);
     },
 
     // Set vehicle current edge
     setVehicleCurrentEdge: (vehicleIndex, edgeIndex) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      vehicle.movement.currentEdge = edgeIndex;
+      ops.setVehicleCurrentEdge(vehicleDataArray, vehicleIndex, edgeIndex);
     },
 
     // Get vehicle position
@@ -173,20 +164,17 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
 
     // Get vehicle status
     getVehicleMovingStatus: (vehicleIndex) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      return vehicle.movement.movingStatus;
+      return ops.getVehicleMovingStatus(vehicleDataArray, vehicleIndex);
     },
 
     // Get vehicle current edge
     getVehicleCurrentEdge: (vehicleIndex) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      return vehicle.movement.currentEdge;
+      return ops.getVehicleCurrentEdge(vehicleDataArray, vehicleIndex);
     },
 
     // Get vehicle edge ratio
     getVehicleEdgeRatio: (vehicleIndex) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      return vehicle.movement.edgeRatio;
+      return ops.getVehicleEdgeRatio(vehicleDataArray, vehicleIndex);
     },
 
     // Add vehicle to edge list
@@ -220,67 +208,22 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
 
     // Add vehicle (integrated)
     addVehicle: (vehicleIndex, data) => {
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-
-      // Set movement data
-      vehicle.movement.x = data.x;
-      vehicle.movement.y = data.y;
-      vehicle.movement.z = data.z;
-      vehicle.movement.rotation = data.rotation ?? 0;
-      vehicle.movement.velocity = data.velocity ?? 0;
-      vehicle.movement.acceleration = data.acceleration ?? 0;
-      vehicle.movement.deceleration = data.deceleration ?? 0;
-      vehicle.movement.edgeRatio = data.edgeRatio ?? 0;
-
-      // Set status data
-      vehicle.movement.movingStatus = data.movingStatus ?? 0;
-      vehicle.movement.currentEdge = data.edgeIndex;
-      vehicle.sensor.hitZone = -1;
-
-      // Add to edge list
-      edgeVehicleQueue.addVehicle(data.edgeIndex, vehicleIndex);
+      ops.addVehicle(vehicleDataArray, edgeVehicleQueue, vehicleIndex, data);
     },
 
     // Remove vehicle (integrated)
     removeVehicle: (vehicleIndex) => {
-      const store = get();
-      const currentEdge = vehicleDataArray.get(vehicleIndex).movement.currentEdge;
-
-      // Remove from edge list
-      if (currentEdge !== -1) {
-        store.removeVehicleFromEdgeList(currentEdge, vehicleIndex);
-      }
-
-      // Clear data
-      store.clearVehicleData(vehicleIndex);
+      ops.removeVehicle(vehicleDataArray, edgeVehicleQueue, vehicleIndex);
     },
 
     // Move vehicle to new edge
     moveVehicleToEdge: (vehicleIndex, newEdgeIndex, edgeRatio = 0) => {
-      const store = get();
-      const vehicle = vehicleDataArray.get(vehicleIndex);
-      const oldEdge = vehicle.movement.currentEdge;
-
-      // Remove from old edge
-      if (oldEdge !== -1) {
-        store.removeVehicleFromEdgeList(oldEdge, vehicleIndex);
-      }
-
-      // Add to new edge
-      store.addVehicleToEdgeList(newEdgeIndex, vehicleIndex);
-      vehicle.movement.currentEdge = newEdgeIndex;
-      vehicle.movement.edgeRatio = edgeRatio;
+      ops.moveVehicleToEdge(vehicleDataArray, edgeVehicleQueue, vehicleIndex, newEdgeIndex, edgeRatio);
     },
 
     // Clear all vehicles
     clearAllVehicles: () => {
-      // Clear all edge lists
-      edgeVehicleQueue.clearAll();
-
-      // Clear all vehicle data
-      vehicleDataArray.clearAll();
-
-      console.log('[VehicleArrayStore] All vehicles cleared');
+      ops.clearAllVehicles(vehicleDataArray, edgeVehicleQueue, '[VehicleArrayStore]');
     },
   })
 );
