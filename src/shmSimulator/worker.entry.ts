@@ -7,7 +7,7 @@ import type { WorkerMessage, MainMessage } from "./types";
 let engine: SimulationEngine | null = null;
 
 // Handle messages from main thread
-self.onmessage = (e: MessageEvent<WorkerMessage>) => {
+globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
 
   switch (message.type) {
@@ -22,7 +22,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
           type: "INITIALIZED",
           actualNumVehicles: engine.getActualNumVehicles(),
         };
-        self.postMessage(response);
+        globalThis.postMessage(response);
 
         console.log("[Worker] Engine initialized, sending INITIALIZED response");
       } catch (error) {
@@ -30,7 +30,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
           type: "ERROR",
           error: error instanceof Error ? error.message : String(error),
         };
-        self.postMessage(errorResponse);
+        globalThis.postMessage(errorResponse);
       }
       break;
 
@@ -40,7 +40,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         engine.start();
 
         const response: MainMessage = { type: "READY" };
-        self.postMessage(response);
+        globalThis.postMessage(response);
       }
       break;
 
@@ -73,24 +73,19 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
       }
       break;
 
-    case "SET_TRANSFER_MODE":
-      // TODO: Implement transfer mode change
-      console.log("[Worker] SET_TRANSFER_MODE:", message.mode);
-      break;
-
     default:
       console.warn("[Worker] Unknown message type:", (message as any).type);
   }
 };
 
 // Handle errors
-self.onerror = (error) => {
+globalThis.onerror = (error) => {
   console.error("[Worker] Unhandled error:", error);
   const response: MainMessage = {
     type: "ERROR",
-    error: String(error),
+    error: error instanceof ErrorEvent ? error.message : String(error),
   };
-  self.postMessage(response);
+  globalThis.postMessage(response);
 };
 
 console.log("[Worker] SHM Simulator worker initialized");

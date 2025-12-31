@@ -10,10 +10,9 @@ import type { Node } from "@/types";
 import type { SimulationConfig, VehicleInitConfig as SimVehicleInitConfig } from "../types";
 import {
   initializeVehicles as initializeVehiclesCommon,
-  VehiclePlacement,
-  InitializationResult,
-  ILockMgr,
-  VehicleInitConfig,
+  type InitializationResult,
+  type ILockMgr,
+  type VehicleInitConfig,
 } from "@/common/vehicle/initialize";
 import { calculateVehiclePlacements } from "@/utils/vehicle/vehiclePlacement";
 
