@@ -17,7 +17,7 @@ import {
 } from "@/common/vehicle/initialize";
 import { calculateVehiclePlacements } from "@/utils/vehicle/vehiclePlacement";
 
-export type { VehiclePlacement, InitializationResult };
+export type { VehiclePlacement, InitializationResult } from "@/common/vehicle/initialize";
 
 export interface InitializeVehiclesParams {
   edges: Edge[];

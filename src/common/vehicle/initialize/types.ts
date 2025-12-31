@@ -2,7 +2,6 @@
 // Shared types for vehicle initialization
 
 import type { Edge } from "@/types/edge";
-import type { Node } from "@/types";
 
 /**
  * Vehicle placement data

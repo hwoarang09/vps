@@ -3,7 +3,7 @@
 
 import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import type { Edge } from "@/types/edge";
-import { VehicleLoop, getNextEdgeInLoop } from "@/utils/vehicle/loopMaker";
+import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { TransferMode } from "@/store/vehicle/arrayMode/vehicleStore";
 import {
   TransferMgr,

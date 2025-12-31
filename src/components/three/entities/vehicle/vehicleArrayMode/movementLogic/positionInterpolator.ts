@@ -8,7 +8,7 @@ import {
   type PositionResult,
 } from "@/common/vehicle/movement/positionInterpolator";
 
-export type { PositionResult };
+export type { PositionResult } from "@/common/vehicle/movement/positionInterpolator";
 
 /**
  * Zero-GC: Calculates 3D position and rotation, writes to target object.
