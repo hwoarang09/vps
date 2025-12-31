@@ -16,7 +16,5 @@ export class PointsCalculator {
 // Export individual calculators as well
 export { EdgePointsCalculator } from "./EdgePointsCalculator";
 export { StraightPointsCalculator } from "./_StraightPointsCalculator";
-export { Curve90EdgePointsCalculator } from "./_Curve90EdgePointsCalculator";
-export { Curve180EdgePointsCalculator } from "./_Curve180EdgePointsCalculator";
-export { CurveCSCEdgePointsCalculator } from "./_CurveCSCEdgePointsCalculator";
+export { SimpleCurveEdgePointsCalculator } from "./_SimpleCurveEdgePointsCalculator";
 export { DirectionUtils } from "./_DirectionUtils";

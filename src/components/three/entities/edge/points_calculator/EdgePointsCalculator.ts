@@ -3,10 +3,8 @@ import * as THREE from "three";
 import { EdgeType } from "@/types";
 
 import { StraightPointsCalculator } from "./_StraightPointsCalculator";
-import { Curve90EdgePointsCalculator } from "./_Curve90EdgePointsCalculator";
+import { SimpleCurveEdgePointsCalculator } from "./_SimpleCurveEdgePointsCalculator";
 import { SCurvePointsCalculator } from "./_SCurvePointsCalculator";
-import { CurveCSCEdgePointsCalculator } from "./_CurveCSCEdgePointsCalculator";
-import { Curve180EdgePointsCalculator } from "./_Curve180EdgePointsCalculator";
 
 /**
  * Edge Points Calculator 라우터
@@ -25,17 +23,13 @@ export class EdgePointsCalculator {
     const nodes = useNodeStore.getState().nodes;
 
     switch (vosRailType) {
-      case "CURVE_90":
-        return Curve90EdgePointsCalculator.calculate(edgeRowData, nodes);
+      case EdgeType.CURVE_90:
+      case EdgeType.CURVE_180:
+      case EdgeType.CURVE_CSC:
+        return SimpleCurveEdgePointsCalculator.calculate(edgeRowData, nodes);
 
-      case "CURVE_180":
-        return Curve180EdgePointsCalculator.calculate(edgeRowData, nodes);
-
-      case "S_CURVE":
+      case EdgeType.S_CURVE:
         return SCurvePointsCalculator.calculate(edgeRowData, nodes);
-
-      case "CURVE_CSC":
-        return CurveCSCEdgePointsCalculator.calculate(edgeRowData, nodes);
 
       case EdgeType.LINEAR:
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
