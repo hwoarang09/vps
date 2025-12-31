@@ -100,7 +100,7 @@ function updateSensorPresetForEdge(
   let presetIdx: number;
 
   if (edge.vos_rail_type === EdgeType.CURVE_180) {
-    presetIdx = 3;
+    presetIdx = PresetIndex.U_TURN;
   } else if (edge.vos_rail_type?.startsWith("C")) {
     if (edge.curve_direction === "left") {
       presetIdx = PresetIndex.CURVE_LEFT;

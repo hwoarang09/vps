@@ -50,13 +50,14 @@ export const NextEdgeState = {
   READY: 2,
 } as const;
 
-// Sensor preset indices
+// Sensor preset indices (synced with sensorPresets.ts)
 export const PresetIndex = {
   STRAIGHT: 0,
   CURVE_LEFT: 1,
   CURVE_RIGHT: 2,
-  MERGE: 3,
-  BRANCH: 4,
+  U_TURN: 3,
+  MERGE: 4,
+  BRANCH: 5,
 } as const;
 
 // --- ID Generator for Auto-Offsets ---
