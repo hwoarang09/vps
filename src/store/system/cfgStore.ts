@@ -6,7 +6,7 @@ import { useStationStore } from "../map/stationStore";
 import { useTextStore, TextPosition } from "../map/textStore";
 import { Node, Edge, VehicleConfig, EdgeType } from "@/types";
 import { StationRawData } from "@/types/station";
-import { getNodeColor } from "@/utils/colors/nodeColors";
+
 import { getEdgeColor } from "@/utils/colors/edgeColors";
 import { PointsCalculator } from "@/components/three/entities/edge/points_calculator";
 import { VehicleSystemType } from "@/types/vehicle";
@@ -133,7 +133,7 @@ const parseNodesCFG = (content: string): Node[] => {
       editor_x: Number.parseFloat(row.editor_x) || 0,
       editor_y: Number.parseFloat(row.editor_y) || 0,
       editor_z: Number.parseFloat(row.editor_z || String(getMarkerConfig().Z)) || getMarkerConfig().Z,
-      color: getNodeColor(row.node_name),
+      color: row.node_name.startsWith("TMP_") ? getMarkerConfig().TMP.COLOR : getMarkerConfig().NORMAL.COLOR,
       size: 0.5,
       readonly: true,
       source: "config" as const,

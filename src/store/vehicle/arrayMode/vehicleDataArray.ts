@@ -9,13 +9,8 @@ export {
   MovingStatus,
   TrafficState,
   StopReason,
-  JobState,
-  NextEdgeState,
   MovementData,
-  SensorData,
-  LogicData,
   VEHICLE_DATA_SIZE,
-  HitZone,
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
 
 /**
@@ -35,4 +30,4 @@ if (typeof globalThis !== 'undefined') {
   (globalThis as any).vehicleDataArray = vehicleDataArray;
 }
 
-export default VehicleDataArray;
+

@@ -3,29 +3,10 @@ import { getMaxVehicles } from "@/config/vehicleConfig";
 import type { RapierRigidBody } from "@react-three/rapier";
 
 // Vehicle data structure matching shared memory layout
-const MOVEMENT_SIZE = 7; // x, y, z, rotation, velocity, acceleration, edgeRatio
-const STATUS_SIZE = 2; // status, currentEdge
-const SENSOR_SIZE = 1; // sensor preset index
-export const VEHICLE_DATA_SIZE = MOVEMENT_SIZE + STATUS_SIZE + SENSOR_SIZE; // 10
-
-export const MovementData = {
-  X: 0,
-  Y: 1,
-  Z: 2,
-  ROTATION: 3,
-  VELOCITY: 4,
-  ACCELERATION: 5,
-  EDGE_RATIO: 6,
-} as const;
-
-export const StatusData = {
-  STATUS: 7,
-  CURRENT_EDGE: 8,
-} as const;
-
-export const SensorData = {
-  PRESET_IDX: 9, // 0=STRAIGHT, 1=CURVE_LEFT, 2=CURVE_RIGHT, 3=MERGE, 4=BRANCH
-} as const;
+import {
+  VEHICLE_DATA_SIZE,
+  MovementData,
+} from "@/common/vehicle/initialize/constants";
 
 // Vehicle data interface for dict mode (Rapier)
 interface VehicleRefData {
@@ -323,7 +304,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
       if (mode === "array_single" || mode === "array_shared") {
         if (vehicleDataArray) {
           const offset = vehicleIndex * VEHICLE_DATA_SIZE;
-          vehicleDataArray[offset + MOVEMENT_SIZE + StatusData.STATUS] = status;
+          vehicleDataArray[offset + MovementData.MOVING_STATUS] = status;
         }
       } else if (mode === "rapier") {
         const vehicle = vehicleDataDict.get(vehicleIndex);
@@ -340,7 +321,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
       if (mode === "array_single" || mode === "array_shared") {
         if (vehicleDataArray) {
           const offset = vehicleIndex * VEHICLE_DATA_SIZE;
-          return vehicleDataArray[offset + MOVEMENT_SIZE + StatusData.STATUS];
+          return vehicleDataArray[offset + MovementData.MOVING_STATUS];
         }
       } else if (mode === "rapier") {
         const vehicle = vehicleDataDict.get(vehicleIndex);
@@ -358,7 +339,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
       if (mode === "array_single" || mode === "array_shared") {
         if (vehicleDataArray) {
           const offset = vehicleIndex * VEHICLE_DATA_SIZE;
-          vehicleDataArray[offset + MOVEMENT_SIZE + StatusData.CURRENT_EDGE] = edgeIndex;
+          vehicleDataArray[offset + MovementData.CURRENT_EDGE] = edgeIndex;
         }
       } else if (mode === "rapier") {
         const vehicle = vehicleDataDict.get(vehicleIndex);
@@ -375,7 +356,7 @@ export const useVehicleRapierStore = create<VehicleRapierStore>(
       if (mode === "array_single" || mode === "array_shared") {
         if (vehicleDataArray) {
           const offset = vehicleIndex * VEHICLE_DATA_SIZE;
-          return vehicleDataArray[offset + MOVEMENT_SIZE + StatusData.CURRENT_EDGE];
+          return vehicleDataArray[offset + MovementData.CURRENT_EDGE];
         }
       } else if (mode === "rapier") {
         const vehicle = vehicleDataDict.get(vehicleIndex);

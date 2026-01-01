@@ -57,7 +57,7 @@ const loadVehicleConfig = async (): Promise<VehicleConfig> => {
 };
 
 // Export config loader
-export const getVehicleConfig = loadVehicleConfig;
+
 
 // For synchronous access (will use default until loaded)
 let vehicleConfig: VehicleConfig = {
@@ -97,23 +97,18 @@ export const waitForConfig = () => configLoadedPromise;
 
 // Export synchronous getters
 export const getMaxVehicles = () => vehicleConfig.MAX_VEHICLES;
-export const getVehicleColor = () => vehicleConfig.VEHICLE_COLOR;
-export const getEdgeMargin = () => vehicleConfig.EDGE_MARGIN;
-export const getVehicleSpacing = () => vehicleConfig.VEHICLE_SPACING;
+
 
 // Body dimensions
 export const getBodyLength = () => vehicleConfig.BODY.LENGTH;
 export const getBodyWidth = () => vehicleConfig.BODY.WIDTH;
-export const getBodyHeight = () => vehicleConfig.BODY.HEIGHT;
+
 
 // Sensor dimensions
-export const getSensorLength = () => vehicleConfig.SENSOR.LENGTH;
-export const getSensorWidth = () => vehicleConfig.SENSOR.WIDTH;
-export const getSensorHeight = () => vehicleConfig.SENSOR.HEIGHT;
+
 
 // Label config
-export const getLabelTextHeight = () => vehicleConfig.LABEL.TEXT_HEIGHT;
-export const getLabelZOffset = () => vehicleConfig.LABEL.Z_OFFSET;
+
 
 // Export the config object itself
 export const getVehicleConfigSync = () => vehicleConfig;

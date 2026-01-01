@@ -180,14 +180,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 }));
 
 // Helper hook for accessing vehicle data in render loop
-export function getShmVehicleData(): Float32Array | null {
-  return useShmSimulatorStore.getState().getVehicleData();
-}
+
 
 export function getShmSensorPointData(): Float32Array | null {
   return useShmSimulatorStore.getState().getSensorPointData();
 }
 
-export function getShmVehiclePosition(index: number) {
-  return useShmSimulatorStore.getState().getVehiclePosition(index);
-}
+

@@ -7,7 +7,9 @@ import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
 import {
+  RENDER_ORDER_RAIL_CURVE_180,
   RENDER_ORDER_RAIL_CURVE_90,
+  RENDER_ORDER_RAIL_CURVE_CSC,
   RENDER_ORDER_RAIL_LINEAR,
 } from "@/utils/renderOrder";
 
@@ -62,13 +64,13 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
         edges={edgesByType[EdgeType.CURVE_180]}
         edgeType={EdgeType.CURVE_180}
         color={colors.CURVE_180}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+        renderOrder={RENDER_ORDER_RAIL_CURVE_180}
       />
       <EdgeTypeRenderer
         edges={edgesByType[EdgeType.CURVE_CSC]}
         edgeType={EdgeType.CURVE_CSC}
         color={colors.CURVE_CSC}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+        renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
       />
       <EdgeTypeRenderer
         edges={edgesByType[EdgeType.S_CURVE]}

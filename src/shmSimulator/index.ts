@@ -266,4 +266,4 @@ export class ShmSimulatorController {
 
 // Export types
 export * from "./types";
-export { VEHICLE_DATA_SIZE, MovementData, SensorData, HitZone } from "@/common/vehicle/memory/VehicleDataArrayBase";
+

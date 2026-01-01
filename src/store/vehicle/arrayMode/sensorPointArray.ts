@@ -4,8 +4,8 @@
 import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
 
 // Re-export constants for compatibility
+// Re-export constants for compatibility
 export {
-  SENSOR_ZONE_COUNT,
   SENSOR_POINT_SIZE,
   SENSOR_DATA_SIZE,
   SensorPoint,

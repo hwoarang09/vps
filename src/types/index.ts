@@ -70,34 +70,7 @@ export interface Edge {
   renderingPoints?: THREE.Vector3[]; // 호/직선 위의 점들 (렌더링용)
 }
 
-// ============================================================================
-// RAIL TYPES
-// ============================================================================
 
-/**
- * Standard rail types
- */
-export type RailType =
-  | "S" // Straight
-  | "C90" // 90-degree curve
-  | "C180" // 180-degree curve
-  | "CS" // S-curve
-  | "H" // H-junction
-  | "R" // R-shape
-  | "J" // Junction
-  | "B" // Bridge
-  | "CUSTOM"; // Custom
-
-/**
- * Rail direction types
- */
-export type RailDirection =
-  | "F" // Forward
-  | "R" // Right
-  | "L" // Left
-  | "B" // Backward
-  | "U" // Up
-  | "D"; // Down
 
 // ============================================================================
 // MENU TYPES
@@ -117,95 +90,15 @@ export type MainMenuType =
   | "MQTT"
   | "Test";
 
-/**
- * Menu item interface
- */
-export interface MenuItem {
-  id: string;
-  label: string;
-  iconFn: (isActive: boolean) => React.ReactNode;
-}
 
-// ============================================================================
-// 3D RENDERING TYPES
-// ============================================================================
 
-/**
- * 3D position
- */
-export interface Position3D {
-  x: number;
-  y: number;
-  z: number;
-}
 
-/**
- * Color and material properties
- */
-export interface MaterialProps {
-  color?: string;
-  opacity?: number;
-  size?: number;
-}
 
-// ============================================================================
-// CURVE TYPES
-// ============================================================================
 
-/**
- * Curve direction for 90-degree curves
- */
-export type CurveDirection = "right" | "left";
 
-/**
- * Curve parameters for 90-degree curves
- */
-export interface Curve90Params {
-  centerX: number;
-  centerY: number;
-  radius: number;
-  startAngle: number;
-  endAngle: number;
-  endDirection: number; // End direction in degrees
-}
 
-// ============================================================================
-// DATA SOURCE TYPES
-// ============================================================================
 
-/**
- * Data source types
- */
-export type DataSource = "config" | "user" | "system";
 
-/**
- * Rendering mode types
- */
-export type RenderMode = "normal" | "preview";
-
-// ============================================================================
-// UTILITY TYPES
-// ============================================================================
-
-/**
- * Generic callback function type
- */
-export type CallbackFunction<T = void> = () => T;
-
-/**
- * Generic event handler type
- */
-export type EventHandler<T = any> = (event: T) => void;
-
-/**
- * Optional properties helper
- */
-export type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-
-/**
- * Required properties helper
- */
-export type RequiredProps<T, K extends keyof T> = T & Required<Pick<T, K>>;
 
 // ============================================================================
 // VEHICLE TYPES
@@ -214,25 +107,7 @@ export type RequiredProps<T, K extends keyof T> = T & Required<Pick<T, K>>;
 /**
  * Vehicle interface - represents a vehicle in the system
  */
-export interface Vehicle {
-  // Required data
-  vehicle_id: string; // Unique vehicle identifier
-  x: number; // X position
-  y: number; // Y position
-  z: number; // Z position
 
-  // Optional data
-  rotation?: number; // Rotation angle in degrees
-  velocity?: number; // Current velocity
-  status?: "idle" | "moving" | "charging" | "error"; // Vehicle status
-  battery_level?: number; // Battery level (0-100)
-  current_node?: string; // Current node name
-  target_node?: string; // Target node name
-  color?: string; // Vehicle color
-  size?: number; // Vehicle size
-  model_url?: string; // URL to 3D model (for future use)
-  source?: "config" | "mqtt" | "system"; // Data source
-}
 
 /**
  * VehicleConfig interface - matches vehicles.cfg format
