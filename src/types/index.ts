@@ -244,16 +244,3 @@ export interface VehicleConfig {
   ratio: number; // Position ratio on edge (0.0 ~ 1.0)
 }
 
-// ============================================================================
-// LEGACY TYPE ALIASES (for backward compatibility)
-// ============================================================================
-
-/**
- * @deprecated Use Node instead
- */
-export type NodeData = Node;
-
-/**
- * @deprecated Use Edge instead
- */
-export type EdgeData = Edge;

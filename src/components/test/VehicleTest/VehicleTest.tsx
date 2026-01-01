@@ -9,7 +9,7 @@ import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "@/types/vehicle";
 import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
 import { Play, Pause } from "lucide-react";
-import { getLockMgr, resetLockMgr } from "@/components/three/entities/vehicle/vehicleArrayMode/logic/LockMgr";
+import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useStationStore } from "@/store/map/stationStore";

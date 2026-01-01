@@ -12,8 +12,8 @@ import type {
 import { createDefaultConfig } from "./types";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import { VEHICLE_DATA_SIZE } from "./memory/vehicleDataArray";
-import { SENSOR_DATA_SIZE } from "./memory/sensorPointArray";
+import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
 
 export class ShmSimulatorController {
   private worker: Worker | null = null;
@@ -266,4 +266,4 @@ export class ShmSimulatorController {
 
 // Export types
 export * from "./types";
-export { VEHICLE_DATA_SIZE, MovementData, SensorData, HitZone } from "./memory/vehicleDataArray";
+export { VEHICLE_DATA_SIZE, MovementData, SensorData, HitZone } from "@/common/vehicle/memory/VehicleDataArrayBase";

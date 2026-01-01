@@ -6,12 +6,14 @@ import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
 import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed, getLinearMaxSpeed } from "@/config/movementConfig";
 import { calculateVehiclePlacements, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
 import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
-import { updateSensorPoints } from "./helpers/sensorPoints";
+import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
+import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
+import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { VehicleConfig } from "@/types";
-import { getLockMgr } from "./logic/LockMgr";
+import { getLockMgr } from "@/common/vehicle/logic/LockMgr";
 import {
   initializeVehicles as initializeVehiclesCommon,
   buildEdgeNameToIndex,
@@ -94,7 +96,10 @@ function updateSensorPointsWrapper(
   rotation: number,
   presetIndex: number
 ): void {
-  updateSensorPoints(vehicleIndex, x, y, rotation, presetIndex);
+  updateSensorPoints(sensorPointArray, vehicleIndex, x, y, rotation, presetIndex, {
+    bodyLength: getBodyLength(),
+    bodyWidth: getBodyWidth(),
+  });
 }
 
 /**

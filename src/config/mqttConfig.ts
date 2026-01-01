@@ -17,8 +17,6 @@ export const TOPICS = {
   STATUS: "STATUS",
 } as const;
 
-export type TopicService = (typeof TOPICS)[keyof typeof TOPICS];
-
 // Default configuration (fallback)
 export const defaultMqttConfig: MqttConfig = {
   MQTT_BROKER_URL: "ws://localhost:9003",

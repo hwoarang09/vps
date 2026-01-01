@@ -11,7 +11,7 @@ import {
     MovementData as ShmMovementData,
     SensorData as ShmSensorData,
     LogicData as ShmLogicData,
-} from "@/shmSimulator/memory/vehicleDataArray";
+} from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";

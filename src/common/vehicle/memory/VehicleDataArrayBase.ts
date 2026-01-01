@@ -36,6 +36,13 @@ export class VehicleDataArrayBase {
   }
 
   /**
+   * Set buffer from SharedArrayBuffer (for Worker thread)
+   */
+  setBuffer(buffer: SharedArrayBuffer): void {
+    this.data = new Float32Array(buffer);
+  }
+
+  /**
    * Get vehicle data accessor (dict-like access)
    */
   get(vehicleIndex: number) {

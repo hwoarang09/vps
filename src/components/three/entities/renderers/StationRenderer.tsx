@@ -38,22 +38,18 @@ const StationRenderer: React.FC = () => {
       <StationTypeRenderer
         stations={stationsByType.OHB}
         color={getStationColor("OHB")}
-        stationType="OHB"
       />
       <StationTypeRenderer
         stations={stationsByType.STK}
         color={getStationColor("STK")}
-        stationType="STK"
       />
       <StationTypeRenderer
         stations={stationsByType.EQ}
         color={getStationColor("EQ")}
-        stationType="EQ"
       />
       <StationTypeRenderer
         stations={stationsByType.OTHER}
         color={getStationColor("OTHER")}
-        stationType="OTHER"
       />
     </group>
   );
@@ -62,7 +58,6 @@ const StationRenderer: React.FC = () => {
 interface StationTypeRendererProps {
   stations: Station[];
   color: string;
-  stationType: string;
 }
 
 const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({

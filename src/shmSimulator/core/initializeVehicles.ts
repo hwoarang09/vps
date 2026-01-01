@@ -2,9 +2,9 @@
 // Uses shared initialization logic from common module
 
 import { EngineStore } from "./EngineStore";
-import { LockMgr } from "../logic/LockMgr";
-import SensorPointArray from "../memory/sensorPointArray";
-import { updateSensorPoints } from "../helpers/sensorPoints";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, VehicleInitConfig as SimVehicleInitConfig } from "../types";
@@ -25,7 +25,7 @@ export interface InitializeVehiclesParams {
   vehicleConfigs: SimVehicleInitConfig[];
   store: EngineStore;
   lockMgr: LockMgr;
-  sensorPointArray: SensorPointArray;
+  sensorPointArray: SensorPointArrayBase;
   config: SimulationConfig;
 }
 
@@ -56,7 +56,7 @@ function createVehicleInitConfig(config: SimulationConfig): VehicleInitConfig {
  * Create updateSensorPoints wrapper with sensorPointArray and config
  */
 function createUpdateSensorPointsWrapper(
-  sensorPointArray: SensorPointArray,
+  sensorPointArray: SensorPointArrayBase,
   config: SimulationConfig
 ) {
   return (

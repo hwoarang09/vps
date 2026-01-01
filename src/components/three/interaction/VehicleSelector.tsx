@@ -7,7 +7,7 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import {
     VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
     MovementData as ShmMovementData,
-} from "@/shmSimulator/memory/vehicleDataArray";
+} from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { getMarkerConfig } from "@/config/mapConfig";
 
 // Threshold for selection in meters

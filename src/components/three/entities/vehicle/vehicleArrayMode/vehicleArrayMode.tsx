@@ -6,17 +6,21 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useEdgeStore } from "@/store/map/edgeStore";
-import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
-import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
-import { getMaxDelta } from "@/config/movementConfig";
+import { getVehicleConfigSync, waitForConfig, getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
+import { getMaxDelta, getApproachMinSpeed, getBrakeMinSpeed, getLinearMaxSpeed, getCurveMaxSpeed, getCurveAcceleration } from "@/config/movementConfig";
 import { initializeVehicles } from "./initializeVehicles";
-import { checkCollisions } from "./collisionLogic/collisionCheck";
-import { updateMovement } from "./movementLogic/movementUpdate";
+import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
+import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";
+import { getLockMgr } from "@/common/vehicle/logic/LockMgr";
+import { TransferMgr, type TransferMode as TransferModeBase } from "@/common/vehicle/logic/TransferMgr";
+import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
+import { TransferMode, useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 
 
 /**
@@ -45,8 +49,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   const edgeNameToIndexRef = useRef<Map<string, number>>(new Map());
   const edgeArrayRef = useRef<any[]>([]);
   const actualNumVehiclesRef = useRef(0);
-
-  // Get vehicle config - useState로 관리하여 로딩 완료 시 리렌더링
+  const transferMgrRef = useRef(new TransferMgr());
   const [config, setConfig] = useState(() => getVehicleConfigSync());
 
   // Wait for config to load from JSON
@@ -148,21 +151,50 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
     const actualNumVehicles = actualNumVehiclesRef.current;
 
     // 1. Collision Check
-    checkCollisions({
+    const collisionCtx: CollisionCheckContext = {
       vehicleArrayData,
-      edgeArray
-    });
+      edgeArray,
+      edgeVehicleQueue,
+      sensorPointArray,
+      config: {
+        approachMinSpeed: getApproachMinSpeed(),
+        brakeMinSpeed: getBrakeMinSpeed(),
+        bodyLength: getBodyLength(),
+      },
+    };
+    checkCollisions(collisionCtx);
 
     // 2. Movement Update
-    updateMovement({
-      data: vehicleArrayData,
+    const movementConfig: MovementConfig = {
+      linearMaxSpeed: getLinearMaxSpeed(),
+      curveMaxSpeed: getCurveMaxSpeed(),
+      curveAcceleration: getCurveAcceleration(),
+      vehicleZOffset: 0.15,
+      bodyLength: getBodyLength(),
+      bodyWidth: getBodyWidth(),
+    };
+
+    const transferModeValue: TransferModeBase =
+      store.transferMode === TransferMode.LOOP ? 0 : 1;
+
+    const movementCtx: MovementUpdateContext = {
+      vehicleDataArray: { getData: () => vehicleArrayData },
+      sensorPointArray,
       edgeArray,
       actualNumVehicles,
       vehicleLoopMap: vehicleLoopMapRef.current,
       edgeNameToIndex: edgeNameToIndexRef.current,
-      store,
+      store: {
+        moveVehicleToEdge: store.moveVehicleToEdge,
+        transferMode: transferModeValue,
+      },
+      lockMgr: getLockMgr(),
+      transferMgr: transferMgrRef.current,
       clampedDelta,
-    });
+      config: movementConfig,
+    };
+
+    updateMovement(movementCtx);
   });
 
   // This component doesn't render anything - rendering is done by VehiclesRenderer

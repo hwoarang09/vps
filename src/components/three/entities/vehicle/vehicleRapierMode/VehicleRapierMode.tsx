@@ -8,7 +8,9 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed, getMaxDelta } from "@/config/movementConfig";
 import { getNextEdgeInLoop, VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { EdgeType } from "@/types";
+
 import { getMarkerConfig } from "@/config/mapConfig";
+import { MovingStatus } from "@/common/vehicle/initialize/constants";
 
 interface VehicleRapierModeProps {
   numVehicles?: number;
@@ -64,7 +66,7 @@ const VehicleRapierMode: React.FC<VehicleRapierModeProps> = ({
       let edgeRatio = edgeRatioNullable;
       let currentEdgeIndex = currentEdgeIndexNullable;
 
-      if (status === 0) {
+      if (status === MovingStatus.STOPPED) {
         store.setVehicleVelocity(i, 0);
         rigidBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
         continue;

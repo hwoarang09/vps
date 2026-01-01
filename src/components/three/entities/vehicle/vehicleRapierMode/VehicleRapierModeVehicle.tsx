@@ -4,6 +4,7 @@ import type { RapierRigidBody } from "@react-three/rapier";
 import SpriteText from "three-spritetext";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
+import { MovingStatus } from "@/common/vehicle/initialize/constants";
 
 export interface VehicleRapierModeVehicleProps {
   vehicleIndex: number;
@@ -55,7 +56,7 @@ const VehicleRapierModeVehicle: React.FC<VehicleRapierModeVehicleProps> = ({
     const otherId = event.other.rigidBodyObject?.userData?.id;
 
     if (otherId !== undefined && otherId !== vehicleIndex) {
-      store.setVehicleStatus(vehicleIndex, 0);
+      store.setVehicleStatus(vehicleIndex, MovingStatus.STOPPED);
     }
   }, [vehicleIndex, store]);
 
@@ -63,7 +64,7 @@ const VehicleRapierModeVehicle: React.FC<VehicleRapierModeVehicleProps> = ({
     const otherId = event.other.rigidBodyObject?.userData?.id;
 
     if (otherId !== undefined && otherId !== vehicleIndex) {
-      store.setVehicleStatus(vehicleIndex, 1);
+      store.setVehicleStatus(vehicleIndex, MovingStatus.MOVING);
     }
   }, [vehicleIndex, store]);
 

@@ -9,7 +9,7 @@ import type { Node } from "@/types";
 import {
   VEHICLE_DATA_SIZE,
   MovementData,
-} from "@/shmSimulator/memory/vehicleDataArray";
+} from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { getMaxDelta } from "@/config/movementConfig";
 
 interface ShmSimulatorState {

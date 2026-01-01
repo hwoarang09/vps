@@ -1,21 +1,21 @@
 // shmSimulator/core/EngineStore.ts
 // Internal store class replacing Zustand vehicleArrayStore
 
-import VehicleDataArray from "../memory/vehicleDataArray";
-import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
+import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { TransferMode } from "../types";
 import type { IVehicleStore } from "@/common/vehicle/initialize";
 import * as ops from "@/common/vehicle/store";
 
 export class EngineStore implements IVehicleStore {
-  private readonly vehicleDataArray: VehicleDataArray;
+  private readonly vehicleDataArray: VehicleDataArrayBase;
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   public actualNumVehicles: number = 0;
   public transferMode: TransferMode = 0; // LOOP
 
   constructor(maxVehicles: number, maxEdges: number) {
-    this.vehicleDataArray = new VehicleDataArray(maxVehicles);
+    this.vehicleDataArray = new VehicleDataArrayBase(maxVehicles);
     this.edgeVehicleQueue = new EdgeVehicleQueue(maxEdges);
   }
 
@@ -28,7 +28,7 @@ export class EngineStore implements IVehicleStore {
 
   // === Data Accessors ===
 
-  getVehicleDataArray(): VehicleDataArray {
+  getVehicleDataArray(): VehicleDataArrayBase {
     return this.vehicleDataArray;
   }
 

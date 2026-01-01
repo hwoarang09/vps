@@ -33,6 +33,13 @@ export class SensorPointArrayBase {
     this.data = new Float32Array(maxVehicles * SENSOR_DATA_SIZE);
   }
 
+  /**
+   * Set buffer from SharedArrayBuffer (for Worker thread)
+   */
+  setBuffer(buffer: SharedArrayBuffer): void {
+    this.data = new Float32Array(buffer);
+  }
+
   getData(): Float32Array {
     return this.data;
   }

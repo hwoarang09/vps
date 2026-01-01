@@ -1,13 +1,13 @@
 // shmSimulator/core/SimulationEngine.ts
 
-import VehicleDataArray from "../memory/vehicleDataArray";
-import SensorPointArray from "../memory/sensorPointArray";
-import EdgeVehicleQueue from "../memory/edgeVehicleQueue";
+import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { EngineStore } from "./EngineStore";
-import { LockMgr } from "../logic/LockMgr";
-import { TransferMgr, VehicleLoop } from "../logic/TransferMgr";
-import { checkCollisions, CollisionCheckContext } from "../collisionLogic/collisionCheck";
-import { updateMovement, MovementUpdateContextLocal } from "../movementLogic/movementUpdate";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { TransferMgr, VehicleLoop, type TransferMode as TransferModeBase } from "@/common/vehicle/logic/TransferMgr";
+import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
+import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
@@ -19,8 +19,8 @@ export class SimulationEngine {
   private readonly store: EngineStore;
 
   // === Memory ===
-  private readonly vehicleDataArray: VehicleDataArray;
-  private readonly sensorPointArray: SensorPointArray;
+  private readonly vehicleDataArray: VehicleDataArrayBase;
+  private readonly sensorPointArray: SensorPointArrayBase;
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   // === Map Data ===
@@ -54,7 +54,7 @@ export class SimulationEngine {
 
     this.store = new EngineStore(this.config.maxVehicles, 200000);
     this.vehicleDataArray = this.store.getVehicleDataArray();
-    this.sensorPointArray = new SensorPointArray(this.config.maxVehicles);
+    this.sensorPointArray = new SensorPointArrayBase(this.config.maxVehicles);
     this.edgeVehicleQueue = this.store.getEdgeVehicleQueue();
     this.lockMgr = new LockMgr();
     this.transferMgr = new TransferMgr();
@@ -210,14 +210,17 @@ export class SimulationEngine {
     checkCollisions(collisionCtx);
 
     // 2. Movement Update
-    const movementCtx: MovementUpdateContextLocal = {
+    const movementCtx: MovementUpdateContext = {
       vehicleDataArray: this.vehicleDataArray,
       sensorPointArray: this.sensorPointArray,
       edgeArray: this.edges,
       actualNumVehicles: this.actualNumVehicles,
       vehicleLoopMap: this.vehicleLoopMap,
       edgeNameToIndex: this.edgeNameToIndex,
-      store: this.store,
+      store: {
+        moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
+        transferMode: this.store.transferMode as TransferModeBase,
+      },
       lockMgr: this.lockMgr,
       transferMgr: this.transferMgr,
       clampedDelta,
