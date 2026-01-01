@@ -104,9 +104,6 @@ const handleTransferMgrMessage = (
 ): void => {
   console.log(`[MQTT] TransferMgr message from ${sender}, service: ${service}`);
 
-  // TODO: Add specific service handlers as needed
-  // Example services might be: moveCommand, stopCommand, statusUpdate, etc.
-
   switch (service) {
     case TOPICS.MOVE:
       handleMoveCommand(sender, message);

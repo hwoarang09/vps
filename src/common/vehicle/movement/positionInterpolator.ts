@@ -73,17 +73,41 @@ export function interpolatePositionTo(
   target.y = p1.y + (p2.y - p1.y) * segmentRatio;
   target.z = defaultZ;
 
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
+  // Calculate rotation using points far enough apart for stability
+  // Minimum distance threshold for stable direction calculation
+  const MIN_DIST_SQ = 0.01; // 0.1m minimum distance
 
-  const distSq = dx * dx + dy * dy;
+  let dx = p2.x - p1.x;
+  let dy = p2.y - p1.y;
+  let distSq = dx * dx + dy * dy;
+
+  // If current segment is too short, look ahead for a farther point
+  if (distSq < MIN_DIST_SQ) {
+    let lookAheadIdx = nextIndex + 1;
+    while (lookAheadIdx <= maxIndex && distSq < MIN_DIST_SQ) {
+      const pAhead = points[lookAheadIdx];
+      dx = pAhead.x - p1.x;
+      dy = pAhead.y - p1.y;
+      distSq = dx * dx + dy * dy;
+      lookAheadIdx++;
+    }
+
+    // If still too short, try looking back
+    if (distSq < MIN_DIST_SQ && index > 0) {
+      let lookBackIdx = index - 1;
+      while (lookBackIdx >= 0 && distSq < MIN_DIST_SQ) {
+        const pBack = points[lookBackIdx];
+        dx = p1.x - pBack.x;
+        dy = p1.y - pBack.y;
+        distSq = dx * dx + dy * dy;
+        lookBackIdx--;
+      }
+    }
+  }
+
   let rawRotation = 0;
-
   if (distSq > 0.000001) {
     rawRotation = Math.atan2(dy, dx) * RAD_TO_DEG;
-  } else if (index > 0) {
-    const pPrev = points[index - 1];
-    rawRotation = Math.atan2(p1.y - pPrev.y, p1.x - pPrev.x) * RAD_TO_DEG;
   }
 
   target.rotation = ((rawRotation % 360) + 360) % 360;

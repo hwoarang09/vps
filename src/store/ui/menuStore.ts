@@ -3,24 +3,29 @@ import { create } from "zustand";
 import { MainMenuType } from "@/types";
 
 export interface MenuState {
-  // 메뉴 계층 구조에 맞는 명확한 네이밍
-  activeMainMenu: MainMenuType | null; // 화면 하단의 메인 메뉴
-  activeSubMenu: string | null; // 메인 메뉴 클릭시 나타나는 서브 메뉴
-  activeThirdMenu: string | null; // 3단계 메뉴 (필요시)
+  // Menu hierarchy state
+  activeMainMenu: MainMenuType | null; // Level 1 menu (bottom)
+  activeSubMenu: string | null; // Level 2 menu (appears when lv1 is clicked)
+  activeThirdMenu: string | null; // Level 3 menu (if needed)
   rightPanelOpen: boolean;
 
-  // 툴팁 관련 상태
+  // Remember last selected lv2 menu for each lv1 menu
+  lastSubMenuByMainMenu: Partial<Record<MainMenuType, string>>;
+
+  // Tooltip state
   hoveredMenuId: string | null;
   tooltipMessage: string | null;
   tooltipPosition: { x: number; y: number } | null;
   tooltipLevel: number | null;
 
-  // 메소드들
+  // Methods
   getCurrentTopLevel: () => number;
   setActiveMainMenu: (menu: MainMenuType | null) => void;
   setActiveSubMenu: (menu: string | null) => void;
   setActiveThirdMenu: (menu: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
+  // Switch to lv1 menu with restoring last lv2 selection (for Shift+key)
+  switchToMainMenuWithMemory: (menu: MainMenuType) => void;
   showTooltip: (
     menuId: string,
     message: string,
@@ -31,35 +36,49 @@ export interface MenuState {
 }
 
 export const useMenuStore = create<MenuState>((set, get) => ({
-  // 상태 초기값
+  // Initial state
   activeMainMenu: "Test",
-  activeSubMenu: "test-rapier-dict",
+  activeSubMenu: "test-shared-memory",
   activeThirdMenu: null,
   rightPanelOpen: false,
 
-  // 툴팁 상태
+  // Remember last selected lv2 menu for each lv1 menu
+  lastSubMenuByMainMenu: {
+    Test: "test-shared-memory", // Initial value for Test menu
+  },
+
+  // Tooltip state
   hoveredMenuId: null,
   tooltipMessage: null,
   tooltipPosition: null,
   tooltipLevel: null,
 
-  // 현재 최상단 레벨 계산
+  // Calculate current top level
   getCurrentTopLevel: () => {
     const { activeSubMenu, activeThirdMenu } = get();
 
-    if (activeThirdMenu) return 3; // 3단계 메뉴가 활성화된 경우
-    if (activeSubMenu) return 2; // 서브 메뉴가 활성화된 경우
-    return 1; // 기본 상태 (메인 메뉴 레벨)
+    if (activeThirdMenu) return 3;
+    if (activeSubMenu) return 2;
+    return 1;
   },
 
-  // 메인 메뉴 설정 (화면 하단의 메뉴)
+  // Set main menu (bottom menu)
   setActiveMainMenu: (menu: MainMenuType | null) => {
+    const { activeMainMenu, activeSubMenu, lastSubMenuByMainMenu } = get();
+
+    // Save current lv2 selection before switching
+    const newLastSubMenuByMainMenu = { ...lastSubMenuByMainMenu };
+    if (activeMainMenu && activeSubMenu) {
+      newLastSubMenuByMainMenu[activeMainMenu] = activeSubMenu;
+    }
+
     set({
       activeMainMenu: menu,
-      // 메인 메뉴 변경시 하위 메뉴들 초기화
+      // Reset sub menus when main menu changes
       activeSubMenu: null,
       activeThirdMenu: null,
-      // 툴팁 숨김
+      lastSubMenuByMainMenu: newLastSubMenuByMainMenu,
+      // Hide tooltip
       hoveredMenuId: null,
       tooltipMessage: null,
       tooltipPosition: null,
@@ -67,13 +86,48 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     });
   },
 
-  // 서브 메뉴 설정 (메인 메뉴 클릭시 나타나는 메뉴)
+  // Set sub menu (appears when main menu is clicked)
   setActiveSubMenu: (menu: string | null) => {
+    const { activeMainMenu, lastSubMenuByMainMenu } = get();
+
+    // Save lv2 selection for current lv1 menu
+    const newLastSubMenuByMainMenu = { ...lastSubMenuByMainMenu };
+    if (activeMainMenu && menu) {
+      newLastSubMenuByMainMenu[activeMainMenu] = menu;
+    }
+
     set({
       activeSubMenu: menu,
-      // 서브 메뉴 변경시 3단계 메뉴 초기화
+      // Reset third level menu when sub menu changes
       activeThirdMenu: null,
-      // 툴팁 숨김
+      lastSubMenuByMainMenu: newLastSubMenuByMainMenu,
+      // Hide tooltip
+      hoveredMenuId: null,
+      tooltipMessage: null,
+      tooltipPosition: null,
+      tooltipLevel: null,
+    });
+  },
+
+  // Switch to main menu and restore last lv2 selection (for Shift+key)
+  switchToMainMenuWithMemory: (menu: MainMenuType) => {
+    const { activeMainMenu, activeSubMenu, lastSubMenuByMainMenu } = get();
+
+    // Save current lv2 selection before switching
+    const newLastSubMenuByMainMenu = { ...lastSubMenuByMainMenu };
+    if (activeMainMenu && activeSubMenu) {
+      newLastSubMenuByMainMenu[activeMainMenu] = activeSubMenu;
+    }
+
+    // Get last lv2 selection for target menu
+    const lastSubMenu = newLastSubMenuByMainMenu[menu] || null;
+
+    set({
+      activeMainMenu: menu,
+      activeSubMenu: lastSubMenu,
+      activeThirdMenu: null,
+      lastSubMenuByMainMenu: newLastSubMenuByMainMenu,
+      // Hide tooltip
       hoveredMenuId: null,
       tooltipMessage: null,
       tooltipPosition: null,

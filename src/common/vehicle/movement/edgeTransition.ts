@@ -98,17 +98,19 @@ function updateSensorPresetForEdge(
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
 
   let presetIdx: number;
+  const railType = edge.vos_rail_type;
 
-  if (edge.vos_rail_type === EdgeType.CURVE_180) {
+  const isCurve = railType?.includes("CURVE") || railType?.startsWith("C");
+
+  if (railType === EdgeType.CURVE_180) {
     presetIdx = PresetIndex.U_TURN;
-  } else if (edge.vos_rail_type?.startsWith("C")) {
-    if (edge.curve_direction === "left") {
-      presetIdx = PresetIndex.CURVE_LEFT;
-    } else if (edge.curve_direction === "right") {
-      presetIdx = PresetIndex.CURVE_RIGHT;
-    } else {
-      presetIdx = PresetIndex.STRAIGHT;
-    }
+  } else if (railType === "LEFT_CURVE" || (isCurve && edge.curve_direction === "left")) {
+    presetIdx = PresetIndex.CURVE_LEFT;
+  } else if (railType === "RIGHT_CURVE" || (isCurve && edge.curve_direction === "right")) {
+    presetIdx = PresetIndex.CURVE_RIGHT;
+  } else if (isCurve) {
+    // Other curve types without explicit direction - default to STRAIGHT
+    presetIdx = PresetIndex.STRAIGHT;
   } else {
     presetIdx = PresetIndex.STRAIGHT;
   }
