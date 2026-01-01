@@ -29,30 +29,13 @@ export function interpolatePositionTo(
   const points = edge.renderingPoints;
 
   if (!points || points.length === 0) {
-    target.x = 0;
-    target.y = 0;
-    target.z = defaultZ;
-    target.rotation = (edge as any).axis ?? 0;
+    setFallbackPosition(target, edge, defaultZ);
     return;
   }
 
   // LINEAR EDGES
   if (edge.vos_rail_type === EdgeType.LINEAR) {
-    const pStart = points[0];
-    const pEnd = points.at(-1)!;
-
-    target.x = pStart.x + (pEnd.x - pStart.x) * ratio;
-    target.y = pStart.y + (pEnd.y - pStart.y) * ratio;
-    target.z = defaultZ;
-
-    const dx = pEnd.x - pStart.x;
-    const dy = pEnd.y - pStart.y;
-
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      target.rotation = dx >= 0 ? 0 : 180;
-    } else {
-      target.rotation = dy >= 0 ? 90 : -90;
-    }
+    interpolateLinearPosition(target, points, ratio, defaultZ);
     return;
   }
 
@@ -73,9 +56,67 @@ export function interpolatePositionTo(
   target.y = p1.y + (p2.y - p1.y) * segmentRatio;
   target.z = defaultZ;
 
+  const { dx, dy, distSq } = calculateStableVector(
+    points,
+    index,
+    nextIndex,
+    p1,
+    p2
+  );
+
+  let rawRotation = 0;
+  if (distSq > 0.000001) {
+    rawRotation = Math.atan2(dy, dx) * RAD_TO_DEG;
+  }
+
+  target.rotation = ((rawRotation % 360) + 360) % 360;
+}
+
+function setFallbackPosition(
+  target: PositionResult,
+  edge: Edge,
+  defaultZ: number
+): void {
+  target.x = 0;
+  target.y = 0;
+  target.z = defaultZ;
+  target.rotation = (edge as any).axis ?? 0;
+}
+
+function interpolateLinearPosition(
+  target: PositionResult,
+  points: { x: number; y: number }[],
+  ratio: number,
+  defaultZ: number
+): void {
+  const pStart = points[0];
+  const pEnd = points.at(-1)!;
+
+  target.x = pStart.x + (pEnd.x - pStart.x) * ratio;
+  target.y = pStart.y + (pEnd.y - pStart.y) * ratio;
+  target.z = defaultZ;
+
+  const dx = pEnd.x - pStart.x;
+  const dy = pEnd.y - pStart.y;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    target.rotation = dx >= 0 ? 0 : 180;
+  } else {
+    target.rotation = dy >= 0 ? 90 : -90;
+  }
+}
+
+function calculateStableVector(
+  points: { x: number; y: number }[],
+  index: number,
+  nextIndex: number,
+  p1: { x: number; y: number },
+  p2: { x: number; y: number }
+): { dx: number; dy: number; distSq: number } {
   // Calculate rotation using points far enough apart for stability
   // Minimum distance threshold for stable direction calculation
   const MIN_DIST_SQ = 0.01; // 0.1m minimum distance
+  const maxIndex = points.length - 1;
 
   let dx = p2.x - p1.x;
   let dy = p2.y - p1.y;
@@ -105,10 +146,5 @@ export function interpolatePositionTo(
     }
   }
 
-  let rawRotation = 0;
-  if (distSq > 0.000001) {
-    rawRotation = Math.atan2(dy, dx) * RAD_TO_DEG;
-  }
-
-  target.rotation = ((rawRotation % 360) + 360) % 360;
+  return { dx, dy, distSq };
 }
