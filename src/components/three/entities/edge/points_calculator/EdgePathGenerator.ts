@@ -88,7 +88,6 @@ export class EdgePathGenerator {
           seg.radius,
           seg.angle,
           count,
-          "from"
         );
         allPoints.push(...points);
         

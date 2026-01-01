@@ -25,7 +25,6 @@ const VehicleTestRunner: React.FC<VehicleTestRunnerProps> = ({
   mode,
   mapName,
   numVehicles,
-  cameraConfig,
   useVehicleConfig = false,
 }) => {
   const { startTest } = useVehicleTestStore();

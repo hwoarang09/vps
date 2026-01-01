@@ -13,12 +13,10 @@ import {
 
 interface EdgeRendererProps {
   edges: Edge[];
-  previewEdges?: Edge[];
 }
 
 const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   edges,
-  previewEdges = [],
 }) => {
   const colors = getEdgeColorConfig();
 

@@ -31,14 +31,14 @@ const CFGLoader: React.FC = () => {
 
   // Auto-close modal after successful load
   useEffect(() => {
+    let timer: NodeJS.Timeout;
     if (!isLoading && !error && selectedFolder) {
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         setShowModal(false);
         setActiveMainMenu(null); // Close any active menu
       }, 2000); // Auto-close after 2 seconds
-
-      return () => clearTimeout(timer);
     }
+    return () => clearTimeout(timer);
   }, [isLoading, error, selectedFolder, setActiveMainMenu]);
 
   const handleFolderSelect = async (folder: string) => {

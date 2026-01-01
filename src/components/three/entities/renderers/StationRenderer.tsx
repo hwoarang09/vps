@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useStationStore, type Station } from "@/store/map/stationStore";
 import { getStationTypeConfig, getStationBoxConfig } from "@/config/stationConfig";
@@ -69,7 +68,6 @@ interface StationTypeRendererProps {
 const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
   stations,
   color,
-  stationType,
 }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const instanceCount = stations.length;
@@ -121,11 +119,6 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
 
     mesh.instanceMatrix.needsUpdate = true;
   }, [stations, instanceCount]);
-
-  // Animation frame (optional - can add pulsing effect later)
-  useFrame((state) => {
-    // Future: Add subtle animation based on station type
-  });
 
   if (instanceCount === 0) {
     return null;

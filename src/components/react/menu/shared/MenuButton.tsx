@@ -55,7 +55,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
   borderWidth = "2px",
   borderRadius = "rounded-xl",
 }) => {
-  const { getCurrentTopLevel, showTooltip, hideTooltip } = useMenuStore();
+  const { showTooltip, hideTooltip } = useMenuStore();
   const [isHovered, setIsHovered] = useState(false);
 
   const sizeConfig =

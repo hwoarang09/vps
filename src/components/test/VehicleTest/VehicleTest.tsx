@@ -225,7 +225,7 @@ const VehicleTest: React.FC = () => {
     useStationStore.getState().setStations(allStations);
 
     // Update text store with fab-separated texts
-    updateTextsForFab(allNodes, allEdges, allStations, fabCountX, fabCountY, bounds);
+    updateTextsForFab(allNodes, allEdges, allStations, fabCountX, fabCountY);
 
     // Re-initialize LockMgr with new edges
     resetLockMgr();
@@ -242,7 +242,6 @@ const VehicleTest: React.FC = () => {
     stations: ReturnType<typeof useStationStore.getState>["stations"],
     gridX: number,
     gridY: number,
-    bounds: ReturnType<typeof getNodeBounds>
   ) => {
     const textStore = useTextStore.getState();
     const fabInfos = useFabStore.getState().fabs;

@@ -1,5 +1,4 @@
 // components/react/menu/data/menuLevel2Config.tsx
-import React from "react";
 import {
   TrendingUp,
   Calendar,
@@ -7,21 +6,14 @@ import {
   CalendarDays,
   Zap,
   Car,
-  Circle,
-  Clock,
-  Wrench,
   FileText,
   Map,
   Timer,
   Eye,
   Bell,
   FileCheck,
-  Minus,
-  RotateCcw,
-  Move3D,
   Waves,
   Hash,
-  CornerDownRight,
   Shuffle,
   Building2,
   Cog,
@@ -36,7 +28,7 @@ import {
 import { ReactComponent as Curve180Icon } from "@/assets/icons/curve180.svg";
 import { ReactComponent as Curve90Icon } from "@/assets/icons/curve90.svg";
 import { ReactComponent as StrmapIcon } from "@/assets/icons/str_edge.svg";
-import { ReactComponent as R_mapIcon } from "@/assets/icons/r_edge.svg";
+import { ReactComponent as RMapIcon } from "@/assets/icons/r_edge.svg";
 
 import {
   MenuLevel2Item,
@@ -45,9 +37,7 @@ import {
   ACTIVE_FILL_COLOR,
   INACTIVE_FILL_COLOR,
   ICON_SIZE_LARGE,
-  ICON_SIZE_MEDIUM,
   ICON_SIZE_SMALL,
-  ICON_SIZE_EXTRA_SMALL,
 } from "../shared";
 
 export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
@@ -346,7 +336,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       id: "map-menu-6",
       label: "R Shape",
       iconFn: (isActive: boolean) => (
-        <R_mapIcon
+        <RMapIcon
           // size={36}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,

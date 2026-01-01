@@ -86,7 +86,7 @@ export interface VehicleArrayStore extends IVehicleStore {
 }
 
 export const useVehicleArrayStore = create<VehicleArrayStore>(
-  (set, get) => ({
+  (set) => ({
     vehicleDataRef: null,
     edgeVehicleListRef: null,
     actualNumVehicles: 0,

@@ -76,7 +76,7 @@ export class SCurvePointsCalculator {
     // n2 → n3 곡선
     const dir1 = DirectionUtils.getLineDirection(n1, n2);
     const pts2 = DirectionUtils.calculateCurveAreaPoints(
-      n2, n3, dir1, radius, rotation, seg2, "from"
+      n2, n3, dir1, radius, rotation, seg2
     );
     forwardPoints.push(...pts2);
 
@@ -94,7 +94,7 @@ export class SCurvePointsCalculator {
     // n5 → n4 곡선
     const dir5 = DirectionUtils.getLineDirection(n6, n5);
     const pts4 = DirectionUtils.calculateCurveAreaPoints(
-      n5, n4, dir5, radius, rotation, seg4, "from"
+      n5, n4, dir5, radius, rotation, seg4
     );
     backwardPoints.push(...pts4);
 

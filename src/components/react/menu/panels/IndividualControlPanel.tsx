@@ -7,9 +7,6 @@ import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import {
-    MovingStatus as ShmMovingStatus,
-    StopReason as ShmStopReason,
-    TrafficState as ShmTrafficState,
     VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
     MovementData as ShmMovementData,
     SensorData as ShmSensorData,

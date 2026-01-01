@@ -111,7 +111,6 @@ export class DirectionUtils {
     radius: number = 0.5,
     rotationDegrees: number = 90,
     segments: number = 16,
-    arcCenterBase: "from" | "to" = "from"
   ): THREE.Vector3[] {
     const points: THREE.Vector3[] = [];
 

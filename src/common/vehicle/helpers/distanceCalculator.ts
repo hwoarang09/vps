@@ -8,8 +8,6 @@ export function calculateVehicleDistance(
   y1: number,
   x2: number,
   y2: number,
-  edge1IsLinear: boolean,
-  edge2IsLinear: boolean
 ): number {
   const dx = x2 - x1;
   const dy = y2 - y1;

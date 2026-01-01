@@ -4,7 +4,6 @@ import VehicleArrayMode from "./vehicleArrayMode/vehicleArrayMode";
 import VehicleSharedMemoryMode from "./vehicleSharedMode/VehicleSharedMemoryMode";
 import VehiclesRenderer from "../renderers/VehiclesRenderer/VehiclesRenderer";
 import { VehicleSystemType } from '@/types/vehicle';
-import { getMaxVehicles } from "@/config/vehicleConfig";
 import { getRapierModeConfig } from "@/config/visualizationConfig";
 import VehicleSelector from "../../interaction/VehicleSelector";
 
@@ -24,7 +23,6 @@ interface VehicleSystemProps {
 const VehicleSystem: React.FC<VehicleSystemProps> = ({
   mode,
   numVehicles = 100,
-  maxVehicles = getMaxVehicles(),
 }) => {
   const needsPhysics = mode === VehicleSystemType.RapierDict;
   const rapierConfig = getRapierModeConfig();
