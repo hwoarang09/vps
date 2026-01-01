@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useStationStore } from "@/store/map/stationStore";
+import { useStationStore, type Station } from "@/store/map/stationStore";
 import { getStationTypeConfig, getStationBoxConfig } from "@/config/stationConfig";
 
 // Color mapping by station type
@@ -61,7 +61,7 @@ const StationRenderer: React.FC = () => {
 };
 
 interface StationTypeRendererProps {
-  stations: ReturnType<typeof useStationStore>["stations"];
+  stations: Station[];
   color: string;
   stationType: string;
 }

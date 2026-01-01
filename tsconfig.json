@@ -4,6 +4,10 @@
     "module": "ESNext", // ESNext 모듈 시스템 사용
     "moduleResolution": "Node", // Node.js 모듈 해석 사용
     "strict": true, // 모든 엄격 모드 활성화
+    "noUnusedLocals": true, // 사용하지 않는 지역 변수 에러
+    "noUnusedParameters": true, // 사용하지 않는 매개변수 에러
+    "noFallthroughCasesInSwitch": true, // switch fall-through 방지
+    "noImplicitReturns": true, // 모든 경로에서 값 반환 강제
     "baseUrl": ".", // 기준 경로를 프로젝트 루트로 설정
     "paths": {
       "@/*": ["src/*"],

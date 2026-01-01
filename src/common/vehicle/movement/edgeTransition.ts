@@ -104,9 +104,9 @@ function updateSensorPresetForEdge(
 
   if (railType === EdgeType.CURVE_180) {
     presetIdx = PresetIndex.U_TURN;
-  } else if (railType === "LEFT_CURVE" || (isCurve && edge.curve_direction === "left")) {
+  } else if ((railType as string) === "LEFT_CURVE" || (isCurve && edge.curve_direction === "left")) {
     presetIdx = PresetIndex.CURVE_LEFT;
-  } else if (railType === "RIGHT_CURVE" || (isCurve && edge.curve_direction === "right")) {
+  } else if ((railType as string) === "RIGHT_CURVE" || (isCurve && edge.curve_direction === "right")) {
     presetIdx = PresetIndex.CURVE_RIGHT;
   } else if (isCurve) {
     // Other curve types without explicit direction - default to STRAIGHT
