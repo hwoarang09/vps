@@ -38,4 +38,4 @@ export const loadMqttConfig = async (): Promise<MqttConfig> => {
 };
 
 // For backward compatibility
-export const mqttUrl = defaultMqttConfig.MQTT_BROKER_URL;
+

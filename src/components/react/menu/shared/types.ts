@@ -28,7 +28,7 @@ export const TOOLTIP_ARROW_BACKGROUND_COLOR = "rgba(85,90,98,0.99)";
 export const TOOLTIP_ARROW_BORDER_COLOR = "rgba(230,230,230, 0.99)";
 
 // Tooltip style constants
-export const TOOLTIP_BORDER_RADIUS = "12px"; // Rounded corners
+
 
 // Menu size constants
 export const MENU_BUTTON_LARGE_SIZE = { width: "w-12", height: "h-12" }; // 64px x 64px
@@ -38,7 +38,7 @@ export const MENU_BUTTON_SMALL_SIZE = { width: "w-12", height: "h-10" }; // 48px
 export const ICON_SIZE_LARGE = 30; // Large icon for Level 2 menu
 export const ICON_SIZE_MEDIUM = 24; // Medium icon for Level 1 menu
 export const ICON_SIZE_SMALL = 20; // Small icon
-export const ICON_SIZE_EXTRA_SMALL = 16; // Extra small icon
+
 
 // MenuButton color constants
 export const MENU_BUTTON_ACTIVE_BACKGROUND = "rgba(94, 197, 255, 0.85)";

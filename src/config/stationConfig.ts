@@ -72,7 +72,7 @@ const loadStationConfig = async (): Promise<StationConfig> => {
 };
 
 // Export config loader
-export const getStationConfig = loadStationConfig;
+
 
 // For synchronous access (will use default until loaded)
 let stationConfig: StationConfig = {
@@ -126,5 +126,5 @@ export const getStationTypeConfig = (stationType: string): StationTypeConfig => 
 
 export const getStationTextConfig = () => stationConfig.TEXT;
 export const getStationBoxConfig = () => stationConfig.BOX;
-export const getStationConfigSync = () => stationConfig;
+
 

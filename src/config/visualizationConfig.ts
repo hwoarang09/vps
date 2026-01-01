@@ -39,7 +39,7 @@ const loadVisualizationConfig = async (): Promise<VisualizationConfig> => {
 };
 
 // Export config loader
-export const getVisualizationConfig = loadVisualizationConfig;
+
 
 // For synchronous access (will use default until loaded)
 let visualizationConfig: VisualizationConfig = {
@@ -63,9 +63,8 @@ loadVisualizationConfig().then(config => {
 
 // Synchronous getters for each mode
 export const getRapierModeConfig = () => visualizationConfig.RAPIER_MODE;
-export const getArrayModeConfig = () => visualizationConfig.ARRAY_MODE;
-export const getSharedMemoryModeConfig = () => visualizationConfig.SHARED_MEMORY_MODE;
+
 
 // Synchronous getter for entire config
-export const getVisualizationConfigSync = () => visualizationConfig;
+
 

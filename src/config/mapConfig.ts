@@ -38,7 +38,7 @@ const loadMapConfig = async () => {
 };
 
 // Export config loader
-export const getMapConfig = loadMapConfig;
+
 
 // For synchronous access (will use default until loaded)
 let mapConfig = {
@@ -73,17 +73,7 @@ loadMapConfig().then(config => {
 });
 
 // Export rail config base path
-export const getRailConfigPath = () => `/${mapConfig.RAIL_CONFIG_PATH}`;
 
-// Export map file paths based on selected map folder
-export const getMapFilePaths = (mapFolder: string) => {
-  const basePath = getRailConfigPath();
-  return {
-    nodesPath: `${basePath}/${mapFolder}/nodes.cfg`,
-    edgesPath: `${basePath}/${mapFolder}/edges.cfg`,
-    stationsPath: `${basePath}/${mapFolder}/stations.cfg`
-  };
-};
 
 // Get available map folders from config
 export const getAvailableMapFolders = async (): Promise<string[]> => {
@@ -92,15 +82,11 @@ export const getAvailableMapFolders = async (): Promise<string[]> => {
 };
 
 // Get auto-load map (returns null if empty string or not set)
-export const getAutoLoadMap = async (): Promise<string | null> => {
-  const config = await loadMapConfig();
-  const autoLoadMap = config.AUTO_LOAD_MAP || '';
-  return autoLoadMap.trim() === '' ? null : autoLoadMap;
-};
+
 
 // Config Getters
 export const getMarkerConfig = () => mapConfig.MARKERS;
 export const getRendererConfig = () => mapConfig.RENDERER;
 export const getEdgeColorConfig = () => mapConfig.EDGE_COLORS;
-export const getMapConfigSync = () => mapConfig; // Full sync access
+
 

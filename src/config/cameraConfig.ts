@@ -34,7 +34,7 @@ const loadCameraConfig = async (): Promise<CameraSettings> => {
 };
 
 // Export config loader
-export const getCameraConfig = loadCameraConfig;
+
 
 // For synchronous access (will use default until loaded)
 let cameraConfig: CameraSettings = {
@@ -49,7 +49,7 @@ let cameraConfig: CameraSettings = {
 };
 
 // Initialize config on module load
-getCameraConfig().then(config => {
+loadCameraConfig().then(config => {
   cameraConfig = config;
   console.log('[CameraConfig] Loaded camera configuration:', config);
 });

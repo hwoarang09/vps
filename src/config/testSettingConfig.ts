@@ -47,7 +47,7 @@ const loadTestSettingConfig = async (): Promise<TestSettingConfig> => {
 };
 
 // Export config loader
-export const getTestSettingConfig = loadTestSettingConfig;
+
 
 // For synchronous access (will use default until loaded)
 let testSettingConfig: TestSettingConfig = {
@@ -155,14 +155,5 @@ export const getTestSettings = () => testSettingConfig.TEST_SETTINGS;
 export const getDefaultSetting = () => testSettingConfig.DEFAULT_SETTING;
 
 // Get test setting by ID
-export const getTestSettingById = (id: string): TestSetting | undefined => {
-  return testSettingConfig.TEST_SETTINGS.find(setting => setting.id === id);
-};
 
-// Get default test setting
-export const getDefaultTestSetting = (): TestSetting => {
-  const defaultId = testSettingConfig.DEFAULT_SETTING;
-  const setting = getTestSettingById(defaultId);
-  return setting || testSettingConfig.TEST_SETTINGS[0];
-};
 

@@ -4,7 +4,7 @@ export { default as MapTextRenderer } from "./MapTextRenderer";
 
 export { useDigitMaterials, textToDigits, CHAR_MAP, CHAR_COUNT, ALL_CHARS } from "./useDigitMaterials";
 export {
-  HIDE_MATRIX,
+
   buildSlotData,
   applyHighAltitudeCulling,
   updateBillboardRotation,

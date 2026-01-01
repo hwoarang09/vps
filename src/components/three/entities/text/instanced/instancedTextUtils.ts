@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { CHAR_COUNT, CHAR_MAP } from "./useDigitMaterials";
 
-export const HIDE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+const HIDE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
 
 // ============================================================================
 // Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
@@ -410,7 +410,7 @@ interface Vec3Like {
  * early exit: 각 축별 거리로 먼저 필터링 후 거리 제곱 계산
  * @returns true면 LOD 컬링됨 (숨김)
  */
-export function checkLODCulling(
+function checkLODCulling(
   pos: Vec3Like,
   camPos: Vec3Like,
   lodDist: number,

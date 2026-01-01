@@ -42,7 +42,7 @@ export interface EdgeSpot {
  * Calculate all available spots for vehicle placement
  * Returns spots in round-robin order across edges
  */
-export const calculateAllSpots = (allEdges: Edge[]): EdgeSpot[] => {
+const calculateAllSpots = (allEdges: Edge[]): EdgeSpot[] => {
   // 1. edge별로 spot 목록 생성
   const edgeSpots: { edge: Edge; spots: number[] }[] = [];
 

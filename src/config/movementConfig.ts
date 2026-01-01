@@ -35,7 +35,7 @@ const loadMovementConfig = async (): Promise<MovementConfig> => {
 };
 
 // Export config loader
-export const getMovementConfig = loadMovementConfig;
+
 
 // For synchronous access (will use default until loaded)
 let movementConfig: MovementConfig = {
@@ -66,5 +66,5 @@ export const getCurveAcceleration = () => movementConfig.CURVE_ACCELERATION;
 export const getMaxDelta = () => movementConfig.MAX_DELTA;
 
 // Export the config object itself
-export const getMovementConfigSync = () => movementConfig;
+
 
