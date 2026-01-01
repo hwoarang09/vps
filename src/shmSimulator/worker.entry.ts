@@ -86,6 +86,9 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
     case "DISPOSE":
       handleDispose();
       break;
+    case "COMMAND":
+      if (engine) engine.handleCommand((message as any).payload);
+      break;
     default:
       console.warn("[Worker] Unknown message type:", (message as any).type);
   }

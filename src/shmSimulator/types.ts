@@ -95,6 +95,7 @@ export type WorkerMessage =
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "DISPOSE" }
+  | { type: "COMMAND"; payload: any }
   | { type: "SET_TRANSFER_MODE"; mode: TransferMode };
 
 // Worker -> Main Thread Messages

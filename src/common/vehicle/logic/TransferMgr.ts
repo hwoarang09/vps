@@ -148,9 +148,9 @@ export class TransferMgr {
   private getNextEdgeRandomly(currentEdge: Edge): number {
     if (currentEdge.nextEdgeIndices?.length > 0) {
       const randomIndex = Math.floor(
-        Math.random() * currentEdge.nextEdgeIndices.length
+        Math.random() * currentEdge.nextEdgeIndices!.length
       );
-      return currentEdge.nextEdgeIndices[randomIndex];
+      return currentEdge.nextEdgeIndices![randomIndex];
     }
     return -1;
   }

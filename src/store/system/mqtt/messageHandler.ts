@@ -9,6 +9,7 @@
 // - SERVICE: MOVE, TRANSFER, STOP, etc. (from TOPICS constant)
 
 import { TOPICS } from "@/config/mqttConfig";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 type MqttStoreGetter = () => {
   setReceivedMessages: (topic: string, message: unknown) => void;
@@ -130,23 +131,12 @@ const handleTransferMgrMessage = (
 // Service Handlers (to be implemented)
 const handleMoveCommand = (sender: string, _message: unknown): void => {
   console.log(`[MQTT] MOVE command from ${sender} message ${JSON.stringify(_message)}`);
-  
-  // TODO: Forward this command to the SimulationEngine via Worker
-  // Since this handler runs on the Main Thread and SimulationEngine is in a Worker,
-  // we need to dispatch a message or event that the SimulationManager (which holds the worker) listens to.
-  // 
-  // Example flow:
-  // window.dispatchEvent(new CustomEvent('mqtt-command', { detail: _message }));
-  //
-  // Or if we have access to the store which manages the worker:
-  // useSimulationStore.getState().sendCommand(_message);
-  
-  console.log("[MQTT] (Mock) Command validated and ready to forward to RoutingMgr");
+  useShmSimulatorStore.getState().sendCommand(_message);
 };
 
 const handleTransferCommand = (sender: string, _message: unknown): void => {
   console.log(`[MQTT] TRANSFER command from ${sender} message ${JSON.stringify(_message)}`);
-  // TODO: Forward to Worker
+  useShmSimulatorStore.getState().sendCommand(_message);
 };
 
 const handleStopCommand = (sender: string, _message: unknown): void => {

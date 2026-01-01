@@ -205,6 +205,15 @@ export class ShmSimulatorController {
   }
 
   /**
+   * Send a command to the worker
+   */
+  sendCommand(payload: any): void {
+    if (!this.worker) return;
+    const message: WorkerMessage = { type: "COMMAND", payload };
+    this.worker.postMessage(message);
+  }
+
+  /**
    * Dispose the controller and terminate worker
    */
   dispose(): void {

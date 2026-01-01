@@ -42,6 +42,8 @@ interface ShmSimulatorState {
   getVehicleData: () => Float32Array | null;
   getSensorPointData: () => Float32Array | null;
   getVehiclePosition: (index: number) => { x: number; y: number; z: number; rotation: number } | null;
+
+  sendCommand: (payload: any) => void;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -176,6 +178,13 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       z: data[ptr + MovementData.Z],
       rotation: data[ptr + MovementData.ROTATION],
     };
+  },
+
+  sendCommand: (payload: any) => {
+    const { controller } = get();
+    if (controller) {
+      controller.sendCommand(payload);
+    }
   },
 }));
 
