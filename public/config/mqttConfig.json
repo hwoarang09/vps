@@ -1,12 +1,6 @@
 {
-  "MQTT_BROKER_URL": "ws://localhost:8083",
+  "MQTT_BROKER_URL": "ws://localhost:9003",
   "SUBSCRIBE_TOPICS": [
-    "UI/LayOut/moveTomap",
-    "UI/LayOut/moveToPickUp",
-    "UI/LayOut/moveToDropDown",
-    "UI/LayOut/dropDown",
-    "UI/LayOut/pickUp",
-    "#"
+    "VPS/transferMgr/+/+"
   ]
 }
-

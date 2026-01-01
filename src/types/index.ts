@@ -114,6 +114,7 @@ export type MainMenuType =
   | "MapBuilder"
   | "LayoutBuilder"
   | "DataPanel"
+  | "MQTT"
   | "Test";
 
 /**

@@ -3,6 +3,7 @@ import React from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
+import MqttControlPanel from "./panels/MqttControlPanel";
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
@@ -115,6 +116,15 @@ const RightPanel: React.FC = () => {
             Individual Control
           </h3>
           <IndividualControlPanel />
+        </div>
+      );
+    }
+
+    // MQTT Connection Panel
+    if (activeMainMenu === "MQTT" && activeSubMenu === "mqtt-connection") {
+      return (
+        <div className="h-full flex flex-col">
+          <MqttControlPanel />
         </div>
       );
     }

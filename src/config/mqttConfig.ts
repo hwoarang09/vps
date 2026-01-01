@@ -1,34 +1,43 @@
+// MQTT Configuration Types
+// Topic format: {PROJECT}/{RECEIVER}/{SENDER}/{SERVICE}
+// Example: VPS/transferMgr/UI/MOVE
+
+export interface MqttConfig {
+  MQTT_BROKER_URL: string;
+  SUBSCRIBE_TOPICS: string[];
+}
+
+// Service types for topic routing
+export const TOPICS = {
+  // Commands
+  MOVE: "MOVE",
+  TRANSFER: "TRANSFER",
+  STOP: "STOP",
+  // Status
+  STATUS: "STATUS",
+} as const;
+
+export type TopicService = (typeof TOPICS)[keyof typeof TOPICS];
+
+// Default configuration (fallback)
+export const defaultMqttConfig: MqttConfig = {
+  MQTT_BROKER_URL: "ws://localhost:9003",
+  SUBSCRIBE_TOPICS: ["VPS/transferMgr/+/+"],
+};
+
 // Load MQTT configuration from JSON file
-const loadMqttConfig = async () => {
+export const loadMqttConfig = async (): Promise<MqttConfig> => {
   try {
-    const response = await fetch('/config/mqttConfig.json');
+    const response = await fetch("/config/mqttConfig.json");
     if (!response.ok) {
       throw new Error(`Failed to load MQTT config: ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading MQTT config:', error);
-    // Fallback to default values
-    return {
-      MQTT_BROKER_URL: 'ws://localhost:8083',
-      SUBSCRIBE_TOPICS: ['#']
-    };
+    console.error("Error loading MQTT config:", error);
+    return defaultMqttConfig;
   }
 };
 
-// Export config loader
-export const getMqttConfig = loadMqttConfig;
-
-// For backward compatibility - synchronous access (will use default until loaded)
-let mqttConfig = {
-  MQTT_BROKER_URL: 'ws://localhost:8083',
-  SUBSCRIBE_TOPICS: ['#'] as string[]
-};
-
-// Load config immediately
-loadMqttConfig().then(config => {
-  mqttConfig = config;
-});
-
-export const mqttUrl = mqttConfig.MQTT_BROKER_URL;
-export const subscribeTopics = mqttConfig.SUBSCRIBE_TOPICS;
+// For backward compatibility
+export const mqttUrl = defaultMqttConfig.MQTT_BROKER_URL;

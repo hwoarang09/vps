@@ -7,6 +7,7 @@ import {
   Table,
   Building,
   TestTube,
+  Antenna,
 } from "lucide-react";
 import {
   MenuLevel1Item,
@@ -111,13 +112,27 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       ),
     },
   ],
-  // Group 5: Debug
+  // Group 5: Debug & MQTT
   [
     {
       id: "DataPanel",
       label: "DataPanel",
       iconFn: (isActive) => (
         <Table
+          size={ICON_SIZE_MEDIUM}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "MQTT",
+      label: "MQTT",
+      shortcutLabel: "m",
+      iconFn: (isActive) => (
+        <Antenna
           size={ICON_SIZE_MEDIUM}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,

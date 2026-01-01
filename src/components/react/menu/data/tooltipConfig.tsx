@@ -15,6 +15,7 @@ export const tooltipsByLevel: {
     MapBuilder: "도로 편집기",
     LayoutBuilder: "레이아웃 편집기",
     DataPanel: "데이터 패널",
+    MQTT: "MQTT 연결 관리",
     Test: "성능 테스트",
   },
   2: {
@@ -58,6 +59,8 @@ export const tooltipsByLevel: {
     "test-rapier-array": "Rapier (Dict) 모드 테스트",
     "test-rapier-dict": "Array Single 모드 테스트",
     "test-shared-memory": "Shared Memory 모드 테스트",
+
+    "mqtt-connection": "MQTT 브로커 연결 관리",
   },
   3: {
     // 서브서브메뉴 레벨 (필요한 경우에만)

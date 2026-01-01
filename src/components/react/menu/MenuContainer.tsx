@@ -8,20 +8,23 @@ import ConfigDataPanel from "../DataPanel/DataPanel";
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
-import { mqttUrl } from "@/config/mqttConfig";
 import { MenuTooltip } from "./MenuTooltip";
+import MqttStatusIndicator from "../system/MqttStatusIndicator";
 
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, rightPanelOpen } = useMenuStore();
-  const { initializeClient } = useMqttStore();
+  const { loadConfig } = useMqttStore();
 
-  // Initialize MQTT client
+  // Load MQTT config on mount (no auto-connect)
   useEffect(() => {
-    initializeClient(mqttUrl);
-  }, [initializeClient]);
+    loadConfig();
+  }, [loadConfig]);
 
   return (
     <>
+      {/* MQTT Status Indicator - Top Left */}
+      <MqttStatusIndicator />
+
       {/* Top area - empty for now */}
       <div
         style={{
