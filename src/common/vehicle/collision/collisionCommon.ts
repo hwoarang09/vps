@@ -123,5 +123,5 @@ export function calculateEuclideanDistance(
   const yA = data[ptrA + MovementData.Y];
   const xB = data[ptrB + MovementData.X];
   const yB = data[ptrB + MovementData.Y];
-  return Math.sqrt(Math.pow(xA - xB, 2) + Math.pow(yA - yB, 2));
+  return Math.hypot(xA - xB, yA - yB);
 }

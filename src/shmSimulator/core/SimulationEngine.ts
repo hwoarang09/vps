@@ -14,6 +14,9 @@ import type { Node } from "@/types";
 import type { InitPayload, SimulationConfig } from "../types";
 import { createDefaultConfig } from "../types";
 
+import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
+import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
+
 export class SimulationEngine {
   // === Internal Store ===
   private readonly store: EngineStore;
@@ -32,6 +35,8 @@ export class SimulationEngine {
   // === Logic Managers ===
   private readonly lockMgr: LockMgr;
   private readonly transferMgr: TransferMgr;
+  private readonly dispatchMgr: DispatchMgr;
+  public readonly routingMgr: RoutingMgr; // Public for easy access (e.g. from Worker event listener)
 
   // === Runtime ===
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
@@ -58,6 +63,17 @@ export class SimulationEngine {
     this.edgeVehicleQueue = this.store.getEdgeVehicleQueue();
     this.lockMgr = new LockMgr();
     this.transferMgr = new TransferMgr();
+    
+    // Wire up new managers
+    this.dispatchMgr = new DispatchMgr(this.transferMgr);
+    this.routingMgr = new RoutingMgr(this.dispatchMgr);
+  }
+
+  /**
+   * Handle external command (e.g. from MQTT via Worker Event)
+   */
+  handleCommand(command: any): void {
+    this.routingMgr.receiveMessage(command);
   }
 
   /**

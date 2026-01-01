@@ -57,4 +57,19 @@ worker.onerror = (error) => {
 
 
 Prefer `Math.hypot(…)` over `Math.sqrt(…)`.
+
+## readOnly
+Member 'dispatchMgr' is never reassigned; mark it as `readonly`.
+
+## Unexpected negated condition
+example...
+if (idx !== undefined) {
+  
+}
+
+## using chanin
+if (command && command.nextEdgeId) {
+}
+Prefer using an optional chain expression instead, as it's more concise and easier to read.
+
 ```

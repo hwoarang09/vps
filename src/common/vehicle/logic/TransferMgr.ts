@@ -7,7 +7,7 @@ import {
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 
-export type TransferMode = 0 | 1; // 0 = LOOP, 1 = RANDOM
+export type TransferMode = 0 | 1 | 2; // 0 = LOOP, 1 = RANDOM, 2 = MQTT_CONTROL
 
 export type VehicleLoop = {
   edgeSequence: string[];
@@ -28,6 +28,8 @@ export function getNextEdgeInLoop(
 
 export class TransferMgr {
   private transferQueue: number[] = [];
+  // Store reserved next edge for each vehicle: vehId -> edgeName
+  private readonly reservedNextEdges: Map<number, string> = new Map();
 
   enqueueVehicleTransfer(vehicleIndex: number) {
     this.transferQueue.push(vehicleIndex);
@@ -39,6 +41,18 @@ export class TransferMgr {
 
   clearQueue() {
     this.transferQueue = [];
+    this.reservedNextEdges.clear();
+  }
+
+  /**
+   * Assign a command to a specific vehicle.
+   * Currently supports 'nextEdgeId' command.
+   */
+  assignCommand(vehId: number, command: any) {
+    if (command?.nextEdgeId) {
+      console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${command.nextEdgeId}`);
+      this.reservedNextEdges.set(vehId, command.nextEdgeId);
+    }
   }
 
   processTransferQueue(
@@ -74,6 +88,8 @@ export class TransferMgr {
       );
 
       if (nextEdgeIndex === -1) {
+        // If no valid next edge found
+        // In MQTT_CONTROL mode, this effectively stops/waits if no command is present
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
       } else {
         data[ptr + MovementData.NEXT_EDGE] = nextEdgeIndex;
@@ -93,7 +109,10 @@ export class TransferMgr {
       return currentEdge.nextEdgeIndices![0];
     }
 
-    if (mode === 0) {
+    if (mode === 2) {
+      // MQTT_CONTROL
+      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex);
+    } else if (mode === 0) {
       // LOOP
       return this.getNextEdgeFromLoop(
         currentEdge,
@@ -107,8 +126,27 @@ export class TransferMgr {
     }
   }
 
+  private getNextEdgeFromCommand(
+    vehicleIndex: number,
+    edgeNameToIndex: Map<string, number>
+  ): number {
+    const reservedName = this.reservedNextEdges.get(vehicleIndex);
+    if (reservedName) {
+      const idx = edgeNameToIndex.get(reservedName);
+      if (idx === undefined) {
+        console.warn(`[TransferMgr] Reserved edge ${reservedName} not found`);
+      } else {
+        // Command consumed (one-time use for now)
+        this.reservedNextEdges.delete(vehicleIndex);
+        return idx;
+      }
+    }
+    // Return -1 to indicate waiting/stop if no command
+    return -1;
+  }
+
   private getNextEdgeRandomly(currentEdge: Edge): number {
-    if (currentEdge.nextEdgeIndices && currentEdge.nextEdgeIndices.length > 0) {
+    if (currentEdge.nextEdgeIndices?.length > 0) {
       const randomIndex = Math.floor(
         Math.random() * currentEdge.nextEdgeIndices.length
       );
@@ -139,7 +177,11 @@ export class TransferMgr {
         loop.edgeSequence
       );
       const found = edgeNameToIndex.get(nextName);
-      if (found !== undefined) nextEdgeIndex = found;
+      if (found === undefined) {
+        // do nothing
+      } else {
+        nextEdgeIndex = found;
+      }
     }
 
     if (nextEdgeIndex === -1 && currentEdge.nextEdgeIndices?.length) {
