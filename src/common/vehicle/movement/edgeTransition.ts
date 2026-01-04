@@ -32,6 +32,7 @@ export interface EdgeTransitionResult {
 
 /**
  * Zero-GC: Handles edge transition, writes result to target object.
+ * @param preserveTargetRatio - If true, don't set TARGET_RATIO=1 (for MQTT mode)
  */
 export function handleEdgeTransition(
   vehicleDataArray: IVehicleDataArray,
@@ -40,7 +41,8 @@ export function handleEdgeTransition(
   initialEdgeIndex: number,
   initialRatio: number,
   edgeArray: Edge[],
-  target: EdgeTransitionResult
+  target: EdgeTransitionResult,
+  preserveTargetRatio: boolean = false
 ): void {
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
@@ -78,7 +80,11 @@ export function handleEdgeTransition(
 
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
     data[ptr + MovementData.NEXT_EDGE] = -1;
-    data[ptr + MovementData.TARGET_RATIO] = 1; // Default to full traversal on new edge
+    
+    // Only set TARGET_RATIO=1 if not preserving (MQTT mode preserves command targetRatio)
+    if (!preserveTargetRatio) {
+      data[ptr + MovementData.TARGET_RATIO] = 1; // Default to full traversal on new edge
+    }
 
     currentEdgeIdx = nextEdgeIndex;
     currentEdge = nextEdge;

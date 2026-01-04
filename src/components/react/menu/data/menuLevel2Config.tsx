@@ -467,20 +467,5 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       ),
     },
   ],
-  MQTT: [
-    {
-      id: "mqtt-connection",
-      label: "Connection",
-      shortcutLabel: "c",
-      iconFn: (isActive: boolean) => (
-        <Zap
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-  ],
+
 };

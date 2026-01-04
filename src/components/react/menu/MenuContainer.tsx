@@ -15,7 +15,7 @@ const MenuContainer: React.FC = () => {
   const { activeMainMenu, rightPanelOpen } = useMenuStore();
   const { loadConfig } = useMqttStore();
 
-  // Load MQTT config on mount (no auto-connect)
+  // Load MQTT config on mount and auto-connect
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);

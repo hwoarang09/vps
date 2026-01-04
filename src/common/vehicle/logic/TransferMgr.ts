@@ -25,6 +25,8 @@ export interface VehicleCommand {
   targetRatio?: number;
   /** Next edge ID to transition to */
   nextEdgeId?: string;
+  /** Path array for multi-edge reservation (for speed control optimization) */
+  path?: Array<{edgeId: string; targetRatio?: number}>;
 }
 
 export function getNextEdgeInLoop(
@@ -45,6 +47,9 @@ export class TransferMgr {
   private transferQueue: number[] = [];
   // Store reserved next edge for each vehicle: vehId -> {edgeId, targetRatio}
   private readonly reservedNextEdges: Map<number, ReservedEdge> = new Map();
+  // Store reserved path for each vehicle: vehId -> Array<{edgeId, targetRatio}>
+  // Used for multi-edge reservation to enable speed control optimization
+  private readonly reservedPaths: Map<number, Array<ReservedEdge>> = new Map();
 
   enqueueVehicleTransfer(vehicleIndex: number) {
     this.transferQueue.push(vehicleIndex);
@@ -76,79 +81,32 @@ export class TransferMgr {
   ) {
     console.log(`[TransferMgr] assignCommand vehId=${vehId}, command=`, command);
 
-    if (!vehicleDataArray || !edgeArray || !edgeNameToIndex) {
-      console.error(`[TransferMgr] Missing required data for command validation`);
-      return;
-    }
+    if (!this.validateCommandData(vehicleDataArray, edgeArray, edgeNameToIndex)) return;
 
-    const data = vehicleDataArray.getData();
+    const data = vehicleDataArray!.getData();
     const ptr = vehId * VEHICLE_DATA_SIZE;
-
-    // Get current vehicle state
     const currentEdgeIndex = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-    const currentEdge = edgeArray[currentEdgeIndex];
-    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+    const currentEdge = edgeArray![currentEdgeIndex];
 
     if (!currentEdge) {
       console.error(`[TransferMgr] Vehicle ${vehId} has invalid current edge ${currentEdgeIndex}`);
       return;
     }
 
-    const { targetRatio, nextEdgeId } = command;
+    const { targetRatio, nextEdgeId, path } = command;
 
-    // Case 1: Same edge movement (no nextEdgeId or same as current)
+    if (path && path.length > 0) {
+      this.processPathCommand(vehId, path, currentEdge, edgeArray!, edgeNameToIndex!, data, ptr);
+    }
+
     if (!nextEdgeId || nextEdgeId === currentEdge.edge_name) {
-      if (targetRatio === undefined) {
-        console.warn(`[TransferMgr] No targetRatio provided for same-edge movement`);
-        return;
-      }
-
-      // Validate: targetRatio must be greater than current
-      if (targetRatio <= currentRatio) {
-        console.error(
-          `[TransferMgr] Invalid command: targetRatio ${targetRatio} <= currentRatio ${currentRatio}`
-        );
-        return;
-      }
-
-      // Update target ratio
-      const clampedRatio = Math.max(0, Math.min(1, targetRatio));
-      data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
-      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} on current edge`);
-    }
-    // Case 2: Edge transition
-    else {
-      // Validate: nextEdge must be connected to currentEdge
-      const nextEdgeIndex = edgeNameToIndex.get(nextEdgeId);
-      
-      if (nextEdgeIndex === undefined) {
-        console.error(`[TransferMgr] Edge ${nextEdgeId} not found in map`);
-        return;
-      }
-
-      if (!currentEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
-        console.error(
-          `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${currentEdge.edge_name}`
-        );
-        return;
-      }
-
-      // Set current edge to go to end (trigger transition)
-      data[ptr + MovementData.TARGET_RATIO] = 1.0;
-      console.log(`[TransferMgr] Vehicle ${vehId} current edge target set to 1.0 for transition`);
-
-      // Reserve next edge with targetRatio (will be applied after transition)
-      const clampedRatio = targetRatio !== undefined ? Math.max(0, Math.min(1, targetRatio)) : undefined;
-      this.reservedNextEdges.set(vehId, { edgeId: nextEdgeId, targetRatio: clampedRatio });
-      console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${nextEdgeId}, targetRatio: ${clampedRatio}`);
+      const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+      this.processSameEdgeCommand(vehId, targetRatio, currentRatio, data, ptr);
+    } else {
+      this.processEdgeTransitionCommand(vehId, nextEdgeId, targetRatio, currentEdge, edgeNameToIndex!, data, ptr);
     }
 
-    // Wake up vehicle if stopped
-    const currentStatus = data[ptr + MovementData.MOVING_STATUS];
-    if (currentStatus === MovingStatus.STOPPED) {
-      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
-      console.log(`[TransferMgr] Vehicle ${vehId} woken up (STOPPED -> MOVING)`);
-    }
+    this.ensureVehicleAwake(data, ptr, vehId);
   }
 
   processTransferQueue(
@@ -180,8 +138,7 @@ export class TransferMgr {
         vehId,
         vehicleLoopMap,
         edgeNameToIndex,
-        mode,
-        vehicleDataArray
+        mode
       );
 
       if (nextEdgeIndex === -1) {
@@ -200,8 +157,7 @@ export class TransferMgr {
     vehicleIndex: number,
     vehicleLoopMap: Map<number, VehicleLoop>,
     edgeNameToIndex: Map<string, number>,
-    mode: TransferMode,
-    vehicleDataArray: IVehicleDataArray
+    mode: TransferMode
   ): number {
     if (this.canDirectlyTransition(currentEdge)) {
       return currentEdge.nextEdgeIndices![0];
@@ -209,7 +165,7 @@ export class TransferMgr {
 
     if (mode === TransferMode.MQTT_CONTROL) {
       // MQTT_CONTROL
-      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, vehicleDataArray);
+      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex);
     } else if (mode === TransferMode.LOOP) {
       // LOOP
       return this.getNextEdgeFromLoop(
@@ -226,25 +182,24 @@ export class TransferMgr {
 
   private getNextEdgeFromCommand(
     vehicleIndex: number,
-    edgeNameToIndex: Map<string, number>,
-    vehicleDataArray?: IVehicleDataArray
+    edgeNameToIndex: Map<string, number>
   ): number {
+    // Check path queue first (multi-edge reservation)
+    const activePathEdge = this.handlePathQueue(vehicleIndex, edgeNameToIndex);
+    if (activePathEdge !== null) {
+      return activePathEdge;
+    }
+    
+    // Fall back to single-edge reservation
     const reserved = this.reservedNextEdges.get(vehicleIndex);
     if (reserved) {
       const idx = edgeNameToIndex.get(reserved.edgeId);
       if (idx === undefined) {
         console.warn(`[TransferMgr] Reserved edge ${reserved.edgeId} not found`);
       } else {
-        // Apply targetRatio for new edge if specified
-        if (reserved.targetRatio !== undefined && vehicleDataArray) {
-          const data = vehicleDataArray.getData();
-          const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
-          data[ptr + MovementData.TARGET_RATIO] = reserved.targetRatio;
-          console.log(`[TransferMgr] Applied targetRatio ${reserved.targetRatio} to vehicle ${vehicleIndex} on new edge`);
-        }
-        
-        // Command consumed (one-time use)
-        this.reservedNextEdges.delete(vehicleIndex);
+        console.log(`[TransferMgr] Returning next edge ${reserved.edgeId} (index ${idx}) for vehicle ${vehicleIndex}`);
+        // Don't delete reservation here - it will be deleted after transition completes
+        // and targetRatio has been used
         return idx;
       }
     }
@@ -296,5 +251,168 @@ export class TransferMgr {
     }
 
     return nextEdgeIndex;
+  }
+
+  // --- Helper Methods ---
+
+  private validateCommandData(
+    vehicleDataArray: IVehicleDataArray | undefined,
+    edgeArray: Edge[] | undefined,
+    edgeNameToIndex: Map<string, number> | undefined
+  ): boolean {
+    if (!vehicleDataArray || !edgeArray || !edgeNameToIndex) {
+      console.error(`[TransferMgr] Missing required data for command validation`);
+      return false;
+    }
+    return true;
+  }
+
+  private processPathCommand(
+    vehId: number,
+    path: Array<{ edgeId: string; targetRatio?: number }>,
+    currentEdge: Edge,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    data: Float32Array,
+    ptr: number
+  ) {
+    console.log(`[TransferMgr] Processing path command with ${path.length} edges`);
+    
+    let prevEdge = currentEdge;
+    for (const pathItem of path) {
+      const pathEdgeId = pathItem.edgeId;
+      const pathEdgeIndex = edgeNameToIndex.get(pathEdgeId);
+      
+      if (pathEdgeIndex === undefined) {
+        console.error(`[TransferMgr] Path edge ${pathEdgeId} not found`);
+        return;
+      }
+      
+      if (!prevEdge.nextEdgeIndices?.includes(pathEdgeIndex)) {
+        console.error(`[TransferMgr] Path edge ${pathEdgeId} not connected to ${prevEdge.edge_name}`);
+        return;
+      }
+      
+      prevEdge = edgeArray[pathEdgeIndex];
+    }
+    
+    this.reservedPaths.set(vehId, path.map(p => ({
+      edgeId: p.edgeId,
+      targetRatio: p.targetRatio
+    })));
+    
+    data[ptr + MovementData.TARGET_RATIO] = 1;
+    console.log(`[TransferMgr] Vehicle ${vehId} current edge target set to 1 for path transition`);
+    
+    console.log(`[TransferMgr] Vehicle ${vehId} reserved path:`, path.map(p => p.edgeId).join(' -> '));
+  }
+
+  private processSameEdgeCommand(
+    vehId: number,
+    targetRatio: number | undefined,
+    currentRatio: number,
+    data: Float32Array,
+    ptr: number
+  ) {
+    if (targetRatio === undefined) {
+      console.warn(`[TransferMgr] No targetRatio provided for same-edge movement`);
+      return;
+    }
+
+    if (targetRatio <= currentRatio) {
+      console.error(
+        `[TransferMgr] Invalid command: targetRatio ${targetRatio} <= currentRatio ${currentRatio}`
+      );
+      return;
+    }
+
+    const clampedRatio = Math.max(0, Math.min(1, targetRatio));
+    data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
+    console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} on current edge`);
+  }
+
+  private processEdgeTransitionCommand(
+    vehId: number,
+    nextEdgeId: string,
+    targetRatio: number | undefined,
+    currentEdge: Edge,
+    edgeNameToIndex: Map<string, number>,
+    data: Float32Array,
+    ptr: number
+  ) {
+    const nextEdgeIndex = edgeNameToIndex.get(nextEdgeId);
+    
+    console.log(`[TransferMgr] Vehicle ${vehId} next edge index: ${nextEdgeIndex}`);
+    console.log(`[TransferMgr] Vehicle ${vehId} current edge index: ${Math.trunc(data[ptr + MovementData.CURRENT_EDGE])}`);
+    console.log(`[TransferMgr] Vehicle ${vehId} current edge next edge indices: ${currentEdge.nextEdgeIndices}`);
+    
+    if (nextEdgeIndex === undefined) {
+      console.error(`[TransferMgr] Edge ${nextEdgeId} not found in map`);
+      return;
+    }
+
+    if (!currentEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
+      console.error(
+        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${currentEdge.edge_name}`
+      );
+      return;
+    }
+
+    if (targetRatio !== undefined) {
+      const clampedRatio = Math.max(0, Math.min(1, targetRatio));
+      data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
+      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} for next edge`);
+    }
+
+    const clampedRatio = targetRatio === undefined ? undefined : Math.max(0, Math.min(1, targetRatio));
+    this.reservedNextEdges.set(vehId, { edgeId: nextEdgeId, targetRatio: clampedRatio });
+    console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${nextEdgeId}, targetRatio: ${clampedRatio}`);
+    console.log(`[TransferMgr] Vehicle will transition when reaching end of current edge`);
+  }
+
+  private ensureVehicleAwake(data: Float32Array, ptr: number, vehId: number) {
+    const currentStatus = data[ptr + MovementData.MOVING_STATUS];
+    if (currentStatus === MovingStatus.STOPPED) {
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+      console.log(`[TransferMgr] Vehicle ${vehId} woken up (STOPPED -> MOVING)`);
+    }
+  }
+
+  private handlePathQueue(
+    vehicleIndex: number,
+    edgeNameToIndex: Map<string, number>
+  ): number | null {
+    const path = this.reservedPaths.get(vehicleIndex);
+    if (!path || path.length === 0) return null;
+
+    const nextEdge = path.shift()!;
+    const idx = edgeNameToIndex.get(nextEdge.edgeId);
+    
+    if (idx === undefined) {
+      console.warn(`[TransferMgr] Path edge ${nextEdge.edgeId} not found`);
+    } else {
+      console.log(`[TransferMgr] Path: transitioning to ${nextEdge.edgeId} (${path.length} edges remaining)`);
+      
+      if (path.length > 0) {
+        this.reservedNextEdges.set(vehicleIndex, {
+          edgeId: nextEdge.edgeId,
+          targetRatio: 1
+        });
+        console.log(`[TransferMgr] More edges in path, setting TARGET_RATIO=1.0 for ${nextEdge.edgeId}`);
+      } else if (nextEdge.targetRatio !== undefined) {
+        this.reservedNextEdges.set(vehicleIndex, {
+          edgeId: nextEdge.edgeId,
+          targetRatio: nextEdge.targetRatio
+        });
+        console.log(`[TransferMgr] Last edge in path, setting TARGET_RATIO=${nextEdge.targetRatio} for ${nextEdge.edgeId}`);
+      }
+      
+      if (path.length === 0) {
+        this.reservedPaths.delete(vehicleIndex);
+      }
+      
+      return idx;
+    }
+    return null;
   }
 }

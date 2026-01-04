@@ -40,6 +40,8 @@ export const useMqttStore = create<MqttState>((set, get) => ({
     const config = await loadMqttConfig();
     set({ config });
     get().addLog(`[Config] Loaded: ${config.MQTT_BROKER_URL}`);
+    // Auto-connect after loading config
+    get().connect(config.MQTT_BROKER_URL);
   },
 
   connect: (url?: string) => {

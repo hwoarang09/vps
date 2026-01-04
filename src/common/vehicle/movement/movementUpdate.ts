@@ -110,7 +110,7 @@ export function updateMovement(ctx: MovementUpdateContext) {
     }
 
     const currentEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
-    let velocity = data[ptr + MovementData.VELOCITY];
+    const velocity = data[ptr + MovementData.VELOCITY];
     const acceleration = data[ptr + MovementData.ACCELERATION];
     const deceleration = data[ptr + MovementData.DECELERATION];
     const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
@@ -146,7 +146,7 @@ export function updateMovement(ctx: MovementUpdateContext) {
       config
     );
 
-    let targetRatio = clampTargetRatio(data[ptr + MovementData.TARGET_RATIO]);
+    const targetRatio = clampTargetRatio(data[ptr + MovementData.TARGET_RATIO]);
 
     let rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
 
@@ -167,7 +167,7 @@ export function updateMovement(ctx: MovementUpdateContext) {
       SCRATCH_TRANSITION
     );
     
-    let finalEdgeIndex = SCRATCH_TRANSITION.finalEdgeIndex;
+    const finalEdgeIndex = SCRATCH_TRANSITION.finalEdgeIndex;
     let finalRatio = SCRATCH_TRANSITION.finalRatio;
     const activeEdge = SCRATCH_TRANSITION.activeEdge;
 
@@ -273,9 +273,20 @@ function processEdgeTransitionLogic(
   targetRatio: number,
   out: EdgeTransitionResult
 ) {
-  // Only transition if we reached the end (Target = 1)
-  // If target < 1, we just stop there.
-  if (rawNewRatio >= 1 && targetRatio === 1) {
+  const data = ctx.vehicleDataArray.getData();
+  const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
+  const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
+
+  // Transition conditions:
+  // 1. Reached end (rawNewRatio >= 1) AND targetRatio === 1 (normal case)
+  // 2. Reached end (rawNewRatio >= 1) AND NEXT_EDGE is ready (MQTT command with nextEdge)
+  //    - This handles case where targetRatio < currentRatio but nextEdge is set
+  const shouldTransition = rawNewRatio >= 1 && (targetRatio === 1 || nextEdgeState === NextEdgeState.READY);
+
+  if (shouldTransition) {
+    // In MQTT_CONTROL mode, preserve TARGET_RATIO (don't overwrite with 1)
+    const preserveTargetRatio = ctx.store.transferMode === TransferMode.MQTT_CONTROL;
+    
     handleEdgeTransition(
       ctx.vehicleDataArray,
       ctx.store,
@@ -283,7 +294,8 @@ function processEdgeTransitionLogic(
       currentEdgeIndex,
       rawNewRatio,
       ctx.edgeArray,
-      out
+      out,
+      preserveTargetRatio
     );
   } else {
     // Just update position on current edge
@@ -317,7 +329,7 @@ function processMergeLogicInline(
   }
 
   const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehId);
-  let currentReason = data[ptr + LogicData.STOP_REASON];
+  const currentReason = data[ptr + LogicData.STOP_REASON];
 
   if (isGranted) {
     if ((currentReason & StopReason.LOCKED) !== 0) {
