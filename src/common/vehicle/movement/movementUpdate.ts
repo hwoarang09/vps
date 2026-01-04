@@ -71,6 +71,12 @@ const SCRATCH_ACCEL = {
   decel: 0,
 };
 
+const SCRATCH_TARGET_CHECK = {
+  finalRatio: 0,
+  finalVelocity: 0,
+  reached: false,
+};
+
 export function updateMovement(ctx: MovementUpdateContext) {
   const {
     vehicleDataArray,
@@ -109,16 +115,13 @@ export function updateMovement(ctx: MovementUpdateContext) {
     const deceleration = data[ptr + MovementData.DECELERATION];
     const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
 
-    const hitZone = calculateHitZone(data, ptr, deceleration);
-
     let finalX = data[ptr + MovementData.X];
     let finalY = data[ptr + MovementData.Y];
     let finalZ = data[ptr + MovementData.Z];
     let finalRotation = data[ptr + MovementData.ROTATION];
 
     const currentEdge = edgeArray[currentEdgeIndex];
-    if (!currentEdge) continue;
-
+    const hitZone = calculateHitZone(data, ptr, deceleration);
     calculateAppliedAccelAndDecel(
       acceleration,
       deceleration,
@@ -143,42 +146,35 @@ export function updateMovement(ctx: MovementUpdateContext) {
       config
     );
 
-    let targetRatio = data[ptr + MovementData.TARGET_RATIO];
-    // Enforce valid range [0, 1] for safety
-    if (targetRatio < 0) targetRatio = 0;
-    if (targetRatio > 1) targetRatio = 1;
+    let targetRatio = clampTargetRatio(data[ptr + MovementData.TARGET_RATIO]);
 
     let rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
 
-    // Check against target ratio
-    if (rawNewRatio >= targetRatio) {
-      rawNewRatio = targetRatio;
-      newVelocity = 0; // Stop at target
-    }
+    checkTargetReached(rawNewRatio, targetRatio, newVelocity, SCRATCH_TARGET_CHECK);
+    rawNewRatio = SCRATCH_TARGET_CHECK.finalRatio;
+    newVelocity = SCRATCH_TARGET_CHECK.finalVelocity;
+    const reachedTarget = SCRATCH_TARGET_CHECK.reached;
 
     checkAndTriggerTransfer(transferMgr, data, ptr, i, rawNewRatio);
 
-    // Only transition if we reached the end (Target = 1)
-    // If target < 1, we just stop there.
-    if (rawNewRatio >= 1 && targetRatio === 1) {
-      handleEdgeTransition(
-        vehicleDataArray,
-        store,
-        i,
-        currentEdgeIndex,
-        rawNewRatio,
-        edgeArray,
-        SCRATCH_TRANSITION
-      );
-    } else {
-       // Just update position on current edge
-       SCRATCH_TRANSITION.finalEdgeIndex = currentEdgeIndex;
-       SCRATCH_TRANSITION.finalRatio = rawNewRatio;
-       SCRATCH_TRANSITION.activeEdge = currentEdge;
-    }
+    processEdgeTransitionLogic(
+      ctx,
+      i,
+      currentEdgeIndex,
+      currentEdge,
+      rawNewRatio,
+      targetRatio,
+      SCRATCH_TRANSITION
+    );
+    
     let finalEdgeIndex = SCRATCH_TRANSITION.finalEdgeIndex;
     let finalRatio = SCRATCH_TRANSITION.finalRatio;
     const activeEdge = SCRATCH_TRANSITION.activeEdge;
+
+    // Fix: If we reached target AND didn't transition => We are stopped
+    if (reachedTarget && finalEdgeIndex === currentEdgeIndex) {
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+    }
 
     checkAndReleaseMergeLock(lockMgr, finalEdgeIndex, currentEdgeIndex, currentEdge, i);
 
@@ -192,7 +188,7 @@ export function updateMovement(ctx: MovementUpdateContext) {
 
     const finalEdge = edgeArray[finalEdgeIndex];
 
-    const shouldWait = processMergeLogicInline(
+    const shouldWait = checkAndProcessMergeWait(
       lockMgr,
       finalEdge,
       i,
@@ -204,6 +200,12 @@ export function updateMovement(ctx: MovementUpdateContext) {
 
     if (shouldWait) {
       finalRatio = SCRATCH_MERGE_POS.x;
+      // Position update is now handled via SCRATCH_MERGE_POS result if needed, 
+      // but wait, we need to update finalX, etc.
+      // Let's look at checkAndProcessMergeWait implementation below.
+      // Actually, if shouldWait is true, SCRATCH_MERGE_POS.x has the new ratio (waitDist/dist).
+      // We need to re-interpolate if we are waiting.
+      
       if (activeEdge) {
         interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS, config.vehicleZOffset);
         finalX = SCRATCH_POS.x;
@@ -262,6 +264,35 @@ function checkAndTriggerTransfer(
   }
 }
 
+function processEdgeTransitionLogic(
+  ctx: MovementUpdateContext,
+  vehicleIndex: number,
+  currentEdgeIndex: number,
+  currentEdge: Edge,
+  rawNewRatio: number,
+  targetRatio: number,
+  out: EdgeTransitionResult
+) {
+  // Only transition if we reached the end (Target = 1)
+  // If target < 1, we just stop there.
+  if (rawNewRatio >= 1 && targetRatio === 1) {
+    handleEdgeTransition(
+      ctx.vehicleDataArray,
+      ctx.store,
+      vehicleIndex,
+      currentEdgeIndex,
+      rawNewRatio,
+      ctx.edgeArray,
+      out
+    );
+  } else {
+    // Just update position on current edge
+    out.finalEdgeIndex = currentEdgeIndex;
+    out.finalRatio = rawNewRatio;
+    out.activeEdge = currentEdge;
+  }
+}
+
 function processMergeLogicInline(
   lockMgr: LockMgr,
   currentEdge: Edge,
@@ -312,6 +343,28 @@ function processMergeLogicInline(
   }
 
   return false;
+}
+
+function checkAndProcessMergeWait(
+  lockMgr: LockMgr,
+  finalEdge: Edge,
+  vehIdx: number,
+  ratio: number,
+  data: Float32Array,
+  ptr: number,
+  outPos: PositionResult
+): boolean {
+  const shouldWait = processMergeLogicInline(
+    lockMgr,
+    finalEdge,
+    vehIdx,
+    ratio,
+    data,
+    ptr,
+    outPos
+  );
+
+  return shouldWait;
 }
 
 function checkAndReleaseMergeLock(
@@ -389,3 +442,28 @@ function checkAndProcessSensorStop(
     return false;
   }
 }
+
+function clampTargetRatio(ratio: number): number {
+  if (ratio < 0) return 0;
+  if (ratio > 1) return 1;
+  return ratio;
+}
+
+function checkTargetReached(
+  rawNewRatio: number,
+  targetRatio: number,
+  currentVelocity: number,
+  out: typeof SCRATCH_TARGET_CHECK
+) {
+  if (rawNewRatio >= targetRatio) {
+    out.finalRatio = targetRatio;
+    out.finalVelocity = 0;
+    out.reached = true;
+  } else {
+    out.finalRatio = rawNewRatio;
+    out.finalVelocity = currentVelocity;
+    out.reached = false;
+  }
+}
+
+
