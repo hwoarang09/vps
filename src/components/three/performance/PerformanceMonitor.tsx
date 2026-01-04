@@ -9,6 +9,8 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 export const PerformanceMonitorUI: React.FC = () => {
   const [avgFps, setAvgFps] = useState<number>(0);
   const [avgMs, setAvgMs] = useState<number>(0);
+  const [minMs, setMinMs] = useState<number>(0);
+  const [maxMs, setMaxMs] = useState<number>(0);
   const [avgCpu, setAvgCpu] = useState<number>(0);
   const frameTimesRef = useRef<number[]>([]);
   const lastUpdateTimeRef = useRef<number>(0);
@@ -18,6 +20,8 @@ export const PerformanceMonitorUI: React.FC = () => {
 
   // Get worker performance stats from store
   const workerAvgMs = useShmSimulatorStore((state) => state.workerAvgMs);
+  const workerMinMs = useShmSimulatorStore((state) => state.workerMinMs);
+  const workerMaxMs = useShmSimulatorStore((state) => state.workerMaxMs);
 
   useEffect(() => {
     const updatePerformance = (currentTime: number) => {
@@ -34,6 +38,8 @@ export const PerformanceMonitorUI: React.FC = () => {
         if (frameTimes.length > 0) {
           // Calculate average frame time
           const avgFrameTime = frameTimes.reduce((sum, time) => sum + time, 0) / frameTimes.length;
+          const minFrameTime = Math.min(...frameTimes);
+          const maxFrameTime = Math.max(...frameTimes);
 
           // Calculate FPS from average frame time
           const fps = 1000 / avgFrameTime;
@@ -45,6 +51,8 @@ export const PerformanceMonitorUI: React.FC = () => {
 
           setAvgFps(fps);
           setAvgMs(avgFrameTime);
+          setMinMs(minFrameTime);
+          setMaxMs(maxFrameTime);
           setAvgCpu(cpuUsage);
         }
 
@@ -99,15 +107,24 @@ export const PerformanceMonitorUI: React.FC = () => {
         <div style={{ fontSize: "14px", color: "#9acd32" }}>
           {avgMs.toFixed(2)} ms
         </div>
-        <div style={{ fontSize: "14px", color: "#9acd32" }}>
-          {avgCpu.toFixed(2)} ms
-        </div>        
+        <div style={{ fontSize: "14px", color: "#95e1d3" }}>
+          {minMs.toFixed(2)} ms
+        </div>
+        <div style={{ fontSize: "14px", color: "#f38181" }}>
+          {maxMs.toFixed(2)} ms
+        </div>
       </div>
       {/* Row 2: Worker Thread */}
       <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
         <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Worker</div>
         <div style={{ fontSize: "14px", color: "#ff9f43" }}>
           {workerAvgMs.toFixed(2)} ms
+        </div>
+        <div style={{ fontSize: "14px", color: "#95e1d3" }}>
+          {workerMinMs.toFixed(2)} ms
+        </div>
+        <div style={{ fontSize: "14px", color: "#f38181" }}>
+          {workerMaxMs.toFixed(2)} ms
         </div>
       </div>
     </div>

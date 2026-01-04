@@ -23,12 +23,12 @@ export class ShmSimulatorController {
 
   private onReadyCallback: (() => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
-  private onPerfStatsCallback: ((avgStepMs: number) => void) | null = null;
+  private onPerfStatsCallback: ((avgStepMs: number, minStepMs: number, maxStepMs: number) => void) | null = null;
 
   /**
    * Set callback for worker performance stats
    */
-  onPerfStats(callback: (avgStepMs: number) => void): void {
+  onPerfStats(callback: (avgStepMs: number, minStepMs: number, maxStepMs: number) => void): void {
     this.onPerfStatsCallback = callback;
   }
 
@@ -147,7 +147,7 @@ export class ShmSimulatorController {
 
       case "PERF_STATS":
         if (this.onPerfStatsCallback) {
-          this.onPerfStatsCallback(message.avgStepMs);
+          this.onPerfStatsCallback(message.avgStepMs, message.minStepMs, message.maxStepMs);
         }
         break;
     }

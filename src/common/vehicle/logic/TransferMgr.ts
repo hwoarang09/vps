@@ -6,6 +6,7 @@ import {
   NextEdgeState,
   VEHICLE_DATA_SIZE,
   TransferMode,
+  MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 
 export type VehicleLoop = {
@@ -14,6 +15,16 @@ export type VehicleLoop = {
 
 export interface IVehicleDataArray {
   getData(): Float32Array;
+}
+
+/**
+ * Vehicle command structure for MQTT control
+ */
+export interface VehicleCommand {
+  /** Target position on current edge (0~1) */
+  targetRatio?: number;
+  /** Next edge ID to transition to */
+  nextEdgeId?: string;
 }
 
 export function getNextEdgeInLoop(
@@ -45,22 +56,33 @@ export class TransferMgr {
 
   /**
    * Assign a command to a specific vehicle.
-   * Currently supports 'nextEdgeId' command.
-   * Also wakes up the vehicle (TargetRatio -> 1.0) if it was stopped.
+   * Supports targetRatio (position on current edge) and nextEdgeId (next edge to transition to).
+   * Wakes up stopped vehicles automatically.
    */
-  assignCommand(vehId: number, command: any, vehicleDataArray?: IVehicleDataArray) {
-    if (command?.nextEdgeId) {
+  assignCommand(vehId: number, command: VehicleCommand, vehicleDataArray?: IVehicleDataArray) {
+    if (!vehicleDataArray) return;
+
+    const data = vehicleDataArray.getData();
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+
+    // 1. Set target ratio (where to go on current edge, 0~1)
+    if (command.targetRatio !== undefined) {
+      const clampedRatio = Math.max(0, Math.min(1, command.targetRatio));
+      data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
+      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio}`);
+    }
+
+    // 2. Reserve next edge (which edge to transition to after reaching end)
+    if (command.nextEdgeId) {
       console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${command.nextEdgeId}`);
       this.reservedNextEdges.set(vehId, command.nextEdgeId);
+    }
 
-      // Wake up vehicle if we have access to data
-      if (vehicleDataArray) {
-        const data = vehicleDataArray.getData();
-        const ptr = vehId * VEHICLE_DATA_SIZE;
-        // Set Target Ratio to 1.0 to allow movement to end of edge
-        data[ptr + MovementData.TARGET_RATIO] = 1;
-        // We could also set state to READY if we wanted to bypass queue, but queue is for transfer.
-      }
+    // 3. Wake up vehicle if it was stopped
+    const currentStatus = data[ptr + MovementData.MOVING_STATUS];
+    if (currentStatus === MovingStatus.STOPPED) {
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+      console.log(`[TransferMgr] Vehicle ${vehId} woken up (STOPPED -> MOVING)`);
     }
   }
 

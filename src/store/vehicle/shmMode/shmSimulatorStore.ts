@@ -21,6 +21,8 @@ interface ShmSimulatorState {
   isRunning: boolean;
   actualNumVehicles: number;
   workerAvgMs: number;
+  workerMinMs: number;
+  workerMaxMs: number;
 
   // Actions
   init: (params: {
@@ -52,6 +54,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   isRunning: false,
   actualNumVehicles: 0,
   workerAvgMs: 0,
+  workerMinMs: 0,
+  workerMaxMs: 0,
 
   init: async (params) => {
     const { edges, nodes, numVehicles, vehicleConfigs = [], config = {}, transferMode = TransferMode.RANDOM } = params;
@@ -67,8 +71,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const controller = new ShmSimulatorController();
 
     // Set up performance stats callback
-    controller.onPerfStats((avgStepMs) => {
-      set({ workerAvgMs: avgStepMs });
+    controller.onPerfStats((avgStepMs, minStepMs, maxStepMs) => {
+      set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
     });
 
     try {
@@ -149,6 +153,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       isRunning: false,
       actualNumVehicles: 0,
       workerAvgMs: 0,
+      workerMinMs: 0,
+      workerMaxMs: 0,
     });
   },
 

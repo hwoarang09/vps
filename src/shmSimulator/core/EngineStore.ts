@@ -12,7 +12,7 @@ export class EngineStore implements IVehicleStore {
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   public actualNumVehicles: number = 0;
-  public transferMode: TransferMode = 0; // LOOP
+  public transferMode: TransferMode = TransferMode.LOOP;
 
   constructor(maxVehicles: number, maxEdges: number) {
     this.vehicleDataArray = new VehicleDataArrayBase(maxVehicles);

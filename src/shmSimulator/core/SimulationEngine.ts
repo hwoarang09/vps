@@ -134,6 +134,9 @@ export class SimulationEngine {
     this.edgeNameToIndex = result.edgeNameToIndex;
     this.actualNumVehicles = result.actualNumVehicles;
 
+    // Set vehicle data array for DispatchMgr (enables MQTT command execution)
+    this.dispatchMgr.setVehicleDataArray(this.vehicleDataArray);
+
     // Build vehicle loop map (simple loop for now)
     this.buildVehicleLoopMap();
 
@@ -263,11 +266,15 @@ export class SimulationEngine {
     if (this.stepTimes.length === 0) return;
 
     const avgStepMs = this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length;
+    const minStepMs = Math.min(...this.stepTimes);
+    const maxStepMs = Math.max(...this.stepTimes);
     this.stepTimes = [];
 
     self.postMessage({
       type: "PERF_STATS",
       avgStepMs,
+      minStepMs,
+      maxStepMs,
     });
   }
 

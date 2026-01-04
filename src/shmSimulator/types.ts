@@ -105,7 +105,7 @@ export type MainMessage =
   | { type: "INITIALIZED"; actualNumVehicles: number }
   | { type: "ERROR"; error: string }
   | { type: "STATS"; fps: number; vehicleCount: number }
-  | { type: "PERF_STATS"; avgStepMs: number };
+  | { type: "PERF_STATS"; avgStepMs: number; minStepMs: number; maxStepMs: number };
 
 // ============================================================================
 // [4] TRANSFER MODE
@@ -119,3 +119,4 @@ export { TransferMode } from "@/common/vehicle/initialize/constants";
 
 export type { Edge } from "@/types/edge";
 export type { Node } from "@/types";
+export type { VehicleCommand } from "@/common/vehicle/logic/TransferMgr";
