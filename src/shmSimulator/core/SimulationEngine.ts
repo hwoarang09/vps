@@ -136,6 +136,9 @@ export class SimulationEngine {
 
     // Set vehicle data array for DispatchMgr (enables MQTT command execution)
     this.dispatchMgr.setVehicleDataArray(this.vehicleDataArray);
+    
+    // Set edge data for DispatchMgr (enables command validation)
+    this.dispatchMgr.setEdgeData(this.edges, this.edgeNameToIndex);
 
     // Build vehicle loop map (simple loop for now)
     this.buildVehicleLoopMap();

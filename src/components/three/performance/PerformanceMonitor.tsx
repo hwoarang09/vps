@@ -11,7 +11,6 @@ export const PerformanceMonitorUI: React.FC = () => {
   const [avgMs, setAvgMs] = useState<number>(0);
   const [minMs, setMinMs] = useState<number>(0);
   const [maxMs, setMaxMs] = useState<number>(0);
-  const [avgCpu, setAvgCpu] = useState<number>(0);
   const frameTimesRef = useRef<number[]>([]);
   const lastUpdateTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
@@ -44,16 +43,10 @@ export const PerformanceMonitorUI: React.FC = () => {
           // Calculate FPS from average frame time
           const fps = 1000 / avgFrameTime;
 
-          // Estimate CPU usage (rough approximation)
-          // Assuming 60 FPS is baseline, lower FPS = higher CPU usage
-          const targetFps = 60;
-          const cpuUsage = Math.max(0, Math.min(100, ((targetFps - fps) / targetFps) * 100 + 20));
-
           setAvgFps(fps);
           setAvgMs(avgFrameTime);
           setMinMs(minFrameTime);
           setMaxMs(maxFrameTime);
-          setAvgCpu(cpuUsage);
         }
 
         // Reset for next interval

@@ -1,8 +1,11 @@
 import { TransferMgr, VehicleCommand, IVehicleDataArray } from "@/common/vehicle/logic/TransferMgr";
+import type { Edge } from "@/types/edge";
 
 export class DispatchMgr {
   private readonly transferMgr: TransferMgr;
   private vehicleDataArray?: IVehicleDataArray;
+  private edgeArray?: Edge[];
+  private edgeNameToIndex?: Map<string, number>;
 
   constructor(transferMgr: TransferMgr) {
     this.transferMgr = transferMgr;
@@ -13,6 +16,14 @@ export class DispatchMgr {
    */
   public setVehicleDataArray(vehicleDataArray: IVehicleDataArray): void {
     this.vehicleDataArray = vehicleDataArray;
+  }
+
+  /**
+   * Set edge data for command validation
+   */
+  public setEdgeData(edgeArray: Edge[], edgeNameToIndex: Map<string, number>): void {
+    this.edgeArray = edgeArray;
+    this.edgeNameToIndex = edgeNameToIndex;
   }
 
   /**
@@ -56,6 +67,12 @@ export class DispatchMgr {
    */
   private assignToVehicle(vehId: number, command: VehicleCommand): void {
     console.log(`[DispatchMgr] Assigning to Vehicle ${vehId}`);
-    this.transferMgr.assignCommand(vehId, command, this.vehicleDataArray);
+    this.transferMgr.assignCommand(
+      vehId,
+      command,
+      this.vehicleDataArray,
+      this.edgeArray,
+      this.edgeNameToIndex
+    );
   }
 }
