@@ -1,15 +1,11 @@
-// shmSimulator/index.ts
-// Main thread controller for SHM Simulator
-
 import type {
   WorkerMessage,
   MainMessage,
   InitPayload,
   SimulationConfig,
   VehicleInitConfig,
-  TransferMode,
 } from "./types";
-import { createDefaultConfig } from "./types";
+import { TransferMode, createDefaultConfig } from "./types";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
@@ -53,7 +49,7 @@ export class ShmSimulatorController {
       numVehicles,
       vehicleConfigs = [],
       config = {},
-      transferMode = 0,
+      transferMode = TransferMode.LOOP,
     } = params;
 
     // Merge with default config

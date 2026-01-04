@@ -29,7 +29,7 @@ interface ShmSimulatorState {
     numVehicles: number;
     vehicleConfigs?: VehicleInitConfig[];
     config?: Partial<SimulationConfig>;
-    transferMode?: typeof TransferMode[keyof typeof TransferMode]; // LOOP=0, RANDOM=1
+    transferMode?: TransferMode;
   }) => Promise<void>;
 
   start: () => void;
@@ -63,7 +63,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       existing.dispose();
     }
 
-    console.log(`[ShmSimulatorStore] Creating new controller... (transferMode=${transferMode === 0 ? 'LOOP' : 'RANDOM'})`);
+    console.log(`[ShmSimulatorStore] Creating new controller... (transferMode=${transferMode})`);
     const controller = new ShmSimulatorController();
 
     // Set up performance stats callback

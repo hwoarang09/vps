@@ -5,7 +5,7 @@ import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBa
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { EngineStore } from "./EngineStore";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr";
-import { TransferMgr, VehicleLoop, type TransferMode as TransferModeBase } from "@/common/vehicle/logic/TransferMgr";
+import { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
 import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
@@ -92,7 +92,7 @@ export class SimulationEngine {
 
     // Update transfer mode
     this.store.setTransferMode(payload.transferMode);
-    console.log(`[SimulationEngine] TransferMode: ${payload.transferMode === 0 ? 'LOOP' : 'RANDOM'} (${payload.transferMode})`);
+    console.log(`[SimulationEngine] TransferMode: ${payload.transferMode}`);
 
     // Store edges and build lookup map
     this.edges = payload.edges;
@@ -235,7 +235,7 @@ export class SimulationEngine {
       edgeNameToIndex: this.edgeNameToIndex,
       store: {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
-        transferMode: this.store.transferMode as TransferModeBase,
+        transferMode: this.store.transferMode,
       },
       lockMgr: this.lockMgr,
       transferMgr: this.transferMgr,

@@ -7,7 +7,7 @@ import {
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 
-export type TransferMode = 0 | 1 | 2; // 0 = LOOP, 1 = RANDOM, 2 = MQTT_CONTROL
+import { TransferMode } from "@/shmSimulator/types";
 
 export type VehicleLoop = {
   edgeSequence: string[];
@@ -109,10 +109,10 @@ export class TransferMgr {
       return currentEdge.nextEdgeIndices![0];
     }
 
-    if (mode === 2) {
+    if (mode === TransferMode.MQTT_CONTROL) {
       // MQTT_CONTROL
       return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex);
-    } else if (mode === 0) {
+    } else if (mode === TransferMode.LOOP) {
       // LOOP
       return this.getNextEdgeFromLoop(
         currentEdge,

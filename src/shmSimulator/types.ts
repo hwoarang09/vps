@@ -110,13 +110,12 @@ export type MainMessage =
 // [4] TRANSFER MODE
 // ============================================================================
 
-export const TransferMode = {
-  LOOP: 0,
-  RANDOM: 1,
-} as const;
-
-export type TransferMode = (typeof TransferMode)[keyof typeof TransferMode];
-
+// TransferMode is now imported from common
+export enum TransferMode {
+  LOOP = "LOOP",
+  RANDOM = "RANDOM",
+  MQTT_CONTROL = "MQTT_CONTROL",
+}
 // ============================================================================
 // [5] RE-EXPORTS
 // ============================================================================

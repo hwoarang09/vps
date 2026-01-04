@@ -12,6 +12,7 @@ import {
   getBrakeMinSpeed,
 } from "@/config/movementConfig";
 import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 
 /**
  * VehicleSharedMemoryMode
@@ -32,6 +33,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
   const edges = useEdgeStore((state) => state.edges);
   const nodes = useNodeStore((state) => state.nodes);
   const isPaused = useVehicleTestStore((state) => state.isPaused);
+  const transferMode = useVehicleArrayStore((state) => state.transferMode);
 
   const {
     init: initSimulator,
@@ -69,6 +71,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       nodes,
       numVehicles,
       config,
+      transferMode,
     })
       .then(() => {
         console.log("[VehicleSharedMemoryMode] SHM Simulator initialized");

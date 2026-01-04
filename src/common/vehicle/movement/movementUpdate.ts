@@ -17,7 +17,8 @@ import { handleEdgeTransition, type EdgeTransitionResult, type IEdgeTransitionSt
 import { interpolatePositionTo, type PositionResult } from "./positionInterpolator";
 import { updateSensorPoints, type SensorPointsConfig } from "@/common/vehicle/helpers/sensorPoints";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
-import type { TransferMgr, VehicleLoop, TransferMode } from "@/common/vehicle/logic/TransferMgr";
+import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
+import { TransferMode } from "@/shmSimulator/types";
 import type { ISensorPointArray } from "@/common/vehicle/collision/sensorCollision";
 
 export interface IVehicleDataArray {

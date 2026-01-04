@@ -408,6 +408,7 @@ const VehicleTest: React.FC = () => {
         >
           <option value={TransferMode.LOOP}>LOOP</option>
           <option value={TransferMode.RANDOM}>RANDOM</option>
+          <option value={TransferMode.MQTT_CONTROL}>MQTT</option>
         </select>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -481,7 +482,7 @@ const VehicleTest: React.FC = () => {
             min="1"
             max="10"
             value={fabCountX}
-            onChange={(e) => setFabCountX(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+            onChange={(e) => setFabCountX(Math.max(1, Math.min(10, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
             style={{
               width: "40px",
@@ -501,7 +502,7 @@ const VehicleTest: React.FC = () => {
             min="1"
             max="10"
             value={fabCountY}
-            onChange={(e) => setFabCountY(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+            onChange={(e) => setFabCountY(Math.max(1, Math.min(10, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
             style={{
               width: "40px",

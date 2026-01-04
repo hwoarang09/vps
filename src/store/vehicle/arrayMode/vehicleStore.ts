@@ -6,6 +6,7 @@ import { vehicleDataArray } from "./vehicleDataArray";
 import { edgeVehicleQueue } from "./edgeVehicleQueue";
 import type { IVehicleStore, IEdgeVehicleQueue } from "@/common/vehicle/initialize";
 import * as ops from "@/common/vehicle/store";
+import { TransferMode } from "@/shmSimulator/types";
 
 export interface VehicleArrayStore extends IVehicleStore {
   // Array references
@@ -228,7 +229,5 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
   })
 );
 
-export enum TransferMode {
-  LOOP = "LOOP",
-  RANDOM = "RANDOM",
-}
+// Re-export TransferMode for convenience
+export { TransferMode } from "@/shmSimulator/types";
