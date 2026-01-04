@@ -71,22 +71,6 @@ function createVehicleInitConfig(): VehicleInitConfig {
   };
 }
 
-/**
- * Callback for vehicle creation - adds to UI store
- */
-function onVehicleCreated(placement: CommonVehiclePlacement, _edgeIndex: number): void {
-  const idNumber = placement.vehicleIndex;
-  const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
-
-  useVehicleGeneralStore.getState().addVehicle(placement.vehicleIndex, {
-    id: formattedId,
-    name: `Vehicle ${placement.vehicleIndex}`,
-    color: "#ffffff",
-    battery: 100,
-    vehicleType: 0,
-    taskType: 0,
-  });
-}
 
 /**
  * Wrapper for updateSensorPoints to match common interface
@@ -118,17 +102,37 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
   // 2. Calculate vehicle placements
   const placements = getVehiclePlacements(vehicleConfigs, numVehicles, edges);
 
-  // 3. Use common initialization logic
+  // 3. Use common initialization logic (without callback)
   const result = initializeVehiclesCommon({
     edges,
     placements,
     store: createStoreAdapter(store),
     lockMgr: createLockMgrAdapter(),
     config: createVehicleInitConfig(),
-    transferMode: transferMode || TransferMode.LOOP, // Use passed mode or default
+    transferMode: transferMode || TransferMode.LOOP,
     updateSensorPoints: updateSensorPointsWrapper,
-    onVehicleCreated,
+    // onVehicleCreated: removed to use batch update
   });
+
+  // 4. Batch update UI store (O(1) update)
+  const vehicleGeneralStore = useVehicleGeneralStore.getState();
+  const batchData = new Map<number, any>(); // Using any to match VehicleData structure loosely or import it if needed
+
+  for (const placement of placements) {
+    const idNumber = placement.vehicleIndex;
+    const formattedId = `VEH${String(idNumber).padStart(5, '0')}`;
+    
+    batchData.set(placement.vehicleIndex, {
+      id: formattedId,
+      name: `Vehicle ${placement.vehicleIndex}`,
+      color: "#ffffff",
+      battery: 100,
+      vehicleType: 0,
+      taskType: 0,
+    });
+  }
+
+  vehicleGeneralStore.batchAddVehicles(batchData);
 
   return result;
 }

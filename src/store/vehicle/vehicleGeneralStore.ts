@@ -18,6 +18,7 @@ interface VehicleGeneralStore {
 
   // CRUD operations
   addVehicle: (vehicleIndex: number, data: VehicleData) => void;
+  batchAddVehicles: (data: Map<number, VehicleData>) => void;
   removeVehicle: (vehicleIndex: number) => void;
   updateVehicle: (
     vehicleIndex: number,
@@ -40,6 +41,16 @@ export const useVehicleGeneralStore = create<VehicleGeneralStore>(
       set((state) => {
         const newMap = new Map(state.vehicles);
         newMap.set(vehicleIndex, data);
+        return { vehicles: newMap };
+      }),
+
+    // Batch add vehicles
+    batchAddVehicles: (data) =>
+      set((state) => {
+        const newMap = new Map(state.vehicles);
+        for (const [key, value] of data) {
+          newMap.set(key, value);
+        }
         return { vehicles: newMap };
       }),
 

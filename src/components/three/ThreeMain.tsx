@@ -66,8 +66,7 @@ const ThreeScene: React.FC = () => {
         <VehicleSystemRenderer />
 
         {/* Development tools */}
-        <Perf position="bottom-right" />
-
+        <Perf position="bottom-right"  deepAnalyze={true}  />
       </Canvas>
 
       {/* Performance Monitor - 5-second average CPU usage */}
