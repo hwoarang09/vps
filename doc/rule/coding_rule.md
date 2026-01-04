@@ -72,4 +72,6 @@ if (command && command.nextEdgeId) {
 }
 Prefer using an optional chain expression instead, as it's more concise and easier to read.
 
-```
+## Number Formatting
+
+Don't use a zero fraction in the number (e.g., use `1` instead of `1.0`).

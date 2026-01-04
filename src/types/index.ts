@@ -40,6 +40,8 @@ export enum EdgeType {
   CURVE_180 = "CURVE_180",
   CURVE_CSC = "CURVE_CSC",
   S_CURVE = "S_CURVE",
+  LEFT_CURVE = "LEFT_CURVE",
+  RIGHT_CURVE = "RIGHT_CURVE",
 }
 
 /**

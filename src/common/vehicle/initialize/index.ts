@@ -19,4 +19,6 @@ export {
   sortVehiclesInEdges,
   processMergeEdgeLocks,
   initializeVehicles,
+  type InitializeSingleVehicleParams,
+  type InitializeVehicleStatesParams,
 } from "./initializeVehicles";

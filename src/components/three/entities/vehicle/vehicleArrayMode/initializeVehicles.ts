@@ -22,6 +22,7 @@ import {
   ILockMgr,
   VehicleInitConfig,
   type InitializationResult,
+  TransferMode,
 } from "@/common/vehicle/initialize";
 
 export type { InitializationResult } from "@/common/vehicle/initialize";
@@ -31,6 +32,7 @@ export interface InitializeVehiclesParams {
   numVehicles: number;
   store: any;
   vehicleConfigs?: VehicleConfig[];
+  transferMode?: TransferMode;
 }
 
 /**
@@ -106,7 +108,7 @@ function updateSensorPointsWrapper(
  * Initialize all vehicles with placement and data (no rendering)
  */
 export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
-  const { edges, numVehicles, store, vehicleConfigs } = params;
+  const { edges, numVehicles, store, vehicleConfigs, transferMode } = params;
 
   console.log(`[VehicleArrayMode] Initializing...`);
 
@@ -123,6 +125,7 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     store: createStoreAdapter(store),
     lockMgr: createLockMgrAdapter(),
     config: createVehicleInitConfig(),
+    transferMode: transferMode || TransferMode.LOOP, // Use passed mode or default
     updateSensorPoints: updateSensorPointsWrapper,
     onVehicleCreated,
   });

@@ -60,6 +60,14 @@ export const PresetIndex = {
   BRANCH: 5,
 } as const;
 
+// Transition Control Mode
+export const TransferMode = {
+  LOOP: "LOOP",
+  RANDOM: "RANDOM",
+  MQTT_CONTROL: "MQTT_CONTROL",
+} as const;
+export type TransferMode = typeof TransferMode[keyof typeof TransferMode];
+
 // --- ID Generator for Auto-Offsets ---
 let _mPtr = 0;
 export const MovementData = {
@@ -75,6 +83,7 @@ export const MovementData = {
   CURRENT_EDGE: _mPtr++,
   NEXT_EDGE: _mPtr++,
   NEXT_EDGE_STATE: _mPtr++,
+  TARGET_RATIO: _mPtr++,
   OFFSET: _mPtr++,
 } as const;
 const MOVEMENT_SIZE = _mPtr;

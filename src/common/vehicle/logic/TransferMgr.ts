@@ -5,9 +5,8 @@ import {
   MovementData,
   NextEdgeState,
   VEHICLE_DATA_SIZE,
+  TransferMode,
 } from "@/common/vehicle/initialize/constants";
-
-import { TransferMode } from "@/shmSimulator/types";
 
 export type VehicleLoop = {
   edgeSequence: string[];
@@ -47,11 +46,21 @@ export class TransferMgr {
   /**
    * Assign a command to a specific vehicle.
    * Currently supports 'nextEdgeId' command.
+   * Also wakes up the vehicle (TargetRatio -> 1.0) if it was stopped.
    */
-  assignCommand(vehId: number, command: any) {
+  assignCommand(vehId: number, command: any, vehicleDataArray?: IVehicleDataArray) {
     if (command?.nextEdgeId) {
       console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${command.nextEdgeId}`);
       this.reservedNextEdges.set(vehId, command.nextEdgeId);
+
+      // Wake up vehicle if we have access to data
+      if (vehicleDataArray) {
+        const data = vehicleDataArray.getData();
+        const ptr = vehId * VEHICLE_DATA_SIZE;
+        // Set Target Ratio to 1.0 to allow movement to end of edge
+        data[ptr + MovementData.TARGET_RATIO] = 1;
+        // We could also set state to READY if we wanted to bypass queue, but queue is for transfer.
+      }
     }
   }
 
@@ -146,7 +155,7 @@ export class TransferMgr {
   }
 
   private getNextEdgeRandomly(currentEdge: Edge): number {
-    if (currentEdge.nextEdgeIndices?.length > 0) {
+    if ((currentEdge.nextEdgeIndices?.length ?? 0) > 0) {
       const randomIndex = Math.floor(
         Math.random() * currentEdge.nextEdgeIndices!.length
       );

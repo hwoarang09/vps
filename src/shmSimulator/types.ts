@@ -3,6 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
+import { TransferMode } from "@/common/vehicle/initialize/constants";
 
 // ============================================================================
 // [1] SIMULATION CONFIG
@@ -111,11 +112,7 @@ export type MainMessage =
 // ============================================================================
 
 // TransferMode is now imported from common
-export enum TransferMode {
-  LOOP = "LOOP",
-  RANDOM = "RANDOM",
-  MQTT_CONTROL = "MQTT_CONTROL",
-}
+export { TransferMode } from "@/common/vehicle/initialize/constants";
 // ============================================================================
 // [5] RE-EXPORTS
 // ============================================================================

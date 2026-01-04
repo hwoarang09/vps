@@ -78,6 +78,7 @@ export function handleEdgeTransition(
 
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
     data[ptr + MovementData.NEXT_EDGE] = -1;
+    data[ptr + MovementData.TARGET_RATIO] = 1; // Default to full traversal on new edge
 
     currentEdgeIdx = nextEdgeIndex;
     currentEdge = nextEdge;
@@ -104,9 +105,9 @@ function updateSensorPresetForEdge(
 
   if (railType === EdgeType.CURVE_180) {
     presetIdx = PresetIndex.U_TURN;
-  } else if ((railType as string) === "LEFT_CURVE" || (isCurve && edge.curve_direction === "left")) {
+  } else if (railType === EdgeType.LEFT_CURVE || (isCurve && edge.curve_direction === "left")) {
     presetIdx = PresetIndex.CURVE_LEFT;
-  } else if ((railType as string) === "RIGHT_CURVE" || (isCurve && edge.curve_direction === "right")) {
+  } else if (railType === EdgeType.RIGHT_CURVE || (isCurve && edge.curve_direction === "right")) {
     presetIdx = PresetIndex.CURVE_RIGHT;
   } else if (isCurve) {
     // Other curve types without explicit direction - default to STRAIGHT

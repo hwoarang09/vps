@@ -13,6 +13,7 @@ import {
   type InitializationResult,
   type ILockMgr,
   type VehicleInitConfig,
+  TransferMode,
 } from "@/common/vehicle/initialize";
 import { calculateVehiclePlacements } from "@/utils/vehicle/vehiclePlacement";
 
@@ -27,6 +28,7 @@ export interface InitializeVehiclesParams {
   lockMgr: LockMgr;
   sensorPointArray: SensorPointArrayBase;
   config: SimulationConfig;
+  transferMode: TransferMode;
 }
 
 /**
@@ -79,7 +81,7 @@ function createUpdateSensorPointsWrapper(
 }
 
 export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
-  const { edges, numVehicles, store, lockMgr, sensorPointArray, config } = params;
+  const { edges, numVehicles, store, lockMgr, sensorPointArray, config, transferMode } = params;
 
   console.log(`[shmSimulator] Initializing ${numVehicles} vehicles...`);
 
@@ -96,6 +98,7 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     store,
     lockMgr: createLockMgrAdapter(lockMgr),
     config: createVehicleInitConfig(config),
+    transferMode,
     updateSensorPoints: createUpdateSensorPointsWrapper(sensorPointArray, config),
   });
 

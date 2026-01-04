@@ -25,6 +25,7 @@ export interface AddVehicleData {
   z: number;
   edgeIndex: number;
   edgeRatio?: number;
+  targetRatio?: number;
   rotation?: number;
   velocity?: number;
   acceleration?: number;
@@ -85,12 +86,17 @@ export interface VehicleInitConfig {
 /**
  * Parameters for initializing vehicles (common function)
  */
+import { TransferMode } from "@/common/vehicle/initialize/constants";
+
+// ... (other imports are fine, but I need to make sure I don't double import if I add to top)
+
 export interface InitializeVehiclesCommonParams {
   edges: Edge[];
   placements: VehiclePlacement[];
   store: IVehicleStore;
   lockMgr: ILockMgr;
   config: VehicleInitConfig;
+  transferMode: TransferMode; // TransferMode enum value
   // Optional callbacks for platform-specific behavior
   onVehicleCreated?: (placement: VehiclePlacement, edgeIndex: number) => void;
   // Sensor point update function (platform-specific)
@@ -102,3 +108,5 @@ export interface InitializeVehiclesCommonParams {
     presetIndex: number
   ) => void;
 }
+
+

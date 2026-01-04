@@ -60,7 +60,10 @@ const VehicleTest: React.FC = () => {
   useEffect(() => {
     setInputValue(selectedSetting.numVehicles.toString());
     setCustomNumVehicles(selectedSetting.numVehicles);
-  }, [selectedSettingId, selectedSetting.numVehicles]);
+    if (selectedSetting.transferMode) {
+      setTransferMode(selectedSetting.transferMode);
+    }
+  }, [selectedSettingId, selectedSetting.numVehicles, selectedSetting.transferMode]);
 
   const loadTestSetting = async (settingId: string) => {
     const setting = testSettings.find(s => s.id === settingId);

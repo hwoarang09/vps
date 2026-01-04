@@ -10,6 +10,7 @@ import {
   MovingStatus,
   PresetIndex,
   VEHICLE_DATA_SIZE,
+  TransferMode,
 } from "./constants";
 import type {
   VehiclePlacement,
@@ -32,23 +33,42 @@ export function buildEdgeNameToIndex(edges: Edge[]): Map<string, number> {
 }
 
 /**
- * Initialize a single vehicle's state
+ * Parameters for initializeSingleVehicle function
  */
-export function initializeSingleVehicle(
-  placement: VehiclePlacement,
-  edgeIndex: number,
-  edge: Edge,
-  store: IVehicleStore,
-  config: VehicleInitConfig,
+export interface InitializeSingleVehicleParams {
+  placement: VehiclePlacement;
+  edgeIndex: number;
+  edge: Edge;
+  store: IVehicleStore;
+  config: VehicleInitConfig;
+  initialTargetRatio: number;
   updateSensorPoints: (
     vehicleIndex: number,
     x: number,
     y: number,
     rotation: number,
     presetIndex: number
-  ) => void,
-  onVehicleCreated?: (placement: VehiclePlacement, edgeIndex: number) => void
+  ) => void;
+  onVehicleCreated?: (placement: VehiclePlacement, edgeIndex: number) => void;
+}
+
+/**
+ * Initialize a single vehicle's state
+ */
+export function initializeSingleVehicle(
+  params: InitializeSingleVehicleParams
 ): void {
+  const {
+    placement,
+    edgeIndex,
+    edge,
+    store,
+    config,
+    initialTargetRatio,
+    updateSensorPoints,
+    onVehicleCreated,
+  } = params;
+
   const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
   const initialVelocity = isCurve ? config.curveMaxSpeed : 0;
 
@@ -59,6 +79,7 @@ export function initializeSingleVehicle(
     z: placement.z,
     edgeIndex: edgeIndex,
     edgeRatio: placement.edgeRatio,
+    targetRatio: initialTargetRatio,
     rotation: placement.rotation,
     velocity: initialVelocity,
     acceleration: config.linearAcceleration,
@@ -71,6 +92,9 @@ export function initializeSingleVehicle(
   const ptr = placement.vehicleIndex * VEHICLE_DATA_SIZE;
   vehData[ptr + SensorData.PRESET_IDX] = PresetIndex.STRAIGHT;
   vehData[ptr + SensorData.HIT_ZONE] = -1;
+
+  // Initialize Target Ratio (New)
+  vehData[ptr + MovementData.TARGET_RATIO] = initialTargetRatio;
 
   // Initialize NextEdge State
   vehData[ptr + MovementData.NEXT_EDGE] = -1;
@@ -92,24 +116,48 @@ export function initializeSingleVehicle(
 }
 
 /**
- * Initialize all vehicles from placements
+ * Parameters for initializeVehicleStates function
  */
-export function initializeVehicleStates(
-  placements: VehiclePlacement[],
-  nameToIndex: Map<string, number>,
-  edgeArray: Edge[],
-  store: IVehicleStore,
-  config: VehicleInitConfig,
+export interface InitializeVehicleStatesParams {
+  placements: VehiclePlacement[];
+  nameToIndex: Map<string, number>;
+  edgeArray: Edge[];
+  store: IVehicleStore;
+  config: VehicleInitConfig;
+  transferMode: TransferMode;
   updateSensorPoints: (
     vehicleIndex: number,
     x: number,
     y: number,
     rotation: number,
     presetIndex: number
-  ) => void,
-  onVehicleCreated?: (placement: VehiclePlacement, edgeIndex: number) => void
+  ) => void;
+  onVehicleCreated?: (placement: VehiclePlacement, edgeIndex: number) => void;
+}
+
+/**
+ * Initialize all vehicles from placements
+ */
+export function initializeVehicleStates(
+  params: InitializeVehicleStatesParams
 ): Map<number, number> {
+  const {
+    placements,
+    nameToIndex,
+    edgeArray,
+    store,
+    config,
+    transferMode,
+    updateSensorPoints,
+    onVehicleCreated,
+  } = params;
+  
   const edgeVehicleCount = new Map<number, number>();
+
+  // Determine initial target ratio logic based on transfer mode
+  // MQTT_CONTROL -> vehicles spawn stopped at their current placement (Target = edgeRatio)
+  // Others -> vehicles spawn and move (Target = 1)
+  const isMqtt = transferMode === TransferMode.MQTT_CONTROL;
 
   for (const placement of placements) {
     const edgeIndex = nameToIndex.get(placement.edgeName);
@@ -117,15 +165,18 @@ export function initializeVehicleStates(
 
     const edge = edgeArray[edgeIndex];
 
-    initializeSingleVehicle(
+    const initialTargetRatio = isMqtt ? placement.edgeRatio : 1;
+
+    initializeSingleVehicle({
       placement,
       edgeIndex,
       edge,
       store,
       config,
+      initialTargetRatio,
       updateSensorPoints,
-      onVehicleCreated
-    );
+      onVehicleCreated,
+    });
 
     edgeVehicleCount.set(edgeIndex, (edgeVehicleCount.get(edgeIndex) || 0) + 1);
   }
@@ -185,6 +236,7 @@ export function initializeVehicles(
     store,
     lockMgr,
     config,
+    transferMode,
     updateSensorPoints,
     onVehicleCreated,
   } = params;
@@ -193,15 +245,17 @@ export function initializeVehicles(
   const nameToIndex = buildEdgeNameToIndex(edgeArray);
 
   // Initialize all vehicle states
-  const edgeVehicleCount = initializeVehicleStates(
+  // Initialize all vehicle states
+  const edgeVehicleCount = initializeVehicleStates({
     placements,
     nameToIndex,
     edgeArray,
     store,
     config,
+    transferMode,
     updateSensorPoints,
-    onVehicleCreated
-  );
+    onVehicleCreated,
+  });
 
   // Sort vehicles in each edge
   sortVehiclesInEdges(edgeVehicleCount, store);

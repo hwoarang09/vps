@@ -16,12 +16,11 @@ import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";
 import { getLockMgr } from "@/common/vehicle/logic/LockMgr";
-import { TransferMgr, type TransferMode as TransferModeBase } from "@/common/vehicle/logic/TransferMgr";
+import { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
-import { TransferMode, useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
-
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 
 /**
  * Log safety configuration on mount
@@ -106,6 +105,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
         numVehicles,
         store,
         vehicleConfigs: (useVehicleConfig && vehicleConfigs.length > 0) ? vehicleConfigs : undefined,
+        transferMode: store.transferMode,
       });
 
       console.log(`[VehicleArrayMode] Initializing with ${useVehicleConfig ? 'vehicles.cfg' : 'auto-placement'}, ${vehicleConfigs.length} configs available`);
@@ -174,8 +174,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
       bodyWidth: getBodyWidth(),
     };
 
-    const transferModeValue: TransferModeBase =
-      store.transferMode === TransferMode.LOOP ? 0 : 1;
+    const transferModeValue = store.transferMode;
 
     const movementCtx: MovementUpdateContext = {
       vehicleDataArray: { getData: () => vehicleArrayData },

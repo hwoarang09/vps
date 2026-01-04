@@ -143,19 +143,39 @@ export function updateMovement(ctx: MovementUpdateContext) {
       config
     );
 
-    const rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
+    let targetRatio = data[ptr + MovementData.TARGET_RATIO];
+    // Enforce valid range [0, 1] for safety
+    if (targetRatio < 0) targetRatio = 0;
+    if (targetRatio > 1) targetRatio = 1;
+
+    let rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
+
+    // Check against target ratio
+    if (rawNewRatio >= targetRatio) {
+      rawNewRatio = targetRatio;
+      newVelocity = 0; // Stop at target
+    }
 
     checkAndTriggerTransfer(transferMgr, data, ptr, i, rawNewRatio);
 
-    handleEdgeTransition(
-      vehicleDataArray,
-      store,
-      i,
-      currentEdgeIndex,
-      rawNewRatio,
-      edgeArray,
-      SCRATCH_TRANSITION
-    );
+    // Only transition if we reached the end (Target = 1)
+    // If target < 1, we just stop there.
+    if (rawNewRatio >= 1 && targetRatio === 1) {
+      handleEdgeTransition(
+        vehicleDataArray,
+        store,
+        i,
+        currentEdgeIndex,
+        rawNewRatio,
+        edgeArray,
+        SCRATCH_TRANSITION
+      );
+    } else {
+       // Just update position on current edge
+       SCRATCH_TRANSITION.finalEdgeIndex = currentEdgeIndex;
+       SCRATCH_TRANSITION.finalRatio = rawNewRatio;
+       SCRATCH_TRANSITION.activeEdge = currentEdge;
+    }
     let finalEdgeIndex = SCRATCH_TRANSITION.finalEdgeIndex;
     let finalRatio = SCRATCH_TRANSITION.finalRatio;
     const activeEdge = SCRATCH_TRANSITION.activeEdge;

@@ -128,6 +128,7 @@ export class SimulationEngine {
       lockMgr: this.lockMgr,
       sensorPointArray: this.sensorPointArray,
       config: this.config,
+      transferMode: payload.transferMode,
     });
 
     this.edgeNameToIndex = result.edgeNameToIndex;
