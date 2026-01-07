@@ -4,6 +4,7 @@
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
+import { StationRawData } from "@/types/station";
 
 // ============================================================================
 // [1] SIMULATION CONFIG
@@ -82,6 +83,7 @@ export interface InitPayload {
   vehicleConfigs: VehicleInitConfig[];
   numVehicles: number;
   transferMode: TransferMode;
+  stationData: StationRawData[];
 }
 
 // ============================================================================

@@ -32,6 +32,7 @@ interface ShmSimulatorState {
     vehicleConfigs?: VehicleInitConfig[];
     config?: Partial<SimulationConfig>;
     transferMode?: TransferMode;
+    stations: ReadonlyArray<any>;
   }) => Promise<void>;
 
   start: () => void;
@@ -58,7 +59,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   workerMaxMs: 0,
 
   init: async (params) => {
-    const { edges, nodes, numVehicles, vehicleConfigs = [], config = {}, transferMode = TransferMode.RANDOM } = params;
+    const { edges, nodes, stations, numVehicles, vehicleConfigs = [], config = {}, transferMode = TransferMode.RANDOM } = params;
 
     // Dispose existing controller if any
     const existing = get().controller;
@@ -83,6 +84,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         vehicleConfigs,
         config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
         transferMode,
+        stations,
       });
 
       set({

@@ -61,7 +61,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Small loop with few vehicles for quick testing",
       mapName: "straight_short_test",
       numVehicles: 5,
-      transferMode: TransferMode.LOOP,
+      transferMode: TransferMode.AUTO_ROUTE,
       camera: {
         position: [5, -2, 10],
         target: [5, 5, 0]
@@ -152,7 +152,7 @@ let testSettingConfig: TestSettingConfig = {
       }
     }
   ],
-  DEFAULT_SETTING: "Y_SHORT"
+  DEFAULT_SETTING: "SMALL_LOOP"
 };
 
 // Load config immediately

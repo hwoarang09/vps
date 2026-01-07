@@ -79,6 +79,8 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
         logic: {
             trafficState: data[ptr + ShmLogicData.TRAFFIC_STATE],
             stopReason: data[ptr + ShmLogicData.STOP_REASON],
+            destinationEdge: data[ptr + ShmLogicData.DESTINATION_EDGE],
+            pathRemaining: data[ptr + ShmLogicData.PATH_REMAINING],
         },
     };
 };
@@ -152,6 +154,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     let status: number, velocity: number, acceleration: number, deceleration: number;
     let sensorPreset: number, hitZone: number, trafficState: number, stopReasonMask: number;
     let currentEdgeIdx: number, currentEdgeRatio: number, nextEdgeIdx: number, collisionTarget: number;
+    let destinationEdgeIdx: number | undefined, pathRemaining: number | undefined;
 
     if (isShmMode) {
         const data = useShmSimulatorStore.getState().getVehicleData();
@@ -171,6 +174,8 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         currentEdgeRatio = vData.movement.edgeRatio;
         nextEdgeIdx = vData.movement.nextEdge;
         collisionTarget = vData.sensor.collisionTarget;
+        destinationEdgeIdx = vData.logic.destinationEdge;
+        pathRemaining = vData.logic.pathRemaining;
     } else {
         const vData = vehicleDataArray.get(vehicleIndex);
         status = vData.movement.movingStatus;
@@ -194,6 +199,10 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     const currentEdgeName = useEdgeStore.getState().getEdgeByIndex(currentEdgeIdx)?.edge_name || "Unknown";
     const nextEdgeName = nextEdgeIdx !== -1
         ? (useEdgeStore.getState().getEdgeByIndex(nextEdgeIdx)?.edge_name || "Unknown")
+        : "None";
+
+    const destinationEdgeName = destinationEdgeIdx !== undefined && destinationEdgeIdx !== -1
+        ? (useEdgeStore.getState().getEdgeByIndex(destinationEdgeIdx)?.edge_name || "Unknown")
         : "None";
 
     // Debug Info: Target
@@ -306,6 +315,13 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                          <span>Next Edge</span>
                          <span className="font-mono">{nextEdgeName} {nextEdgeIdx !== -1 ? `(#${nextEdgeIdx})` : ""}</span>
                     </div>
+
+                    {isShmMode && destinationEdgeName !== "None" && (
+                        <div className="flex justify-between text-xs text-purple-600 font-medium mt-1">
+                            <span>Destination</span>
+                            <span className="font-mono">{destinationEdgeName} (Hops: {pathRemaining?.toFixed(0)})</span>
+                        </div>
+                    )}
 
                     <div className="my-2 border-t border-gray-200"></div>
 

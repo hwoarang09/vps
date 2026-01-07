@@ -412,6 +412,7 @@ const VehicleTest: React.FC = () => {
           <option value={TransferMode.LOOP}>LOOP</option>
           <option value={TransferMode.RANDOM}>RANDOM</option>
           <option value={TransferMode.MQTT_CONTROL}>MQTT</option>
+          <option value={TransferMode.AUTO_ROUTE}>AUTO_ROUTE</option>
         </select>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

@@ -3,6 +3,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { useStationStore } from "@/store/map/stationStore";
 import {
   getLinearMaxSpeed,
   getLinearAcceleration,
@@ -34,6 +35,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
   const nodes = useNodeStore((state) => state.nodes);
   const isPaused = useVehicleTestStore((state) => state.isPaused);
   const transferMode = useVehicleArrayStore((state) => state.transferMode);
+  const stations = useStationStore((state) => state.stations);
 
   const {
     init: initSimulator,
@@ -72,6 +74,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       numVehicles,
       config,
       transferMode,
+      stations,
     })
       .then(() => {
         console.log("[VehicleSharedMemoryMode] SHM Simulator initialized");
@@ -87,7 +90,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       disposeSimulator();
       initRef.current = false;
     };
-  }, [edges, nodes, numVehicles, initSimulator, disposeSimulator]);
+  }, [edges, nodes, stations, numVehicles, initSimulator, disposeSimulator]);
 
   // Handle play/pause state changes
   useEffect(() => {

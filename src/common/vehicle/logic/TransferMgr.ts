@@ -45,8 +45,8 @@ interface ReservedEdge {
 
 export class TransferMgr {
   private transferQueue: number[] = [];
-  // Store reserved next edge for each vehicle: vehId -> {edgeId, targetRatio}
-  private readonly reservedNextEdges: Map<number, ReservedEdge> = new Map();
+  // Store reserved next edge for each vehicle: vehId -> ReservedEdge[]
+  private readonly reservedNextEdges: Map<number, ReservedEdge[]> = new Map();
   // Store reserved path for each vehicle: vehId -> Array<{edgeId, targetRatio}>
   // Used for multi-edge reservation to enable speed control optimization
   private readonly reservedPaths: Map<number, Array<ReservedEdge>> = new Map();
@@ -59,9 +59,23 @@ export class TransferMgr {
     return this.transferQueue.length;
   }
 
+  /**
+   * Checks if the vehicle has any pending commands (Reserved Edges or Path).
+   */
+  hasPendingCommands(vehId: number): boolean {
+    const queue = this.reservedNextEdges.get(vehId);
+    if (queue && queue.length > 0) return true;
+    
+    const path = this.reservedPaths.get(vehId);
+    if (path && path.length > 0) return true;
+
+    return false;
+  }
+
   clearQueue() {
     this.transferQueue = [];
     this.reservedNextEdges.clear();
+    this.reservedPaths.clear();
   }
 
   /**
@@ -100,10 +114,14 @@ export class TransferMgr {
     }
 
     if (!nextEdgeId || nextEdgeId === currentEdge.edge_name) {
+      // If we are just setting target on current edge, we normally check currentRatio
+      // BUT if there is a queue, "current edge" might conceptually be the last queued edge?
+      // For now, let's assume same-edge command applies to the ACTUAL current edge immediately.
+      // If the user wants to set target on a FUTURE edge, they should use the queue/path.
       const currentRatio = data[ptr + MovementData.EDGE_RATIO];
       this.processSameEdgeCommand(vehId, targetRatio, currentRatio, data, ptr);
     } else {
-      this.processEdgeTransitionCommand(vehId, nextEdgeId, targetRatio, currentEdge, edgeNameToIndex!, data, ptr);
+      this.processEdgeTransitionCommand(vehId, nextEdgeId, targetRatio, currentEdge, edgeArray!, edgeNameToIndex!, data, ptr);
     }
 
     this.ensureVehicleAwake(data, ptr, vehId);
@@ -190,21 +208,42 @@ export class TransferMgr {
       return activePathEdge;
     }
     
-    // Fall back to single-edge reservation
-    const reserved = this.reservedNextEdges.get(vehicleIndex);
-    if (reserved) {
-      const idx = edgeNameToIndex.get(reserved.edgeId);
+    // Fall back to manual reservation queue
+    const queue = this.reservedNextEdges.get(vehicleIndex);
+    if (queue && queue.length > 0) {
+      const nextReserved = queue[0]; // Peek
+      const idx = edgeNameToIndex.get(nextReserved.edgeId);
       if (idx === undefined) {
-        console.warn(`[TransferMgr] Reserved edge ${reserved.edgeId} not found`);
+        console.warn(`[TransferMgr] Reserved edge ${nextReserved.edgeId} not found`);
       } else {
-        console.log(`[TransferMgr] Returning next edge ${reserved.edgeId} (index ${idx}) for vehicle ${vehicleIndex}`);
-        // Don't delete reservation here - it will be deleted after transition completes
-        // and targetRatio has been used
+        console.log(`[TransferMgr] Returning next edge ${nextReserved.edgeId} (index ${idx}) for vehicle ${vehicleIndex}`);
         return idx;
       }
     }
     // Return -1 to indicate waiting/stop if no command
     return -1;
+  }
+
+  /**
+   * Consumes and returns the reserved target ratio for the given vehicle.
+   * This is called when the vehicle actually transitions to the next edge.
+   */
+  consumeNextEdgeReservation(vehId: number): number | undefined {
+    const queue = this.reservedNextEdges.get(vehId);
+    if (!queue || queue.length === 0) return undefined;
+
+    // Shift the first reservation
+    const reservation = queue.shift()!;
+    const ratio = reservation.targetRatio;
+    
+    // Cleanup if empty
+    if (queue.length === 0) {
+      this.reservedNextEdges.delete(vehId);
+    } else {
+      console.log(`[TransferMgr] Vehicle ${vehId} consumed one reservation, ${queue.length} remaining.`);
+    }
+    
+    return ratio;
   }
 
   private getNextEdgeRandomly(currentEdge: Edge): number {
@@ -278,6 +317,10 @@ export class TransferMgr {
   ) {
     console.log(`[TransferMgr] Processing path command with ${path.length} edges`);
     
+    // Clear existing reservations when a new path is processed?
+    // Usually a path command overrides everything.
+    this.reservedNextEdges.delete(vehId);
+
     let prevEdge = currentEdge;
     for (const pathItem of path) {
       const pathEdgeId = pathItem.edgeId;
@@ -336,38 +379,54 @@ export class TransferMgr {
     nextEdgeId: string,
     targetRatio: number | undefined,
     currentEdge: Edge,
+    edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
     data: Float32Array,
     ptr: number
   ) {
+    // Determine connection reference: Last queued edge OR current edge
+    let referenceEdge = currentEdge;
+    const queue = this.reservedNextEdges.get(vehId);
+    
+    if (queue && queue.length > 0) {
+      const lastReserved = queue[queue.length - 1];
+      const lastEdgeIndex = edgeNameToIndex.get(lastReserved.edgeId);
+      if (lastEdgeIndex !== undefined) {
+        referenceEdge = edgeArray[lastEdgeIndex];
+      }
+    }
+
     const nextEdgeIndex = edgeNameToIndex.get(nextEdgeId);
     
-    console.log(`[TransferMgr] Vehicle ${vehId} next edge index: ${nextEdgeIndex}`);
-    console.log(`[TransferMgr] Vehicle ${vehId} current edge index: ${Math.trunc(data[ptr + MovementData.CURRENT_EDGE])}`);
-    console.log(`[TransferMgr] Vehicle ${vehId} current edge next edge indices: ${currentEdge.nextEdgeIndices}`);
+    console.log(`[TransferMgr] Vehicle ${vehId} next edge: ${nextEdgeId} (Queue size: ${queue?.length ?? 0})`);
     
     if (nextEdgeIndex === undefined) {
       console.error(`[TransferMgr] Edge ${nextEdgeId} not found in map`);
       return;
     }
 
-    if (!currentEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
+    if (!referenceEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
       console.error(
-        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${currentEdge.edge_name}`
+        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${referenceEdge.edge_name} (Queue tail)`
       );
       return;
     }
 
-    if (targetRatio !== undefined) {
-      const clampedRatio = Math.max(0, Math.min(1, targetRatio));
-      data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
-      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} for next edge`);
+    // Always ensure current vehicle target is 1.0 (if it was stopped)
+    // Only set if we are adding the FIRST item to the queue (meaning we are currently on the active edge)
+    if (!queue || queue.length === 0) {
+      data[ptr + MovementData.TARGET_RATIO] = 1;
+      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to 1.0 (full traversal) for current edge`);
     }
 
     const clampedRatio = targetRatio === undefined ? undefined : Math.max(0, Math.min(1, targetRatio));
-    this.reservedNextEdges.set(vehId, { edgeId: nextEdgeId, targetRatio: clampedRatio });
-    console.log(`[TransferMgr] Vehicle ${vehId} reserved next edge: ${nextEdgeId}, targetRatio: ${clampedRatio}`);
-    console.log(`[TransferMgr] Vehicle will transition when reaching end of current edge`);
+    
+    if (!this.reservedNextEdges.has(vehId)) {
+      this.reservedNextEdges.set(vehId, []);
+    }
+    this.reservedNextEdges.get(vehId)!.push({ edgeId: nextEdgeId, targetRatio: clampedRatio });
+    
+    console.log(`[TransferMgr] Vehicle ${vehId} queued next edge: ${nextEdgeId}, targetRatio: ${clampedRatio}`);
   }
 
   private ensureVehicleAwake(data: Float32Array, ptr: number, vehId: number) {
@@ -385,6 +444,17 @@ export class TransferMgr {
     const path = this.reservedPaths.get(vehicleIndex);
     if (!path || path.length === 0) return null;
 
+    // Logic change: If we have a path, we should feed the main queue if it's empty?
+    // OR we just keep handlePathQueue as a separate high-priority feeder.
+    // Given the request is about manual commands, let's keep path logic simple:
+    // It pops one and returns it. BUT it should probably push to reservedNextEdges to unify consumption?
+    // Let's keep existing logic: return index directly.
+    // BUT we need to handle targetRatio?
+    // The previous logic was:
+    // this.reservedNextEdges.set(vehicleIndex, { edgeId: nextEdge.edgeId, ... });
+    // This assumes reservedNextEdges is a Map<number, ReservedEdge>.
+    // Now it is Map<number, ReservedEdge[]>.
+    
     const nextEdge = path.shift()!;
     const idx = edgeNameToIndex.get(nextEdge.edgeId);
     
@@ -393,25 +463,36 @@ export class TransferMgr {
     } else {
       console.log(`[TransferMgr] Path: transitioning to ${nextEdge.edgeId} (${path.length} edges remaining)`);
       
-      if (path.length > 0) {
-        this.reservedNextEdges.set(vehicleIndex, {
-          edgeId: nextEdge.edgeId,
-          targetRatio: 1
-        });
-        console.log(`[TransferMgr] More edges in path, setting TARGET_RATIO=1.0 for ${nextEdge.edgeId}`);
-      } else if (nextEdge.targetRatio !== undefined) {
-        this.reservedNextEdges.set(vehicleIndex, {
-          edgeId: nextEdge.edgeId,
-          targetRatio: nextEdge.targetRatio
-        });
-        console.log(`[TransferMgr] Last edge in path, setting TARGET_RATIO=${nextEdge.targetRatio} for ${nextEdge.edgeId}`);
+      const queue = this.reservedNextEdges.get(vehicleIndex) || [];
+      if (!this.reservedNextEdges.has(vehicleIndex)) {
+        this.reservedNextEdges.set(vehicleIndex, queue);
       }
+
+      // We need to support the logic where path items are fed into the system.
+      // If we just return 'idx', the Caller (determineNextEdge) returns it as nextEdge.
+      // And then consumeNextEdgeReservation will be called later?
+      // Wait, movementUpdate calls determineNextEdge -> sets NEXT_EDGE.
+      // Then movementUpdate calls consumeNextEdgeReservation when transition happens.
+      // So handlePathQueue MUST populate reservedNextEdges for consumption!
+      
+      let rRatio: number | undefined = undefined;
+      if (path.length > 0) {
+        rRatio = 1.0;
+      } else if (nextEdge.targetRatio !== undefined) {
+        rRatio = nextEdge.targetRatio;
+      }
+      
+      // Push to queue (so consumeNextEdgeReservation can find it)
+      queue.push({
+        edgeId: nextEdge.edgeId,
+        targetRatio: rRatio
+      });
       
       if (path.length === 0) {
         this.reservedPaths.delete(vehicleIndex);
       }
       
-      return idx;
+      return idx; // Return index to set NEXT_EDGE
     }
     return null;
   }

@@ -150,11 +150,6 @@ export function updateMovement(ctx: MovementUpdateContext) {
 
     let rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
 
-    checkTargetReached(rawNewRatio, targetRatio, newVelocity, SCRATCH_TARGET_CHECK);
-    rawNewRatio = SCRATCH_TARGET_CHECK.finalRatio;
-    newVelocity = SCRATCH_TARGET_CHECK.finalVelocity;
-    const reachedTarget = SCRATCH_TARGET_CHECK.reached;
-
     checkAndTriggerTransfer(transferMgr, data, ptr, i, rawNewRatio);
 
     processEdgeTransitionLogic(
@@ -171,9 +166,22 @@ export function updateMovement(ctx: MovementUpdateContext) {
     let finalRatio = SCRATCH_TRANSITION.finalRatio;
     const activeEdge = SCRATCH_TRANSITION.activeEdge;
 
-    // Fix: If we reached target AND didn't transition => We are stopped
-    if (reachedTarget && finalEdgeIndex === currentEdgeIndex) {
-      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+    // Logic to handle velocity and stopping:
+    // If we transitioned to a new edge, we maintain velocity (momentum).
+    // If we stayed on the same edge, we must check if we hit the target limit.
+    if (finalEdgeIndex !== currentEdgeIndex) {
+      // Transitioned: Keep newVelocity as is.
+      // The finalRatio is already calculated correctly with overflow in handleEdgeTransition.
+    } else {
+      // Same edge: Check if we reached the target on this edge
+      checkTargetReached(rawNewRatio, targetRatio, newVelocity, SCRATCH_TARGET_CHECK);
+      finalRatio = SCRATCH_TARGET_CHECK.finalRatio;
+      newVelocity = SCRATCH_TARGET_CHECK.finalVelocity;
+      const reachedTarget = SCRATCH_TARGET_CHECK.reached;
+
+      if (reachedTarget) {
+        data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+      }
     }
 
     checkAndReleaseMergeLock(lockMgr, finalEdgeIndex, currentEdgeIndex, currentEdge, i);
@@ -287,16 +295,20 @@ function processEdgeTransitionLogic(
     // In MQTT_CONTROL mode, preserve TARGET_RATIO (don't overwrite with 1)
     const preserveTargetRatio = ctx.store.transferMode === TransferMode.MQTT_CONTROL;
     
-    handleEdgeTransition(
-      ctx.vehicleDataArray,
-      ctx.store,
-      vehicleIndex,
-      currentEdgeIndex,
-      rawNewRatio,
-      ctx.edgeArray,
-      out,
-      preserveTargetRatio
-    );
+    // Check if there's a reserved target ratio for the next edge (fixes premature target application bug)
+    const nextTargetRatio = ctx.transferMgr.consumeNextEdgeReservation(vehicleIndex);
+    
+    handleEdgeTransition({
+      vehicleDataArray: ctx.vehicleDataArray,
+      store: ctx.store,
+      vehicleIndex: vehicleIndex,
+      initialEdgeIndex: currentEdgeIndex,
+      initialRatio: rawNewRatio,
+      edgeArray: ctx.edgeArray,
+      target: out,
+      preserveTargetRatio: preserveTargetRatio,
+      nextTargetRatio: nextTargetRatio
+    });
   } else {
     // Just update position on current edge
     out.finalEdgeIndex = currentEdgeIndex;

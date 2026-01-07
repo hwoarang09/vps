@@ -16,6 +16,7 @@ import { createDefaultConfig } from "../types";
 
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
+import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 
 export class SimulationEngine {
   // === Internal Store ===
@@ -37,6 +38,7 @@ export class SimulationEngine {
   private readonly transferMgr: TransferMgr;
   private readonly dispatchMgr: DispatchMgr;
   public readonly routingMgr: RoutingMgr; // Public for easy access (e.g. from Worker event listener)
+  private readonly autoMgr: AutoMgr;
 
   // === Runtime ===
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
@@ -67,6 +69,7 @@ export class SimulationEngine {
     // Wire up new managers
     this.dispatchMgr = new DispatchMgr(this.transferMgr);
     this.routingMgr = new RoutingMgr(this.dispatchMgr);
+    this.autoMgr = new AutoMgr();
   }
 
   /**
@@ -142,6 +145,12 @@ export class SimulationEngine {
 
     // Build vehicle loop map (simple loop for now)
     this.buildVehicleLoopMap();
+
+    // Initialize AutoMgr with stations
+    if (payload.stationData) {
+      this.autoMgr.initStations(payload.stationData, this.edgeNameToIndex);
+    }
+
 
     console.log(`[SimulationEngine] Initialized with ${this.actualNumVehicles} vehicles`);
   }
@@ -250,6 +259,18 @@ export class SimulationEngine {
       config: this.config,
     };
     updateMovement(movementCtx);
+
+    // 3. Auto Routing Trigger
+    // Check if we need to assign new destinations (AUTO_ROUTE mode)
+    this.autoMgr.update(
+      this.store.transferMode,
+      this.actualNumVehicles,
+      this.vehicleDataArray, // Now passes IVehicleDataArray directly
+      this.edges,
+      this.edgeNameToIndex,
+      this.transferMgr
+    );
+
 
     // Measure step time
     const stepEnd = performance.now();

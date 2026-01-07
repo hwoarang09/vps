@@ -65,6 +65,7 @@ export const TransferMode = {
   LOOP: "LOOP",
   RANDOM: "RANDOM",
   MQTT_CONTROL: "MQTT_CONTROL",
+  AUTO_ROUTE: "AUTO_ROUTE",
 } as const;
 export type TransferMode = typeof TransferMode[keyof typeof TransferMode];
 
@@ -100,6 +101,8 @@ export const LogicData = {
   TRAFFIC_STATE: _lPtr++,
   STOP_REASON: _lPtr++,
   JOB_STATE: _lPtr++,
+  DESTINATION_EDGE: _lPtr++,
+  PATH_REMAINING: _lPtr++,
 } as const;
 
 export const VEHICLE_DATA_SIZE = _lPtr;

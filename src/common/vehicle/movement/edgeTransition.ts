@@ -32,18 +32,38 @@ export interface EdgeTransitionResult {
 
 /**
  * Zero-GC: Handles edge transition, writes result to target object.
- * @param preserveTargetRatio - If true, don't set TARGET_RATIO=1 (for MQTT mode)
+ * @param preserveTargetRatio - If true, don't set TARGET_RATIO=1 (for MQTT mode). 
+ *        NOTE: This flag is somewhat legacy now that we support nextTargetRatio, but kept for compatibility.
+ * @param nextTargetRatio - The target ratio to set for the new edge (optional).
  */
-export function handleEdgeTransition(
-  vehicleDataArray: IVehicleDataArray,
-  store: IEdgeTransitionStore,
-  vehicleIndex: number,
-  initialEdgeIndex: number,
-  initialRatio: number,
-  edgeArray: Edge[],
-  target: EdgeTransitionResult,
-  preserveTargetRatio: boolean = false
-): void {
+export interface EdgeTransitionParams {
+  vehicleDataArray: IVehicleDataArray;
+  store: IEdgeTransitionStore;
+  vehicleIndex: number;
+  initialEdgeIndex: number;
+  initialRatio: number;
+  edgeArray: Edge[];
+  target: EdgeTransitionResult;
+  preserveTargetRatio?: boolean;
+  nextTargetRatio?: number;
+}
+
+/**
+ * Zero-GC: Handles edge transition, writes result to target object.
+ * @param params - The input parameters for edge transition logic
+ */
+export function handleEdgeTransition(params: EdgeTransitionParams): void {
+  const {
+    vehicleDataArray,
+    store,
+    vehicleIndex,
+    initialEdgeIndex,
+    initialRatio,
+    edgeArray,
+    target,
+    preserveTargetRatio = false,
+    nextTargetRatio
+  } = params;
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
   let currentEdge = edgeArray[currentEdgeIdx];
@@ -81,10 +101,16 @@ export function handleEdgeTransition(
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
     data[ptr + MovementData.NEXT_EDGE] = -1;
     
-    // Only set TARGET_RATIO=1 if not preserving (MQTT mode preserves command targetRatio)
-    if (!preserveTargetRatio) {
-      data[ptr + MovementData.TARGET_RATIO] = 1; // Default to full traversal on new edge
+    // Set TARGET_RATIO for the new edge
+    if (nextTargetRatio !== undefined) {
+      // If explicit next target ratio is provided (from TransferMgr reservation)
+      data[ptr + MovementData.TARGET_RATIO] = nextTargetRatio;
+    } else if (!preserveTargetRatio) {
+      // Default behavior: Set to 1.0 (full traversal)
+      data[ptr + MovementData.TARGET_RATIO] = 1; 
     }
+    // If preserveTargetRatio is true AND nextTargetRatio is undefined, 
+    // we leave TARGET_RATIO as is (legacy behavior, though logically it might be 1.0 from previous frame)
 
     currentEdgeIdx = nextEdgeIndex;
     currentEdge = nextEdge;

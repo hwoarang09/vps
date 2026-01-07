@@ -42,6 +42,7 @@ export class ShmSimulatorController {
     vehicleConfigs?: VehicleInitConfig[];
     config?: Partial<SimulationConfig>;
     transferMode?: TransferMode;
+    stations: ReadonlyArray<any>; // Using any to avoid StationRawData type import issues if distinct
   }): Promise<void> {
     const {
       edges,
@@ -93,6 +94,7 @@ export class ShmSimulatorController {
       vehicleConfigs: vehicleConfigs,
       numVehicles: numVehicles,
       transferMode: transferMode,
+      stationData: params.stations as any[],
     };
 
     // Send init message
