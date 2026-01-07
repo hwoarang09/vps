@@ -106,19 +106,7 @@ export class AutoMgr {
         const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
         
         if (pathIndices && pathIndices.length > 0) {
-             const pathCommand: Array<{ edgeId: string; targetRatio?: number }> = [];
-
-            // Construct command from path
-            for (let i = 1; i < pathIndices.length; i++) {
-                const idx = pathIndices[i];
-                const edge = edgeArray[idx];
-                const isLast = (i === pathIndices.length - 1);
-                
-                pathCommand.push({
-                    edgeId: edge.edge_name,
-                    targetRatio: isLast ? 0.5 : undefined 
-                });
-            }
+            const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
 
             // Assign
              const command: VehicleCommand = {
@@ -147,5 +135,23 @@ export class AutoMgr {
 
   getDestinationInfo(vehId: number) {
     return this.vehicleDestinations.get(vehId);
+  }
+
+  private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {
+    const pathCommand: Array<{ edgeId: string; targetRatio?: number }> = [];
+
+    // Construct command from path (start from 1 as 0 is current edge)
+    for (let i = 1; i < pathIndices.length; i++) {
+      const idx = pathIndices[i];
+      const edge = edgeArray[idx];
+      const isLast = (i === pathIndices.length - 1);
+
+      pathCommand.push({
+        edgeId: edge.edge_name,
+        targetRatio: isLast ? 0.5 : undefined
+      });
+    }
+
+    return pathCommand;
   }
 }

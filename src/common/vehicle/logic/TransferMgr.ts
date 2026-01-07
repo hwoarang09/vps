@@ -121,7 +121,16 @@ export class TransferMgr {
       const currentRatio = data[ptr + MovementData.EDGE_RATIO];
       this.processSameEdgeCommand(vehId, targetRatio, currentRatio, data, ptr);
     } else {
-      this.processEdgeTransitionCommand(vehId, nextEdgeId, targetRatio, currentEdge, edgeArray!, edgeNameToIndex!, data, ptr);
+      this.processEdgeTransitionCommand({
+        vehId,
+        nextEdgeId,
+        targetRatio,
+        currentEdge,
+        edgeArray: edgeArray!,
+        edgeNameToIndex: edgeNameToIndex!,
+        data,
+        ptr
+      });
     }
 
     this.ensureVehicleAwake(data, ptr, vehId);
@@ -374,16 +383,26 @@ export class TransferMgr {
     console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} on current edge`);
   }
 
-  private processEdgeTransitionCommand(
-    vehId: number,
-    nextEdgeId: string,
-    targetRatio: number | undefined,
-    currentEdge: Edge,
-    edgeArray: Edge[],
-    edgeNameToIndex: Map<string, number>,
-    data: Float32Array,
-    ptr: number
-  ) {
+  private processEdgeTransitionCommand(params: {
+    vehId: number;
+    nextEdgeId: string;
+    targetRatio: number | undefined;
+    currentEdge: Edge;
+    edgeArray: Edge[];
+    edgeNameToIndex: Map<string, number>;
+    data: Float32Array;
+    ptr: number;
+  }) {
+    const {
+      vehId,
+      nextEdgeId,
+      targetRatio,
+      currentEdge,
+      edgeArray,
+      edgeNameToIndex,
+      data,
+      ptr,
+    } = params;
     // Determine connection reference: Last queued edge OR current edge
     let referenceEdge = currentEdge;
     const queue = this.reservedNextEdges.get(vehId);
