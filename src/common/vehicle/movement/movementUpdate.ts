@@ -169,19 +169,9 @@ export function updateMovement(ctx: MovementUpdateContext) {
     // Logic to handle velocity and stopping:
     // If we transitioned to a new edge, we maintain velocity (momentum).
     // If we stayed on the same edge, we must check if we hit the target limit.
-    if (finalEdgeIndex !== currentEdgeIndex) {
-      // Transitioned: Keep newVelocity as is.
-      // The finalRatio is already calculated correctly with overflow in handleEdgeTransition.
-    } else {
-      // Same edge: Check if we reached the target on this edge
-      checkTargetReached(rawNewRatio, targetRatio, newVelocity, SCRATCH_TARGET_CHECK);
+    if (processSameEdgeLogic(finalEdgeIndex === currentEdgeIndex, rawNewRatio, targetRatio, newVelocity, data, ptr, SCRATCH_TARGET_CHECK)) {
       finalRatio = SCRATCH_TARGET_CHECK.finalRatio;
       newVelocity = SCRATCH_TARGET_CHECK.finalVelocity;
-      const reachedTarget = SCRATCH_TARGET_CHECK.reached;
-
-      if (reachedTarget) {
-        data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
-      }
     }
 
     checkAndReleaseMergeLock(lockMgr, finalEdgeIndex, currentEdgeIndex, currentEdge, i);
@@ -398,11 +388,10 @@ function checkAndReleaseMergeLock(
   currentEdge: Edge,
   vehId: number
 ) {
-  if (finalEdgeIndex !== currentEdgeIndex) {
-    const prevToNode = currentEdge.to_node;
-    if (lockMgr.isMergeNode(prevToNode)) {
-      lockMgr.releaseLock(prevToNode, vehId);
-    }
+  if (finalEdgeIndex === currentEdgeIndex) return;
+  const prevToNode = currentEdge.to_node;
+  if (lockMgr.isMergeNode(prevToNode)) {
+    lockMgr.releaseLock(prevToNode, vehId);
   }
 }
 
@@ -488,6 +477,28 @@ function checkTargetReached(
     out.finalVelocity = currentVelocity;
     out.reached = false;
   }
+}
+
+function processSameEdgeLogic(
+  isSameEdge: boolean,
+  rawNewRatio: number,
+  targetRatio: number,
+  currentVelocity: number,
+  data: Float32Array,
+  ptr: number,
+  out: typeof SCRATCH_TARGET_CHECK
+): boolean {
+  if (!isSameEdge) {
+    return false;
+  }
+
+  checkTargetReached(rawNewRatio, targetRatio, currentVelocity, out);
+
+  if (out.reached) {
+    data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+  }
+
+  return true;
 }
 
 

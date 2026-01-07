@@ -389,7 +389,7 @@ export class TransferMgr {
     const queue = this.reservedNextEdges.get(vehId);
     
     if (queue && queue.length > 0) {
-      const lastReserved = queue[queue.length - 1];
+      const lastReserved = queue.at(-1)!;
       const lastEdgeIndex = edgeNameToIndex.get(lastReserved.edgeId);
       if (lastEdgeIndex !== undefined) {
         referenceEdge = edgeArray[lastEdgeIndex];
@@ -400,14 +400,9 @@ export class TransferMgr {
     
     console.log(`[TransferMgr] Vehicle ${vehId} next edge: ${nextEdgeId} (Queue size: ${queue?.length ?? 0})`);
     
-    if (nextEdgeIndex === undefined) {
-      console.error(`[TransferMgr] Edge ${nextEdgeId} not found in map`);
-      return;
-    }
-
-    if (!referenceEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
+    if (nextEdgeIndex === undefined || !referenceEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
       console.error(
-        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${referenceEdge.edge_name} (Queue tail)`
+        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${referenceEdge.edge_name} (Queue tail) or not found`
       );
       return;
     }
@@ -477,7 +472,7 @@ export class TransferMgr {
       
       let rRatio: number | undefined = undefined;
       if (path.length > 0) {
-        rRatio = 1.0;
+        rRatio = 1;
       } else if (nextEdge.targetRatio !== undefined) {
         rRatio = nextEdge.targetRatio;
       }
