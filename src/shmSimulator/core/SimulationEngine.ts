@@ -3,9 +3,11 @@
 import { FabContext, FabInitParams } from "./FabContext";
 import type { InitPayload, SimulationConfig, FabInitData } from "../types";
 import { createDefaultConfig } from "../types";
+import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
 
 export class SimulationEngine {
   // === Fab Contexts ===
+  /** Map of Fab ID (e.g., "fab_A", "fab_B") to FabContext instances */
   private readonly fabContexts: Map<string, FabContext> = new Map();
 
   // === Runtime ===
@@ -27,6 +29,7 @@ export class SimulationEngine {
 
   /**
    * Handle external command for a specific fab
+   * @param fabId - Unique identifier for the fab (e.g., "fab_A", "fab_B")
    */
   handleCommand(fabId: string, command: unknown): void {
     const context = this.fabContexts.get(fabId);
@@ -39,6 +42,7 @@ export class SimulationEngine {
 
   /**
    * Initialize from payload (called from Worker)
+   * @returns Record of Fab ID to actual vehicle count
    */
   init(payload: InitPayload): Record<string, number> {
     console.log("[SimulationEngine] Initializing...");
@@ -105,6 +109,7 @@ export class SimulationEngine {
 
   /**
    * Remove a fab dynamically
+   * @param fabId - Unique identifier for the fab to remove
    */
   removeFab(fabId: string): boolean {
     const context = this.fabContexts.get(fabId);
@@ -122,6 +127,7 @@ export class SimulationEngine {
 
   /**
    * Get a specific fab context
+   * @param fabId - Unique identifier for the fab
    */
   getFabContext(fabId: string): FabContext | undefined {
     return this.fabContexts.get(fabId);
@@ -129,6 +135,7 @@ export class SimulationEngine {
 
   /**
    * Get all fab IDs
+   * @returns Array of fab identifiers (e.g., ["fab_A", "fab_B"])
    */
   getFabIds(): string[] {
     return Array.from(this.fabContexts.keys());
@@ -208,11 +215,24 @@ export class SimulationEngine {
     const maxStepMs = Math.max(...this.stepTimes);
     this.stepTimes = [];
 
+    // Get Dijkstra stats
+    const dijkstraStats = getDijkstraPerformanceStats();
+
+    // Get per-fab vehicle counts
+    const fabVehicleCounts = this.getVehicleCountsByFab();
+
     self.postMessage({
       type: "PERF_STATS",
       avgStepMs,
       minStepMs,
       maxStepMs,
+      dijkstra: dijkstraStats.count > 0 ? {
+        count: dijkstraStats.count,
+        avgTimeMs: dijkstraStats.totalTime / dijkstraStats.count,
+        minTimeMs: dijkstraStats.minTime,
+        maxTimeMs: dijkstraStats.maxTime,
+      } : undefined,
+      fabVehicleCounts,
     });
   }
 
@@ -243,6 +263,7 @@ export class SimulationEngine {
 
   /**
    * Get vehicle counts per fab
+   * @returns Record of Fab ID to vehicle count
    */
   getVehicleCountsByFab(): Record<string, number> {
     const counts: Record<string, number> = {};

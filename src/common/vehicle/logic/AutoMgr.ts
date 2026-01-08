@@ -21,9 +21,9 @@ export class AutoMgr {
   // Vehicle ID -> Current Destination info
   private readonly vehicleDestinations: Map<number, { stationName: string, edgeIndex: number }> = new Map();
   // Edge -> Region ID 매핑 (어떤 구역에 속하는지)
-  private edgeToRegion: Map<number, number> = new Map();
+  private readonly edgeToRegion: Map<number, number> = new Map();
   // Region ID -> 해당 구역의 스테이션들
-  private regionStations: Map<number, StationTarget[]> = new Map();
+  private readonly regionStations: Map<number, StationTarget[]> = new Map();
 
   /**
    * Initializes available stations for routing.
@@ -56,8 +56,23 @@ export class AutoMgr {
    * BFS로 연결된 edge들을 같은 구역으로 분류
    */
   private buildRegionMapping(edgeArray: Edge[]) {
-    // 역방향 인덱스 미리 구축 (O(E))
+    // 1. 역방향 인덱스 구축
+    const prevEdges = this.buildReverseEdgeIndex(edgeArray);
+
+    // 2. BFS로 edge들을 구역에 할당
+    this.assignEdgesToRegions(edgeArray, prevEdges);
+
+    // 3. 스테이션을 구역별로 분류
+    this.classifyStationsByRegion();
+  }
+
+  /**
+   * 역방향 edge 인덱스 구축 (O(E))
+   * @returns prevEdges[i] = i로 들어오는 edge들의 목록
+   */
+  private buildReverseEdgeIndex(edgeArray: Edge[]): number[][] {
     const prevEdges: number[][] = Array.from({ length: edgeArray.length }, () => []);
+    
     for (let i = 0; i < edgeArray.length; i++) {
       const nextIndices = edgeArray[i]?.nextEdgeIndices || [];
       for (const next of nextIndices) {
@@ -66,44 +81,66 @@ export class AutoMgr {
         }
       }
     }
+    
+    return prevEdges;
+  }
 
+  /**
+   * BFS로 연결된 edge들을 같은 구역으로 분류
+   */
+  private assignEdgesToRegions(edgeArray: Edge[], prevEdges: number[][]): void {
     const visited = new Set<number>();
     let regionId = 0;
 
-    // BFS로 연결된 모든 edge를 같은 구역으로 분류
     for (let startEdge = 0; startEdge < edgeArray.length; startEdge++) {
       if (visited.has(startEdge)) continue;
 
-      // 새 구역 시작
-      const queue: number[] = [startEdge];
-      visited.add(startEdge);
+      // 새 구역 시작 - BFS 수행
+      this.exploreRegion(startEdge, regionId, edgeArray, prevEdges, visited);
+      regionId++;
+    }
+  }
 
-      while (queue.length > 0) {
-        const current = queue.shift()!;
-        this.edgeToRegion.set(current, regionId);
+  /**
+   * BFS로 하나의 구역 탐색
+   */
+  private exploreRegion(
+    startEdge: number,
+    regionId: number,
+    edgeArray: Edge[],
+    prevEdges: number[][],
+    visited: Set<number>
+  ): void {
+    const queue: number[] = [startEdge];
+    visited.add(startEdge);
 
-        // 다음 edge들 탐색 (정방향)
-        const nextEdges = edgeArray[current]?.nextEdgeIndices || [];
-        for (const next of nextEdges) {
-          if (!visited.has(next)) {
-            visited.add(next);
-            queue.push(next);
-          }
-        }
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      this.edgeToRegion.set(current, regionId);
 
-        // 이전 edge들 탐색 (역방향) - 미리 구축한 인덱스 사용
-        for (const prev of prevEdges[current]) {
-          if (!visited.has(prev)) {
-            visited.add(prev);
-            queue.push(prev);
-          }
+      // 정방향 탐색
+      const nextEdges = edgeArray[current]?.nextEdgeIndices || [];
+      for (const next of nextEdges) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push(next);
         }
       }
 
-      regionId++;
+      // 역방향 탐색
+      for (const prev of prevEdges[current]) {
+        if (!visited.has(prev)) {
+          visited.add(prev);
+          queue.push(prev);
+        }
+      }
     }
+  }
 
-    // 스테이션을 구역별로 분류
+  /**
+   * 스테이션을 구역별로 분류
+   */
+  private classifyStationsByRegion(): void {
     for (const station of this.stations) {
       const region = this.edgeToRegion.get(station.edgeIndex);
       if (region !== undefined) {

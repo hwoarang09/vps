@@ -6,6 +6,21 @@ interface PathNode {
   cost: number;
 }
 
+interface PerformanceStats {
+  count: number;
+  totalTime: number;
+  minTime: number;
+  maxTime: number;
+}
+
+// Performance tracking
+const perfStats: PerformanceStats = {
+  count: 0,
+  totalTime: 0,
+  minTime: Infinity,
+  maxTime: 0,
+};
+
 /**
  * Finds the shortest path between startEdge and endEdge using Dijkstra's algorithm.
  * Since edges are nodes in the routing graph (Node-Edge duality), we traverse from edge to edge via connectivity.
@@ -20,8 +35,16 @@ export function findShortestPath(
   endEdgeIndex: number,
   edgeArray: Edge[]
 ): number[] | null {
-  if (!edgeArray[startEdgeIndex] || !edgeArray[endEdgeIndex]) return null;
-  if (startEdgeIndex === endEdgeIndex) return [startEdgeIndex];
+  const startTime = performance.now();
+  
+  if (!edgeArray[startEdgeIndex] || !edgeArray[endEdgeIndex]) {
+    recordPerformance(performance.now() - startTime);
+    return null;
+  }
+  if (startEdgeIndex === endEdgeIndex) {
+    recordPerformance(performance.now() - startTime);
+    return [startEdgeIndex];
+  }
 
   const dist = new Map<number, number>();
   const prev = new Map<number, number>();
@@ -43,7 +66,12 @@ export function findShortestPath(
   }
 
   // Reconstruct path
-  return reconstructPath(endEdgeIndex, prev);
+  const result = reconstructPath(endEdgeIndex, prev);
+  
+  // Record performance
+  recordPerformance(performance.now() - startTime);
+  
+  return result;
 }
 
 function processNeighbors(
@@ -82,4 +110,49 @@ function reconstructPath(endEdgeIndex: number, prev: Map<number, number>): numbe
     curr = prev.get(curr);
   }
   return path;
+}
+
+/**
+ * Record performance measurement
+ */
+function recordPerformance(elapsedTime: number): void {
+  perfStats.count++;
+  perfStats.totalTime += elapsedTime;
+  perfStats.minTime = Math.min(perfStats.minTime, elapsedTime);
+  perfStats.maxTime = Math.max(perfStats.maxTime, elapsedTime);
+  
+  // Log every 100 calls
+  if (perfStats.count % 100 === 0) {
+    logPerformanceStats();
+  }
+}
+
+/**
+ * Log current performance statistics
+ */
+function logPerformanceStats(): void {
+  const avg = perfStats.totalTime / perfStats.count;
+  console.log(`[Dijkstra Performance]`);
+  console.log(`  Total Calls: ${perfStats.count}`);
+  console.log(`  Average Time: ${avg.toFixed(3)}ms`);
+  console.log(`  Min Time: ${perfStats.minTime.toFixed(3)}ms`);
+  console.log(`  Max Time: ${perfStats.maxTime.toFixed(3)}ms`);
+}
+
+/**
+ * Get current performance statistics
+ */
+export function getDijkstraPerformanceStats(): Readonly<PerformanceStats> {
+  return { ...perfStats };
+}
+
+/**
+ * Reset performance statistics
+ */
+export function resetDijkstraPerformanceStats(): void {
+  perfStats.count = 0;
+  perfStats.totalTime = 0;
+  perfStats.minTime = Infinity;
+  perfStats.maxTime = 0;
+  console.log('[Dijkstra Performance] Statistics reset');
 }

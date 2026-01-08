@@ -15,6 +15,7 @@ import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
 
 // Fab별 버퍼 및 데이터 관리
 interface FabBufferData {
+  /** Unique identifier for the fab (e.g., "fab_A", "fab_B") */
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
@@ -25,6 +26,7 @@ interface FabBufferData {
 
 // Fab 초기화 파라미터
 export interface FabInitParams {
+  /** Unique identifier for the fab (e.g., "fab_A", "fab_B") */
   fabId: string;
   edges: Edge[];
   nodes: Node[];
@@ -41,7 +43,7 @@ export class ShmSimulatorController {
   private isRunning: boolean = false;
 
   // Fab별 버퍼 관리
-  private fabBuffers: Map<string, FabBufferData> = new Map();
+  private readonly fabBuffers: Map<string, FabBufferData> = new Map();
 
   private onReadyCallback: (() => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
@@ -72,6 +74,7 @@ export class ShmSimulatorController {
 
   /**
    * Create buffer for a single fab
+   * @param fabId - Unique identifier for the fab (e.g., "fab_A", "fab_B")
    */
   private createFabBuffers(fabId: string): FabBufferData {
     // Allocate SharedArrayBuffer for vehicle data
@@ -255,6 +258,26 @@ export class ShmSimulatorController {
   }
 
   /**
+   * Handle initialization complete message
+   */
+  private handleInitialized(fabVehicleCounts: Record<string, number>): void {
+    console.log("[ShmSimulatorController] Initialized fabs:", Object.keys(fabVehicleCounts));
+
+    // Update actual vehicle counts
+    for (const [fabId, count] of Object.entries(fabVehicleCounts)) {
+      const bufData = this.fabBuffers.get(fabId);
+      if (bufData) {
+        bufData.actualNumVehicles = count;
+      }
+    }
+
+    if (this.onReadyCallback) {
+      this.onReadyCallback();
+      this.onReadyCallback = null;
+    }
+  }
+
+  /**
    * Handle messages from worker
    */
   private handleWorkerMessage(message: MainMessage): void {
@@ -264,21 +287,7 @@ export class ShmSimulatorController {
         break;
 
       case "INITIALIZED": {
-        const fabVehicleCounts = message.fabVehicleCounts;
-        console.log("[ShmSimulatorController] Initialized fabs:", Object.keys(fabVehicleCounts));
-
-        // Update actual vehicle counts
-        for (const [fabId, count] of Object.entries(fabVehicleCounts)) {
-          const bufData = this.fabBuffers.get(fabId);
-          if (bufData) {
-            bufData.actualNumVehicles = count;
-          }
-        }
-
-        if (this.onReadyCallback) {
-          this.onReadyCallback();
-          this.onReadyCallback = null;
-        }
+        this.handleInitialized(message.fabVehicleCounts);
         break;
       }
 

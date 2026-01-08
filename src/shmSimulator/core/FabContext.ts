@@ -15,11 +15,11 @@ import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collisi
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import type { SimulationConfig, TransferMode } from "../types";
+import type { SimulationConfig, TransferMode, VehicleInitConfig } from "../types";
 import type { StationRawData } from "@/types/station";
-import type { VehicleInitConfig } from "../types";
 
 export interface FabInitParams {
+  /** Unique identifier for the fab (e.g., "fab_A", "fab_B") */
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
@@ -33,6 +33,7 @@ export interface FabInitParams {
 }
 
 export class FabContext {
+  /** Unique identifier for this fab (e.g., "fab_A", "fab_B") */
   public readonly fabId: string;
 
   // === Internal Store ===
@@ -58,7 +59,7 @@ export class FabContext {
 
   // === Runtime ===
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
-  private config: SimulationConfig;
+  private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
 
   constructor(params: FabInitParams) {

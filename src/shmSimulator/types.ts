@@ -76,6 +76,7 @@ export function createDefaultConfig(): SimulationConfig {
 
 // 단일 Fab 초기화 데이터
 export interface FabInitData {
+  /** Unique identifier for the fab (e.g., "fab_A", "fab_B") */
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
@@ -120,21 +121,21 @@ export type WorkerMessage =
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "DISPOSE" }
-  | { type: "COMMAND"; fabId: string; payload: unknown }
-  | { type: "SET_TRANSFER_MODE"; fabId: string; mode: TransferMode }
+  | { type: "COMMAND"; /** Unique identifier for the fab */ fabId: string; payload: unknown }
+  | { type: "SET_TRANSFER_MODE"; /** Unique identifier for the fab */ fabId: string; mode: TransferMode }
   // Fab 동적 관리
   | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
-  | { type: "REMOVE_FAB"; fabId: string };
+  | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string };
 
 // Worker -> Main Thread Messages
 export type MainMessage =
   | { type: "READY" }
-  | { type: "INITIALIZED"; fabVehicleCounts: Record<string, number> }
+  | { type: "INITIALIZED"; /** Fab ID -> actual vehicle count */ fabVehicleCounts: Record<string, number> }
   | { type: "ERROR"; error: string }
   | { type: "STATS"; fps: number; vehicleCount: number }
   | { type: "PERF_STATS"; avgStepMs: number; minStepMs: number; maxStepMs: number }
-  | { type: "FAB_ADDED"; fabId: string; actualNumVehicles: number }
-  | { type: "FAB_REMOVED"; fabId: string };
+  | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }
+  | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string };
 
 // ============================================================================
 // [4] TRANSFER MODE
