@@ -13,19 +13,27 @@ import { StationRawData } from "@/types/station";
 interface StationTarget {
   name: string;
   edgeIndex: number;
+  regionId?: number;  // 어떤 연결 구역에 속하는지
 }
 
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
   private readonly vehicleDestinations: Map<number, { stationName: string, edgeIndex: number }> = new Map();
+  // Edge -> Region ID 매핑 (어떤 구역에 속하는지)
+  private edgeToRegion: Map<number, number> = new Map();
+  // Region ID -> 해당 구역의 스테이션들
+  private regionStations: Map<number, StationTarget[]> = new Map();
 
   /**
    * Initializes available stations for routing.
    * Called once at startup.
    */
-  initStations(stationData: StationRawData[], edgeNameToIndex: Map<string, number>) {
+  initStations(stationData: StationRawData[], edgeNameToIndex: Map<string, number>, edgeArray?: Edge[]) {
     this.stations = [];
+    this.edgeToRegion.clear();
+    this.regionStations.clear();
+
     for (const station of stationData) {
       if (station.nearest_edge) {
         const edgeIdx = edgeNameToIndex.get(station.nearest_edge);
@@ -37,7 +45,85 @@ export class AutoMgr {
         }
       }
     }
-    console.log(`[AutoMgr] Initialized with ${this.stations.length} valid stations.`);
+    // 구역 매핑 및 스테이션 분류
+    if (edgeArray && this.stations.length > 0) {
+      this.buildRegionMapping(edgeArray);
+    }
+  }
+
+  /**
+   * 구역 매핑 빌드 - 각 edge가 어느 구역에 속하는지 계산
+   * BFS로 연결된 edge들을 같은 구역으로 분류
+   */
+  private buildRegionMapping(edgeArray: Edge[]) {
+    // 역방향 인덱스 미리 구축 (O(E))
+    const prevEdges: number[][] = Array.from({ length: edgeArray.length }, () => []);
+    for (let i = 0; i < edgeArray.length; i++) {
+      const nextIndices = edgeArray[i]?.nextEdgeIndices || [];
+      for (const next of nextIndices) {
+        if (next < prevEdges.length) {
+          prevEdges[next].push(i);
+        }
+      }
+    }
+
+    const visited = new Set<number>();
+    let regionId = 0;
+
+    // BFS로 연결된 모든 edge를 같은 구역으로 분류
+    for (let startEdge = 0; startEdge < edgeArray.length; startEdge++) {
+      if (visited.has(startEdge)) continue;
+
+      // 새 구역 시작
+      const queue: number[] = [startEdge];
+      visited.add(startEdge);
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        this.edgeToRegion.set(current, regionId);
+
+        // 다음 edge들 탐색 (정방향)
+        const nextEdges = edgeArray[current]?.nextEdgeIndices || [];
+        for (const next of nextEdges) {
+          if (!visited.has(next)) {
+            visited.add(next);
+            queue.push(next);
+          }
+        }
+
+        // 이전 edge들 탐색 (역방향) - 미리 구축한 인덱스 사용
+        for (const prev of prevEdges[current]) {
+          if (!visited.has(prev)) {
+            visited.add(prev);
+            queue.push(prev);
+          }
+        }
+      }
+
+      regionId++;
+    }
+
+    // 스테이션을 구역별로 분류
+    for (const station of this.stations) {
+      const region = this.edgeToRegion.get(station.edgeIndex);
+      if (region !== undefined) {
+        station.regionId = region;
+
+        if (!this.regionStations.has(region)) {
+          this.regionStations.set(region, []);
+        }
+        this.regionStations.get(region)!.push(station);
+      }
+    }
+  }
+
+  /**
+   * 특정 edge가 속한 구역의 스테이션들 반환
+   */
+  getStationsForEdge(edgeIndex: number): StationTarget[] {
+    const region = this.edgeToRegion.get(edgeIndex);
+    if (region === undefined) return this.stations; // fallback
+    return this.regionStations.get(region) || [];
   }
 
   /**
@@ -89,48 +175,50 @@ export class AutoMgr {
     edgeNameToIndex: Map<string, number>,
     transferMgr: TransferMgr
   ) {
-    if (this.stations.length === 0) return;
+    // 현재 edge가 속한 구역의 스테이션만 선택
+    const availableStations = this.getStationsForEdge(currentEdgeIdx);
+
+    if (availableStations.length === 0) {
+      // 해당 구역에 스테이션이 없으면 조용히 실패
+      return;
+    }
 
     const MAX_ATTEMPTS = 5;
-    
+
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        // Pick random station
-        let candidate = this.stations[Math.floor(Math.random() * this.stations.length)];
-        
+        // Pick random station from same region
+        const candidate = availableStations[Math.floor(Math.random() * availableStations.length)];
+
         // Skip if same as current edge (unless it's the only one)
-        if (candidate.edgeIndex === currentEdgeIdx && this.stations.length > 1) {
+        if (candidate.edgeIndex === currentEdgeIdx && availableStations.length > 1) {
             continue;
         }
 
         // Pathfinding
         const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
-        
+
         if (pathIndices && pathIndices.length > 0) {
             const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
 
             // Assign
-             const command: VehicleCommand = {
+            const command: VehicleCommand = {
                 path: pathCommand
             };
-            
-            console.log(`[AutoMgr] Assigned Veh ${vehId} -> ${candidate.name} (${pathCommand.length} hops)`);
+
             this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
 
             // Update Shared Memory for UI
-             const ptr = vehId * VEHICLE_DATA_SIZE;
-             const data = vehicleDataArray.getData();
-             if (data) {
+            const ptr = vehId * VEHICLE_DATA_SIZE;
+            const data = vehicleDataArray.getData();
+            if (data) {
                 data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex;
                 data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
-             }
+            }
 
             transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
-            return; // Success
+            return;
         }
     }
-
-    // Failed after retries
-    console.warn(`[AutoMgr] Failed to find path for Veh ${vehId} after ${MAX_ATTEMPTS} attempts`);
   }
 
   getDestinationInfo(vehId: number) {

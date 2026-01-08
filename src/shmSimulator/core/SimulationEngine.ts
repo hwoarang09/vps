@@ -1,50 +1,16 @@
 // shmSimulator/core/SimulationEngine.ts
 
-import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
-import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
-import { EngineStore } from "./EngineStore";
-import { LockMgr } from "@/common/vehicle/logic/LockMgr";
-import { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
-import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
-import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
-import { initializeVehicles, InitializationResult } from "./initializeVehicles";
-import type { Edge } from "@/types/edge";
-import type { Node } from "@/types";
-import type { InitPayload, SimulationConfig } from "../types";
+import { FabContext, FabInitParams } from "./FabContext";
+import type { InitPayload, SimulationConfig, FabInitData } from "../types";
 import { createDefaultConfig } from "../types";
 
-import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
-import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
-import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
-
 export class SimulationEngine {
-  // === Internal Store ===
-  private readonly store: EngineStore;
-
-  // === Memory ===
-  private readonly vehicleDataArray: VehicleDataArrayBase;
-  private readonly sensorPointArray: SensorPointArrayBase;
-  private readonly edgeVehicleQueue: EdgeVehicleQueue;
-
-  // === Map Data ===
-  private edges: Edge[] = [];
-  private nodes: Node[] = [];
-  private edgeNameToIndex: Map<string, number> = new Map();
-  private readonly nodeNameToIndex: Map<string, number> = new Map();
-
-  // === Logic Managers ===
-  private readonly lockMgr: LockMgr;
-  private readonly transferMgr: TransferMgr;
-  private readonly dispatchMgr: DispatchMgr;
-  public readonly routingMgr: RoutingMgr; // Public for easy access (e.g. from Worker event listener)
-  private readonly autoMgr: AutoMgr;
+  // === Fab Contexts ===
+  private readonly fabContexts: Map<string, FabContext> = new Map();
 
   // === Runtime ===
-  private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
   private config: SimulationConfig;
   private isRunning: boolean = false;
-  private actualNumVehicles: number = 0;
   private loopHandle: ReturnType<typeof setInterval> | null = null;
 
   // === Performance Monitoring ===
@@ -56,131 +22,116 @@ export class SimulationEngine {
   private lastStepTime: number = 0;
 
   constructor() {
-    // Use default config initially, will be overwritten by init()
     this.config = createDefaultConfig();
-
-    this.store = new EngineStore(this.config.maxVehicles, 200000);
-    this.vehicleDataArray = this.store.getVehicleDataArray();
-    this.sensorPointArray = new SensorPointArrayBase(this.config.maxVehicles);
-    this.edgeVehicleQueue = this.store.getEdgeVehicleQueue();
-    this.lockMgr = new LockMgr();
-    this.transferMgr = new TransferMgr();
-    
-    // Wire up new managers
-    this.dispatchMgr = new DispatchMgr(this.transferMgr);
-    this.routingMgr = new RoutingMgr(this.dispatchMgr);
-    this.autoMgr = new AutoMgr();
   }
 
   /**
-   * Handle external command (e.g. from MQTT via Worker Event)
+   * Handle external command for a specific fab
    */
-  handleCommand(command: any): void {
-    this.routingMgr.receiveMessage(command);
+  handleCommand(fabId: string, command: unknown): void {
+    const context = this.fabContexts.get(fabId);
+    if (!context) {
+      console.warn(`[SimulationEngine] Fab not found: ${fabId}`);
+      return;
+    }
+    context.handleCommand(command);
   }
 
   /**
    * Initialize from payload (called from Worker)
    */
-  init(payload: InitPayload): void {
+  init(payload: InitPayload): Record<string, number> {
     console.log("[SimulationEngine] Initializing...");
-
-    // Set SharedArrayBuffer for Main-Worker communication
-    this.store.setSharedBuffer(payload.sharedBuffer);
-    this.sensorPointArray.setBuffer(payload.sensorPointBuffer);
-    console.log("[SimulationEngine] SharedArrayBuffers connected (vehicle + sensor)");
 
     // Update config from payload
     this.config = payload.config;
 
-    // Update transfer mode
-    this.store.setTransferMode(payload.transferMode);
-    console.log(`[SimulationEngine] TransferMode: ${payload.transferMode}`);
+    const fabVehicleCounts: Record<string, number> = {};
 
-    // Store edges and build lookup map
-    this.edges = payload.edges;
-    this.edgeNameToIndex.clear();
-    for (let idx = 0; idx < this.edges.length; idx++) {
-      this.edgeNameToIndex.set(this.edges[idx].edge_name, idx);
+    // Initialize each fab
+    for (const fabData of payload.fabs) {
+      const params: FabInitParams = {
+        fabId: fabData.fabId,
+        sharedBuffer: fabData.sharedBuffer,
+        sensorPointBuffer: fabData.sensorPointBuffer,
+        edges: fabData.edges,
+        nodes: fabData.nodes,
+        config: this.config,
+        vehicleConfigs: fabData.vehicleConfigs,
+        numVehicles: fabData.numVehicles,
+        transferMode: fabData.transferMode,
+        stationData: fabData.stationData,
+      };
+
+      const context = new FabContext(params);
+      this.fabContexts.set(fabData.fabId, context);
+      fabVehicleCounts[fabData.fabId] = context.getActualNumVehicles();
+
+      console.log(`[SimulationEngine] Fab ${fabData.fabId} initialized with ${context.getActualNumVehicles()} vehicles`);
     }
 
-    // Store nodes and build lookup map
-    this.nodes = payload.nodes;
-    this.nodeNameToIndex.clear();
-    for (let idx = 0; idx < this.nodes.length; idx++) {
-      this.nodeNameToIndex.set(this.nodes[idx].node_name, idx);
-    }
-
-    console.log(`[SimulationEngine] Loaded ${this.edges.length} edges, ${this.nodes.length} nodes`);
-    console.log(`[SimulationEngine] Config: linearMaxSpeed=${this.config.linearMaxSpeed}, curveMaxSpeed=${this.config.curveMaxSpeed}`);
-
-    // Debug: Log diverge edges and their nextEdgeIndices
-    const divergeEdges = this.edges.filter(e => e.toNodeIsDiverge);
-    console.log(`[SimulationEngine] Found ${divergeEdges.length} diverge edges:`);
-
-    // Initialize LockMgr from edges
-    this.lockMgr.initFromEdges(this.edges);
-
-    // Initialize vehicles
-    const result: InitializationResult = initializeVehicles({
-      edges: this.edges,
-      nodes: this.nodes,
-      numVehicles: payload.numVehicles,
-      vehicleConfigs: payload.vehicleConfigs,
-      store: this.store,
-      lockMgr: this.lockMgr,
-      sensorPointArray: this.sensorPointArray,
-      config: this.config,
-      transferMode: payload.transferMode,
-    });
-
-    this.edgeNameToIndex = result.edgeNameToIndex;
-    this.actualNumVehicles = result.actualNumVehicles;
-
-    // Set vehicle data array for DispatchMgr (enables MQTT command execution)
-    this.dispatchMgr.setVehicleDataArray(this.vehicleDataArray);
-    
-    // Set edge data for DispatchMgr (enables command validation)
-    this.dispatchMgr.setEdgeData(this.edges, this.edgeNameToIndex);
-
-    // Build vehicle loop map (simple loop for now)
-    this.buildVehicleLoopMap();
-
-    // Initialize AutoMgr with stations
-    if (payload.stationData) {
-      this.autoMgr.initStations(payload.stationData, this.edgeNameToIndex);
-    }
-
-
-    console.log(`[SimulationEngine] Initialized with ${this.actualNumVehicles} vehicles`);
+    console.log(`[SimulationEngine] Initialized ${this.fabContexts.size} fab(s)`);
+    return fabVehicleCounts;
   }
 
   /**
-   * Build vehicle loop map for path following
+   * Add a new fab dynamically
    */
-  private buildVehicleLoopMap(): void {
-    this.vehicleLoopMap.clear();
-
-    for (let i = 0; i < this.actualNumVehicles; i++) {
-      const currentEdgeIndex = this.store.getVehicleCurrentEdge(i);
-      const currentEdge = this.edges[currentEdgeIndex];
-      if (!currentEdge) continue;
-
-      const sequence: string[] = [currentEdge.edge_name];
-      let edge = currentEdge;
-
-      for (let j = 0; j < 100; j++) {
-        if (!edge.nextEdgeIndices?.length) break;
-
-        const nextEdge = this.edges[edge.nextEdgeIndices[0]];
-        if (!nextEdge || nextEdge.edge_name === currentEdge.edge_name) break;
-
-        sequence.push(nextEdge.edge_name);
-        edge = nextEdge;
-      }
-
-      this.vehicleLoopMap.set(i, { edgeSequence: sequence });
+  addFab(fabData: FabInitData, config: SimulationConfig): number {
+    if (this.fabContexts.has(fabData.fabId)) {
+      console.warn(`[SimulationEngine] Fab already exists: ${fabData.fabId}`);
+      return this.fabContexts.get(fabData.fabId)!.getActualNumVehicles();
     }
+
+    const params: FabInitParams = {
+      fabId: fabData.fabId,
+      sharedBuffer: fabData.sharedBuffer,
+      sensorPointBuffer: fabData.sensorPointBuffer,
+      edges: fabData.edges,
+      nodes: fabData.nodes,
+      config: config,
+      vehicleConfigs: fabData.vehicleConfigs,
+      numVehicles: fabData.numVehicles,
+      transferMode: fabData.transferMode,
+      stationData: fabData.stationData,
+    };
+
+    const context = new FabContext(params);
+    this.fabContexts.set(fabData.fabId, context);
+
+    console.log(`[SimulationEngine] Fab ${fabData.fabId} added with ${context.getActualNumVehicles()} vehicles`);
+    return context.getActualNumVehicles();
+  }
+
+  /**
+   * Remove a fab dynamically
+   */
+  removeFab(fabId: string): boolean {
+    const context = this.fabContexts.get(fabId);
+    if (!context) {
+      console.warn(`[SimulationEngine] Fab not found: ${fabId}`);
+      return false;
+    }
+
+    context.dispose();
+    this.fabContexts.delete(fabId);
+
+    console.log(`[SimulationEngine] Fab ${fabId} removed`);
+    return true;
+  }
+
+  /**
+   * Get a specific fab context
+   */
+  getFabContext(fabId: string): FabContext | undefined {
+    return this.fabContexts.get(fabId);
+  }
+
+  /**
+   * Get all fab IDs
+   */
+  getFabIds(): string[] {
+    return Array.from(this.fabContexts.keys());
   }
 
   /**
@@ -222,55 +173,18 @@ export class SimulationEngine {
   }
 
   /**
-   * Single simulation step
+   * Single simulation step - updates all fabs
    */
   step(delta: number): void {
     if (!this.isRunning) return;
 
     const stepStart = performance.now();
-
     const clampedDelta = Math.min(delta, this.config.maxDelta);
 
-    // 1. Collision Check
-    const collisionCtx: CollisionCheckContext = {
-      vehicleArrayData: this.vehicleDataArray.getData(),
-      edgeArray: this.edges,
-      edgeVehicleQueue: this.edgeVehicleQueue,
-      sensorPointArray: this.sensorPointArray,
-      config: this.config,
-    };
-    checkCollisions(collisionCtx);
-
-    // 2. Movement Update
-    const movementCtx: MovementUpdateContext = {
-      vehicleDataArray: this.vehicleDataArray,
-      sensorPointArray: this.sensorPointArray,
-      edgeArray: this.edges,
-      actualNumVehicles: this.actualNumVehicles,
-      vehicleLoopMap: this.vehicleLoopMap,
-      edgeNameToIndex: this.edgeNameToIndex,
-      store: {
-        moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
-        transferMode: this.store.transferMode,
-      },
-      lockMgr: this.lockMgr,
-      transferMgr: this.transferMgr,
-      clampedDelta,
-      config: this.config,
-    };
-    updateMovement(movementCtx);
-
-    // 3. Auto Routing Trigger
-    // Check if we need to assign new destinations (AUTO_ROUTE mode)
-    this.autoMgr.update(
-      this.store.transferMode,
-      this.actualNumVehicles,
-      this.vehicleDataArray, // Now passes IVehicleDataArray directly
-      this.edges,
-      this.edgeNameToIndex,
-      this.transferMgr
-    );
-
+    // Update all fab contexts
+    for (const context of this.fabContexts.values()) {
+      context.step(clampedDelta);
+    }
 
     // Measure step time
     const stepEnd = performance.now();
@@ -307,23 +221,34 @@ export class SimulationEngine {
    */
   dispose(): void {
     this.stop();
-    this.store.clearAllVehicles();
-    this.lockMgr.reset();
-    this.transferMgr.clearQueue();
+
+    for (const context of this.fabContexts.values()) {
+      context.dispose();
+    }
+    this.fabContexts.clear();
+
     console.log("[SimulationEngine] Disposed");
   }
 
   /**
-   * Get vehicle data for rendering (Main Thread access via SharedArrayBuffer)
+   * Get total vehicle count across all fabs
    */
-  getVehicleData(): Float32Array {
-    return this.vehicleDataArray.getData();
+  getTotalVehicleCount(): number {
+    let total = 0;
+    for (const context of this.fabContexts.values()) {
+      total += context.getActualNumVehicles();
+    }
+    return total;
   }
 
   /**
-   * Get actual vehicle count
+   * Get vehicle counts per fab
    */
-  getActualNumVehicles(): number {
-    return this.actualNumVehicles;
+  getVehicleCountsByFab(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const [fabId, context] of this.fabContexts) {
+      counts[fabId] = context.getActualNumVehicles();
+    }
+    return counts;
   }
 }

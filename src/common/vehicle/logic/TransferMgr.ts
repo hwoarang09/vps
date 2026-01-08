@@ -93,8 +93,6 @@ export class TransferMgr {
     edgeArray: Edge[] | undefined,
     edgeNameToIndex: Map<string, number> | undefined
   ) {
-    console.log(`[TransferMgr] assignCommand vehId=${vehId}, command=`, command);
-
     if (!this.validateCommandData(vehicleDataArray, edgeArray, edgeNameToIndex)) return;
 
     const data = vehicleDataArray!.getData();
@@ -222,10 +220,7 @@ export class TransferMgr {
     if (queue && queue.length > 0) {
       const nextReserved = queue[0]; // Peek
       const idx = edgeNameToIndex.get(nextReserved.edgeId);
-      if (idx === undefined) {
-        console.warn(`[TransferMgr] Reserved edge ${nextReserved.edgeId} not found`);
-      } else {
-        console.log(`[TransferMgr] Returning next edge ${nextReserved.edgeId} (index ${idx}) for vehicle ${vehicleIndex}`);
+      if (idx !== undefined) {
         return idx;
       }
     }
@@ -248,8 +243,6 @@ export class TransferMgr {
     // Cleanup if empty
     if (queue.length === 0) {
       this.reservedNextEdges.delete(vehId);
-    } else {
-      console.log(`[TransferMgr] Vehicle ${vehId} consumed one reservation, ${queue.length} remaining.`);
     }
     
     return ratio;
@@ -324,63 +317,52 @@ export class TransferMgr {
     data: Float32Array,
     ptr: number
   ) {
-    console.log(`[TransferMgr] Processing path command with ${path.length} edges`);
-    
-    // Clear existing reservations when a new path is processed?
-    // Usually a path command overrides everything.
+    // Clear existing reservations when a new path is processed
     this.reservedNextEdges.delete(vehId);
 
     let prevEdge = currentEdge;
     for (const pathItem of path) {
       const pathEdgeId = pathItem.edgeId;
       const pathEdgeIndex = edgeNameToIndex.get(pathEdgeId);
-      
+
       if (pathEdgeIndex === undefined) {
         console.error(`[TransferMgr] Path edge ${pathEdgeId} not found`);
         return;
       }
-      
+
       if (!prevEdge.nextEdgeIndices?.includes(pathEdgeIndex)) {
         console.error(`[TransferMgr] Path edge ${pathEdgeId} not connected to ${prevEdge.edge_name}`);
         return;
       }
-      
+
       prevEdge = edgeArray[pathEdgeIndex];
     }
-    
+
     this.reservedPaths.set(vehId, path.map(p => ({
       edgeId: p.edgeId,
       targetRatio: p.targetRatio
     })));
-    
+
     data[ptr + MovementData.TARGET_RATIO] = 1;
-    console.log(`[TransferMgr] Vehicle ${vehId} current edge target set to 1 for path transition`);
-    
-    console.log(`[TransferMgr] Vehicle ${vehId} reserved path:`, path.map(p => p.edgeId).join(' -> '));
   }
 
   private processSameEdgeCommand(
-    vehId: number,
+    _vehId: number,
     targetRatio: number | undefined,
     currentRatio: number,
     data: Float32Array,
     ptr: number
   ) {
     if (targetRatio === undefined) {
-      console.warn(`[TransferMgr] No targetRatio provided for same-edge movement`);
       return;
     }
 
     if (targetRatio <= currentRatio) {
-      console.error(
-        `[TransferMgr] Invalid command: targetRatio ${targetRatio} <= currentRatio ${currentRatio}`
-      );
       return;
     }
 
     const clampedRatio = Math.max(0, Math.min(1, targetRatio));
     data[ptr + MovementData.TARGET_RATIO] = clampedRatio;
-    console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to ${clampedRatio} on current edge`);
   }
 
   private processEdgeTransitionCommand(params: {
@@ -416,38 +398,28 @@ export class TransferMgr {
     }
 
     const nextEdgeIndex = edgeNameToIndex.get(nextEdgeId);
-    
-    console.log(`[TransferMgr] Vehicle ${vehId} next edge: ${nextEdgeId} (Queue size: ${queue?.length ?? 0})`);
-    
+
     if (nextEdgeIndex === undefined || !referenceEdge.nextEdgeIndices?.includes(nextEdgeIndex)) {
-      console.error(
-        `[TransferMgr] Invalid transition: ${nextEdgeId} not connected to ${referenceEdge.edge_name} (Queue tail) or not found`
-      );
       return;
     }
 
-    // Always ensure current vehicle target is 1.0 (if it was stopped)
-    // Only set if we are adding the FIRST item to the queue (meaning we are currently on the active edge)
+    // Only set if we are adding the FIRST item to the queue
     if (!queue || queue.length === 0) {
       data[ptr + MovementData.TARGET_RATIO] = 1;
-      console.log(`[TransferMgr] Vehicle ${vehId} target ratio set to 1.0 (full traversal) for current edge`);
     }
 
     const clampedRatio = targetRatio === undefined ? undefined : Math.max(0, Math.min(1, targetRatio));
-    
+
     if (!this.reservedNextEdges.has(vehId)) {
       this.reservedNextEdges.set(vehId, []);
     }
     this.reservedNextEdges.get(vehId)!.push({ edgeId: nextEdgeId, targetRatio: clampedRatio });
-    
-    console.log(`[TransferMgr] Vehicle ${vehId} queued next edge: ${nextEdgeId}, targetRatio: ${clampedRatio}`);
   }
 
-  private ensureVehicleAwake(data: Float32Array, ptr: number, vehId: number) {
+  private ensureVehicleAwake(data: Float32Array, ptr: number, _vehId: number) {
     const currentStatus = data[ptr + MovementData.MOVING_STATUS];
     if (currentStatus === MovingStatus.STOPPED) {
       data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
-      console.log(`[TransferMgr] Vehicle ${vehId} woken up (STOPPED -> MOVING)`);
     }
   }
 
@@ -458,56 +430,34 @@ export class TransferMgr {
     const path = this.reservedPaths.get(vehicleIndex);
     if (!path || path.length === 0) return null;
 
-    // Logic change: If we have a path, we should feed the main queue if it's empty?
-    // OR we just keep handlePathQueue as a separate high-priority feeder.
-    // Given the request is about manual commands, let's keep path logic simple:
-    // It pops one and returns it. BUT it should probably push to reservedNextEdges to unify consumption?
-    // Let's keep existing logic: return index directly.
-    // BUT we need to handle targetRatio?
-    // The previous logic was:
-    // this.reservedNextEdges.set(vehicleIndex, { edgeId: nextEdge.edgeId, ... });
-    // This assumes reservedNextEdges is a Map<number, ReservedEdge>.
-    // Now it is Map<number, ReservedEdge[]>.
-    
     const nextEdge = path.shift()!;
     const idx = edgeNameToIndex.get(nextEdge.edgeId);
-    
-    if (idx === undefined) {
-      console.warn(`[TransferMgr] Path edge ${nextEdge.edgeId} not found`);
-    } else {
-      console.log(`[TransferMgr] Path: transitioning to ${nextEdge.edgeId} (${path.length} edges remaining)`);
-      
-      const queue = this.reservedNextEdges.get(vehicleIndex) || [];
-      if (!this.reservedNextEdges.has(vehicleIndex)) {
-        this.reservedNextEdges.set(vehicleIndex, queue);
-      }
 
-      // We need to support the logic where path items are fed into the system.
-      // If we just return 'idx', the Caller (determineNextEdge) returns it as nextEdge.
-      // And then consumeNextEdgeReservation will be called later?
-      // Wait, movementUpdate calls determineNextEdge -> sets NEXT_EDGE.
-      // Then movementUpdate calls consumeNextEdgeReservation when transition happens.
-      // So handlePathQueue MUST populate reservedNextEdges for consumption!
-      
-      let rRatio: number | undefined = undefined;
-      if (path.length > 0) {
-        rRatio = 1;
-      } else if (nextEdge.targetRatio !== undefined) {
-        rRatio = nextEdge.targetRatio;
-      }
-      
-      // Push to queue (so consumeNextEdgeReservation can find it)
-      queue.push({
-        edgeId: nextEdge.edgeId,
-        targetRatio: rRatio
-      });
-      
-      if (path.length === 0) {
-        this.reservedPaths.delete(vehicleIndex);
-      }
-      
-      return idx; // Return index to set NEXT_EDGE
+    if (idx === undefined) {
+      return null;
     }
-    return null;
+
+    const queue = this.reservedNextEdges.get(vehicleIndex) || [];
+    if (!this.reservedNextEdges.has(vehicleIndex)) {
+      this.reservedNextEdges.set(vehicleIndex, queue);
+    }
+
+    let rRatio: number | undefined = undefined;
+    if (path.length > 0) {
+      rRatio = 1;
+    } else if (nextEdge.targetRatio !== undefined) {
+      rRatio = nextEdge.targetRatio;
+    }
+
+    queue.push({
+      edgeId: nextEdge.edgeId,
+      targetRatio: rRatio
+    });
+
+    if (path.length === 0) {
+      this.reservedPaths.delete(vehicleIndex);
+    }
+
+    return idx;
   }
 }

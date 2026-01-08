@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import { ShmSimulatorController, createDefaultConfig, TransferMode } from "@/shmSimulator";
-import type { SimulationConfig, VehicleInitConfig } from "@/shmSimulator";
+import type { SimulationConfig, VehicleInitConfig, FabInitParams } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import {
@@ -12,6 +12,9 @@ import {
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { getMaxDelta } from "@/config/movementConfig";
 
+// 기본 fabId (단일 fab 호환용)
+const DEFAULT_FAB_ID = "default";
+
 interface ShmSimulatorState {
   // Controller instance
   controller: ShmSimulatorController | null;
@@ -19,12 +22,15 @@ interface ShmSimulatorState {
   // State
   isInitialized: boolean;
   isRunning: boolean;
+  // 하위 호환성 - 기본 fab의 비히클 수 (deprecated: use fabVehicleCounts or getActualNumVehicles)
   actualNumVehicles: number;
+  // Fab별 비히클 수
+  fabVehicleCounts: Record<string, number>;
   workerAvgMs: number;
   workerMinMs: number;
   workerMaxMs: number;
 
-  // Actions
+  // Actions - 단일 fab 호환 API
   init: (params: {
     edges: Edge[];
     nodes: Node[];
@@ -32,8 +38,18 @@ interface ShmSimulatorState {
     vehicleConfigs?: VehicleInitConfig[];
     config?: Partial<SimulationConfig>;
     transferMode?: TransferMode;
-    stations: ReadonlyArray<any>;
+    stations: ReadonlyArray<unknown>;
+    fabId?: string;
   }) => Promise<void>;
+
+  // Actions - 멀티 fab API
+  initMultiFab: (params: {
+    fabs: FabInitParams[];
+    config?: Partial<SimulationConfig>;
+  }) => Promise<void>;
+
+  addFab: (params: FabInitParams) => Promise<number>;
+  removeFab: (fabId: string) => Promise<void>;
 
   start: () => void;
   stop: () => void;
@@ -41,12 +57,17 @@ interface ShmSimulatorState {
   resume: () => void;
   dispose: () => void;
 
-  // Data access
-  getVehicleData: () => Float32Array | null;
-  getSensorPointData: () => Float32Array | null;
-  getVehiclePosition: (index: number) => { x: number; y: number; z: number; rotation: number } | null;
+  // Data access - 단일 fab 호환 API (기본 fabId 사용)
+  getVehicleData: (fabId?: string) => Float32Array | null;
+  getSensorPointData: (fabId?: string) => Float32Array | null;
+  getVehiclePosition: (index: number, fabId?: string) => { x: number; y: number; z: number; rotation: number } | null;
+  getActualNumVehicles: (fabId?: string) => number;
 
-  sendCommand: (payload: any) => void;
+  // Fab 관리
+  getFabIds: () => string[];
+  getTotalVehicleCount: () => number;
+
+  sendCommand: (payload: unknown, fabId?: string) => void;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -54,12 +75,42 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   isInitialized: false,
   isRunning: false,
   actualNumVehicles: 0,
+  fabVehicleCounts: {},
   workerAvgMs: 0,
   workerMinMs: 0,
   workerMaxMs: 0,
 
+  // 단일 fab 초기화 (하위 호환성)
   init: async (params) => {
-    const { edges, nodes, stations, numVehicles, vehicleConfigs = [], config = {}, transferMode = TransferMode.RANDOM } = params;
+    const {
+      edges,
+      nodes,
+      stations,
+      numVehicles,
+      vehicleConfigs = [],
+      config = {},
+      transferMode = TransferMode.RANDOM,
+      fabId = DEFAULT_FAB_ID,
+    } = params;
+
+    // 멀티 fab API로 위임
+    await get().initMultiFab({
+      fabs: [{
+        fabId,
+        edges,
+        nodes,
+        numVehicles,
+        vehicleConfigs,
+        transferMode,
+        stations,
+      }],
+      config,
+    });
+  },
+
+  // 멀티 fab 초기화
+  initMultiFab: async (params) => {
+    const { fabs, config = {} } = params;
 
     // Dispose existing controller if any
     const existing = get().controller;
@@ -68,7 +119,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       existing.dispose();
     }
 
-    console.log(`[ShmSimulatorStore] Creating new controller... (transferMode=${transferMode})`);
+    console.log(`[ShmSimulatorStore] Creating new controller with ${fabs.length} fab(s)...`);
     const controller = new ShmSimulatorController();
 
     // Set up performance stats callback
@@ -76,25 +127,48 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
     });
 
+    // Set up fab event callbacks
+    controller.onFabAdded((fabId, actualNumVehicles) => {
+      set((state) => ({
+        fabVehicleCounts: { ...state.fabVehicleCounts, [fabId]: actualNumVehicles },
+      }));
+    });
+
+    controller.onFabRemoved((fabId) => {
+      set((state) => {
+        const newCounts = { ...state.fabVehicleCounts };
+        delete newCounts[fabId];
+        return { fabVehicleCounts: newCounts };
+      });
+    });
+
     try {
       await controller.init({
-        edges,
-        nodes,
-        numVehicles,
-        vehicleConfigs,
+        fabs: fabs.map(fab => ({
+          ...fab,
+          transferMode: fab.transferMode ?? TransferMode.RANDOM,
+        })),
         config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
-        transferMode,
-        stations,
       });
+
+      // Build vehicle counts
+      const fabVehicleCounts: Record<string, number> = {};
+      for (const fabId of controller.getFabIds()) {
+        fabVehicleCounts[fabId] = controller.getActualNumVehicles(fabId);
+      }
+
+      // 하위 호환성을 위해 기본 fab의 비히클 수를 actualNumVehicles에 저장
+      const defaultFabCount = fabVehicleCounts[DEFAULT_FAB_ID] ?? controller.getTotalVehicleCount();
 
       set({
         controller,
         isInitialized: true,
         isRunning: false,
-        actualNumVehicles: controller.getActualNumVehicles(),
+        actualNumVehicles: defaultFabCount,
+        fabVehicleCounts,
       });
 
-      console.log(`[ShmSimulatorStore] Initialized with ${controller.getActualNumVehicles()} vehicles`);
+      console.log(`[ShmSimulatorStore] Initialized with ${controller.getTotalVehicleCount()} total vehicles across ${fabs.length} fab(s)`);
     } catch (error) {
       console.error("[ShmSimulatorStore] Init failed:", error);
       set({
@@ -102,9 +176,37 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         isInitialized: false,
         isRunning: false,
         actualNumVehicles: 0,
+        fabVehicleCounts: {},
       });
       throw error;
     }
+  },
+
+  addFab: async (params) => {
+    const { controller } = get();
+    if (!controller) {
+      throw new Error("Controller not initialized");
+    }
+
+    const actualNumVehicles = await controller.addFab(params);
+    set((state) => ({
+      fabVehicleCounts: { ...state.fabVehicleCounts, [params.fabId]: actualNumVehicles },
+    }));
+    return actualNumVehicles;
+  },
+
+  removeFab: async (fabId) => {
+    const { controller } = get();
+    if (!controller) {
+      throw new Error("Controller not initialized");
+    }
+
+    await controller.removeFab(fabId);
+    set((state) => {
+      const newCounts = { ...state.fabVehicleCounts };
+      delete newCounts[fabId];
+      return { fabVehicleCounts: newCounts };
+    });
   },
 
   start: () => {
@@ -154,29 +256,30 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       isInitialized: false,
       isRunning: false,
       actualNumVehicles: 0,
+      fabVehicleCounts: {},
       workerAvgMs: 0,
       workerMinMs: 0,
       workerMaxMs: 0,
     });
   },
 
-  getVehicleData: () => {
+  getVehicleData: (fabId = DEFAULT_FAB_ID) => {
     const { controller } = get();
     if (!controller) return null;
-    return controller.getVehicleData();
+    return controller.getVehicleData(fabId);
   },
 
-  getSensorPointData: () => {
+  getSensorPointData: (fabId = DEFAULT_FAB_ID) => {
     const { controller } = get();
     if (!controller) return null;
-    return controller.getSensorPointData();
+    return controller.getSensorPointData(fabId);
   },
 
-  getVehiclePosition: (index: number) => {
+  getVehiclePosition: (index: number, fabId = DEFAULT_FAB_ID) => {
     const { controller } = get();
     if (!controller) return null;
 
-    const data = controller.getVehicleData();
+    const data = controller.getVehicleData(fabId);
     if (!data) return null;
 
     const ptr = index * VEHICLE_DATA_SIZE;
@@ -188,19 +291,33 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     };
   },
 
-  sendCommand: (payload: any) => {
+  getActualNumVehicles: (fabId = DEFAULT_FAB_ID) => {
+    const { controller } = get();
+    if (!controller) return 0;
+    return controller.getActualNumVehicles(fabId);
+  },
+
+  getFabIds: () => {
+    const { controller } = get();
+    if (!controller) return [];
+    return controller.getFabIds();
+  },
+
+  getTotalVehicleCount: () => {
+    const { controller } = get();
+    if (!controller) return 0;
+    return controller.getTotalVehicleCount();
+  },
+
+  sendCommand: (payload: unknown, fabId = DEFAULT_FAB_ID) => {
     const { controller } = get();
     if (controller) {
-      controller.sendCommand(payload);
+      controller.sendCommand(fabId, payload);
     }
   },
 }));
 
 // Helper hook for accessing vehicle data in render loop
-
-
-export function getShmSensorPointData(): Float32Array | null {
-  return useShmSimulatorStore.getState().getSensorPointData();
+export function getShmSensorPointData(fabId = DEFAULT_FAB_ID): Float32Array | null {
+  return useShmSimulatorStore.getState().getSensorPointData(fabId);
 }
-
-

@@ -74,7 +74,29 @@ export function createDefaultConfig(): SimulationConfig {
 // [2] INIT PAYLOAD (Main -> Worker)
 // ============================================================================
 
+// 단일 Fab 초기화 데이터
+export interface FabInitData {
+  fabId: string;
+  sharedBuffer: SharedArrayBuffer;
+  sensorPointBuffer: SharedArrayBuffer;
+  edges: Edge[];
+  nodes: Node[];
+  vehicleConfigs: VehicleInitConfig[];
+  numVehicles: number;
+  transferMode: TransferMode;
+  stationData: StationRawData[];
+}
+
+// 멀티 Fab 지원 Init Payload
 export interface InitPayload {
+  // 공통 설정
+  config: SimulationConfig;
+  // 여러 Fab 데이터
+  fabs: FabInitData[];
+}
+
+// 레거시 호환용 (단일 fab) - deprecated
+export interface LegacyInitPayload {
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
   edges: Edge[];
@@ -98,16 +120,21 @@ export type WorkerMessage =
   | { type: "PAUSE" }
   | { type: "RESUME" }
   | { type: "DISPOSE" }
-  | { type: "COMMAND"; payload: any }
-  | { type: "SET_TRANSFER_MODE"; mode: TransferMode };
+  | { type: "COMMAND"; fabId: string; payload: unknown }
+  | { type: "SET_TRANSFER_MODE"; fabId: string; mode: TransferMode }
+  // Fab 동적 관리
+  | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
+  | { type: "REMOVE_FAB"; fabId: string };
 
 // Worker -> Main Thread Messages
 export type MainMessage =
   | { type: "READY" }
-  | { type: "INITIALIZED"; actualNumVehicles: number }
+  | { type: "INITIALIZED"; fabVehicleCounts: Record<string, number> }
   | { type: "ERROR"; error: string }
   | { type: "STATS"; fps: number; vehicleCount: number }
-  | { type: "PERF_STATS"; avgStepMs: number; minStepMs: number; maxStepMs: number };
+  | { type: "PERF_STATS"; avgStepMs: number; minStepMs: number; maxStepMs: number }
+  | { type: "FAB_ADDED"; fabId: string; actualNumVehicles: number }
+  | { type: "FAB_REMOVED"; fabId: string };
 
 // ============================================================================
 // [4] TRANSFER MODE

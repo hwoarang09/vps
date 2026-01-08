@@ -4,26 +4,50 @@ import type {
   InitPayload,
   SimulationConfig,
   VehicleInitConfig,
+  FabInitData,
 } from "./types";
 import { TransferMode, createDefaultConfig } from "./types";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
+import type { StationRawData } from "@/types/station";
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
 
+// Fab별 버퍼 및 데이터 관리
+interface FabBufferData {
+  fabId: string;
+  sharedBuffer: SharedArrayBuffer;
+  sensorPointBuffer: SharedArrayBuffer;
+  vehicleData: Float32Array;
+  sensorPointData: Float32Array;
+  actualNumVehicles: number;
+}
+
+// Fab 초기화 파라미터
+export interface FabInitParams {
+  fabId: string;
+  edges: Edge[];
+  nodes: Node[];
+  numVehicles: number;
+  vehicleConfigs?: VehicleInitConfig[];
+  transferMode?: TransferMode;
+  stations: ReadonlyArray<unknown>;
+}
+
 export class ShmSimulatorController {
   private worker: Worker | null = null;
-  private sharedBuffer: SharedArrayBuffer | null = null;
-  private sensorPointBuffer: SharedArrayBuffer | null = null;
-  private vehicleData: Float32Array | null = null;
-  private sensorPointData: Float32Array | null = null;
-  private actualNumVehicles: number = 0;
+  private config: SimulationConfig = createDefaultConfig();
   private isInitialized: boolean = false;
   private isRunning: boolean = false;
+
+  // Fab별 버퍼 관리
+  private fabBuffers: Map<string, FabBufferData> = new Map();
 
   private onReadyCallback: (() => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
   private onPerfStatsCallback: ((avgStepMs: number, minStepMs: number, maxStepMs: number) => void) | null = null;
+  private onFabAddedCallback: ((fabId: string, actualNumVehicles: number) => void) | null = null;
+  private onFabRemovedCallback: ((fabId: string) => void) | null = null;
 
   /**
    * Set callback for worker performance stats
@@ -33,38 +57,54 @@ export class ShmSimulatorController {
   }
 
   /**
-   * Initialize the simulator with map data and config
+   * Set callback for fab added event
    */
-  async init(params: {
-    edges: Edge[];
-    nodes: Node[];
-    numVehicles: number;
-    vehicleConfigs?: VehicleInitConfig[];
-    config?: Partial<SimulationConfig>;
-    transferMode?: TransferMode;
-    stations: ReadonlyArray<any>; // Using any to avoid StationRawData type import issues if distinct
-  }): Promise<void> {
-    const {
-      edges,
-      nodes,
-      numVehicles,
-      vehicleConfigs = [],
-      config = {},
-      transferMode = TransferMode.LOOP,
-    } = params;
+  onFabAdded(callback: (fabId: string, actualNumVehicles: number) => void): void {
+    this.onFabAddedCallback = callback;
+  }
 
-    // Merge with default config
-    const finalConfig: SimulationConfig = { ...createDefaultConfig(), ...config };
+  /**
+   * Set callback for fab removed event
+   */
+  onFabRemoved(callback: (fabId: string) => void): void {
+    this.onFabRemovedCallback = callback;
+  }
 
+  /**
+   * Create buffer for a single fab
+   */
+  private createFabBuffers(fabId: string): FabBufferData {
     // Allocate SharedArrayBuffer for vehicle data
-    const bufferSize = finalConfig.maxVehicles * VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
-    this.sharedBuffer = new SharedArrayBuffer(bufferSize);
-    this.vehicleData = new Float32Array(this.sharedBuffer);
+    const bufferSize = this.config.maxVehicles * VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
+    const sharedBuffer = new SharedArrayBuffer(bufferSize);
+    const vehicleData = new Float32Array(sharedBuffer);
 
     // Allocate SharedArrayBuffer for sensor point data
-    const sensorBufferSize = finalConfig.maxVehicles * SENSOR_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
-    this.sensorPointBuffer = new SharedArrayBuffer(sensorBufferSize);
-    this.sensorPointData = new Float32Array(this.sensorPointBuffer);
+    const sensorBufferSize = this.config.maxVehicles * SENSOR_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
+    const sensorPointBuffer = new SharedArrayBuffer(sensorBufferSize);
+    const sensorPointData = new Float32Array(sensorPointBuffer);
+
+    return {
+      fabId,
+      sharedBuffer,
+      sensorPointBuffer,
+      vehicleData,
+      sensorPointData,
+      actualNumVehicles: 0,
+    };
+  }
+
+  /**
+   * Initialize the simulator with multiple fabs
+   */
+  async init(params: {
+    fabs: FabInitParams[];
+    config?: Partial<SimulationConfig>;
+  }): Promise<void> {
+    const { fabs, config = {} } = params;
+
+    // Merge with default config
+    this.config = { ...createDefaultConfig(), ...config };
 
     // Create worker
     this.worker = new Worker(
@@ -84,17 +124,32 @@ export class ShmSimulatorController {
       }
     };
 
+    // Create buffers and prepare init data for each fab
+    const fabInitDataList: FabInitData[] = [];
+
+    for (const fabParams of fabs) {
+      const bufferData = this.createFabBuffers(fabParams.fabId);
+      this.fabBuffers.set(fabParams.fabId, bufferData);
+
+      const fabInitData: FabInitData = {
+        fabId: fabParams.fabId,
+        sharedBuffer: bufferData.sharedBuffer,
+        sensorPointBuffer: bufferData.sensorPointBuffer,
+        edges: fabParams.edges,
+        nodes: fabParams.nodes,
+        vehicleConfigs: fabParams.vehicleConfigs ?? [],
+        numVehicles: fabParams.numVehicles,
+        transferMode: fabParams.transferMode ?? TransferMode.LOOP,
+        stationData: fabParams.stations as StationRawData[],
+      };
+
+      fabInitDataList.push(fabInitData);
+    }
+
     // Prepare init payload
     const payload: InitPayload = {
-      sharedBuffer: this.sharedBuffer,
-      sensorPointBuffer: this.sensorPointBuffer,
-      edges: edges,
-      nodes: nodes,
-      config: finalConfig,
-      vehicleConfigs: vehicleConfigs,
-      numVehicles: numVehicles,
-      transferMode: transferMode,
-      stationData: params.stations as any[],
+      config: this.config,
+      fabs: fabInitDataList,
     };
 
     // Send init message
@@ -116,6 +171,90 @@ export class ShmSimulatorController {
   }
 
   /**
+   * Add a new fab dynamically
+   */
+  async addFab(fabParams: FabInitParams): Promise<number> {
+    if (!this.worker || !this.isInitialized) {
+      throw new Error("Controller not initialized");
+    }
+
+    if (this.fabBuffers.has(fabParams.fabId)) {
+      throw new Error(`Fab already exists: ${fabParams.fabId}`);
+    }
+
+    // Create buffers
+    const bufferData = this.createFabBuffers(fabParams.fabId);
+    this.fabBuffers.set(fabParams.fabId, bufferData);
+
+    const fabInitData: FabInitData = {
+      fabId: fabParams.fabId,
+      sharedBuffer: bufferData.sharedBuffer,
+      sensorPointBuffer: bufferData.sensorPointBuffer,
+      edges: fabParams.edges,
+      nodes: fabParams.nodes,
+      vehicleConfigs: fabParams.vehicleConfigs ?? [],
+      numVehicles: fabParams.numVehicles,
+      transferMode: fabParams.transferMode ?? TransferMode.LOOP,
+      stationData: fabParams.stations as StationRawData[],
+    };
+
+    return new Promise((resolve) => {
+      const originalCallback = this.onFabAddedCallback;
+
+      this.onFabAddedCallback = (fabId, actualNumVehicles) => {
+        if (fabId === fabParams.fabId) {
+          const bufData = this.fabBuffers.get(fabId);
+          if (bufData) {
+            bufData.actualNumVehicles = actualNumVehicles;
+          }
+          this.onFabAddedCallback = originalCallback;
+          resolve(actualNumVehicles);
+        }
+        originalCallback?.(fabId, actualNumVehicles);
+      };
+
+      const message: WorkerMessage = {
+        type: "ADD_FAB",
+        fab: fabInitData,
+        config: this.config,
+      };
+      this.worker!.postMessage(message);
+    });
+  }
+
+  /**
+   * Remove a fab dynamically
+   */
+  async removeFab(fabId: string): Promise<void> {
+    if (!this.worker || !this.isInitialized) {
+      throw new Error("Controller not initialized");
+    }
+
+    if (!this.fabBuffers.has(fabId)) {
+      throw new Error(`Fab not found: ${fabId}`);
+    }
+
+    return new Promise((resolve) => {
+      const originalCallback = this.onFabRemovedCallback;
+
+      this.onFabRemovedCallback = (removedFabId) => {
+        if (removedFabId === fabId) {
+          this.fabBuffers.delete(fabId);
+          this.onFabRemovedCallback = originalCallback;
+          resolve();
+        }
+        originalCallback?.(removedFabId);
+      };
+
+      const message: WorkerMessage = {
+        type: "REMOVE_FAB",
+        fabId,
+      };
+      this.worker!.postMessage(message);
+    });
+  }
+
+  /**
    * Handle messages from worker
    */
   private handleWorkerMessage(message: MainMessage): void {
@@ -124,16 +263,24 @@ export class ShmSimulatorController {
         console.log("[ShmSimulatorController] Worker ready");
         break;
 
-      case "INITIALIZED":
-        console.log(
-          `[ShmSimulatorController] Initialized with ${message.actualNumVehicles} vehicles`
-        );
-        this.actualNumVehicles = message.actualNumVehicles;
+      case "INITIALIZED": {
+        const fabVehicleCounts = message.fabVehicleCounts;
+        console.log("[ShmSimulatorController] Initialized fabs:", Object.keys(fabVehicleCounts));
+
+        // Update actual vehicle counts
+        for (const [fabId, count] of Object.entries(fabVehicleCounts)) {
+          const bufData = this.fabBuffers.get(fabId);
+          if (bufData) {
+            bufData.actualNumVehicles = count;
+          }
+        }
+
         if (this.onReadyCallback) {
           this.onReadyCallback();
           this.onReadyCallback = null;
         }
         break;
+      }
 
       case "ERROR":
         console.error("[ShmSimulatorController] Worker error:", message.error);
@@ -150,6 +297,20 @@ export class ShmSimulatorController {
       case "PERF_STATS":
         if (this.onPerfStatsCallback) {
           this.onPerfStatsCallback(message.avgStepMs, message.minStepMs, message.maxStepMs);
+        }
+        break;
+
+      case "FAB_ADDED":
+        console.log(`[ShmSimulatorController] Fab added: ${message.fabId} with ${message.actualNumVehicles} vehicles`);
+        if (this.onFabAddedCallback) {
+          this.onFabAddedCallback(message.fabId, message.actualNumVehicles);
+        }
+        break;
+
+      case "FAB_REMOVED":
+        console.log(`[ShmSimulatorController] Fab removed: ${message.fabId}`);
+        if (this.onFabRemovedCallback) {
+          this.onFabRemovedCallback(message.fabId);
         }
         break;
     }
@@ -203,11 +364,11 @@ export class ShmSimulatorController {
   }
 
   /**
-   * Send a command to the worker
+   * Send a command to a specific fab
    */
-  sendCommand(payload: any): void {
+  sendCommand(fabId: string, payload: unknown): void {
     if (!this.worker) return;
-    const message: WorkerMessage = { type: "COMMAND", payload };
+    const message: WorkerMessage = { type: "COMMAND", fabId, payload };
     this.worker.postMessage(message);
   }
 
@@ -225,10 +386,7 @@ export class ShmSimulatorController {
       }, 100);
     }
 
-    this.sharedBuffer = null;
-    this.sensorPointBuffer = null;
-    this.vehicleData = null;
-    this.sensorPointData = null;
+    this.fabBuffers.clear();
     this.isInitialized = false;
     this.isRunning = false;
 
@@ -236,24 +394,45 @@ export class ShmSimulatorController {
   }
 
   /**
-   * Get vehicle data for rendering (direct access to SharedArrayBuffer)
+   * Get vehicle data for a specific fab
    */
-  getVehicleData(): Float32Array | null {
-    return this.vehicleData;
+  getVehicleData(fabId: string): Float32Array | null {
+    const bufData = this.fabBuffers.get(fabId);
+    return bufData?.vehicleData ?? null;
   }
 
   /**
-   * Get sensor point data for rendering (direct access to SharedArrayBuffer)
+   * Get sensor point data for a specific fab
    */
-  getSensorPointData(): Float32Array | null {
-    return this.sensorPointData;
+  getSensorPointData(fabId: string): Float32Array | null {
+    const bufData = this.fabBuffers.get(fabId);
+    return bufData?.sensorPointData ?? null;
   }
 
   /**
-   * Get actual number of vehicles
+   * Get actual number of vehicles for a specific fab
    */
-  getActualNumVehicles(): number {
-    return this.actualNumVehicles;
+  getActualNumVehicles(fabId: string): number {
+    const bufData = this.fabBuffers.get(fabId);
+    return bufData?.actualNumVehicles ?? 0;
+  }
+
+  /**
+   * Get all fab IDs
+   */
+  getFabIds(): string[] {
+    return Array.from(this.fabBuffers.keys());
+  }
+
+  /**
+   * Get total vehicle count across all fabs
+   */
+  getTotalVehicleCount(): number {
+    let total = 0;
+    for (const bufData of this.fabBuffers.values()) {
+      total += bufData.actualNumVehicles;
+    }
+    return total;
   }
 
   /**
@@ -273,4 +452,3 @@ export class ShmSimulatorController {
 
 // Export types
 export * from "./types";
-
