@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import type { Node, Edge } from "@/types";
+import type { Station } from "./stationStore";
 
 /**
  * Fab 정보 (각 fab의 bounds, center)
@@ -17,6 +19,16 @@ export interface FabInfo {
   centerY: number;
 }
 
+/**
+ * 원본 맵 데이터 (멀티 워커용)
+ * FAB Create 전의 원본 데이터를 저장
+ */
+export interface OriginalMapData {
+  nodes: Node[];
+  edges: Edge[];
+  stations: Station[];
+}
+
 interface FabStore {
   // Fab grid 설정
   fabCountX: number;
@@ -26,13 +38,18 @@ interface FabStore {
   // 현재 활성 fab index (-1 = none)
   activeFabIndex: number;
 
+  // 원본 맵 데이터 (멀티 워커용)
+  originalMapData: OriginalMapData | null;
+
   // Actions
   setFabGrid: (countX: number, countY: number, fabs: FabInfo[]) => void;
+  setOriginalMapData: (data: OriginalMapData) => void;
   setActiveFabIndex: (index: number) => void;
   clearFabs: () => void;
 
   // Utility
   findNearestFab: (x: number, y: number) => number;
+  isMultiFab: () => boolean;
 }
 
 export const useFabStore = create<FabStore>((set, get) => ({
@@ -40,9 +57,14 @@ export const useFabStore = create<FabStore>((set, get) => ({
   fabCountY: 1,
   fabs: [],
   activeFabIndex: 0,
+  originalMapData: null,
 
   setFabGrid: (countX, countY, fabs) => {
     set({ fabCountX: countX, fabCountY: countY, fabs });
+  },
+
+  setOriginalMapData: (data) => {
+    set({ originalMapData: data });
   },
 
   setActiveFabIndex: (index) => {
@@ -50,7 +72,15 @@ export const useFabStore = create<FabStore>((set, get) => ({
   },
 
   clearFabs: () => {
-    set({ fabCountX: 1, fabCountY: 1, fabs: [], activeFabIndex: 0 });
+    set({ fabCountX: 1, fabCountY: 1, fabs: [], activeFabIndex: 0, originalMapData: null });
+  },
+
+  /**
+   * 멀티 Fab 여부 확인
+   */
+  isMultiFab: (): boolean => {
+    const { fabCountX, fabCountY } = get();
+    return fabCountX * fabCountY > 1;
   },
 
   /**

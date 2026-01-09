@@ -37,7 +37,6 @@ export class SCurvePointsCalculator {
       return [];
     }
 
-    console.log(radius, rotation)
     // 각 구간 길이 계산
     const len1 = calculateStraightDistance(n1, n2);
     const len2 = calculateCurveLength(radius, rotation);

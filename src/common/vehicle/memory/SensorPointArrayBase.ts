@@ -21,12 +21,28 @@ export const SensorPoint = {
 } as const;
 
 /**
+ * 메모리 영역 정보 (멀티 워커 지원용)
+ */
+export interface SensorMemoryRegion {
+  /** SharedArrayBuffer 내 시작 오프셋 (bytes) */
+  offset: number;
+  /** 할당된 영역 크기 (bytes) */
+  size: number;
+  /** 이 영역에서 관리할 수 있는 최대 Vehicle 수 */
+  maxVehicles: number;
+}
+
+/**
  * SensorPointArrayBase - Base class for sensor point data management
  * - Subclasses can override data initialization (e.g., SharedArrayBuffer support)
+ * - Supports memory region restriction for multi-worker environments
  */
 export class SensorPointArrayBase {
   protected data: Float32Array;
-  protected readonly maxVehicles: number;
+  protected maxVehicles: number;
+
+  /** 메모리 영역 제한 정보 (멀티 워커 환경에서 사용) */
+  protected memoryRegion: SensorMemoryRegion | null = null;
 
   constructor(maxVehicles: number) {
     this.maxVehicles = maxVehicles;
@@ -35,9 +51,31 @@ export class SensorPointArrayBase {
 
   /**
    * Set buffer from SharedArrayBuffer (for Worker thread)
+   * 하위호환: 전체 버퍼를 사용
    */
   setBuffer(buffer: SharedArrayBuffer): void {
     this.data = new Float32Array(buffer);
+    this.maxVehicles = this.data.length / SENSOR_DATA_SIZE;
+    this.memoryRegion = null;
+  }
+
+  /**
+   * Set buffer with memory region restriction (for Multi-Worker)
+   * 특정 영역만 사용하도록 제한
+   */
+  setBufferWithRegion(buffer: SharedArrayBuffer, region: SensorMemoryRegion): void {
+    const floatLength = region.size / Float32Array.BYTES_PER_ELEMENT;
+
+    this.data = new Float32Array(buffer, region.offset, floatLength);
+    this.maxVehicles = region.maxVehicles;
+    this.memoryRegion = region;
+  }
+
+  /**
+   * 현재 메모리 영역 정보 반환
+   */
+  getMemoryRegion(): SensorMemoryRegion | null {
+    return this.memoryRegion;
   }
 
   getData(): Float32Array {

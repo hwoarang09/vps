@@ -52,7 +52,6 @@ let movementConfig: MovementConfig = {
 // Load config immediately
 loadMovementConfig().then(config => {
   movementConfig = config;
-  console.log('[MovementConfig] Loaded:', config);
 });
 
 // Export synchronous getters

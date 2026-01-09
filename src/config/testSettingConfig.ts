@@ -156,9 +156,7 @@ let testSettingConfig: TestSettingConfig = {
 };
 
 // Load config immediately
-// Load config immediately
 testSettingConfig = await loadTestSettingConfig();
-console.log('[TestSettingConfig] Loaded:', testSettingConfig);
 
 // Export synchronous getters
 export const getTestSettings = () => testSettingConfig.TEST_SETTINGS;

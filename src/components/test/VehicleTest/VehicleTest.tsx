@@ -208,6 +208,13 @@ const VehicleTest: React.FC = () => {
     const totalFabs = fabCountX * fabCountY;
     console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes, ${edges.length} edges, ${stations.length} stations`);
 
+    // 원본 데이터 저장 (멀티 워커용)
+    useFabStore.getState().setOriginalMapData({
+      nodes: [...nodes],
+      edges: [...edges],
+      stations: [...stations],
+    });
+
     // Get bounds for offset calculation
     const bounds = getNodeBounds(nodes);
 

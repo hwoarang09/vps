@@ -140,8 +140,6 @@ export const useStationStore = create<StationStore>((set) => ({
   stations: [],
 
   loadStations: (rawData: StationRawData[]): Station[] => {
-    console.log(`[StationStore] Loading ${rawData.length} stations...`);
-
     const stations: Station[] = rawData.map((raw) => {
       const position = calculateStationPosition(raw);
 
@@ -151,13 +149,11 @@ export const useStationStore = create<StationStore>((set) => ({
       };
     });
 
-    console.log(`[StationStore] Loaded ${stations.length} stations`);
     set({ stations });
     return stations;
   },
 
   setStations: (stations: Station[]) => {
-    console.log(`[StationStore] Setting ${stations.length} stations`);
     set({ stations });
   },
 

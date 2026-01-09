@@ -31,8 +31,9 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   // Get actualNumVehicles from appropriate store based on mode
   const arrayActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
-  const shmActualNumVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
-  const actualNumVehicles = isSharedMemory ? shmActualNumVehicles : arrayActualNumVehicles;
+  // 멀티 Fab: totalVehicleCount 사용, 단일 Fab: actualNumVehicles 사용
+  const shmTotalVehicles = useShmSimulatorStore((state) => state.controller?.getTotalVehicleCount() ?? state.actualNumVehicles);
+  const actualNumVehicles = isSharedMemory ? shmTotalVehicles : arrayActualNumVehicles;
 
   // Get vehicle config
   const [config, setConfig] = useState(() => getVehicleConfigSync());

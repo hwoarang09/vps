@@ -115,7 +115,6 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
     });
 
     console.timeEnd("EdgeTopologyCalc");
-    console.log(`[EdgeStore] Loaded ${connectedEdges.length} edges with topology.`);
 
     set({ 
       edges: connectedEdges, 

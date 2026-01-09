@@ -4,6 +4,7 @@ import { useNodeStore } from "@/store/map/nodeStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useStationStore } from "@/store/map/stationStore";
+import { useFabStore } from "@/store/map/fabStore";
 import {
   getLinearMaxSpeed,
   getLinearAcceleration,
@@ -14,6 +15,7 @@ import {
 } from "@/config/movementConfig";
 import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { createFabGridSeparated } from "@/utils/fab/fabUtils";
 
 /**
  * VehicleSharedMemoryMode
@@ -39,6 +41,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
 
   const {
     init: initSimulator,
+    initMultiFab,
     pause: pauseSimulator,
     resume: resumeSimulator,
     dispose: disposeSimulator,
@@ -68,21 +71,66 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       brakeMinSpeed: getBrakeMinSpeed(),
     };
 
-    initSimulator({
-      edges,
-      nodes,
-      numVehicles,
-      config,
-      transferMode,
-      stations,
-    })
-      .then(() => {
-        console.log("[VehicleSharedMemoryMode] SHM Simulator initialized");
-        // Don't auto-start - wait for play button
+    // 멀티 Fab 확인
+    const fabStore = useFabStore.getState();
+    const isMultiFab = fabStore.isMultiFab();
+    const originalMapData = fabStore.originalMapData;
+
+    if (isMultiFab && originalMapData) {
+      // 멀티 Fab 모드: 각 Fab별로 분리된 데이터로 초기화
+      const { fabCountX, fabCountY } = fabStore;
+      const totalFabs = fabCountX * fabCountY;
+      const vehiclesPerFab = Math.floor(numVehicles / totalFabs);
+
+      console.log(`[VehicleSharedMemoryMode] Multi-Fab mode: ${fabCountX}x${fabCountY}=${totalFabs} fabs, ${vehiclesPerFab} vehicles per fab`);
+
+      // 각 Fab별로 분리된 데이터 생성
+      const fabDataList = createFabGridSeparated(
+        originalMapData.nodes,
+        originalMapData.edges,
+        originalMapData.stations,
+        fabCountX,
+        fabCountY
+      );
+
+      // initMultiFab 호출
+      // maxVehicles를 실제 차량 수로 맞춤 (메모리 효율 + 렌더링 연속성)
+      const fabs = fabDataList.map(fabData => ({
+        fabId: fabData.fabId,
+        edges: fabData.edges,
+        nodes: fabData.nodes,
+        numVehicles: vehiclesPerFab,
+        maxVehicles: vehiclesPerFab,  // 메모리 할당을 실제 차량 수로 제한
+        transferMode,
+        stations: fabData.stations,
+      }));
+
+      initMultiFab({ fabs, config })
+        .then(() => {
+          console.log(`[VehicleSharedMemoryMode] Multi-Fab SHM Simulator initialized with ${totalFabs} fabs`);
+        })
+        .catch((error) => {
+          console.error("[VehicleSharedMemoryMode] Failed to initialize multi-fab:", error);
+        });
+    } else {
+      // 단일 Fab 모드: 기존 방식
+      console.log("[VehicleSharedMemoryMode] Single-Fab mode");
+
+      initSimulator({
+        edges,
+        nodes,
+        numVehicles,
+        config,
+        transferMode,
+        stations,
       })
-      .catch((error) => {
-        console.error("[VehicleSharedMemoryMode] Failed to initialize:", error);
-      });
+        .then(() => {
+          console.log("[VehicleSharedMemoryMode] SHM Simulator initialized");
+        })
+        .catch((error) => {
+          console.error("[VehicleSharedMemoryMode] Failed to initialize:", error);
+        });
+    }
 
     // Cleanup on unmount
     return () => {
@@ -90,7 +138,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       disposeSimulator();
       initRef.current = false;
     };
-  }, [edges, nodes, stations, numVehicles, initSimulator, disposeSimulator]);
+  }, [edges, nodes, stations, numVehicles, initSimulator, initMultiFab, disposeSimulator]);
 
   // Handle play/pause state changes
   useEffect(() => {

@@ -15,7 +15,7 @@ import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collisi
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import type { SimulationConfig, TransferMode, VehicleInitConfig } from "../types";
+import type { SimulationConfig, TransferMode, VehicleInitConfig, FabMemoryAssignment } from "../types";
 import type { StationRawData } from "@/types/station";
 
 export interface FabInitParams {
@@ -30,6 +30,12 @@ export interface FabInitParams {
   numVehicles: number;
   transferMode: TransferMode;
   stationData: StationRawData[];
+
+  /**
+   * 메모리 영역 할당 정보 (멀티 워커 환경에서 사용)
+   * 없으면 전체 버퍼 사용 (하위호환)
+   */
+  memoryAssignment?: FabMemoryAssignment;
 }
 
 export class FabContext {
@@ -87,9 +93,19 @@ export class FabContext {
     console.log(`[FabContext:${this.fabId}] Initializing...`);
 
     // Set SharedArrayBuffer for Main-Worker communication
-    this.store.setSharedBuffer(params.sharedBuffer);
-    this.sensorPointArray.setBuffer(params.sensorPointBuffer);
-    console.log(`[FabContext:${this.fabId}] SharedArrayBuffers connected`);
+    // 멀티 워커 환경에서는 영역 제한 사용
+    if (params.memoryAssignment) {
+      const { vehicleRegion, sensorRegion } = params.memoryAssignment;
+      this.store.setSharedBufferWithRegion(params.sharedBuffer, vehicleRegion);
+      this.sensorPointArray.setBufferWithRegion(params.sensorPointBuffer, sensorRegion);
+      console.log(`[FabContext:${this.fabId}] SharedArrayBuffers connected with region restriction`);
+      console.log(`[FabContext:${this.fabId}] Vehicle region: offset=${vehicleRegion.offset}, size=${vehicleRegion.size}, maxVehicles=${vehicleRegion.maxVehicles}`);
+    } else {
+      // 하위호환: 전체 버퍼 사용
+      this.store.setSharedBuffer(params.sharedBuffer);
+      this.sensorPointArray.setBuffer(params.sensorPointBuffer);
+      console.log(`[FabContext:${this.fabId}] SharedArrayBuffers connected (full buffer)`);
+    }
 
     // Update transfer mode
     this.store.setTransferMode(params.transferMode);

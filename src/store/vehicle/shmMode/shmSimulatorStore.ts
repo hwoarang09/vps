@@ -1,9 +1,10 @@
 // shmSimulatorStore.ts
-// Zustand store for managing ShmSimulatorController instance
+// Zustand store for managing MultiWorkerController instance (멀티 워커 지원)
 
 import { create } from "zustand";
-import { ShmSimulatorController, createDefaultConfig, TransferMode } from "@/shmSimulator";
-import type { SimulationConfig, VehicleInitConfig, FabInitParams } from "@/shmSimulator";
+import { MultiWorkerController, MultiFabInitParams } from "@/shmSimulator/MultiWorkerController";
+import { createDefaultConfig, TransferMode } from "@/shmSimulator";
+import type { SimulationConfig, VehicleInitConfig } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import {
@@ -12,12 +13,18 @@ import {
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { getMaxDelta } from "@/config/movementConfig";
 
+// FabInitParams 호환 타입
+type FabInitParams = MultiFabInitParams;
+
 // 기본 fabId (단일 fab 호환용)
 const DEFAULT_FAB_ID = "default";
 
 interface ShmSimulatorState {
-  // Controller instance
-  controller: ShmSimulatorController | null;
+  // Controller instance (MultiWorkerController로 변경)
+  controller: MultiWorkerController | null;
+
+  // 워커 수
+  workerCount: number;
 
   // State
   isInitialized: boolean;
@@ -46,6 +53,7 @@ interface ShmSimulatorState {
   initMultiFab: (params: {
     fabs: FabInitParams[];
     config?: Partial<SimulationConfig>;
+    workerCount?: number;
   }) => Promise<void>;
 
   addFab: (params: FabInitParams) => Promise<number>;
@@ -72,6 +80,7 @@ interface ShmSimulatorState {
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   controller: null,
+  workerCount: 0,
   isInitialized: false,
   isRunning: false,
   actualNumVehicles: 0,
@@ -108,9 +117,9 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     });
   },
 
-  // 멀티 fab 초기화
+  // 멀티 fab 초기화 (MultiWorkerController 사용)
   initMultiFab: async (params) => {
-    const { fabs, config = {} } = params;
+    const { fabs, config = {}, workerCount } = params;
 
     // Dispose existing controller if any
     const existing = get().controller;
@@ -119,27 +128,17 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       existing.dispose();
     }
 
-    console.log(`[ShmSimulatorStore] Creating new controller with ${fabs.length} fab(s)...`);
-    const controller = new ShmSimulatorController();
+    console.log(`[ShmSimulatorStore] Creating MultiWorkerController with ${fabs.length} fab(s)...`);
+    const controller = new MultiWorkerController();
 
     // Set up performance stats callback
     controller.onPerfStats((avgStepMs, minStepMs, maxStepMs) => {
       set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
     });
 
-    // Set up fab event callbacks
-    controller.onFabAdded((fabId, actualNumVehicles) => {
-      set((state) => ({
-        fabVehicleCounts: { ...state.fabVehicleCounts, [fabId]: actualNumVehicles },
-      }));
-    });
-
-    controller.onFabRemoved((fabId) => {
-      set((state) => {
-        const newCounts = { ...state.fabVehicleCounts };
-        delete newCounts[fabId];
-        return { fabVehicleCounts: newCounts };
-      });
+    // Set up error callback
+    controller.onError((error) => {
+      console.error("[ShmSimulatorStore] Worker error:", error);
     });
 
     try {
@@ -148,6 +147,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
           ...fab,
           transferMode: fab.transferMode ?? TransferMode.RANDOM,
         })),
+        workerCount,
         config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
       });
 
@@ -162,17 +162,20 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 
       set({
         controller,
+        workerCount: controller.getWorkerCount(),
         isInitialized: true,
         isRunning: false,
         actualNumVehicles: defaultFabCount,
         fabVehicleCounts,
       });
 
-      console.log(`[ShmSimulatorStore] Initialized with ${controller.getTotalVehicleCount()} total vehicles across ${fabs.length} fab(s)`);
+      console.log(`[ShmSimulatorStore] Initialized with ${controller.getTotalVehicleCount()} total vehicles across ${fabs.length} fab(s), ${controller.getWorkerCount()} workers`);
+      console.log(`[ShmSimulatorStore] Worker assignments:`, controller.getWorkerAssignments());
     } catch (error) {
       console.error("[ShmSimulatorStore] Init failed:", error);
       set({
         controller: null,
+        workerCount: 0,
         isInitialized: false,
         isRunning: false,
         actualNumVehicles: 0,
@@ -182,31 +185,16 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     }
   },
 
-  addFab: async (params) => {
-    const { controller } = get();
-    if (!controller) {
-      throw new Error("Controller not initialized");
-    }
-
-    const actualNumVehicles = await controller.addFab(params);
-    set((state) => ({
-      fabVehicleCounts: { ...state.fabVehicleCounts, [params.fabId]: actualNumVehicles },
-    }));
-    return actualNumVehicles;
+  addFab: async () => {
+    // MultiWorkerController에서는 동적 Fab 추가 미지원
+    // dispose() 후 새로 init() 해야 함
+    throw new Error("Dynamic fab addition not supported in MultiWorkerController. Use dispose() and re-init().");
   },
 
-  removeFab: async (fabId) => {
-    const { controller } = get();
-    if (!controller) {
-      throw new Error("Controller not initialized");
-    }
-
-    await controller.removeFab(fabId);
-    set((state) => {
-      const newCounts = { ...state.fabVehicleCounts };
-      delete newCounts[fabId];
-      return { fabVehicleCounts: newCounts };
-    });
+  removeFab: async () => {
+    // MultiWorkerController에서는 동적 Fab 삭제 미지원
+    // dispose() 후 새로 init() 해야 함
+    throw new Error("Dynamic fab removal not supported in MultiWorkerController. Use dispose() and re-init().");
   },
 
   start: () => {
@@ -253,6 +241,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     }
     set({
       controller: null,
+      workerCount: 0,
       isInitialized: false,
       isRunning: false,
       actualNumVehicles: 0,
@@ -263,9 +252,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     });
   },
 
-  getVehicleData: (fabId = DEFAULT_FAB_ID) => {
+  getVehicleData: (fabId?: string) => {
     const { controller } = get();
     if (!controller) return null;
+    // fabId가 없으면 전체 버퍼 반환 (멀티 Fab 렌더링용)
     return controller.getVehicleData(fabId);
   },
 

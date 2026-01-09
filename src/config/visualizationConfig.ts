@@ -58,7 +58,6 @@ let visualizationConfig: VisualizationConfig = {
 // Load config immediately
 loadVisualizationConfig().then(config => {
   visualizationConfig = config;
-  console.log('[VisualizationConfig] Loaded:', config);
 });
 
 // Synchronous getters for each mode

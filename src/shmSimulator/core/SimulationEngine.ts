@@ -65,6 +65,7 @@ export class SimulationEngine {
         numVehicles: fabData.numVehicles,
         transferMode: fabData.transferMode,
         stationData: fabData.stationData,
+        memoryAssignment: fabData.memoryAssignment,
       };
 
       const context = new FabContext(params);
@@ -98,6 +99,7 @@ export class SimulationEngine {
       numVehicles: fabData.numVehicles,
       transferMode: fabData.transferMode,
       stationData: fabData.stationData,
+      memoryAssignment: fabData.memoryAssignment,
     };
 
     const context = new FabContext(params);

@@ -112,7 +112,6 @@ let stationConfig: StationConfig = {
 // Load config immediately
 loadStationConfig().then(config => {
   stationConfig = config;
-  console.log('[StationConfig] Loaded:', config);
 });
 
 // Export synchronous getters

@@ -7,6 +7,34 @@ import { TransferMode } from "@/common/vehicle/initialize/constants";
 import { StationRawData } from "@/types/station";
 
 // ============================================================================
+// [0] MEMORY REGION (Multi-Worker Support)
+// ============================================================================
+
+/**
+ * SharedArrayBuffer 내에서 할당된 메모리 영역 정보
+ * 멀티 워커 환경에서 각 워커가 자신의 영역만 접근하도록 제한
+ */
+export interface MemoryRegion {
+  /** SharedArrayBuffer 내 시작 오프셋 (bytes) */
+  offset: number;
+  /** 할당된 영역 크기 (bytes) */
+  size: number;
+  /** 이 영역에서 관리할 수 있는 최대 Vehicle 수 */
+  maxVehicles: number;
+}
+
+/**
+ * Fab별 메모리 할당 정보
+ */
+export interface FabMemoryAssignment {
+  fabId: string;
+  /** Vehicle 데이터 영역 */
+  vehicleRegion: MemoryRegion;
+  /** Sensor 데이터 영역 */
+  sensorRegion: MemoryRegion;
+}
+
+// ============================================================================
 // [1] SIMULATION CONFIG
 // ============================================================================
 
@@ -86,6 +114,12 @@ export interface FabInitData {
   numVehicles: number;
   transferMode: TransferMode;
   stationData: StationRawData[];
+
+  /**
+   * 메모리 영역 할당 정보 (멀티 워커 환경에서 사용)
+   * 없으면 전체 버퍼 사용 (하위호환)
+   */
+  memoryAssignment?: FabMemoryAssignment;
 }
 
 // 멀티 Fab 지원 Init Payload

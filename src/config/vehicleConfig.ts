@@ -88,7 +88,6 @@ let configLoadedPromise: Promise<VehicleConfig>;
 // Load config immediately
 configLoadedPromise = loadVehicleConfig().then(config => {
   vehicleConfig = config;
-  console.log('[VehicleConfig] Loaded:', config);
   return config;
 });
 

@@ -1,7 +1,7 @@
 // shmSimulator/core/EngineStore.ts
 // Internal store class replacing Zustand vehicleArrayStore
 
-import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { VehicleDataArrayBase, VehicleMemoryRegion } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { TransferMode } from "../types";
 import type { IVehicleStore } from "@/common/vehicle/initialize";
@@ -21,9 +21,18 @@ export class EngineStore implements IVehicleStore {
 
   /**
    * Set SharedArrayBuffer for Main-Worker communication
+   * 하위호환: 전체 버퍼 사용
    */
   setSharedBuffer(buffer: SharedArrayBuffer): void {
     this.vehicleDataArray.setBuffer(buffer);
+  }
+
+  /**
+   * Set SharedArrayBuffer with memory region restriction (for Multi-Worker)
+   * 특정 영역만 사용하도록 제한
+   */
+  setSharedBufferWithRegion(buffer: SharedArrayBuffer, region: VehicleMemoryRegion): void {
+    this.vehicleDataArray.setBufferWithRegion(buffer, region);
   }
 
   // === Data Accessors ===

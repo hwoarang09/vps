@@ -332,3 +332,112 @@ export function createFabGridStations(
 
   return allStations;
 }
+
+// ============================================================================
+// [8] FAB Grid Separated - Each Fab as separate data (for Multi-Worker)
+// ============================================================================
+
+/**
+ * 개별 Fab 데이터 (멀티 워커용)
+ */
+export interface FabData {
+  fabId: string;
+  fabIndex: number;
+  col: number;
+  row: number;
+  nodes: Node[];
+  edges: Edge[];
+  stations: Station[];
+}
+
+/**
+ * FAB Grid 생성 (각 Fab별로 분리된 데이터 반환)
+ * 멀티 워커 시뮬레이션용
+ */
+export function createFabGridSeparated(
+  nodes: Node[],
+  edges: Edge[],
+  stations: Station[],
+  gridX: number,
+  gridY: number
+): FabData[] {
+  if (nodes.length === 0 || edges.length === 0) {
+    return [];
+  }
+
+  const bounds = getNodeBounds(nodes);
+  const xOffset = bounds.width * 1.1;
+  const yOffset = bounds.height * 1.1;
+
+  const fabDataList: FabData[] = [];
+
+  for (let row = 0; row < gridY; row++) {
+    for (let col = 0; col < gridX; col++) {
+      const fabIndex = row * gridX + col;
+      const idOffset = fabIndex * 1000;
+      const fabId = `fab_${col}_${row}`;
+
+      const currentXOffset = col * xOffset;
+      const currentYOffset = row * yOffset;
+
+      let fabNodes: Node[];
+      let fabEdges: Edge[];
+      let fabStations: Station[];
+
+      if (fabIndex === 0) {
+        // 원본
+        fabNodes = [...nodes];
+        fabEdges = [...edges];
+        fabStations = [...stations];
+      } else {
+        // 복제본
+        fabNodes = nodes.map(node => ({
+          ...node,
+          node_name: addOffsetToId(node.node_name, idOffset),
+          editor_x: node.editor_x + currentXOffset,
+          editor_y: node.editor_y + currentYOffset,
+        }));
+
+        fabEdges = edges.map(edge => {
+          const newWaypoints = edge.waypoints.map(wp => addOffsetToId(wp, idOffset));
+
+          let newRenderingPoints = edge.renderingPoints;
+          if (edge.renderingPoints) {
+            newRenderingPoints = edge.renderingPoints.map(point =>
+              new THREE.Vector3(
+                point.x + currentXOffset,
+                point.y + currentYOffset,
+                point.z
+              )
+            );
+          }
+
+          return {
+            ...edge,
+            edge_name: addOffsetToId(edge.edge_name, idOffset),
+            from_node: addOffsetToId(edge.from_node, idOffset),
+            to_node: addOffsetToId(edge.to_node, idOffset),
+            waypoints: newWaypoints,
+            renderingPoints: newRenderingPoints,
+          };
+        });
+
+        fabStations = stations.map(station =>
+          cloneFabStation(station, col, row, fabIndex, currentXOffset, currentYOffset)
+        );
+      }
+
+      fabDataList.push({
+        fabId,
+        fabIndex,
+        col,
+        row,
+        nodes: fabNodes,
+        edges: fabEdges,
+        stations: fabStations,
+      });
+    }
+  }
+
+  return fabDataList;
+}

@@ -312,7 +312,6 @@ const processNodeTexts = (nodes: Node[], textStore: any) => {
       }
     }
     textStore.setNodeTexts(nodeTexts);
-    console.log("CFG Store - Generated nodeTexts (dict):", nodeTexts);
   } else {
     const nodeTextsArray = nodes
       .filter((node) => !node.node_name.startsWith("TMP_"))
@@ -325,7 +324,6 @@ const processNodeTexts = (nodes: Node[], textStore: any) => {
         },
       }));
     textStore.setNodeTextsArray(nodeTextsArray);
-    console.log("CFG Store - Generated nodeTexts (array):", nodeTextsArray.length);
   }
 };
 
@@ -394,7 +392,6 @@ const processEdgeTextsDict = (edges: Edge[], nodes: Node[], textStore: any) => {
     }
   }
   textStore.setEdgeTexts(edgeTexts);
-  console.log("CFG Store - Generated edgeTexts (dict):", edgeTexts);
 };
 
 // 엣지 텍스트 생성 (Array Mode)
@@ -429,7 +426,6 @@ const processEdgeTextsArray = (edges: Edge[], nodes: Node[], textStore: any) => 
     .filter((item): item is { name: string; position: TextPosition } => item !== null);
 
   textStore.setEdgeTextsArray(edgeTextsArray);
-  console.log("CFG Store - Generated edgeTexts (array):", edgeTextsArray.length);
 };
 
 // Station texts 생성 및 업데이트 (Array mode)
@@ -445,7 +441,6 @@ const processStationTextsArray = (stations: any[], textStore: any) => {
   }));
 
   textStore.setStationTextsArray(stationTextsArray);
-  console.log("CFG Store - Generated stationTexts (array):", stationTextsArray.length);
 };
 
 // Load CFG file from specified map folder
@@ -487,7 +482,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       try {
         const vehiclesContent = await loadCFGFile(mapFolder, "vehicles.cfg");
         vehicleConfigs = parseVehiclesCFG(vehiclesContent);
-        console.log(`[CFGStore] Loaded ${vehicleConfigs.length} vehicle configurations`);
       } catch (error) {
         console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs ", error);
       }
@@ -497,7 +491,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       try {
         const stationContent = await loadCFGFile(mapFolder, "station.map");
         stationRawData = parseStationMap(stationContent);
-        console.log(`[CFGStore] Loaded ${stationRawData.length} stations`);
       } catch (error) {
         console.warn("[CFGStore] No station.map found or failed to parse, skipping stations ", error);
       }
@@ -536,7 +529,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
 
       setTimeout(() => {
         textStore.forceUpdate();
-        console.log("CFG Store - Force update triggered");
       }, 100);
 
       set({ vehicleConfigs, isLoading: false });

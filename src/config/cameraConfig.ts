@@ -51,7 +51,6 @@ let cameraConfig: CameraSettings = {
 // Initialize config on module load
 loadCameraConfig().then(config => {
   cameraConfig = config;
-  console.log('[CameraConfig] Loaded camera configuration:', config);
 });
 
 // Synchronous getters

@@ -121,22 +121,18 @@ function recordPerformance(elapsedTime: number): void {
   perfStats.minTime = Math.min(perfStats.minTime, elapsedTime);
   perfStats.maxTime = Math.max(perfStats.maxTime, elapsedTime);
   
-  // Log every 100 calls
-  if (perfStats.count % 100 === 0) {
+  // Log every 1000 calls (reduced from 100 to avoid spam)
+  if (perfStats.count % 1000 === 0) {
     logPerformanceStats();
   }
 }
 
 /**
- * Log current performance statistics
+ * Log current performance statistics (compact format)
  */
 function logPerformanceStats(): void {
   const avg = perfStats.totalTime / perfStats.count;
-  console.log(`[Dijkstra Performance]`);
-  console.log(`  Total Calls: ${perfStats.count}`);
-  console.log(`  Average Time: ${avg.toFixed(3)}ms`);
-  console.log(`  Min Time: ${perfStats.minTime.toFixed(3)}ms`);
-  console.log(`  Max Time: ${perfStats.maxTime.toFixed(3)}ms`);
+  console.log(`[Dijkstra] ${perfStats.count} calls | Avg: ${avg.toFixed(3)}ms | Min: ${perfStats.minTime.toFixed(3)}ms | Max: ${perfStats.maxTime.toFixed(3)}ms`);
 }
 
 /**
@@ -154,5 +150,4 @@ export function resetDijkstraPerformanceStats(): void {
   perfStats.totalTime = 0;
   perfStats.minTime = Infinity;
   perfStats.maxTime = 0;
-  console.log('[Dijkstra Performance] Statistics reset');
 }

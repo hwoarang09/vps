@@ -119,7 +119,6 @@ export class LockMgr {
       }
     }
 
-    console.log(`\n========== MAP TOPOLOGY: MERGE NODES ==========`);
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
@@ -137,8 +136,9 @@ export class LockMgr {
         strategyState: {},
       };
     }
-    console.log(`[LockMgr] Total Merge Nodes: ${Object.keys(this.lockTable).length}`);
-    console.log(`===============================================\n`);
+    if (Object.keys(this.lockTable).length > 0) {
+      console.log(`[LockMgr] Initialized ${Object.keys(this.lockTable).length} merge nodes`);
+    }
   }
 
   getTable() {
