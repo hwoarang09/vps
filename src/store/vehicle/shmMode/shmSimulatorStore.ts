@@ -2,7 +2,7 @@
 // Zustand store for managing MultiWorkerController instance (멀티 워커 지원)
 
 import { create } from "zustand";
-import { MultiWorkerController, MultiFabInitParams } from "@/shmSimulator/MultiWorkerController";
+import { MultiWorkerController, MultiFabInitParams, WorkerPerfStats } from "@/shmSimulator/MultiWorkerController";
 import { createDefaultConfig, TransferMode } from "@/shmSimulator";
 import type { SimulationConfig, VehicleInitConfig, SharedMapData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
@@ -33,6 +33,11 @@ interface ShmSimulatorState {
   actualNumVehicles: number;
   // Fab별 비히클 수
   fabVehicleCounts: Record<string, number>;
+
+  // 워커별 성능 정보
+  workerPerfStats: WorkerPerfStats[];
+
+  // 하위 호환성 - 전체 워커의 평균값 (deprecated: use workerPerfStats)
   workerAvgMs: number;
   workerMinMs: number;
   workerMaxMs: number;
@@ -86,6 +91,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   isRunning: false,
   actualNumVehicles: 0,
   fabVehicleCounts: {},
+  workerPerfStats: [],
   workerAvgMs: 0,
   workerMinMs: 0,
   workerMaxMs: 0,
@@ -133,8 +139,17 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const controller = new MultiWorkerController();
 
     // Set up performance stats callback
-    controller.onPerfStats((avgStepMs, minStepMs, maxStepMs) => {
-      set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
+    controller.onPerfStats((workerStats) => {
+      // 워커별 성능 정보 저장
+      set({ workerPerfStats: workerStats });
+
+      // 하위 호환성: 전체 워커의 평균값 계산
+      if (workerStats.length > 0) {
+        const avgStepMs = workerStats.reduce((sum, s) => sum + s.avgStepMs, 0) / workerStats.length;
+        const minStepMs = Math.min(...workerStats.map(s => s.minStepMs));
+        const maxStepMs = Math.max(...workerStats.map(s => s.maxStepMs));
+        set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
+      }
     });
 
     // Set up error callback
@@ -248,6 +263,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       isRunning: false,
       actualNumVehicles: 0,
       fabVehicleCounts: {},
+      workerPerfStats: [],
       workerAvgMs: 0,
       workerMinMs: 0,
       workerMaxMs: 0,

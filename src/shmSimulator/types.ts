@@ -217,7 +217,19 @@ export type MainMessage =
   | { type: "INITIALIZED"; /** Fab ID -> actual vehicle count */ fabVehicleCounts: Record<string, number> }
   | { type: "ERROR"; error: string }
   | { type: "STATS"; fps: number; vehicleCount: number }
-  | { type: "PERF_STATS"; avgStepMs: number; minStepMs: number; maxStepMs: number }
+  | {
+      type: "PERF_STATS";
+      avgStepMs: number;
+      minStepMs: number;
+      maxStepMs: number;
+      dijkstra?: {
+        count: number;
+        avgTimeMs: number;
+        minTimeMs: number;
+        maxTimeMs: number;
+      };
+      fabVehicleCounts: Record<string, number>;
+    }
   | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }
   | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string };
 

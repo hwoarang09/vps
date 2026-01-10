@@ -116,7 +116,7 @@ export class SimulationEngine {
     col: number,
     row: number
   ): { edges: Edge[]; nodes: Node[]; stations: StationRawData[] } {
-    const { originalEdges, originalNodes, originalStations, gridX, gridY } = sharedMapData;
+    const { originalEdges, originalNodes, originalStations} = sharedMapData;
 
     // Calculate bounds for offset
     const bounds = this.getNodeBounds(originalNodes);
@@ -172,11 +172,8 @@ export class SimulationEngine {
       ...station,
       station_name: this.createFabStationName(station.station_name, col, row),
       nearest_edge: this.createFabEdgeName(station.nearest_edge, fabIndex),
-      position: {
-        x: station.position.x + currentXOffset,
-        y: station.position.y + currentYOffset,
-        z: station.position.z,
-      },
+      editor_x: (Number.parseFloat(station.editor_x) + currentXOffset).toString(),
+      editor_y: (Number.parseFloat(station.editor_y) + currentYOffset).toString(),
     }));
 
     return { edges, nodes, stations };
@@ -263,13 +260,13 @@ export class SimulationEngine {
       fabId: fabData.fabId,
       sharedBuffer: fabData.sharedBuffer,
       sensorPointBuffer: fabData.sensorPointBuffer,
-      edges: fabData.edges,
-      nodes: fabData.nodes,
+      edges: fabData.edges ?? [],
+      nodes: fabData.nodes ?? [],
       config: config,
       vehicleConfigs: fabData.vehicleConfigs,
       numVehicles: fabData.numVehicles,
       transferMode: fabData.transferMode,
-      stationData: fabData.stationData,
+      stationData: fabData.stationData ?? [],
       memoryAssignment: fabData.memoryAssignment,
     };
 

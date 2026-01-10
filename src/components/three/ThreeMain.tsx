@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
 } from "@react-three/drei";
-// import { Perf } from "r3f-perf";
+import { Perf } from "r3f-perf";
 import * as THREE from "three";
 
 import MapRenderer from "./entities/renderers/MapRenderer";
@@ -66,7 +66,7 @@ const ThreeScene: React.FC = () => {
         <VehicleSystemRenderer />
 
         {/* Development tools */}
-        {/* <Perf position="bottom-right"  deepAnalyze={true}  /> */}
+        <Perf position="bottom-right"  deepAnalyze={true}  />
       </Canvas>
 
       {/* Performance Monitor - 5-second average CPU usage */}

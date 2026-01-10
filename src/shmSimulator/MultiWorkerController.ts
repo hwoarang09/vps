@@ -35,6 +35,16 @@ export interface MultiFabInitParams {
 export type { FabInitParams } from "@/shmSimulator/index";
 
 /**
+ * 워커별 성능 통계
+ */
+export interface WorkerPerfStats {
+  workerIndex: number;
+  avgStepMs: number;
+  minStepMs: number;
+  maxStepMs: number;
+}
+
+/**
  * 워커 정보
  */
 interface WorkerInfo {
@@ -42,6 +52,7 @@ interface WorkerInfo {
   workerIndex: number;
   fabIds: string[];
   isInitialized: boolean;
+  perfStats: WorkerPerfStats;
 }
 
 /**
@@ -72,13 +83,13 @@ export class MultiWorkerController {
   private isRunning: boolean = false;
 
   // 콜백
-  private onPerfStatsCallback: ((avgStepMs: number, minStepMs: number, maxStepMs: number) => void) | null = null;
+  private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
 
   /**
-   * Set callback for performance stats
+   * Set callback for performance stats (각 워커별 성능 정보 배열)
    */
-  onPerfStats(callback: (avgStepMs: number, minStepMs: number, maxStepMs: number) => void): void {
+  onPerfStats(callback: (workerStats: WorkerPerfStats[]) => void): void {
     this.onPerfStatsCallback = callback;
   }
 
@@ -159,6 +170,12 @@ export class MultiWorkerController {
         workerIndex: assignment.workerIndex,
         fabIds: assignment.fabIds,
         isInitialized: false,
+        perfStats: {
+          workerIndex: assignment.workerIndex,
+          avgStepMs: 0,
+          minStepMs: 0,
+          maxStepMs: 0,
+        },
       };
 
       this.workers.push(workerInfo);
@@ -266,7 +283,16 @@ export class MultiWorkerController {
         break;
 
       case "PERF_STATS":
-        this.onPerfStatsCallback?.(message.avgStepMs, message.minStepMs, message.maxStepMs);
+        // 해당 워커의 성능 정보 업데이트
+        workerInfo.perfStats.avgStepMs = message.avgStepMs;
+        workerInfo.perfStats.minStepMs = message.minStepMs;
+        workerInfo.perfStats.maxStepMs = message.maxStepMs;
+
+        // 모든 워커의 성능 정보를 콜백으로 전달
+        if (this.onPerfStatsCallback) {
+          const allStats = this.workers.map(w => ({ ...w.perfStats }));
+          this.onPerfStatsCallback(allStats);
+        }
         break;
 
       case "ERROR":

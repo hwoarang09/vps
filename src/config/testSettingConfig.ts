@@ -53,7 +53,7 @@ const loadTestSettingConfig = async (): Promise<TestSettingConfig> => {
           }
         }
       ],
-      DEFAULT_SETTING: "SMALL_LOOP"
+      DEFAULT_SETTING: "Y_SHORT"
     };
   }
 };
@@ -161,7 +161,7 @@ let testSettingConfig: TestSettingConfig = {
       }
     }
   ],
-  DEFAULT_SETTING: "SMALL_LOOP"
+  DEFAULT_SETTING: "Y_SHORT"
 };
 
 // Load config immediately

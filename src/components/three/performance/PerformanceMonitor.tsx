@@ -11,6 +11,7 @@ export const PerformanceMonitorUI: React.FC = () => {
   const [avgMs, setAvgMs] = useState<number>(0);
   const [minMs, setMinMs] = useState<number>(0);
   const [maxMs, setMaxMs] = useState<number>(0);
+  const [isWorkerExpanded, setIsWorkerExpanded] = useState<boolean>(false);
   const frameTimesRef = useRef<number[]>([]);
   const lastUpdateTimeRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
@@ -18,6 +19,7 @@ export const PerformanceMonitorUI: React.FC = () => {
   const UPDATE_INTERVAL = 5000; // 5 seconds in milliseconds
 
   // Get worker performance stats from store
+  const workerPerfStats = useShmSimulatorStore((state) => state.workerPerfStats);
   const workerAvgMs = useShmSimulatorStore((state) => state.workerAvgMs);
   const workerMinMs = useShmSimulatorStore((state) => state.workerMinMs);
   const workerMaxMs = useShmSimulatorStore((state) => state.workerMaxMs);
@@ -84,7 +86,6 @@ export const PerformanceMonitorUI: React.FC = () => {
         border: "1px solid rgba(255, 255, 255, 0.3)",
         textShadow: "1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black",
         zIndex: 9999,
-        pointerEvents: "none",
         userSelect: "none",
         display: "flex",
         flexDirection: "column",
@@ -107,19 +108,77 @@ export const PerformanceMonitorUI: React.FC = () => {
           {maxMs.toFixed(2)} ms
         </div>
       </div>
-      {/* Row 2: Worker Thread */}
-      <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
-        <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Worker</div>
-        <div style={{ fontSize: "14px", color: "#ff9f43" }}>
-          {workerAvgMs.toFixed(2)} ms
+
+      {/* Worker Threads */}
+      {workerPerfStats.length > 1 ? (
+        <>
+          {/* 펼치기/접기 가능한 Worker 헤더 */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              gap: "12px",
+              alignItems: "center",
+              cursor: "pointer",
+              pointerEvents: "auto",
+            }}
+            onClick={() => setIsWorkerExpanded(!isWorkerExpanded)}
+          >
+            <div style={{ fontSize: "12px", color: "#888", width: "50px", display: "flex", alignItems: "center", gap: "4px" }}>
+              Worker
+              <span style={{ fontSize: "10px" }}>{isWorkerExpanded ? "▲" : "▼"}</span>
+            </div>
+            <div style={{ fontSize: "14px", color: "#ff9f43" }}>
+              {workerAvgMs.toFixed(2)} ms
+            </div>
+            <div style={{ fontSize: "14px", color: "#95e1d3" }}>
+              {workerMinMs.toFixed(2)} ms
+            </div>
+            <div style={{ fontSize: "14px", color: "#f38181" }}>
+              {workerMaxMs.toFixed(2)} ms
+            </div>
+          </div>
+
+          {/* 펼쳐진 워커별 상세 정보 */}
+          {isWorkerExpanded && workerPerfStats.map((stat) => (
+            <div
+              key={stat.workerIndex}
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                gap: "12px",
+                alignItems: "center",
+                paddingLeft: "20px",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#666", width: "50px" }}>W{stat.workerIndex}</div>
+              <div style={{ fontSize: "13px", color: "#ff9f43" }}>
+                {stat.avgStepMs.toFixed(2)} ms
+              </div>
+              <div style={{ fontSize: "13px", color: "#95e1d3" }}>
+                {stat.minStepMs.toFixed(2)} ms
+              </div>
+              <div style={{ fontSize: "13px", color: "#f38181" }}>
+                {stat.maxStepMs.toFixed(2)} ms
+              </div>
+            </div>
+          ))}
+        </>
+      ) : (
+        /* 워커가 1개 이하면 기존 UI 유지 */
+        <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
+          <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Worker</div>
+          <div style={{ fontSize: "14px", color: "#ff9f43" }}>
+            {workerAvgMs.toFixed(2)} ms
+          </div>
+          <div style={{ fontSize: "14px", color: "#95e1d3" }}>
+            {workerMinMs.toFixed(2)} ms
+          </div>
+          <div style={{ fontSize: "14px", color: "#f38181" }}>
+            {workerMaxMs.toFixed(2)} ms
+          </div>
         </div>
-        <div style={{ fontSize: "14px", color: "#95e1d3" }}>
-          {workerMinMs.toFixed(2)} ms
-        </div>
-        <div style={{ fontSize: "14px", color: "#f38181" }}>
-          {workerMaxMs.toFixed(2)} ms
-        </div>
-      </div>
+      )}
     </div>
   );
 };
