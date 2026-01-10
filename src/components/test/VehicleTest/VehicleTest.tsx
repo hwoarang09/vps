@@ -34,11 +34,6 @@ const VehicleTest: React.FC = () => {
   const edges = useEdgeStore((state) => state.edges);
   const { transferMode, setTransferMode } = useVehicleArrayStore();
 
-  // Calculate max vehicle capacity from edges
-  const maxVehicleCapacity = React.useMemo(() => {
-    if (edges.length === 0) return 0;
-    return getMaxVehicleCapacity(edges);
-  }, [edges]);
   const { dispose: disposeShmSimulator } = useShmSimulatorStore();
   const { loadCFGFiles } = useCFGStore();
   const { setCameraView } = useCameraStore();
@@ -57,6 +52,16 @@ const VehicleTest: React.FC = () => {
   const [fabCountX, setFabCountX] = useState<number>(2);
   const [fabCountY, setFabCountY] = useState<number>(1);
   const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
+
+  // Calculate max vehicle capacity from edges (fab 개수 반영)
+  const maxVehicleCapacity = React.useMemo(() => {
+    if (edges.length === 0) return 0;
+    const baseCapacity = getMaxVehicleCapacity(edges);
+    if (isFabApplied) {
+      return baseCapacity * fabCountX * fabCountY;
+    }
+    return baseCapacity;
+  }, [edges, isFabApplied, fabCountX, fabCountY]);
 
   useEffect(() => {
     setInputValue(selectedSetting.numVehicles.toString());

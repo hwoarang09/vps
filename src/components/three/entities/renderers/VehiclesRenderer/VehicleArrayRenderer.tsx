@@ -6,7 +6,7 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
-// import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
+import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
@@ -32,8 +32,11 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   // Get actualNumVehicles from appropriate store based on mode
   const arrayActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
-  // 멀티 Fab: totalVehicleCount 사용, 단일 Fab: actualNumVehicles 사용
-  const shmTotalVehicles = useShmSimulatorStore((state) => state.controller?.getTotalVehicleCount() ?? state.actualNumVehicles);
+  // 멀티 Fab: fabVehicleCounts 합산 사용 (selector에서 메서드 호출 금지 - re-render 안됨)
+  const shmTotalVehicles = useShmSimulatorStore((state) => {
+    const total = Object.values(state.fabVehicleCounts).reduce((sum, count) => sum + count, 0);
+    return total > 0 ? total : state.actualNumVehicles;
+  });
   const actualNumVehicles = isSharedMemory ? shmTotalVehicles : arrayActualNumVehicles;
 
   // Get vehicle config
@@ -140,7 +143,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         frustumCulled={false}
       />
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
-      {/* <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} /> */}
+      <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} />
     </>
   );
 };

@@ -277,9 +277,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     return controller.getVehicleData(fabId);
   },
 
-  getSensorPointData: (fabId = DEFAULT_FAB_ID) => {
+  getSensorPointData: (fabId?: string) => {
     const { controller } = get();
     if (!controller) return null;
+    // fabId가 없으면 전체 버퍼 반환 (멀티 Fab 렌더링용)
     return controller.getSensorPointData(fabId);
   },
 
@@ -326,6 +327,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 }));
 
 // Helper hook for accessing vehicle data in render loop
-export function getShmSensorPointData(fabId = DEFAULT_FAB_ID): Float32Array | null {
+// fabId가 없으면 전체 버퍼 반환 (멀티 Fab 렌더링용)
+export function getShmSensorPointData(fabId?: string): Float32Array | null {
   return useShmSimulatorStore.getState().getSensorPointData(fabId);
 }

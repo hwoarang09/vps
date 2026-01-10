@@ -452,10 +452,15 @@ export class MultiWorkerController {
   }
 
   /**
-   * Get sensor point data for a specific fab
+   * Get sensor point data for a specific fab (or all fabs if no fabId)
    */
-  getSensorPointData(fabId: string): Float32Array | null {
+  getSensorPointData(fabId?: string): Float32Array | null {
     if (!this.sensorBuffer || !this.layout) return null;
+
+    // fabId가 없으면 전체 버퍼 반환
+    if (!fabId) {
+      return new Float32Array(this.sensorBuffer);
+    }
 
     const assignment = this.layout.fabAssignments.get(fabId);
     if (!assignment) return null;
