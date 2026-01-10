@@ -77,14 +77,16 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
     const originalMapData = fabStore.originalMapData;
 
     if (isMultiFab && originalMapData) {
-      // 멀티 Fab 모드: 각 Fab별로 분리된 데이터로 초기화
+      // 멀티 Fab 모드: 원본 맵 데이터를 한 번만 전송하여 메모리 절약
       const { fabCountX, fabCountY } = fabStore;
       const totalFabs = fabCountX * fabCountY;
       const vehiclesPerFab = Math.floor(numVehicles / totalFabs);
+      // 버퍼 오버플로우 방지를 위해 10% 여유 추가
+      const maxVehiclesPerFab = Math.ceil(vehiclesPerFab * 1.1);
 
-      console.log(`[VehicleSharedMemoryMode] Multi-Fab mode: ${fabCountX}x${fabCountY}=${totalFabs} fabs, ${vehiclesPerFab} vehicles per fab`);
+      console.log(`[VehicleSharedMemoryMode] Multi-Fab mode: ${fabCountX}x${fabCountY}=${totalFabs} fabs, ${vehiclesPerFab} vehicles per fab (max: ${maxVehiclesPerFab})`);
 
-      // 각 Fab별로 분리된 데이터 생성
+      // 각 Fab별로 분리된 데이터 생성 (fabId만 필요)
       const fabDataList = createFabGridSeparated(
         originalMapData.nodes,
         originalMapData.edges,
@@ -94,20 +96,29 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       );
 
       // initMultiFab 호출
-      // maxVehicles를 실제 차량 수로 맞춤 (메모리 효율 + 렌더링 연속성)
+      // edges/nodes/stations를 각 fab에 포함하지 않고, sharedMapData로 한 번만 전송
       const fabs = fabDataList.map(fabData => ({
         fabId: fabData.fabId,
-        edges: fabData.edges,
-        nodes: fabData.nodes,
+        edges: [], // sharedMapData 사용하므로 빈 배열
+        nodes: [], // sharedMapData 사용하므로 빈 배열
         numVehicles: vehiclesPerFab,
-        maxVehicles: vehiclesPerFab,  // 메모리 할당을 실제 차량 수로 제한
+        maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
         transferMode,
-        stations: fabData.stations,
+        stations: [], // sharedMapData 사용하므로 빈 배열
       }));
 
-      initMultiFab({ fabs, config })
+      // 공유 맵 데이터 생성 (원본 데이터 한 번만 전송)
+      const sharedMapData = {
+        originalEdges: originalMapData.edges,
+        originalNodes: originalMapData.nodes,
+        originalStations: originalMapData.stations,
+        gridX: fabCountX,
+        gridY: fabCountY,
+      };
+
+      initMultiFab({ fabs, config, sharedMapData })
         .then(() => {
-          console.log(`[VehicleSharedMemoryMode] Multi-Fab SHM Simulator initialized with ${totalFabs} fabs`);
+          console.log(`[VehicleSharedMemoryMode] Multi-Fab SHM Simulator initialized with ${totalFabs} fabs (using sharedMapData)`);
         })
         .catch((error) => {
           console.error("[VehicleSharedMemoryMode] Failed to initialize multi-fab:", error);

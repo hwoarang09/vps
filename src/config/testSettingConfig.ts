@@ -19,6 +19,15 @@ interface TestSettingConfig {
   DEFAULT_SETTING: string;
 }
 
+// 전역 렌더링 설정
+export interface RenderConfig {
+  maxVisibleFabs: number; // 동시에 표시할 최대 fab 개수
+}
+
+export const renderConfig: RenderConfig = {
+  maxVisibleFabs: 25,
+};
+
 // Load test setting configuration from JSON file
 const loadTestSettingConfig = async (): Promise<TestSettingConfig> => {
   try {
@@ -156,7 +165,9 @@ let testSettingConfig: TestSettingConfig = {
 };
 
 // Load config immediately
-testSettingConfig = await loadTestSettingConfig();
+loadTestSettingConfig().then(config => {
+  testSettingConfig = config;
+});
 
 // Export synchronous getters
 export const getTestSettings = () => testSettingConfig.TEST_SETTINGS;

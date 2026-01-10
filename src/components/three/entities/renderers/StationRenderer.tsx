@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { useStationStore, type Station } from "@/store/map/stationStore";
+import type { Station } from "@/store/map/stationStore";
+import { useFabStore } from "@/store/map/fabStore";
 import { getStationTypeConfig, getStationBoxConfig } from "@/config/stationConfig";
 
 // Color mapping by station type
@@ -9,10 +10,15 @@ const getStationColor = (type: string): string => {
   return config.COLOR;
 };
 
-const StationRenderer: React.FC = () => {
-  const stations = useStationStore((state) => state.stations);
+interface StationRendererProps {
+  stations: Station[];
+}
 
-  // Group stations by type for efficient rendering
+const StationRenderer: React.FC<StationRendererProps> = ({ stations }) => {
+  const slots = useFabStore((state) => state.slots);
+  const fabs = useFabStore((state) => state.fabs);
+
+  // Group stations by type for efficient rendering (전체 스테이션 사용)
   const stationsByType = useMemo(() => {
     const grouped: Record<string, typeof stations> = {
       OHB: [],
@@ -33,24 +39,53 @@ const StationRenderer: React.FC = () => {
     return grouped;
   }, [stations]);
 
+  // 단일 fab이거나 슬롯이 없으면 기본 렌더링
+  if (fabs.length <= 1 || slots.length === 0) {
+    return (
+      <group name="stations">
+        <StationTypeRenderer
+          stations={stationsByType.OHB}
+          color={getStationColor("OHB")}
+        />
+        <StationTypeRenderer
+          stations={stationsByType.STK}
+          color={getStationColor("STK")}
+        />
+        <StationTypeRenderer
+          stations={stationsByType.EQ}
+          color={getStationColor("EQ")}
+        />
+        <StationTypeRenderer
+          stations={stationsByType.OTHER}
+          color={getStationColor("OTHER")}
+        />
+      </group>
+    );
+  }
+
+  // 멀티 fab: 슬롯 기반 렌더링 (각 슬롯마다 offset 적용)
   return (
     <group name="stations">
-      <StationTypeRenderer
-        stations={stationsByType.OHB}
-        color={getStationColor("OHB")}
-      />
-      <StationTypeRenderer
-        stations={stationsByType.STK}
-        color={getStationColor("STK")}
-      />
-      <StationTypeRenderer
-        stations={stationsByType.EQ}
-        color={getStationColor("EQ")}
-      />
-      <StationTypeRenderer
-        stations={stationsByType.OTHER}
-        color={getStationColor("OTHER")}
-      />
+      {slots.map((slot) => (
+        <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+          <StationTypeRenderer
+            stations={stationsByType.OHB}
+            color={getStationColor("OHB")}
+          />
+          <StationTypeRenderer
+            stations={stationsByType.STK}
+            color={getStationColor("STK")}
+          />
+          <StationTypeRenderer
+            stations={stationsByType.EQ}
+            color={getStationColor("EQ")}
+          />
+          <StationTypeRenderer
+            stations={stationsByType.OTHER}
+            color={getStationColor("OTHER")}
+          />
+        </group>
+      ))}
     </group>
   );
 };
@@ -83,7 +118,7 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
     [color]
   );
 
-  // Initialize instance matrices
+  // Initialize instance matrices (원본 데이터만 처리)
   useEffect(() => {
     const mesh = instancedMeshRef.current;
     if (!mesh || instanceCount === 0) return;

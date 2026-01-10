@@ -3,7 +3,7 @@
 
 import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
 
-const MAX_VEHICLES_PER_EDGE = 500;
+const MAX_VEHICLES_PER_EDGE = 100;
 const EDGE_LIST_SIZE = MAX_VEHICLES_PER_EDGE + 1; // count + vehicles
 
 export class EdgeVehicleQueue {

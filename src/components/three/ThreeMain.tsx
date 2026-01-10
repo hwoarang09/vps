@@ -3,13 +3,13 @@ import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
 } from "@react-three/drei";
-import { Perf } from "r3f-perf";
+// import { Perf } from "r3f-perf";
 import * as THREE from "three";
 
 import MapRenderer from "./entities/renderers/MapRenderer";
 import Floor from "./scene/Floor";
 import AxisHelper from "./scene/AxisHelper";
-import TextRenderer from "./entities/renderers/TextRenderer";
+// import TextRenderer from "./entities/renderers/TextRenderer";
 import VehicleSystem from "./entities/vehicle/VehicleSystem";
 
 import CameraController from "./scene/Camera/cameraController";
@@ -60,13 +60,13 @@ const ThreeScene: React.FC = () => {
         <MapRenderer />
 
         {/* Text rendering - displays node and edge labels */}
-        <TextRenderer scale={0.2} nodeColor="#00e5ff" edgeColor="#ff9800" />
+        {/* <TextRenderer scale={0.2} nodeColor="#00e5ff" edgeColor="#ff9800" /> */}
 
         {/* Vehicle System - Conditionally rendered when test is active */}
         <VehicleSystemRenderer />
 
         {/* Development tools */}
-        <Perf position="bottom-right"  deepAnalyze={true}  />
+        {/* <Perf position="bottom-right"  deepAnalyze={true}  /> */}
       </Canvas>
 
       {/* Performance Monitor - 5-second average CPU usage */}

@@ -102,18 +102,63 @@ export function createDefaultConfig(): SimulationConfig {
 // [2] INIT PAYLOAD (Main -> Worker)
 // ============================================================================
 
+/**
+ * Fab offset 정보 (멀티 Fab 모드용)
+ */
+export interface FabOffsetInfo {
+  fabIndex: number;
+  col: number;
+  row: number;
+}
+
+/**
+ * 공유 맵 데이터 (멀티 Fab 모드에서 원본 데이터를 한 번만 전송)
+ */
+export interface SharedMapData {
+  /** 원본 edges (fab 복제 전) */
+  originalEdges: Edge[];
+  /** 원본 nodes (fab 복제 전) */
+  originalNodes: Node[];
+  /** 원본 stations (fab 복제 전) */
+  originalStations: StationRawData[];
+  /** Grid 가로 개수 */
+  gridX: number;
+  /** Grid 세로 개수 */
+  gridY: number;
+}
+
 // 단일 Fab 초기화 데이터
 export interface FabInitData {
   /** Unique identifier for the fab (e.g., "fab_A", "fab_B") */
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
-  edges: Edge[];
-  nodes: Node[];
+
+  /**
+   * Fab별 edges (단일 Fab 모드에서 사용)
+   * 멀티 Fab 모드에서는 sharedMapData + fabOffset 사용
+   */
+  edges?: Edge[];
+  /**
+   * Fab별 nodes (단일 Fab 모드에서 사용)
+   * 멀티 Fab 모드에서는 sharedMapData + fabOffset 사용
+   */
+  nodes?: Node[];
+  /**
+   * Fab별 station data (단일 Fab 모드에서 사용)
+   * 멀티 Fab 모드에서는 sharedMapData + fabOffset 사용
+   */
+  stationData?: StationRawData[];
+
+  /**
+   * Fab offset 정보 (멀티 Fab 모드에서 사용)
+   * sharedMapData와 함께 사용하여 fab별 데이터 계산
+   */
+  fabOffset?: FabOffsetInfo;
+
   vehicleConfigs: VehicleInitConfig[];
   numVehicles: number;
   transferMode: TransferMode;
-  stationData: StationRawData[];
 
   /**
    * 메모리 영역 할당 정보 (멀티 워커 환경에서 사용)
@@ -128,6 +173,11 @@ export interface InitPayload {
   config: SimulationConfig;
   // 여러 Fab 데이터
   fabs: FabInitData[];
+  /**
+   * 공유 맵 데이터 (멀티 Fab 모드에서만 사용)
+   * 원본 맵 데이터를 한 번만 전송하여 메모리 절약
+   */
+  sharedMapData?: SharedMapData;
 }
 
 // 레거시 호환용 (단일 fab) - deprecated

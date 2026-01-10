@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import { MultiWorkerController, MultiFabInitParams } from "@/shmSimulator/MultiWorkerController";
 import { createDefaultConfig, TransferMode } from "@/shmSimulator";
-import type { SimulationConfig, VehicleInitConfig } from "@/shmSimulator";
+import type { SimulationConfig, VehicleInitConfig, SharedMapData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import {
@@ -54,6 +54,7 @@ interface ShmSimulatorState {
     fabs: FabInitParams[];
     config?: Partial<SimulationConfig>;
     workerCount?: number;
+    sharedMapData?: SharedMapData;
   }) => Promise<void>;
 
   addFab: (params: FabInitParams) => Promise<number>;
@@ -119,7 +120,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 
   // 멀티 fab 초기화 (MultiWorkerController 사용)
   initMultiFab: async (params) => {
-    const { fabs, config = {}, workerCount } = params;
+    const { fabs, config = {}, workerCount, sharedMapData } = params;
 
     // Dispose existing controller if any
     const existing = get().controller;
@@ -149,6 +150,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         })),
         workerCount,
         config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
+        sharedMapData,
       });
 
       // Build vehicle counts

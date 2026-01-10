@@ -1,8 +1,9 @@
-// EdgeRenderer.tsx - InstancedMesh 통합 버전
+// EdgeRenderer.tsx - InstancedMesh 통합 버전 (슬롯 기반 렌더링)
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
 import { getEdgeColorConfig } from "@/config/mapConfig";
+import { useFabStore } from "@/store/map/fabStore";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
@@ -21,8 +22,10 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   edges,
 }) => {
   const colors = getEdgeColorConfig();
+  const slots = useFabStore((state) => state.slots);
+  const fabs = useFabStore((state) => state.fabs);
 
-  // Group edges by type
+  // Group edges by type (원본 데이터 기준)
   const edgesByType = useMemo(() => {
     const grouped: Record<string, Edge[]> = {
       [EdgeType.LINEAR]: [],
@@ -46,38 +49,81 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
     return grouped;
   }, [edges]);
 
+  // 단일 fab이거나 슬롯이 없으면 기본 렌더링
+  if (fabs.length <= 1 || slots.length === 0) {
+    return (
+      <group>
+        <EdgeTypeRenderer
+          edges={edgesByType[EdgeType.LINEAR]}
+          edgeType={EdgeType.LINEAR}
+          color={colors.LINEAR}
+          renderOrder={RENDER_ORDER_RAIL_LINEAR}
+        />
+        <EdgeTypeRenderer
+          edges={edgesByType[EdgeType.CURVE_90]}
+          edgeType={EdgeType.CURVE_90}
+          color={colors.CURVE_90}
+          renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+        />
+        <EdgeTypeRenderer
+          edges={edgesByType[EdgeType.CURVE_180]}
+          edgeType={EdgeType.CURVE_180}
+          color={colors.CURVE_180}
+          renderOrder={RENDER_ORDER_RAIL_CURVE_180}
+        />
+        <EdgeTypeRenderer
+          edges={edgesByType[EdgeType.CURVE_CSC]}
+          edgeType={EdgeType.CURVE_CSC}
+          color={colors.CURVE_CSC}
+          renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
+        />
+        <EdgeTypeRenderer
+          edges={edgesByType[EdgeType.S_CURVE]}
+          edgeType={EdgeType.S_CURVE}
+          color={colors.S_CURVE}
+          renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+        />
+      </group>
+    );
+  }
+
+  // 멀티 fab: 슬롯 기반 렌더링 (각 슬롯마다 offset 적용)
   return (
     <group>
-      <EdgeTypeRenderer
-        edges={edgesByType[EdgeType.LINEAR]}
-        edgeType={EdgeType.LINEAR}
-        color={colors.LINEAR}
-        renderOrder={RENDER_ORDER_RAIL_LINEAR}
-      />
-      <EdgeTypeRenderer
-        edges={edgesByType[EdgeType.CURVE_90]}
-        edgeType={EdgeType.CURVE_90}
-        color={colors.CURVE_90}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_90}
-      />
-      <EdgeTypeRenderer
-        edges={edgesByType[EdgeType.CURVE_180]}
-        edgeType={EdgeType.CURVE_180}
-        color={colors.CURVE_180}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_180}
-      />
-      <EdgeTypeRenderer
-        edges={edgesByType[EdgeType.CURVE_CSC]}
-        edgeType={EdgeType.CURVE_CSC}
-        color={colors.CURVE_CSC}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
-      />
-      <EdgeTypeRenderer
-        edges={edgesByType[EdgeType.S_CURVE]}
-        edgeType={EdgeType.S_CURVE}
-        color={colors.S_CURVE}
-        renderOrder={RENDER_ORDER_RAIL_CURVE_90}
-      />
+      {slots.map((slot) => (
+        <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+          <EdgeTypeRenderer
+            edges={edgesByType[EdgeType.LINEAR]}
+            edgeType={EdgeType.LINEAR}
+            color={colors.LINEAR}
+            renderOrder={RENDER_ORDER_RAIL_LINEAR}
+          />
+          <EdgeTypeRenderer
+            edges={edgesByType[EdgeType.CURVE_90]}
+            edgeType={EdgeType.CURVE_90}
+            color={colors.CURVE_90}
+            renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+          />
+          <EdgeTypeRenderer
+            edges={edgesByType[EdgeType.CURVE_180]}
+            edgeType={EdgeType.CURVE_180}
+            color={colors.CURVE_180}
+            renderOrder={RENDER_ORDER_RAIL_CURVE_180}
+          />
+          <EdgeTypeRenderer
+            edges={edgesByType[EdgeType.CURVE_CSC]}
+            edgeType={EdgeType.CURVE_CSC}
+            color={colors.CURVE_CSC}
+            renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
+          />
+          <EdgeTypeRenderer
+            edges={edgesByType[EdgeType.S_CURVE]}
+            edgeType={EdgeType.S_CURVE}
+            color={colors.S_CURVE}
+            renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+          />
+        </group>
+      ))}
     </group>
   );
 };
@@ -131,7 +177,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
     });
   }, [color]);
 
-  // Update instance matrices
+  // Update instance matrices (원본 데이터만 처리, fab visibility 없음)
   useEffect(() => {
     const mesh = instancedMeshRef.current;
     if (!mesh || instanceCount === 0) return;
@@ -168,7 +214,8 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
         scale.set(length, 0.25, 1);
 
         matrix.compose(position, quaternion, scale);
-        mesh.setMatrixAt(instanceIndex++, matrix);
+        mesh.setMatrixAt(instanceIndex, matrix);
+        instanceIndex++;
       } else {
         // Curve edges: multiple segments
         const segmentCount = points.length - 1;
@@ -189,7 +236,8 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
           scale.set(length * 2, 0.25, 1);
 
           matrix.compose(position, quaternion, scale);
-          mesh.setMatrixAt(instanceIndex++, matrix);
+          mesh.setMatrixAt(instanceIndex, matrix);
+          instanceIndex++;
         }
       }
     }

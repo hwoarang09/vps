@@ -14,7 +14,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useStationStore } from "@/store/map/stationStore";
 import { useTextStore } from "@/store/map/textStore";
-import { createFabGrid, createFabGridStations, getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
+import { getNodeBounds, createFabGrid, createFabGridStations, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
@@ -223,13 +223,18 @@ const VehicleTest: React.FC = () => {
     useFabStore.getState().setFabGrid(fabCountX, fabCountY, fabInfos);
     console.log(`[FAB] Created ${fabInfos.length} fab infos`);
 
-    // Create grid of fabs for nodes and edges
+    // Initialize render slots (슬롯 기반 렌더링용)
+    useFabStore.getState().initSlots();
+    console.log(`[FAB] Initialized render slots`);
+
+    // Create grid of fabs for nodes and edges (시뮬레이션에 필요)
     const { allNodes, allEdges } = createFabGrid(nodes, edges, fabCountX, fabCountY);
 
-    // Create grid of fabs for stations
+    // Create grid of fabs for stations (시뮬레이션에 필요)
     const allStations = createFabGridStations(stations, fabCountX, fabCountY, bounds);
 
-    // Update stores
+    // Update stores with all fab data (시뮬레이션이 사용)
+    // 렌더링은 originalMapData를 사용하므로 화면에는 원본만 표시됨
     useNodeStore.getState().setNodes(allNodes);
     useEdgeStore.getState().setEdges(allEdges);
     useStationStore.getState().setStations(allStations);
@@ -237,7 +242,7 @@ const VehicleTest: React.FC = () => {
     // Update text store with fab-separated texts
     updateTextsForFab(allNodes, allEdges, allStations, fabCountX, fabCountY);
 
-    // Re-initialize LockMgr with new edges
+    // Re-initialize LockMgr with all edges
     resetLockMgr();
     getLockMgr().initFromEdges(allEdges);
 
@@ -333,16 +338,15 @@ const VehicleTest: React.FC = () => {
     textStore.forceUpdate();
 
     // 로그
-    for (let i = 0; i < totalFabs; i++) {
-      const f = textsByFab[i];
-      console.log(`[FAB ${i}] nodes: ${f.nodeTexts.length}, edges: ${f.edgeTexts.length}, stations: ${f.stationTexts.length}`);
-    }
+    console.log(`[FAB] Text stored for ${totalFabs} fabs (first fab: ${textsByFab[0].nodeTexts.length} nodes)`);
   };
 
   // Handle FAB Clear - reload map to reset to original state
   const handleFabClear = async () => {
     console.log("[FAB] Clearing FAB, reloading map...");
     setIsFabApplied(false);
+    // fabStore clear 먼저 (slots, fabs, originalMapData 초기화)
+    useFabStore.getState().clearFabs();
     await loadTestSetting(selectedSettingId);
   };
 
@@ -491,12 +495,12 @@ const VehicleTest: React.FC = () => {
           <input
             type="number"
             min="1"
-            max="10"
+            max="100"
             value={fabCountX}
-            onChange={(e) => setFabCountX(Math.max(1, Math.min(10, Number.parseInt(e.target.value) || 1)))}
+            onChange={(e) => setFabCountX(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
             style={{
-              width: "40px",
+              width: "50px",
               padding: "5px 4px",
               background: isFabApplied ? "#555" : "#333",
               color: "white",
@@ -511,12 +515,12 @@ const VehicleTest: React.FC = () => {
           <input
             type="number"
             min="1"
-            max="10"
+            max="100"
             value={fabCountY}
-            onChange={(e) => setFabCountY(Math.max(1, Math.min(10, Number.parseInt(e.target.value) || 1)))}
+            onChange={(e) => setFabCountY(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
             style={{
-              width: "40px",
+              width: "50px",
               padding: "5px 4px",
               background: isFabApplied ? "#555" : "#333",
               color: "white",

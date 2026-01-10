@@ -1,8 +1,9 @@
-// NodesRenderer.tsx - InstancedMesh version for all nodes
+// NodesRenderer.tsx - InstancedMesh version for all nodes (슬롯 기반 렌더링)
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useNodeStore } from "@/store/map/nodeStore";
+import { useFabStore } from "@/store/map/fabStore";
 import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
 import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
 import { getMarkerConfig } from "@/config/mapConfig";
@@ -90,12 +91,39 @@ const updateMarkerForNode = (
 };
 
 /**
- * NodesRenderer - Renders all nodes using a single InstancedMesh
- * - Much more efficient than individual NodeInstance components
- * - Single useFrame for all nodes
- * - Updates instance matrices when node positions/colors change
+ * NodesRenderer - Renders all nodes using InstancedMesh with slot-based rendering
+ * - Uses slots for multi-fab rendering (each slot has different offset)
+ * - Single fab mode renders directly without slots
  */
 const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
+  const slots = useFabStore((state) => state.slots);
+  const fabs = useFabStore((state) => state.fabs);
+
+  // 단일 fab이거나 슬롯이 없으면 기본 렌더링
+  if (fabs.length <= 1 || slots.length === 0) {
+    return <NodesCore nodeIds={nodeIds} />;
+  }
+
+  // 멀티 fab: 슬롯 기반 렌더링 (각 슬롯마다 offset 적용)
+  return (
+    <group>
+      {slots.map((slot) => (
+        <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+          <NodesCore nodeIds={nodeIds} />
+        </group>
+      ))}
+    </group>
+  );
+};
+
+/**
+ * NodesCore - 실제 노드 렌더링 로직 (원본 데이터만 처리)
+ */
+interface NodesCoreProps {
+  nodeIds: string[];
+}
+
+const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const normalMarkerRef = useRef<THREE.InstancedMesh>(null);
   const tmpMarkerRef = useRef<THREE.InstancedMesh>(null);
@@ -171,7 +199,7 @@ const NodesRenderer: React.FC<NodesRendererProps> = ({ nodeIds }) => {
     tmpNodeMapRef.current = buildIndexMap(tmpNodeIds);
   }, [nodeIds, normalNodeIds, tmpNodeIds]);
 
-  // Initialize instance matrices and colors
+  // Initialize instance matrices and colors (원본 데이터만 처리)
   useEffect(() => {
     const mesh = instancedMeshRef.current;
     const normalMarker = normalMarkerRef.current;

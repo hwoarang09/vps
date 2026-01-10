@@ -178,6 +178,91 @@ export interface FabOffset {
 export type { FabInfo } from "@/store/map/fabStore";
 
 /**
+ * 노드 위치를 기반으로 해당 노드가 속한 fab 인덱스 찾기
+ * @param nodeX - 노드의 editor_x
+ * @param nodeY - 노드의 editor_y
+ * @param fabs - FabInfo 배열
+ * @returns fabIndex (-1 if not found)
+ */
+export function findFabIndexByPosition(
+  nodeX: number,
+  nodeY: number,
+  fabs: import("@/store/map/fabStore").FabInfo[]
+): number {
+  for (const fab of fabs) {
+    if (
+      nodeX >= fab.xMin &&
+      nodeX <= fab.xMax &&
+      nodeY >= fab.yMin &&
+      nodeY <= fab.yMax
+    ) {
+      return fab.fabIndex;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 노드 배열에서 가시 fab에 속한 노드만 필터링
+ * @param nodes - 전체 노드 배열
+ * @param fabs - FabInfo 배열
+ * @param visibleFabIndices - 가시 fab 인덱스 Set
+ * @returns 가시 fab에 속한 노드들만
+ */
+export function filterNodesByVisibleFabs(
+  nodes: Node[],
+  fabs: import("@/store/map/fabStore").FabInfo[],
+  visibleFabIndices: Set<number>
+): Node[] {
+  // 단일 fab이면 전체 반환
+  if (fabs.length <= 1) return nodes;
+  // 모든 fab이 visible이면 전체 반환
+  if (visibleFabIndices.size === fabs.length) return nodes;
+
+  return nodes.filter(node => {
+    const fabIdx = findFabIndexByPosition(node.editor_x, node.editor_y, fabs);
+    return fabIdx === -1 || visibleFabIndices.has(fabIdx);
+  });
+}
+
+/**
+ * 엣지 배열에서 가시 fab에 속한 엣지만 필터링
+ * (renderingPoints의 첫 번째 점 위치로 판단)
+ */
+export function filterEdgesByVisibleFabs(
+  edges: Edge[],
+  fabs: import("@/store/map/fabStore").FabInfo[],
+  visibleFabIndices: Set<number>
+): Edge[] {
+  if (fabs.length <= 1) return edges;
+  if (visibleFabIndices.size === fabs.length) return edges;
+
+  return edges.filter(edge => {
+    if (!edge.renderingPoints || edge.renderingPoints.length === 0) return true;
+    const firstPoint = edge.renderingPoints[0];
+    const fabIdx = findFabIndexByPosition(firstPoint.x, firstPoint.y, fabs);
+    return fabIdx === -1 || visibleFabIndices.has(fabIdx);
+  });
+}
+
+/**
+ * 스테이션 배열에서 가시 fab에 속한 스테이션만 필터링
+ */
+export function filterStationsByVisibleFabs<T extends { position: { x: number; y: number } }>(
+  stations: T[],
+  fabs: import("@/store/map/fabStore").FabInfo[],
+  visibleFabIndices: Set<number>
+): T[] {
+  if (fabs.length <= 1) return stations;
+  if (visibleFabIndices.size === fabs.length) return stations;
+
+  return stations.filter(station => {
+    const fabIdx = findFabIndexByPosition(station.position.x, station.position.y, fabs);
+    return fabIdx === -1 || visibleFabIndices.has(fabIdx);
+  });
+}
+
+/**
  * Fab grid 생성 시 각 fab의 정보 배열 생성
  * @param gridX - 가로 fab 개수
  * @param gridY - 세로 fab 개수

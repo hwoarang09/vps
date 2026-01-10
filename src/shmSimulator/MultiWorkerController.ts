@@ -8,6 +8,7 @@ import type {
   SimulationConfig,
   VehicleInitConfig,
   FabInitData,
+  SharedMapData,
 } from "./types";
 import { TransferMode, createDefaultConfig } from "./types";
 import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment } from "./MemoryLayoutManager";
@@ -95,8 +96,13 @@ export class MultiWorkerController {
     fabs: MultiFabInitParams[];
     workerCount?: number;
     config?: Partial<SimulationConfig>;
+    /**
+     * 멀티 Fab 모드용 공유 맵 데이터
+     * 원본 맵 데이터를 한 번만 전송하여 메모리 절약
+     */
+    sharedMapData?: SharedMapData;
   }): Promise<void> {
-    const { fabs, config = {} } = params;
+    const { fabs, config = {}, sharedMapData } = params;
 
     // Merge config
     this.config = { ...createDefaultConfig(), ...config };
@@ -163,7 +169,7 @@ export class MultiWorkerController {
       }
 
       // 워커 초기화
-      const promise = this.initWorker(workerInfo, assignment);
+      const promise = this.initWorker(workerInfo, assignment, sharedMapData);
       initPromises.push(promise);
     }
 
@@ -176,7 +182,7 @@ export class MultiWorkerController {
   /**
    * Initialize a single worker
    */
-  private initWorker(workerInfo: WorkerInfo, assignment: WorkerAssignment): Promise<void> {
+  private initWorker(workerInfo: WorkerInfo, assignment: WorkerAssignment, sharedMapData?: SharedMapData): Promise<void> {
     return new Promise((resolve, reject) => {
       const { worker } = workerInfo;
 
@@ -211,16 +217,25 @@ export class MultiWorkerController {
         const fabConfig = this.fabConfigs.get(fabAssignment.fabId);
         if (!fabConfig) continue;
 
+        // fabId에서 col, row 파싱 (fab_col_row 형식)
+        const fabIdMatch = /fab_(\d+)_(\d+)/.exec(fabAssignment.fabId);
+        const col = fabIdMatch ? Number.parseInt(fabIdMatch[1], 10) : 0;
+        const row = fabIdMatch ? Number.parseInt(fabIdMatch[2], 10) : 0;
+        const fabIndex = sharedMapData ? (row * sharedMapData.gridX + col) : 0;
+
         const fabInitData: FabInitData = {
           fabId: fabAssignment.fabId,
           sharedBuffer: this.vehicleBuffer!,
           sensorPointBuffer: this.sensorBuffer!,
-          edges: fabConfig.edges,
-          nodes: fabConfig.nodes,
+          // sharedMapData가 있으면 edges/nodes/stationData를 보내지 않음 (메모리 절약)
+          edges: sharedMapData ? undefined : fabConfig.edges,
+          nodes: sharedMapData ? undefined : fabConfig.nodes,
+          stationData: sharedMapData ? undefined : (fabConfig.stations as StationRawData[]),
+          // sharedMapData가 있으면 fabOffset 추가
+          fabOffset: sharedMapData ? { fabIndex, col, row } : undefined,
           vehicleConfigs: fabConfig.vehicleConfigs ?? [],
           numVehicles: fabConfig.numVehicles,
           transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
-          stationData: fabConfig.stations as StationRawData[],
           memoryAssignment: fabAssignment,
         };
 
@@ -230,6 +245,8 @@ export class MultiWorkerController {
       const payload: InitPayload = {
         config: this.config,
         fabs: fabInitDataList,
+        // sharedMapData가 있으면 포함 (원본 맵 데이터 한 번만 전송)
+        sharedMapData,
       };
 
       const message: WorkerMessage = { type: "INIT", payload };

@@ -1,9 +1,13 @@
 // shmSimulator/core/SimulationEngine.ts
 
 import { FabContext, FabInitParams } from "./FabContext";
-import type { InitPayload, SimulationConfig, FabInitData } from "../types";
+import type { InitPayload, SimulationConfig, FabInitData, SharedMapData } from "../types";
 import { createDefaultConfig } from "../types";
 import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
+import type { Edge } from "@/types/edge";
+import type { Node } from "@/types";
+import type { StationRawData } from "@/types/station";
+import * as THREE from "three";
 
 export class SimulationEngine {
   // === Fab Contexts ===
@@ -54,17 +58,40 @@ export class SimulationEngine {
 
     // Initialize each fab
     for (const fabData of payload.fabs) {
+      // sharedMapData가 있으면 fabOffset을 사용하여 fab별 데이터 계산
+      let edges: Edge[];
+      let nodes: Node[];
+      let stationData: StationRawData[];
+
+      if (payload.sharedMapData && fabData.fabOffset) {
+        // sharedMapData에서 fab별 데이터 계산
+        const calculated = this.calculateFabData(
+          payload.sharedMapData,
+          fabData.fabOffset.fabIndex,
+          fabData.fabOffset.col,
+          fabData.fabOffset.row
+        );
+        edges = calculated.edges;
+        nodes = calculated.nodes;
+        stationData = calculated.stations;
+      } else {
+        // 기존 방식: fabData에 포함된 데이터 사용
+        edges = fabData.edges ?? [];
+        nodes = fabData.nodes ?? [];
+        stationData = fabData.stationData ?? [];
+      }
+
       const params: FabInitParams = {
         fabId: fabData.fabId,
         sharedBuffer: fabData.sharedBuffer,
         sensorPointBuffer: fabData.sensorPointBuffer,
-        edges: fabData.edges,
-        nodes: fabData.nodes,
+        edges,
+        nodes,
         config: this.config,
         vehicleConfigs: fabData.vehicleConfigs,
         numVehicles: fabData.numVehicles,
         transferMode: fabData.transferMode,
-        stationData: fabData.stationData,
+        stationData,
         memoryAssignment: fabData.memoryAssignment,
       };
 
@@ -77,6 +104,150 @@ export class SimulationEngine {
 
     console.log(`[SimulationEngine] Initialized ${this.fabContexts.size} fab(s)`);
     return fabVehicleCounts;
+  }
+
+  /**
+   * Calculate fab-specific data from shared map data
+   * (Based on fabUtils.ts createFabGridSeparated logic)
+   */
+  private calculateFabData(
+    sharedMapData: SharedMapData,
+    fabIndex: number,
+    col: number,
+    row: number
+  ): { edges: Edge[]; nodes: Node[]; stations: StationRawData[] } {
+    const { originalEdges, originalNodes, originalStations, gridX, gridY } = sharedMapData;
+
+    // Calculate bounds for offset
+    const bounds = this.getNodeBounds(originalNodes);
+    const xOffset = bounds.width * 1.1;
+    const yOffset = bounds.height * 1.1;
+
+    const idOffset = fabIndex * 1000;
+    const currentXOffset = col * xOffset;
+    const currentYOffset = row * yOffset;
+
+    if (fabIndex === 0) {
+      // Original fab (no offset)
+      return {
+        edges: [...originalEdges],
+        nodes: [...originalNodes],
+        stations: [...originalStations],
+      };
+    }
+
+    // Clone with offset
+    const nodes = originalNodes.map(node => ({
+      ...node,
+      node_name: this.addOffsetToId(node.node_name, idOffset),
+      editor_x: node.editor_x + currentXOffset,
+      editor_y: node.editor_y + currentYOffset,
+    }));
+
+    const edges = originalEdges.map(edge => {
+      const newWaypoints = edge.waypoints.map(wp => this.addOffsetToId(wp, idOffset));
+
+      let newRenderingPoints = edge.renderingPoints;
+      if (edge.renderingPoints) {
+        newRenderingPoints = edge.renderingPoints.map(point =>
+          new THREE.Vector3(
+            point.x + currentXOffset,
+            point.y + currentYOffset,
+            point.z
+          )
+        );
+      }
+
+      return {
+        ...edge,
+        edge_name: this.addOffsetToId(edge.edge_name, idOffset),
+        from_node: this.addOffsetToId(edge.from_node, idOffset),
+        to_node: this.addOffsetToId(edge.to_node, idOffset),
+        waypoints: newWaypoints,
+        renderingPoints: newRenderingPoints,
+      };
+    });
+
+    const stations = originalStations.map(station => ({
+      ...station,
+      station_name: this.createFabStationName(station.station_name, col, row),
+      nearest_edge: this.createFabEdgeName(station.nearest_edge, fabIndex),
+      position: {
+        x: station.position.x + currentXOffset,
+        y: station.position.y + currentYOffset,
+        z: station.position.z,
+      },
+    }));
+
+    return { edges, nodes, stations };
+  }
+
+  /**
+   * Helper: Get node bounds (from fabUtils.ts)
+   */
+  private getNodeBounds(nodes: Node[]): { width: number; height: number; xMin: number; xMax: number; yMin: number; yMax: number } {
+    if (nodes.length === 0) {
+      return { xMin: 0, xMax: 0, yMin: 0, yMax: 0, width: 0, height: 0 };
+    }
+
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    let yMin = Infinity;
+    let yMax = -Infinity;
+
+    for (const node of nodes) {
+      if (node.editor_x < xMin) xMin = node.editor_x;
+      if (node.editor_x > xMax) xMax = node.editor_x;
+      if (node.editor_y < yMin) yMin = node.editor_y;
+      if (node.editor_y > yMax) yMax = node.editor_y;
+    }
+
+    return {
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+      width: xMax - xMin,
+      height: yMax - yMin,
+    };
+  }
+
+  /**
+   * Helper: Add offset to ID (from fabUtils.ts)
+   */
+  private addOffsetToId(name: string, offset: number): string {
+    const match = /^(.*)(\d{4})$/.exec(name);
+    if (!match) {
+      return name;
+    }
+
+    const prefix = match[1];
+    const numStr = match[2];
+    const num = Number.parseInt(numStr, 10);
+    const newNum = num + offset;
+
+    return `${prefix}${newNum.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Helper: Create fab station name (from fabUtils.ts)
+   */
+  private createFabStationName(originalName: string, col: number, row: number): string {
+    if (col === 0 && row === 0) {
+      return originalName;
+    }
+    return `${originalName}_fab_${col}_${row}`;
+  }
+
+  /**
+   * Helper: Create fab edge name (from fabUtils.ts)
+   */
+  private createFabEdgeName(originalEdgeName: string, fabIndex: number): string {
+    if (fabIndex === 0) {
+      return originalEdgeName;
+    }
+    const idOffset = fabIndex * 1000;
+    return this.addOffsetToId(originalEdgeName, idOffset);
   }
 
   /**
