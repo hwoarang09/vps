@@ -215,6 +215,7 @@ export type WorkerMessage =
 export type MainMessage =
   | { type: "READY" }
   | { type: "INITIALIZED"; /** Fab ID -> actual vehicle count */ fabVehicleCounts: Record<string, number> }
+  | { type: "DISPOSED" }
   | { type: "ERROR"; error: string }
   | { type: "STATS"; fps: number; vehicleCount: number }
   | {

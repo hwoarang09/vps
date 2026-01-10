@@ -16,14 +16,21 @@ interface StationTarget {
   regionId?: number;  // 어떤 연결 구역에 속하는지
 }
 
+// Maximum number of path findings per frame to prevent spikes
+const MAX_PATH_FINDS_PER_FRAME = 10;
+
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
   private readonly vehicleDestinations: Map<number, { stationName: string, edgeIndex: number }> = new Map();
-  // Edge -> Region ID 매핑 (어떤 구역에 속하는지)
+  // Edge -> Region ID mapping (which region an edge belongs to)
   private readonly edgeToRegion: Map<number, number> = new Map();
-  // Region ID -> 해당 구역의 스테이션들
+  // Region ID -> stations in that region
   private readonly regionStations: Map<number, StationTarget[]> = new Map();
+  // Round-robin index for fair vehicle processing
+  private nextVehicleIndex = 0;
+  // Path finding count in current frame
+  private pathFindCountThisFrame = 0;
 
   /**
    * Initializes available stations for routing.
@@ -166,6 +173,7 @@ export class AutoMgr {
   /**
    * Main update loop for Auto Routing.
    * Checks if vehicles need new destinations and assigns them.
+   * Uses round-robin and per-frame limit to prevent performance spikes.
    */
   update(
     mode: TransferMode,
@@ -176,9 +184,36 @@ export class AutoMgr {
     transferMgr: TransferMgr
   ) {
     if (mode !== TransferMode.AUTO_ROUTE) return;
+    if (numVehicles === 0) return;
 
-    for (let vehId = 0; vehId < numVehicles; vehId++) {
-      this.checkAndAssignRoute(vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr);
+    // Reset per-frame counter
+    this.pathFindCountThisFrame = 0;
+
+    // Process vehicles in round-robin fashion with limit
+    const startIndex = this.nextVehicleIndex;
+    let processedCount = 0;
+
+    for (let i = 0; i < numVehicles; i++) {
+      // Check if we've hit the per-frame limit
+      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) {
+        break;
+      }
+
+      const vehId = (startIndex + i) % numVehicles;
+      const didAssign = this.checkAndAssignRoute(
+        vehId,
+        vehicleDataArray,
+        edgeArray,
+        edgeNameToIndex,
+        transferMgr
+      );
+
+      processedCount++;
+
+      // Update next starting index for round-robin
+      if (didAssign) {
+        this.nextVehicleIndex = (vehId + 1) % numVehicles;
+      }
     }
   }
 
@@ -186,6 +221,7 @@ export class AutoMgr {
    * Checks a specific vehicle and assigns a route if:
    * 1. It has no pending commands (idle or finished path).
    * 2. It is stopped or moving on the last edge.
+   * @returns true if a route was assigned, false otherwise
    */
   private checkAndAssignRoute(
     vehId: number,
@@ -193,17 +229,20 @@ export class AutoMgr {
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
     transferMgr: TransferMgr
-  ) {
-    if (transferMgr.hasPendingCommands(vehId)) return;
+  ): boolean {
+    if (transferMgr.hasPendingCommands(vehId)) return false;
 
     const data = vehicleDataArray.getData();
     const ptr = vehId * VEHICLE_DATA_SIZE;
     const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
 
     // Assign random destination
-    this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr);
+    return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr);
   }
 
+  /**
+   * @returns true if a route was successfully assigned
+   */
   assignRandomDestination(
     vehId: number,
     currentEdgeIdx: number,
@@ -211,55 +250,69 @@ export class AutoMgr {
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
     transferMgr: TransferMgr
-  ) {
-    // 현재 edge가 속한 구역의 스테이션만 선택
+  ): boolean {
+    // Get stations for the region this edge belongs to
     const availableStations = this.getStationsForEdge(currentEdgeIdx);
 
     if (availableStations.length === 0) {
-      // 해당 구역에 스테이션이 없으면 조용히 실패
-      return;
+      return false;
     }
 
     const MAX_ATTEMPTS = 5;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        // Pick random station from same region
-        const candidate = availableStations[Math.floor(Math.random() * availableStations.length)];
+      // Pick random station from same region
+      const candidate = availableStations[Math.floor(Math.random() * availableStations.length)];
 
-        // Skip if same as current edge (unless it's the only one)
-        if (candidate.edgeIndex === currentEdgeIdx && availableStations.length > 1) {
-            continue;
+      // Skip if same as current edge (unless it's the only one)
+      if (candidate.edgeIndex === currentEdgeIdx && availableStations.length > 1) {
+        continue;
+      }
+
+      // Increment path find counter BEFORE calling findShortestPath
+      this.pathFindCountThisFrame++;
+
+      // Pathfinding
+      const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
+
+      if (pathIndices && pathIndices.length > 0) {
+        const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
+
+        // Assign
+        const command: VehicleCommand = {
+          path: pathCommand
+        };
+
+        this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
+
+        // Update Shared Memory for UI
+        const ptr = vehId * VEHICLE_DATA_SIZE;
+        const data = vehicleDataArray.getData();
+        if (data) {
+          data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex;
+          data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
         }
 
-        // Pathfinding
-        const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
-
-        if (pathIndices && pathIndices.length > 0) {
-            const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
-
-            // Assign
-            const command: VehicleCommand = {
-                path: pathCommand
-            };
-
-            this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
-
-            // Update Shared Memory for UI
-            const ptr = vehId * VEHICLE_DATA_SIZE;
-            const data = vehicleDataArray.getData();
-            if (data) {
-                data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex;
-                data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
-            }
-
-            transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
-            return;
-        }
+        transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
+        return true;
+      }
     }
+
+    return false;
   }
 
   getDestinationInfo(vehId: number) {
     return this.vehicleDestinations.get(vehId);
+  }
+
+  /**
+   * Dispose all internal data to allow garbage collection
+   */
+  dispose(): void {
+    this.stations = [];
+    this.vehicleDestinations.clear();
+    this.edgeToRegion.clear();
+    this.regionStations.clear();
   }
 
   private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {

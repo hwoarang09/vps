@@ -100,6 +100,7 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
   color,
 }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
+  const prevInstanceCountRef = useRef(0);
   const instanceCount = stations.length;
 
   // Geometry and material from config
@@ -149,6 +150,24 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
 
     mesh.instanceMatrix.needsUpdate = true;
   }, [stations, instanceCount]);
+
+  // Cleanup when stations are deleted (instanceCount decreases to 0)
+  useEffect(() => {
+    if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
+      console.log("[StationTypeRenderer] Stations deleted, cleaning up resources");
+      geometry.dispose();
+      material.dispose();
+    }
+    prevInstanceCountRef.current = instanceCount;
+  }, [instanceCount, geometry, material]);
+
+  // Cleanup geometry and material on unmount
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
 
   if (instanceCount === 0) {
     return null;

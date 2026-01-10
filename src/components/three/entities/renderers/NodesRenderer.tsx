@@ -127,6 +127,7 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const normalMarkerRef = useRef<THREE.InstancedMesh>(null);
   const tmpMarkerRef = useRef<THREE.InstancedMesh>(null);
+  const prevInstanceCountRef = useRef(0);
 
   // nodeId -> instanceIndex 매핑 (전체 노드용)
   const nodeDataRef = useRef<Map<string, number>>(new Map());
@@ -280,6 +281,32 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
 
     return unsub;
   }, [nodeIds]);
+
+  // Cleanup when nodes are deleted (instanceCount decreases to 0)
+  useEffect(() => {
+    if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
+      console.log("[NodesCore] Nodes deleted, cleaning up resources");
+      geometry.dispose();
+      normalMarkerGeometry.dispose();
+      tmpMarkerGeometry.dispose();
+      normalMarkerMaterial.dispose();
+      tmpMarkerMaterial.dispose();
+      material.dispose();
+    }
+    prevInstanceCountRef.current = instanceCount;
+  }, [instanceCount, geometry, normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial, material]);
+
+  // Cleanup all geometries and materials on unmount
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      normalMarkerGeometry.dispose();
+      tmpMarkerGeometry.dispose();
+      normalMarkerMaterial.dispose();
+      tmpMarkerMaterial.dispose();
+      material.dispose();
+    };
+  }, [geometry, normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial, material]);
 
   // Single useFrame for all nodes - only update time uniform
   useFrame((state) => {

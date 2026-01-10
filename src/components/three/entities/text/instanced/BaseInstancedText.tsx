@@ -12,16 +12,23 @@ export interface BaseInstancedTextProps {
   renderOrder?: number;
 }
 
-export const BaseInstancedText = React.memo(({ 
-  data, 
-  instRefs, 
-  color = "#ffffff", 
+export const BaseInstancedText = React.memo(({
+  data,
+  instRefs,
+  color = "#ffffff",
   bgColor = "transparent",
   font,
   renderOrder,
 }: BaseInstancedTextProps) => {
   const digitMaterials = useDigitMaterials({ color, bgColor, font });
   const quad = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+
+  // Cleanup quad geometry
+  useEffect(() => {
+    return () => {
+      quad.dispose();
+    };
+  }, [quad]);
 
   // 1. Mesh creation logic
   const meshes = useMemo(() => {

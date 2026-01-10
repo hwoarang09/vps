@@ -346,4 +346,12 @@ export class VehicleDataArrayBase {
   setJobState(vehicleIndex: number, val: number): void {
     this.data[vehicleIndex * VEHICLE_DATA_SIZE + LogicData.JOB_STATE] = val;
   }
+
+  /**
+   * Dispose memory region reference to allow garbage collection
+   * Note: data (Float32Array view) is not nullified as it may reference SharedArrayBuffer
+   */
+  dispose(): void {
+    this.memoryRegion = null;
+  }
 }

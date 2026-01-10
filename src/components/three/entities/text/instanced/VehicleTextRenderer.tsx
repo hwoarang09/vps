@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
@@ -35,7 +35,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
   // 슬롯 데이터 계산 (Render Phase)
-  const slotData = React.useMemo(() => {
+  const slotData = useMemo(() => {
     return buildVehicleSlotData(numVehicles, LABEL_LENGTH);
   }, [numVehicles]);
 

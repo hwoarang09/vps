@@ -374,14 +374,18 @@ export class MultiWorkerController {
 
   /**
    * Dispose all workers
+   * 워커들이 정리를 완료할 때까지 대기 후 terminate
    */
   dispose(): void {
-    for (const workerInfo of this.workers) {
-      workerInfo.worker.postMessage({ type: "DISPOSE" } as WorkerMessage);
+    if (this.workers.length === 0) {
+      console.log("[MultiWorkerController] No workers to dispose");
+      return;
+    }
 
-      setTimeout(() => {
-        workerInfo.worker.terminate();
-      }, 100);
+    console.log(`[MultiWorkerController] Disposing ${this.workers.length} workers...`);
+
+    for (const workerInfo of this.workers) {
+      this.disposeWorker(workerInfo);
     }
 
     this.workers = [];
@@ -395,6 +399,34 @@ export class MultiWorkerController {
     this.isRunning = false;
 
     console.log("[MultiWorkerController] Disposed");
+  }
+
+  /**
+   * Dispose a single worker with proper cleanup
+   */
+  private disposeWorker(workerInfo: WorkerInfo): void {
+    const { worker, workerIndex } = workerInfo;
+
+    const terminateWorker = () => {
+      worker.terminate();
+      console.log(`[MultiWorkerController] Worker ${workerIndex} terminated`);
+    };
+
+    const onMessage = (e: MessageEvent<MainMessage>) => {
+      if (e.data.type === "DISPOSED") {
+        worker.removeEventListener("message", onMessage);
+        terminateWorker();
+      }
+    };
+
+    worker.addEventListener("message", onMessage);
+    worker.postMessage({ type: "DISPOSE" } as WorkerMessage);
+
+    // 안전장치: 500ms 후에도 DISPOSED 메시지가 없으면 강제 terminate
+    setTimeout(() => {
+      worker.removeEventListener("message", onMessage);
+      terminateWorker();
+    }, 500);
   }
 
   // =========================================================================

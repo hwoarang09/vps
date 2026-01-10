@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 
 // 0-9, N, E, V, H, _, F, A, B, S, T, L, O, P, C, D, I, K, G, M, R, U, W, X, Y, Z (26 letters + 10 digits + underscore)
@@ -35,18 +35,18 @@ export function useDigitMaterials({
   font = "bold 96px system-ui, Roboto, Arial",
   size = 256,
 }: DigitMaterialsOptions = {}) {
-  return useMemo(() => {
+  const materials = useMemo(() => {
     return ALL_CHARS.map(char => {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
       const ctx = canvas.getContext("2d")!;
-      
+
       ctx.clearRect(0, 0, size, size);
       if (bgColor !== "transparent") {
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, size, size);
       }
-      
+
       ctx.fillStyle = color;
       ctx.font = font;
       ctx.textAlign = "center";
@@ -67,4 +67,23 @@ export function useDigitMaterials({
       });
     });
   }, [color, bgColor, font, size]);
+
+  // Cleanup materials and textures when component unmounts or deps change
+  const ref = useRef(materials);
+  useEffect(() => {
+    const prevMaterials = ref.current;
+    ref.current = materials;
+
+    return () => {
+      // Cleanup materials
+      for (const mat of prevMaterials) {
+        if (mat.map) {
+          mat.map.dispose();
+        }
+        mat.dispose();
+      }
+    };
+  }, [materials]);
+
+  return materials;
 }

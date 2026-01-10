@@ -121,4 +121,11 @@ export class SensorPointArrayBase {
   reset(): void {
     this.data.fill(0);
   }
+
+  /**
+   * Dispose memory region reference to allow garbage collection
+   */
+  dispose(): void {
+    this.memoryRegion = null;
+  }
 }

@@ -75,4 +75,13 @@ export class DispatchMgr {
       this.edgeNameToIndex
     );
   }
+
+  /**
+   * Dispose all references to allow garbage collection
+   */
+  dispose(): void {
+    this.vehicleDataArray = undefined;
+    this.edgeArray = undefined;
+    this.edgeNameToIndex = undefined;
+  }
 }

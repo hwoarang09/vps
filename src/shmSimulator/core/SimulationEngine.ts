@@ -255,7 +255,6 @@ export class SimulationEngine {
       console.warn(`[SimulationEngine] Fab already exists: ${fabData.fabId}`);
       return this.fabContexts.get(fabData.fabId)!.getActualNumVehicles();
     }
-
     const params: FabInitParams = {
       fabId: fabData.fabId,
       sharedBuffer: fabData.sharedBuffer,

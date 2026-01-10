@@ -26,6 +26,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   mode,
 }) => {
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
+  const prevNumVehiclesRef = useRef(0);
 
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
@@ -78,6 +79,24 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     }
     bodyMesh.instanceMatrix.needsUpdate = true;
   }, [actualNumVehicles, tempMatrix]);
+
+  // Cleanup when vehicles are deleted (numVehicles decreases to 0)
+  useEffect(() => {
+    if (prevNumVehiclesRef.current > actualNumVehicles && actualNumVehicles === 0) {
+      console.log("[VehicleArrayRenderer] Vehicles deleted, cleaning up resources");
+      bodyGeometry.dispose();
+      bodyMaterial.dispose();
+    }
+    prevNumVehiclesRef.current = actualNumVehicles;
+  }, [actualNumVehicles, bodyGeometry, bodyMaterial]);
+
+  // Cleanup geometry and material on unmount
+  useEffect(() => {
+    return () => {
+      bodyGeometry.dispose();
+      bodyMaterial.dispose();
+    };
+  }, [bodyGeometry, bodyMaterial]);
 
   // Update instance matrices every frame (Zero GC)
   useFrame(() => {

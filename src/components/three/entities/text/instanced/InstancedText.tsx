@@ -43,9 +43,24 @@ export default function InstancedText({
   camHeightCutoff = 60,
 }: Props) {
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
+  const prevGroupsLengthRef = React.useRef(0);
   const slotData = React.useMemo(() => {
     return buildSlotData(groups);
   }, [groups]);
+
+  // Cleanup when text groups are deleted
+  React.useEffect(() => {
+    if (prevGroupsLengthRef.current > groups.length && groups.length === 0) {
+      console.log("[InstancedText] Text groups deleted, cleaning up resources");
+      // Dispose InstancedMesh resources
+      for (const mesh of instRefs.current) {
+        if (mesh) {
+          mesh.dispose();
+        }
+      }
+    }
+    prevGroupsLengthRef.current = groups.length;
+  }, [groups.length]);
 
   // Spatial Grid 빌드 (LOD 최적화용 - 한 번만 계산)
   const spatialGrid = React.useMemo(() => {

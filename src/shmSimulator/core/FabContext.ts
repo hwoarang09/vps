@@ -241,12 +241,29 @@ export class FabContext {
   }
 
   /**
-   * Dispose the context
+   * Dispose the context and release all resources for garbage collection
    */
   dispose(): void {
-    this.store.clearAllVehicles();
+    // Clear vehicle and sensor data
+    this.store.dispose();
+    this.sensorPointArray.dispose();
+
+    // Reset logic managers
     this.lockMgr.reset();
     this.transferMgr.clearQueue();
+    this.dispatchMgr.dispose();
+    this.autoMgr.dispose();
+
+    // Clear map data references
+    this.edges = [];
+    this.nodes = [];
+    this.edgeNameToIndex.clear();
+    this.nodeNameToIndex.clear();
+    this.vehicleLoopMap.clear();
+
+    // Reset vehicle count
+    this.actualNumVehicles = 0;
+
     console.log(`[FabContext:${this.fabId}] Disposed`);
   }
 

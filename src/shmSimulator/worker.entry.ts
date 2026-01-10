@@ -104,10 +104,13 @@ function handleResume(): void {
 }
 
 function handleDispose(): void {
-  if (!engine) return;
   console.log("[Worker] Disposing engine");
-  engine.dispose();
-  engine = null;
+  if (engine) {
+    engine.dispose();
+    engine = null;
+  }
+  const response: MainMessage = { type: "DISPOSED" };
+  globalThis.postMessage(response);
 }
 
 // Handle messages from main thread

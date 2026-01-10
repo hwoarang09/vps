@@ -113,7 +113,7 @@ export const PerformanceMonitorUI: React.FC = () => {
       {workerPerfStats.length > 1 ? (
         <>
           {/* 펼치기/접기 가능한 Worker 헤더 */}
-          <div
+          <button
             style={{
               display: "flex",
               flexDirection: "row",
@@ -121,12 +121,20 @@ export const PerformanceMonitorUI: React.FC = () => {
               alignItems: "center",
               cursor: "pointer",
               pointerEvents: "auto",
+              background: "none",
+              border: "none",
+              color: "inherit",
+              font: "inherit",
+              padding: "0",
             }}
             onClick={() => setIsWorkerExpanded(!isWorkerExpanded)}
+            aria-expanded={isWorkerExpanded}
           >
             <div style={{ fontSize: "12px", color: "#888", width: "50px", display: "flex", alignItems: "center", gap: "4px" }}>
-              Worker
-              <span style={{ fontSize: "10px" }}>{isWorkerExpanded ? "▲" : "▼"}</span>
+              Worker{" "}
+              <span style={{ fontSize: "10px", display: "inline" }} aria-hidden="true">
+                {isWorkerExpanded ? "▲" : "▼"}
+              </span>
             </div>
             <div style={{ fontSize: "14px", color: "#ff9f43" }}>
               {workerAvgMs.toFixed(2)} ms
@@ -137,7 +145,7 @@ export const PerformanceMonitorUI: React.FC = () => {
             <div style={{ fontSize: "14px", color: "#f38181" }}>
               {workerMaxMs.toFixed(2)} ms
             </div>
-          </div>
+          </button>
 
           {/* 펼쳐진 워커별 상세 정보 */}
           {isWorkerExpanded && workerPerfStats.map((stat) => (

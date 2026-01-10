@@ -142,6 +142,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   renderOrder,
 }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
+  const prevInstanceCountRef = useRef(0);
 
   // Calculate total instance count based on edge type
   const instanceCount = useMemo(() => {
@@ -244,6 +245,25 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
 
     mesh.instanceMatrix.needsUpdate = true;
   }, [edges, edgeType, instanceCount]);
+
+  // Cleanup when data is deleted (instanceCount decreases)
+  useEffect(() => {
+    if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
+      // Data was deleted - cleanup resources
+      console.log(`[EdgeTypeRenderer:${edgeType}] Data deleted, cleaning up resources`);
+      geometry.dispose();
+      shaderMaterial.dispose();
+    }
+    prevInstanceCountRef.current = instanceCount;
+  }, [instanceCount, geometry, shaderMaterial, edgeType]);
+
+  // Cleanup geometry and material when component unmounts
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      shaderMaterial.dispose();
+    };
+  }, [geometry, shaderMaterial]);
 
   // Single useFrame for all edges of this type
   useFrame((state) => {

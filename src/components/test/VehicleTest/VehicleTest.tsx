@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
+import { useVehicleGeneralStore } from "@store/vehicle/vehicleGeneralStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCFGStore } from "@store/system/cfgStore";
 import { useCameraStore } from "@store/ui/cameraStore";
@@ -14,7 +15,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useStationStore } from "@/store/map/stationStore";
 import { useTextStore } from "@/store/map/textStore";
-import { getNodeBounds, createFabGrid, createFabGridStations, createFabInfos } from "@/utils/fab/fabUtils";
+import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
@@ -65,13 +66,23 @@ const VehicleTest: React.FC = () => {
     }
   }, [selectedSettingId, selectedSetting.numVehicles, selectedSetting.transferMode]);
 
-  const loadTestSetting = async (settingId: string) => {
+  // Ref to track pending setTimeout for vehicle creation
+  const vehicleCreateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadTestSetting = async (settingId: string, autoCreateVehicles = true) => {
     const setting = testSettings.find(s => s.id === settingId);
     if (!setting) return;
+
+    // Cancel any pending vehicle creation timeout
+    if (vehicleCreateTimeoutRef.current) {
+      clearTimeout(vehicleCreateTimeoutRef.current);
+      vehicleCreateTimeoutRef.current = null;
+    }
 
     // Cleanup all simulators before loading new map
     resetLockMgr();
     disposeShmSimulator(); // Dispose SHM simulator
+    useVehicleGeneralStore.getState().clearAll(); // Clear vehicle metadata
     setIsFabApplied(false); // Reset FAB state when loading new map
     if (isTestCreated) {
       stopTest();
@@ -94,15 +105,19 @@ const VehicleTest: React.FC = () => {
         console.log(`[VehicleTest] ✓ Camera positioned`);
       }
 
-      // Wait for map to render and edges renderingPoints to be calculated
-      console.log(`[VehicleTest] Waiting for edges to calculate renderingPoints...`);
-      setTimeout(() => {
-        // Auto-create vehicles using vehicles.cfg
-        console.log(`[VehicleTest] ✓ Creating vehicles from vehicles.cfg`);
-        setUseVehicleConfig(true); // Use vehicles.cfg
-        setIsTestCreated(true);
-        setTestKey(prev => prev + 1); // Force remount to create vehicles
-      }, 800);
+      // Auto-create vehicles only if requested
+      if (autoCreateVehicles) {
+        // Wait for map to render and edges renderingPoints to be calculated
+        console.log(`[VehicleTest] Waiting for edges to calculate renderingPoints...`);
+        vehicleCreateTimeoutRef.current = setTimeout(() => {
+          // Auto-create vehicles using vehicles.cfg
+          console.log(`[VehicleTest] ✓ Creating vehicles from vehicles.cfg`);
+          setUseVehicleConfig(true); // Use vehicles.cfg
+          setIsTestCreated(true);
+          setTestKey(prev => prev + 1); // Force remount to create vehicles
+          vehicleCreateTimeoutRef.current = null;
+        }, 800);
+      }
     } catch (error) {
       console.error("[VehicleTest] ✗ Failed to load map:", error);
     }
@@ -169,6 +184,8 @@ const VehicleTest: React.FC = () => {
     resetLockMgr();
     // Dispose SHM simulator
     disposeShmSimulator();
+    // Clear vehicle metadata from store
+    useVehicleGeneralStore.getState().clearAll();
 
     // Re-initialize LockMgr with current edges so it's ready for next create or manual use
     // Note: useEdgeStore.getState().edges should be valid here as map is loaded
@@ -227,27 +244,22 @@ const VehicleTest: React.FC = () => {
     useFabStore.getState().initSlots();
     console.log(`[FAB] Initialized render slots`);
 
-    // Create grid of fabs for nodes and edges (시뮬레이션에 필요)
-    const { allNodes, allEdges } = createFabGrid(nodes, edges, fabCountX, fabCountY);
+    // Store에는 원본만 저장 (메모리 절약)
+    // Worker는 sharedMapData로 원본을 받아서 자체적으로 fab별 offset 계산
+    useNodeStore.getState().setNodes(nodes);
+    useEdgeStore.getState().setEdges(edges);
+    useStationStore.getState().setStations(stations);
 
-    // Create grid of fabs for stations (시뮬레이션에 필요)
-    const allStations = createFabGridStations(stations, fabCountX, fabCountY, bounds);
+    // Update text store with original data (fab별 분리는 위치 기반으로 수행)
+    updateTextsForFab(nodes, edges, stations, fabCountX, fabCountY);
 
-    // Update stores with all fab data (시뮬레이션이 사용)
-    // 렌더링은 originalMapData를 사용하므로 화면에는 원본만 표시됨
-    useNodeStore.getState().setNodes(allNodes);
-    useEdgeStore.getState().setEdges(allEdges);
-    useStationStore.getState().setStations(allStations);
-
-    // Update text store with fab-separated texts
-    updateTextsForFab(allNodes, allEdges, allStations, fabCountX, fabCountY);
-
-    // Re-initialize LockMgr with all edges
+    // Re-initialize LockMgr with original edges
+    // 메인 스레드 LockMgr는 원본 기준, Worker는 각자 fab별 LockMgr 사용
     resetLockMgr();
-    getLockMgr().initFromEdges(allEdges);
+    getLockMgr().initFromEdges(edges);
 
     setIsFabApplied(true);
-    console.log(`[FAB] ✓ Created ${totalFabs} fabs: ${allNodes.length} nodes, ${allEdges.length} edges, ${allStations.length} stations`);
+    console.log(`[FAB] ✓ Created ${totalFabs} fabs (using original: ${nodes.length} nodes, ${edges.length} edges, ${stations.length} stations)`);
   };
 
   // Update text store with fab-separated data
@@ -341,13 +353,27 @@ const VehicleTest: React.FC = () => {
     console.log(`[FAB] Text stored for ${totalFabs} fabs (first fab: ${textsByFab[0].nodeTexts.length} nodes)`);
   };
 
-  // Handle FAB Clear - reload map to reset to original state
+  // Handle FAB Clear - reload map to reset to original state (no auto vehicle creation)
   const handleFabClear = async () => {
     console.log("[FAB] Clearing FAB, reloading map...");
+
+    // 1. Stop test and cleanup vehicles first
+    if (isTestCreated) {
+      stopTest();
+      setIsTestCreated(false);
+    }
+    disposeShmSimulator();
+    useVehicleGeneralStore.getState().clearAll();
+
+    // 2. Reset FAB state
     setIsFabApplied(false);
-    // fabStore clear 먼저 (slots, fabs, originalMapData 초기화)
     useFabStore.getState().clearFabs();
-    await loadTestSetting(selectedSettingId);
+
+    // 3. Wait for renderers to unmount before loading new map
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 4. Reload map only (no auto vehicle creation)
+    await loadTestSetting(selectedSettingId, false);
   };
 
 

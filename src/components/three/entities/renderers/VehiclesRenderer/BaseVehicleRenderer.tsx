@@ -25,6 +25,7 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
 }) => {
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const sensorMeshRef = useRef<THREE.InstancedMesh>(null);
+  const prevNumVehiclesRef = useRef(0);
 
   // Config 로드 (공통) - useState로 관리하여 로딩 완료 시 리렌더링
   const [config, setConfig] = useState(() => getVehicleConfigSync());
@@ -57,6 +58,28 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   const tempScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
 
   const sensorOffsetX = (bodyLength + sensorLength) * 0.5 + 0.05;
+
+  // Cleanup when vehicles are deleted (numVehicles decreases to 0)
+  useEffect(() => {
+    if (prevNumVehiclesRef.current > numVehicles && numVehicles === 0) {
+      console.log(`[Vehicle${rendererName}Renderer] Vehicles deleted, cleaning up resources`);
+      bodyGeometry.dispose();
+      sensorGeometry.dispose();
+      bodyMaterial.dispose();
+      sensorMaterial.dispose();
+    }
+    prevNumVehiclesRef.current = numVehicles;
+  }, [numVehicles, bodyGeometry, sensorGeometry, bodyMaterial, sensorMaterial, rendererName]);
+
+  // Cleanup geometries and materials on unmount
+  useEffect(() => {
+    return () => {
+      bodyGeometry.dispose();
+      sensorGeometry.dispose();
+      bodyMaterial.dispose();
+      sensorMaterial.dispose();
+    };
+  }, [bodyGeometry, sensorGeometry, bodyMaterial, sensorMaterial]);
 
   // 초기화 로직
   useEffect(() => {

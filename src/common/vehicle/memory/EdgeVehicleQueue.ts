@@ -184,6 +184,14 @@ export class EdgeVehicleQueue {
       data[1 + i] = vehicles[i];
     }
   }
+
+  /**
+   * Dispose all internal data to allow garbage collection
+   */
+  dispose(): void {
+    // Clear and remove all arrays
+    this.dataArrays.length = 0;
+  }
 }
 
 export default EdgeVehicleQueue;

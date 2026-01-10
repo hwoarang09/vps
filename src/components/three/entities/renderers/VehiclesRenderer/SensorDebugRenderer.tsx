@@ -1,6 +1,6 @@
 // SensorDebugRenderer.tsx - Wireframe visualization of vehicle sensors
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
@@ -58,6 +58,26 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
       new THREE.BufferAttribute(positions, 3)
     );
   }, [numVehicles]);
+
+  // Create materials
+  const outerMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ffff00", linewidth: 4, depthTest: false, transparent: true, depthWrite: false }), []);
+  const middleMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ff8800", linewidth: 2, depthTest: false, transparent: true, depthWrite: false }), []);
+  const innerMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ff0000", linewidth: 6, depthTest: false, transparent: true, depthWrite: false }), []);
+  const bodyMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#00ffff", linewidth: 1, depthTest: false, transparent: true, depthWrite: false }), []);
+
+  // Cleanup all geometries and materials
+  useEffect(() => {
+    return () => {
+      outerGeometry.dispose();
+      middleGeometry.dispose();
+      innerGeometry.dispose();
+      bodyGeometry.dispose();
+      outerMaterial.dispose();
+      middleMaterial.dispose();
+      innerMaterial.dispose();
+      bodyMaterial.dispose();
+    };
+  }, [outerGeometry, middleGeometry, innerGeometry, bodyGeometry, outerMaterial, middleMaterial, innerMaterial, bodyMaterial]);
 
   // Update wireframes every frame
   useFrame(() => {
@@ -182,20 +202,12 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
   return (
     <group renderOrder={999}>
       {/* Sensor wireframes */}
-      <lineSegments ref={outerLinesRef} geometry={outerGeometry} frustumCulled={false} renderOrder={999}>
-        <lineBasicMaterial color={"#ffff00"} linewidth={4} depthTest={false} transparent depthWrite={false} />
-      </lineSegments>
-      <lineSegments ref={middleLinesRef} geometry={middleGeometry} frustumCulled={false} renderOrder={999}>
-        <lineBasicMaterial color="#ff8800" linewidth={2} depthTest={false} transparent depthWrite={false} />
-      </lineSegments>
-      <lineSegments ref={innerLinesRef} geometry={innerGeometry} frustumCulled={false} renderOrder={999}>
-        <lineBasicMaterial color="#ff0000" linewidth={6} depthTest={false} transparent depthWrite={false} />
-      </lineSegments>
+      <lineSegments ref={outerLinesRef} args={[outerGeometry, outerMaterial]} frustumCulled={false} renderOrder={999} />
+      <lineSegments ref={middleLinesRef} args={[middleGeometry, middleMaterial]} frustumCulled={false} renderOrder={999} />
+      <lineSegments ref={innerLinesRef} args={[innerGeometry, innerMaterial]} frustumCulled={false} renderOrder={999} />
 
       {/* Body wireframes (cyan) */}
-      <lineSegments ref={bodyLinesRef} geometry={bodyGeometry} frustumCulled={false} renderOrder={999}>
-        <lineBasicMaterial color="#00ffff" linewidth={1} depthTest={false} transparent depthWrite={false} />
-      </lineSegments>
+      <lineSegments ref={bodyLinesRef} args={[bodyGeometry, bodyMaterial]} frustumCulled={false} renderOrder={999} />
     </group>
   );
 }

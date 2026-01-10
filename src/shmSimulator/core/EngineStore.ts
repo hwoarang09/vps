@@ -181,4 +181,13 @@ export class EngineStore implements IVehicleStore {
   ): void {
     ops.moveVehicleToEdge(this.vehicleDataArray, this.edgeVehicleQueue, vehicleIndex, newEdgeIndex, edgeRatio);
   }
+
+  /**
+   * Dispose all internal data to allow garbage collection
+   */
+  dispose(): void {
+    this.clearAllVehicles();
+    this.vehicleDataArray.dispose();
+    this.edgeVehicleQueue.dispose();
+  }
 }
