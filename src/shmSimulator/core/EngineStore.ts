@@ -14,8 +14,13 @@ export class EngineStore implements IVehicleStore {
   public actualNumVehicles: number = 0;
   public transferMode: TransferMode = TransferMode.LOOP;
 
-  constructor(maxVehicles: number, maxEdges: number) {
-    this.vehicleDataArray = new VehicleDataArrayBase(maxVehicles);
+  /**
+   * @param maxVehicles - 최대 vehicle 수
+   * @param maxEdges - 최대 edge 수
+   * @param skipAllocation - true이면 VehicleDataArray 임시 배열 할당 스킵 (SharedBuffer 사용 시)
+   */
+  constructor(maxVehicles: number, maxEdges: number, skipAllocation: boolean = false) {
+    this.vehicleDataArray = new VehicleDataArrayBase(maxVehicles, skipAllocation);
     this.edgeVehicleQueue = new EdgeVehicleQueue(maxEdges);
   }
 

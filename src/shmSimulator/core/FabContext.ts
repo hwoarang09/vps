@@ -73,9 +73,12 @@ export class FabContext {
     this.config = params.config;
 
     // Create store and memory structures
-    this.store = new EngineStore(this.config.maxVehicles, 200000);
+    // maxEdges를 실제 edge 수로 제한 (여유분 포함)
+    // skipAllocation=true: SharedBuffer를 사용하므로 임시 배열 할당 스킵
+    const maxEdges = Math.max(params.edges.length * 2, 1000);
+    this.store = new EngineStore(this.config.maxVehicles, maxEdges, true);
     this.vehicleDataArray = this.store.getVehicleDataArray();
-    this.sensorPointArray = new SensorPointArrayBase(this.config.maxVehicles);
+    this.sensorPointArray = new SensorPointArrayBase(this.config.maxVehicles, true);
     this.edgeVehicleQueue = this.store.getEdgeVehicleQueue();
 
     // Create managers

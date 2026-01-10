@@ -41,15 +41,21 @@ export interface VehicleMemoryRegion {
  * - Supports memory region restriction for multi-worker environments
  */
 export class VehicleDataArrayBase {
-  protected data: Float32Array;
+  protected data!: Float32Array;
   protected maxVehicles: number;
 
   /** 메모리 영역 제한 정보 (멀티 워커 환경에서 사용) */
   protected memoryRegion: VehicleMemoryRegion | null = null;
 
-  constructor(maxVehicles: number) {
+  /**
+   * @param maxVehicles - 최대 vehicle 수
+   * @param skipAllocation - true이면 초기 배열 할당 스킵 (SharedBuffer 사용 시)
+   */
+  constructor(maxVehicles: number, skipAllocation: boolean = false) {
     this.maxVehicles = maxVehicles;
-    this.data = new Float32Array(maxVehicles * VEHICLE_DATA_SIZE);
+    if (!skipAllocation) {
+      this.data = new Float32Array(maxVehicles * VEHICLE_DATA_SIZE);
+    }
   }
 
   /**

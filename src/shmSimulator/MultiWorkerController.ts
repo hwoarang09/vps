@@ -51,7 +51,7 @@ interface WorkerInfo {
  */
 export class MultiWorkerController {
   private config: SimulationConfig = createDefaultConfig();
-  private layoutManager = new MemoryLayoutManager();
+  private readonly layoutManager = new MemoryLayoutManager();
   private layout: MemoryLayout | null = null;
 
   // 공유 버퍼
@@ -60,11 +60,11 @@ export class MultiWorkerController {
 
   // 워커 관리
   private workers: WorkerInfo[] = [];
-  private fabToWorkerMap: Map<string, number> = new Map();  // fabId -> workerIndex
+  private readonly fabToWorkerMap: Map<string, number> = new Map();  // fabId -> workerIndex
 
   // Fab별 정보
-  private fabConfigs: Map<string, MultiFabInitParams> = new Map();
-  private fabVehicleCounts: Map<string, number> = new Map();
+  private readonly fabConfigs: Map<string, MultiFabInitParams> = new Map();
+  private readonly fabVehicleCounts: Map<string, number> = new Map();
 
   // 상태
   private isInitialized: boolean = false;
@@ -102,9 +102,9 @@ export class MultiWorkerController {
     this.config = { ...createDefaultConfig(), ...config };
 
     // 워커 수 결정 (기본: CPU 코어 수와 Fab 수 중 작은 값)
-    const defaultWorkerCount = typeof navigator !== 'undefined'
-      ? Math.min(navigator.hardwareConcurrency || 4, fabs.length)
-      : Math.min(4, fabs.length);
+    const defaultWorkerCount = typeof navigator === 'undefined'
+      ? Math.min(4, fabs.length)
+      : Math.min(navigator.hardwareConcurrency || 4, fabs.length);
     const workerCount = params.workerCount ?? defaultWorkerCount;
 
     console.log(`[MultiWorkerController] Initializing with ${fabs.length} fabs, ${workerCount} workers`);
