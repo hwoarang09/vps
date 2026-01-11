@@ -25,7 +25,7 @@ export interface RenderConfig {
 }
 
 export const renderConfig: RenderConfig = {
-  maxVisibleFabs: 4,
+  maxVisibleFabs: 9,
 };
 
 // Load test setting configuration from JSON file

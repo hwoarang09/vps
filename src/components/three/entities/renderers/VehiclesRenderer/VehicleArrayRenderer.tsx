@@ -6,7 +6,7 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
-import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
+// import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -226,7 +226,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         frustumCulled={false}
       />
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
-      <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} />
+      {/* <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} /> */}
     </>
   );
 };

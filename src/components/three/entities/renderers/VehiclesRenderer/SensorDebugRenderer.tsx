@@ -1,4 +1,4 @@
-// SensorDebugRenderer.tsx - Wireframe visualization of vehicle sensors
+// SensorDebugRenderer.tsx - Shader-based wireframe visualization of vehicle sensors
 
 import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -7,6 +7,171 @@ import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } fr
 import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { getMarkerConfig } from "@/config/mapConfig";
 import { VehicleSystemType } from "@/types/vehicle";
+
+// -----------------------------------------------------------------------------
+// Shader Definitions (GPU Logic)
+// -----------------------------------------------------------------------------
+
+const vertexShader = `
+  // 인스턴스별 데이터 (4개의 코너 좌표)
+  attribute vec4 quadStartEnd; // xy: FL, zw: FR
+  attribute vec4 quadOther;    // xy: BL(or SL), zw: BR(or SR)
+
+  // 정점별 인덱스 (0~7) - 어떤 코너를 연결할지 결정
+  attribute float vertexIndex;
+
+  uniform float zHeight;
+
+  void main() {
+    vec2 targetPos;
+
+    // Line 1: FL -> OtherLeft (0 -> 1)
+    if (vertexIndex < 0.5) targetPos = quadStartEnd.xy;      // FL
+    else if (vertexIndex < 1.5) targetPos = quadOther.xy;    // OtherLeft
+
+    // Line 2: OtherLeft -> OtherRight (2 -> 3)
+    else if (vertexIndex < 2.5) targetPos = quadOther.xy;    // OtherLeft
+    else if (vertexIndex < 3.5) targetPos = quadOther.zw;    // OtherRight
+
+    // Line 3: OtherRight -> FR (4 -> 5)
+    else if (vertexIndex < 4.5) targetPos = quadOther.zw;    // OtherRight
+    else if (vertexIndex < 5.5) targetPos = quadStartEnd.zw; // FR
+
+    // Line 4: FR -> FL (6 -> 7)
+    else if (vertexIndex < 6.5) targetPos = quadStartEnd.zw; // FR
+    else targetPos = quadStartEnd.xy;                        // FL
+
+    // 이미 World 좌표이므로 modelMatrix 무시
+    vec4 worldPosition = vec4(targetPos, zHeight, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  }
+`;
+
+const fragmentShader = `
+  uniform vec3 color;
+  void main() {
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+// -----------------------------------------------------------------------------
+// Instanced Quad Component
+// -----------------------------------------------------------------------------
+
+interface InstancedQuadLinesProps {
+  numVehicles: number;
+  color: string;
+  getData: () => Float32Array | null;
+  dataOffset: number; // 0=outer, 1=middle, 2=inner
+  isBody?: boolean;   // Body는 BL/BR 사용, Sensor는 SL/SR 사용
+}
+
+function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = false }: InstancedQuadLinesProps) {
+  const meshRef = useRef<THREE.LineSegments>(null);
+
+  // 1. Static Geometry (Topology)
+  const geometry = useMemo(() => {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.instanceCount = numVehicles;
+
+    // 8 vertices for 4 lines (0,1, 2,3, 4,5, 6,7)
+    // position attribute is required for Three.js to know vertex count
+    const vertexIndices = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3)); // dummy positions
+    geo.setAttribute('vertexIndex', new THREE.BufferAttribute(vertexIndices, 1));
+
+    // Instance Attributes: xy=FL, zw=FR
+    geo.setAttribute('quadStartEnd', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
+    // Instance Attributes: xy=BL/SL, zw=BR/SR
+    geo.setAttribute('quadOther', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
+
+    return geo;
+  }, [numVehicles]);
+
+  // 2. Material
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
+    uniforms: {
+      zHeight: { value: 0 },
+      color: { value: new THREE.Color(color) }
+    },
+    depthTest: false,
+    transparent: true,
+  }), [color]);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  // 3. Update Loop
+  useFrame(() => {
+    if (!meshRef.current) return;
+
+    const data = getData();
+    if (!data) return;
+
+    const startEndAttr = geometry.attributes.quadStartEnd as THREE.InstancedBufferAttribute;
+    const otherAttr = geometry.attributes.quadOther as THREE.InstancedBufferAttribute;
+
+    const arrStartEnd = startEndAttr.array as Float32Array;
+    const arrOther = otherAttr.array as Float32Array;
+
+    // Update Uniforms
+    material.uniforms.zHeight.value = getMarkerConfig().Z;
+
+    // Fast Data Copy - 8 floats per vehicle (vs 24 previously)
+    for (let i = 0; i < numVehicles; i++) {
+      const base = i * SENSOR_DATA_SIZE + (dataOffset * SENSOR_POINT_SIZE);
+      const writeIdx = i * 4;
+
+      // Common points
+      const flx = data[base + SensorPoint.FL_X];
+      const fly = data[base + SensorPoint.FL_Y];
+      const frx = data[base + SensorPoint.FR_X];
+      const fry = data[base + SensorPoint.FR_Y];
+
+      // Points that differ between Body and Sensor
+      let olx, oly, orx, ory;
+
+      if (isBody) {
+        olx = data[base + SensorPoint.BL_X];
+        oly = data[base + SensorPoint.BL_Y];
+        orx = data[base + SensorPoint.BR_X];
+        ory = data[base + SensorPoint.BR_Y];
+      } else {
+        // Sensor uses SL/SR (Sensor Left/Right)
+        olx = data[base + SensorPoint.SL_X];
+        oly = data[base + SensorPoint.SL_Y];
+        orx = data[base + SensorPoint.SR_X];
+        ory = data[base + SensorPoint.SR_Y];
+      }
+
+      // Fill Attributes
+      arrStartEnd[writeIdx] = flx;
+      arrStartEnd[writeIdx + 1] = fly;
+      arrStartEnd[writeIdx + 2] = frx;
+      arrStartEnd[writeIdx + 3] = fry;
+
+      arrOther[writeIdx] = olx;
+      arrOther[writeIdx + 1] = oly;
+      arrOther[writeIdx + 2] = orx;
+      arrOther[writeIdx + 3] = ory;
+    }
+
+    startEndAttr.needsUpdate = true;
+    otherAttr.needsUpdate = true;
+  });
+
+  return <lineSegments ref={meshRef} args={[geometry, material]} frustumCulled={false} renderOrder={999} />;
+}
+
+// -----------------------------------------------------------------------------
+// Main Renderer
+// -----------------------------------------------------------------------------
 
 interface SensorDebugRendererProps {
   readonly numVehicles: number;
@@ -18,196 +183,44 @@ interface SensorDebugRendererProps {
  * Shows 3-zone sensor quads (outer/approach, middle/brake, inner/stop) and body quad
  */
 export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererProps) {
-  const outerLinesRef = useRef<THREE.LineSegments>(null);
-  const middleLinesRef = useRef<THREE.LineSegments>(null);
-  const innerLinesRef = useRef<THREE.LineSegments>(null);
-  const bodyLinesRef = useRef<THREE.LineSegments>(null);
-
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
-  // Create geometry for sensor quads (4 lines per vehicle)
-  const outerGeometry = useMemo(() => {
-    const positions = new Float32Array(numVehicles * 4 * 2 * 3); // 4 lines, 2 points each, xyz
-    return new THREE.BufferGeometry().setAttribute(
-      "position",
-      new THREE.BufferAttribute(positions, 3)
-    );
-  }, [numVehicles]);
+  // Data fetcher function reference
+  const getData = () => isSharedMemory ? getShmSensorPointData() : sensorPointArray.getData();
 
-  const middleGeometry = useMemo(() => {
-    const positions = new Float32Array(numVehicles * 4 * 2 * 3);
-    return new THREE.BufferGeometry().setAttribute(
-      "position",
-      new THREE.BufferAttribute(positions, 3)
-    );
-  }, [numVehicles]);
-
-  const innerGeometry = useMemo(() => {
-    const positions = new Float32Array(numVehicles * 4 * 2 * 3);
-    return new THREE.BufferGeometry().setAttribute(
-      "position",
-      new THREE.BufferAttribute(positions, 3)
-    );
-  }, [numVehicles]);
-
-  // Create geometry for body quads (4 lines per vehicle)
-  const bodyGeometry = useMemo(() => {
-    const positions = new Float32Array(numVehicles * 4 * 2 * 3);
-    return new THREE.BufferGeometry().setAttribute(
-      "position",
-      new THREE.BufferAttribute(positions, 3)
-    );
-  }, [numVehicles]);
-
-  // Create materials
-  const outerMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ffff00", linewidth: 4, depthTest: false, transparent: true, depthWrite: false }), []);
-  const middleMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ff8800", linewidth: 2, depthTest: false, transparent: true, depthWrite: false }), []);
-  const innerMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#ff0000", linewidth: 6, depthTest: false, transparent: true, depthWrite: false }), []);
-  const bodyMaterial = useMemo(() => new THREE.LineBasicMaterial({ color: "#00ffff", linewidth: 1, depthTest: false, transparent: true, depthWrite: false }), []);
-
-  // Cleanup all geometries and materials
-  useEffect(() => {
-    return () => {
-      outerGeometry.dispose();
-      middleGeometry.dispose();
-      innerGeometry.dispose();
-      bodyGeometry.dispose();
-      outerMaterial.dispose();
-      middleMaterial.dispose();
-      innerMaterial.dispose();
-      bodyMaterial.dispose();
-    };
-  }, [outerGeometry, middleGeometry, innerGeometry, bodyGeometry, outerMaterial, middleMaterial, innerMaterial, bodyMaterial]);
-
-  // Update wireframes every frame
-  useFrame(() => {
-    const outerLines = outerLinesRef.current;
-    const middleLines = middleLinesRef.current;
-    const innerLines = innerLinesRef.current;
-    const bodyLines = bodyLinesRef.current;
-    if (!outerLines || !middleLines || !innerLines || !bodyLines) return;
-
-    const data = isSharedMemory ? getShmSensorPointData() : sensorPointArray.getData();
-    if (!data) return;
-
-    const outerPositions = outerGeometry.attributes.position.array as Float32Array;
-    const middlePositions = middleGeometry.attributes.position.array as Float32Array;
-    const innerPositions = innerGeometry.attributes.position.array as Float32Array;
-    const bodyPositions = bodyGeometry.attributes.position.array as Float32Array;
-
-    const zHeight = getMarkerConfig().Z;
-
-    for (let i = 0; i < numVehicles; i++) {
-      const base = i * SENSOR_DATA_SIZE;
-      const sensorIdx = i * 4 * 2 * 3; // 4 lines, 2 points, xyz
-      const bodyIdx = i * 4 * 2 * 3;
-
-      const writeZone = (zoneIndex: number, target: Float32Array) => {
-        const offset = base + zoneIndex * SENSOR_POINT_SIZE;
-        const flx = data[offset + SensorPoint.FL_X];
-        const fly = data[offset + SensorPoint.FL_Y];
-        const frx = data[offset + SensorPoint.FR_X];
-        const fry = data[offset + SensorPoint.FR_Y];
-        const slx = data[offset + SensorPoint.SL_X];
-        const sly = data[offset + SensorPoint.SL_Y];
-        const srx = data[offset + SensorPoint.SR_X];
-        const sry = data[offset + SensorPoint.SR_Y];
-
-        // Sensor quad: FL -> SL -> SR -> FR -> FL
-        target[sensorIdx + 0] = flx;
-        target[sensorIdx + 1] = fly;
-        target[sensorIdx + 2] = zHeight;
-        target[sensorIdx + 3] = slx;
-        target[sensorIdx + 4] = sly;
-        target[sensorIdx + 5] = zHeight;
-
-        target[sensorIdx + 6] = slx;
-        target[sensorIdx + 7] = sly;
-        target[sensorIdx + 8] = zHeight;
-        target[sensorIdx + 9] = srx;
-        target[sensorIdx + 10] = sry;
-        target[sensorIdx + 11] = zHeight;
-
-        target[sensorIdx + 12] = srx;
-        target[sensorIdx + 13] = sry;
-        target[sensorIdx + 14] = zHeight;
-        target[sensorIdx + 15] = frx;
-        target[sensorIdx + 16] = fry;
-        target[sensorIdx + 17] = zHeight;
-
-        target[sensorIdx + 18] = frx;
-        target[sensorIdx + 19] = fry;
-        target[sensorIdx + 20] = zHeight;
-        target[sensorIdx + 21] = flx;
-        target[sensorIdx + 22] = fly;
-        target[sensorIdx + 23] = zHeight;
-      };
-
-      // Zones: 0=outer(approach),1=middle(brake),2=inner(stop)
-      writeZone(0, outerPositions);
-      writeZone(1, middlePositions);
-      writeZone(2, innerPositions);
-
-      // Body quad from outer zone (index 0)
-      const bodyOffset = base + 0 * SENSOR_POINT_SIZE;
-      const flx = data[bodyOffset + SensorPoint.FL_X];
-      const fly = data[bodyOffset + SensorPoint.FL_Y];
-      const frx = data[bodyOffset + SensorPoint.FR_X];
-      const fry = data[bodyOffset + SensorPoint.FR_Y];
-      const blx = data[bodyOffset + SensorPoint.BL_X];
-      const bly = data[bodyOffset + SensorPoint.BL_Y];
-      const brx = data[bodyOffset + SensorPoint.BR_X];
-      const bry = data[bodyOffset + SensorPoint.BR_Y];
-
-      // Body quad: FL -> BL -> BR -> FR -> FL
-      // Line 1: FL -> BL
-      bodyPositions[bodyIdx + 0] = flx;
-      bodyPositions[bodyIdx + 1] = fly;
-      bodyPositions[bodyIdx + 2] = zHeight;
-      bodyPositions[bodyIdx + 3] = blx;
-      bodyPositions[bodyIdx + 4] = bly;
-      bodyPositions[bodyIdx + 5] = zHeight;
-
-      // Line 2: BL -> BR
-      bodyPositions[bodyIdx + 6] = blx;
-      bodyPositions[bodyIdx + 7] = bly;
-      bodyPositions[bodyIdx + 8] = zHeight;
-      bodyPositions[bodyIdx + 9] = brx;
-      bodyPositions[bodyIdx + 10] = bry;
-      bodyPositions[bodyIdx + 11] = zHeight;
-
-      // Line 3: BR -> FR
-      bodyPositions[bodyIdx + 12] = brx;
-      bodyPositions[bodyIdx + 13] = bry;
-      bodyPositions[bodyIdx + 14] = zHeight;
-      bodyPositions[bodyIdx + 15] = frx;
-      bodyPositions[bodyIdx + 16] = fry;
-      bodyPositions[bodyIdx + 17] = zHeight;
-
-      // Line 4: FR -> FL
-      bodyPositions[bodyIdx + 18] = frx;
-      bodyPositions[bodyIdx + 19] = fry;
-      bodyPositions[bodyIdx + 20] = zHeight;
-      bodyPositions[bodyIdx + 21] = flx;
-      bodyPositions[bodyIdx + 22] = fly;
-      bodyPositions[bodyIdx + 23] = zHeight;
-    }
-
-    outerGeometry.attributes.position.needsUpdate = true;
-    middleGeometry.attributes.position.needsUpdate = true;
-    innerGeometry.attributes.position.needsUpdate = true;
-    bodyGeometry.attributes.position.needsUpdate = true;
-  });
+  if (numVehicles === 0) return null;
 
   return (
-    <group renderOrder={999}>
-      {/* Sensor wireframes */}
-      <lineSegments ref={outerLinesRef} args={[outerGeometry, outerMaterial]} frustumCulled={false} renderOrder={999} />
-      <lineSegments ref={middleLinesRef} args={[middleGeometry, middleMaterial]} frustumCulled={false} renderOrder={999} />
-      <lineSegments ref={innerLinesRef} args={[innerGeometry, innerMaterial]} frustumCulled={false} renderOrder={999} />
-
-      {/* Body wireframes (cyan) */}
-      <lineSegments ref={bodyLinesRef} args={[bodyGeometry, bodyMaterial]} frustumCulled={false} renderOrder={999} />
-    </group>
+    <>
+      {/* Outer / Approach (Yellow) */}
+      <InstancedQuadLines
+        numVehicles={numVehicles}
+        color="#ffff00"
+        getData={getData}
+        dataOffset={0}
+      />
+      {/* Middle / Brake (Orange) */}
+      <InstancedQuadLines
+        numVehicles={numVehicles}
+        color="#ff8800"
+        getData={getData}
+        dataOffset={1}
+      />
+      {/* Inner / Stop (Red) */}
+      <InstancedQuadLines
+        numVehicles={numVehicles}
+        color="#ff0000"
+        getData={getData}
+        dataOffset={2}
+      />
+      {/* Body (Cyan) - Uses Offset 0 but reads BL/BR instead of SL/SR */}
+      <InstancedQuadLines
+        numVehicles={numVehicles}
+        color="#00ffff"
+        getData={getData}
+        dataOffset={0}
+        isBody={true}
+      />
+    </>
   );
 }
