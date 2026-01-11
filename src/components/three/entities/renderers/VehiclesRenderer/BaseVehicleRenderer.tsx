@@ -51,11 +51,13 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: new THREE.Color(vehicleColor) }), [vehicleColor]);
   const sensorMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 }), []);
 
-  // Temp Objects
+  // Temp Objects (Zero-GC: 재사용)
   const tempMatrix = useMemo(() => new THREE.Matrix4(), []);
   const tempPosition = useMemo(() => new THREE.Vector3(), []);
   const tempQuaternion = useMemo(() => new THREE.Quaternion(), []);
   const tempScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
+  const tempSensorPos = useMemo(() => new THREE.Vector3(), []);
+  const tempInitMatrix = useMemo(() => new THREE.Matrix4().identity(), []);
 
   const sensorOffsetX = (bodyLength + sensorLength) * 0.5 + 0.05;
 
@@ -81,22 +83,21 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
     };
   }, [bodyGeometry, sensorGeometry, bodyMaterial, sensorMaterial]);
 
-  // 초기화 로직
+  // 초기화 로직 (Zero-GC: tempInitMatrix 재사용)
   useEffect(() => {
     if (!bodyMeshRef.current) return;
-    const temp = new THREE.Matrix4().identity();
-    
+
     for (let i = 0; i < numVehicles; i++) {
-      bodyMeshRef.current.setMatrixAt(i, temp);
+      bodyMeshRef.current.setMatrixAt(i, tempInitMatrix);
       if (showSensor && sensorMeshRef.current) {
-        sensorMeshRef.current.setMatrixAt(i, temp);
+        sensorMeshRef.current.setMatrixAt(i, tempInitMatrix);
       }
     }
     bodyMeshRef.current.instanceMatrix.needsUpdate = true;
     if (showSensor && sensorMeshRef.current) sensorMeshRef.current.instanceMatrix.needsUpdate = true;
-    
+
     console.log(`[Vehicle${rendererName}Renderer] Initialized ${numVehicles} vehicles`);
-  }, [numVehicles, showSensor, rendererName]);
+  }, [numVehicles, showSensor, rendererName, tempInitMatrix]);
 
   // 렌더링 루프 (핵심)
   useFrame((state) => {
@@ -115,12 +116,12 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
         bodyMesh.setMatrixAt(i, tempMatrix);
 
-        // 3. Sensor Matrix (옵션)
+        // 3. Sensor Matrix (옵션) - Zero-GC: tempSensorPos 재사용
         if (sensorMesh) {
-          const sensorPos = new THREE.Vector3(sensorOffsetX, 0, 0)
+          tempSensorPos.set(sensorOffsetX, 0, 0)
             .applyQuaternion(tempQuaternion)
             .add(tempPosition);
-          tempMatrix.compose(sensorPos, tempQuaternion, tempScale);
+          tempMatrix.compose(tempSensorPos, tempQuaternion, tempScale);
           sensorMesh.setMatrixAt(i, tempMatrix);
         }
         updateCount++;

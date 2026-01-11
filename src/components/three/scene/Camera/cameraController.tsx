@@ -6,6 +6,10 @@ import { useMenuStore } from "@store/ui/menuStore";
 import { OrbitControls } from 'three-stdlib';
 import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "@/config/cameraConfig";
 
+// Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
+const _scratchZAxis = new THREE.Vector3(0, 0, 1);
+const _scratchOffset = new THREE.Vector3();
+
 const CameraController: React.FC = () => {
   const { camera, controls } = useThree(); // controls는 drei가 set해줌
 
@@ -231,10 +235,10 @@ const CameraController: React.FC = () => {
     // 회전 요청이 있으면 현재 target 기준으로 Z축 공전
     if (rotateZDeg !== 0) {
       const currentTarget = (controls as any).target;
-      const axis = new THREE.Vector3(0, 0, 1);
+      // Zero-GC: 모듈 레벨 scratch 사용
       camera.position
         .sub(currentTarget)
-        .applyAxisAngle(axis, THREE.MathUtils.degToRad(rotateZDeg))
+        .applyAxisAngle(_scratchZAxis, THREE.MathUtils.degToRad(rotateZDeg))
         .add(currentTarget);
       _resetRotateZ();
 
@@ -289,22 +293,22 @@ const CameraController: React.FC = () => {
        const fineZoomFactor = 0.05; // 5% adjustment per press
  
        if (['=', '+', 'NumpadAdd'].includes(event.key)) {
-         // Zoom In (Decrease distance)
-         const offset = new THREE.Vector3().subVectors(camera.position, orbitControls.target);
-         const dist = offset.length();
+         // Zoom In (Decrease distance) - Zero-GC: 모듈 레벨 scratch 사용
+         _scratchOffset.subVectors(camera.position, orbitControls.target);
+         const dist = _scratchOffset.length();
          const newDist = Math.max(orbitControls.minDistance, dist * (1 - fineZoomFactor));
-         
-         offset.setLength(newDist);
-         camera.position.copy(orbitControls.target).add(offset);
+
+         _scratchOffset.setLength(newDist);
+         camera.position.copy(orbitControls.target).add(_scratchOffset);
          orbitControls.update();
        } else if (['-', '_', 'NumpadSubtract'].includes(event.key)) {
-         // Zoom Out (Increase distance)
-         const offset = new THREE.Vector3().subVectors(camera.position, orbitControls.target);
-         const dist = offset.length();
+         // Zoom Out (Increase distance) - Zero-GC: 모듈 레벨 scratch 사용
+         _scratchOffset.subVectors(camera.position, orbitControls.target);
+         const dist = _scratchOffset.length();
          const newDist = Math.min(orbitControls.maxDistance, dist * (1 + fineZoomFactor));
-         
-         offset.setLength(newDist);
-         camera.position.copy(orbitControls.target).add(offset);
+
+         _scratchOffset.setLength(newDist);
+         camera.position.copy(orbitControls.target).add(_scratchOffset);
          orbitControls.update();
        }
      };

@@ -10,6 +10,9 @@ import { SENSOR_PRESETS, getSensorZone } from "@/common/vehicle/collision/sensor
 
 const DEG2RAD = Math.PI / 180;
 
+// Zero-GC: 모듈 레벨 상수 배열 (매 호출마다 배열 생성 방지)
+const ZONE_KEYS = ["approach", "brake", "stop"] as const;
+
 export interface SensorPointsConfig {
   bodyLength: number;
   bodyWidth: number;
@@ -40,9 +43,9 @@ export function updateSensorPoints(
   const bx = x - HALF_L * cos,
     by = y - HALF_L * sin;
 
-  const zones = ["approach", "brake", "stop"] as const;
-  for (let zoneIndex = 0; zoneIndex < zones.length; zoneIndex++) {
-    const zoneKey = zones[zoneIndex];
+  // Zero-GC: ZONE_KEYS 모듈 레벨 상수 사용
+  for (let zoneIndex = 0; zoneIndex < ZONE_KEYS.length; zoneIndex++) {
+    const zoneKey = ZONE_KEYS[zoneIndex];
     const zone = getSensorZone(preset, zoneKey);
     const widthScale = 1;
     const wx = HALF_W * widthScale * sin;

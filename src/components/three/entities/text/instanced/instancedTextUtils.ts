@@ -15,6 +15,7 @@ const _tempQuat = new THREE.Quaternion();
 const _tempRight = new THREE.Vector3();
 const _unitX = new THREE.Vector3(1, 0, 0);
 const _lodCheckPos = { x: 0, y: 0, z: 0 }; // LOD 체크용
+const _defaultVehicleLODMap = new Map<number, boolean>(); // Zero-GC: 기본 LOD 캐시
 
 // Billboard rotation cache (차량 수만큼 미리 할당하지 않고, 프레임별로 재사용)
 let _cachedBillboardQuat: THREE.Quaternion | null = null;
@@ -475,11 +476,9 @@ export function updateVehicleTextTransforms(
   const billboardQuat = getBillboardQuaternion();
   const billboardRight = getBillboardRight();
 
-  // LOD 캐시 (외부에서 전달받거나 내부 생성)
-  const vehicleLOD = vehicleLODCache || new Map<number, boolean>();
-  if (!vehicleLODCache) {
-    vehicleLOD.clear();
-  }
+  // LOD 캐시 (외부에서 전달받거나 모듈 레벨 기본값 사용) - Zero-GC
+  const vehicleLOD = vehicleLODCache || _defaultVehicleLODMap;
+  vehicleLOD.clear();
 
   let lastVehicle = -1;
   let lastLODResult = false;
