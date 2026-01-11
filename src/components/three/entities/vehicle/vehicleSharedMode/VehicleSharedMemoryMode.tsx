@@ -13,6 +13,7 @@ import {
   getApproachMinSpeed,
   getBrakeMinSpeed,
 } from "@/config/movementConfig";
+import { getWorkerCount } from "@/config/workerConfig";
 import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { createFabGridSeparated } from "@/utils/fab/fabUtils";
@@ -105,6 +106,11 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
         transferMode,
         stations: [], // sharedMapData 사용하므로 빈 배열
+        fabOffset: {
+          fabIndex: fabData.fabIndex,
+          col: fabData.col,
+          row: fabData.row,
+        },
       }));
 
       // 공유 맵 데이터 생성 (원본 데이터 한 번만 전송)
@@ -116,7 +122,10 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         gridY: fabCountY,
       };
 
-      initMultiFab({ fabs, config, sharedMapData })
+      const workerCount = getWorkerCount(fabs.length);
+      console.log(`[VehicleSharedMemoryMode] Using ${workerCount} workers`);
+
+      initMultiFab({ fabs, config, sharedMapData, workerCount })
         .then(() => {
           console.log(`[VehicleSharedMemoryMode] Multi-Fab SHM Simulator initialized with ${totalFabs} fabs (using sharedMapData)`);
         })
