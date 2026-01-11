@@ -32,7 +32,6 @@ export const StopReason = {
   OBS_LIDAR: 1,
   OBS_CAMERA: 1 << 1,
   E_STOP: 1 << 2,
-  WAITING_FOR_LOCK: 1 << 3,
   LOCKED: 1 << 3,
   DESTINATION_REACHED: 1 << 4,
   PATH_BLOCKED: 1 << 5,

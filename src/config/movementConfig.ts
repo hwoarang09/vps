@@ -22,13 +22,13 @@ const loadMovementConfig = async (): Promise<MovementConfig> => {
     console.error('Error loading movement config:', error);
     // Fallback to default values
     return {
-      LINEAR_MAX_SPEED: 5.0,
-      LINEAR_ACCELERATION: 3.0,
-      LINEAR_DECELERATION: 5.0, // Stronger braking by default
-      CURVE_MAX_SPEED: 1.0,
-      APPROACH_MIN_SPEED: 1.0,
+      LINEAR_MAX_SPEED: 5,
+      LINEAR_ACCELERATION: 3,
+      LINEAR_DECELERATION: 5, // Stronger braking by default
+      CURVE_MAX_SPEED: 1,
+      APPROACH_MIN_SPEED: 2,
       BRAKE_MIN_SPEED: 0.5,
-      CURVE_ACCELERATION: 0.0,
+      CURVE_ACCELERATION: 0,
       MAX_DELTA: 0.1
     };
   }
