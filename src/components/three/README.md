@@ -1,551 +1,534 @@
-# Three.js Rendering System
+# Three.js 렌더링 시스템
 
-Three.js 기반 3D 렌더링 시스템입니다. React Three Fiber(R3F)를 사용하여 대규모 차량 시뮬레이션을 실시간으로 렌더링합니다.
+Main Thread에서 실행되는 Three.js 기반 3D 렌더링 시스템입니다. Worker에서 계산된 시뮬레이션 결과를 읽어 화면에 표시합니다.
 
-## 불변조건 (Invariants)
+## 개념 (왜 이렇게 설계했나)
 
-### 렌더링 원칙
-- **엔티티 독립성**: 각 Entity는 자신의 geometry/material만 관리한다
-- **상태 읽기 전용**: Renderer는 Vehicle 상태를 읽기만 하며, 절대 수정하지 않는다
-- **Shader 기반 업데이트**: 대량 렌더링(10k+ objects)은 항상 Shader 사용 필수
-- **메모리 참조**: Vehicle 상태는 `src/store/vehicle/`에서만 읽는다
-
-### 성능 제약
-- **FAB 수 제한**: 한 번에 보이는 FAB(Floating Action Button) 수는 설정값 이하여야 함
-- **InstancedMesh 사용**: 동일한 geometry는 InstancedMesh로 묶어야 함
-- **LOD 적용**: 카메라 거리에 따라 디테일 단계 조절
-- **불필요한 렌더링 방지**: `useFrame` 내에서 변경사항 없으면 스킵
-
-### Three.js 규칙
-- **Dispose 필수**: 컴포넌트 언마운트 시 geometry, material, texture dispose 필수
-- **메모리 누수 방지**: BufferGeometry, Texture 등은 사용 후 반드시 정리
-- **즉시 업데이트**: Matrix 변경 후 `instancedMesh.instanceMatrix.needsUpdate = true` 호출
-
-## 폴더 구조
+### Main Thread 역할 분리
 
 ```
-src/components/three/
-├── entities/                   # 렌더링할 엔티티들
-│   ├── renderers/              # 렌더러 컴포넌트
-│   │   ├── VehiclesRenderer/   # 차량 렌더러
-│   │   │   ├── VehiclesRenderer.tsx       # 모드별 렌더러 선택
-│   │   │   ├── BaseVehicleRenderer.tsx    # 공통 렌더링 로직
-│   │   │   ├── VehicleArrayRenderer.tsx   # arrayMode 전용
-│   │   │   ├── VehicleRapierRenderer.tsx  # rapierMode 전용
-│   │   │   └── SensorDebugRenderer.tsx    # 센서 디버그 렌더러
-│   │   ├── MapRenderer.tsx                # 맵 전체 렌더러
-│   │   ├── EdgeRenderer.tsx               # Edge 렌더러
-│   │   ├── NodesRenderer.tsx              # Node 렌더러
-│   │   ├── StationRenderer.tsx            # Station 렌더러
-│   │   └── TextRenderer.tsx               # 텍스트 렌더러
-│   │
-│   ├── vehicle/                # 차량 시스템
-│   │   ├── VehicleSystem.tsx              # 차량 시스템 진입점
-│   │   ├── vehicleArrayMode/              # arrayMode 구현
-│   │   ├── vehicleRapierMode/             # rapierMode 구현
-│   │   └── vehicleSharedMode/             # shmMode 구현
-│   │       └── VehicleSharedMemoryMode.tsx
-│   │
-│   ├── edge/                   # Edge 엔티티
-│   ├── node/                   # Node 엔티티
-│   ├── station/                # Station 엔티티
-│   └── text/                   # 텍스트 엔티티
-│       └── instanced/          # InstancedText (대량 텍스트)
-│
-├── scene/                      # Three.js 씬 설정
-│   └── SceneSetup.tsx          # 카메라, 조명, 컨트롤 등
-│
-├── interaction/                # 마우스 상호작용
-│   ├── Raycaster.tsx           # 오브젝트 클릭 감지
-│   └── CameraControls.tsx      # 카메라 조작
-│
-└── performance/                # 성능 최적화
-    ├── LOD.tsx                 # Level of Detail
-    └── Culling.tsx             # Frustum Culling
+Main Thread                     Worker Thread
+┌─────────────────┐            ┌─────────────────────┐
+│ Three.js        │            │ SimulationEngine    │
+│ - 맵 렌더링      │            │ - 충돌 감지          │
+│ - 차량 렌더링    │            │ - 이동 계산          │
+│ - UI 렌더링     │            │ - 경로 탐색          │
+│                 │            │                     │
+│ READ ONLY       │            │ WRITE               │
+│     ↓           │            │     ↓               │
+│ SharedBuffer ◀──┼────────────┼─────────────────────│
+└─────────────────┘            └─────────────────────┘
 ```
 
-## 핵심 렌더러
+**역할:**
+- **Main Thread**: SharedArrayBuffer를 **읽기만** 하고 Three.js로 렌더링
+- **Worker Thread**: 시뮬레이션 계산 후 SharedArrayBuffer에 **쓰기**
 
-### 1. `VehiclesRenderer` - 차량 렌더링
+**이유:**
+- Main Thread가 계산 부담 없이 60 FPS 렌더링 유지
+- 시뮬레이션 프레임(Worker)과 렌더링 프레임(Main)이 독립적으로 동작
+- UI 반응성 보장 (계산 부하가 UI를 블로킹하지 않음)
 
-#### 구조
-```
-VehiclesRenderer (모드 선택)
-    ├─ VehicleArrayRenderer (arrayMode)
-    ├─ VehicleRapierRenderer (rapierMode)
-    └─ (shmMode는 VehicleSharedMemoryMode가 직접 렌더링)
-```
+### InstancedMesh 기반 렌더링
 
-#### `BaseVehicleRenderer.tsx` - 공통 로직
+수천~수십만 개의 객체를 **단일 draw call**로 렌더링합니다.
+
 ```typescript
-// InstancedMesh 기반 렌더링
-const BaseVehicleRenderer = ({ vehicleData, count }) => {
-  const meshRef = useRef<InstancedMesh>(null);
-  const tempMatrix = useMemo(() => new Matrix4(), []);
-  const tempQuat = useMemo(() => new Quaternion(), []);
-  const tempPos = useMemo(() => new Vector3(), []);
+// 나쁜 예: 차량 1000대 = 1000 draw calls
+for (const vehicle of vehicles) {
+  <mesh position={vehicle.position} />  // N draw calls
+}
 
-  useFrame(() => {
-    if (!meshRef.current) return;
-
-    // 모든 차량의 Matrix 업데이트
-    for (let i = 0; i < count; i++) {
-      const [x, y, z] = vehicleData.getPosition(i);
-      const [qx, qy, qz, qw] = vehicleData.getRotation(i);
-
-      tempPos.set(x, y, z);
-      tempQuat.set(qx, qy, qz, qw);
-      tempMatrix.compose(tempPos, tempQuat, SCALE);
-
-      meshRef.current.setMatrixAt(i, tempMatrix);
-    }
-
-    meshRef.current.instanceMatrix.needsUpdate = true;
-  });
-
-  return (
-    <instancedMesh ref={meshRef} args={[null, null, count]}>
-      <boxGeometry args={[1.2, 0.6, 0.3]} />
-      <meshStandardMaterial color="blue" />
-    </instancedMesh>
-  );
-};
-```
-
-#### Shader 기반 렌더링 (대량 차량용)
-```typescript
-// Custom Shader로 Instance 색상 개별 제어
-const vertexShader = `
-  attribute vec3 instanceColor;
-  varying vec3 vColor;
-
-  void main() {
-    vColor = instanceColor;
-    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-  }
-`;
-
-const fragmentShader = `
-  varying vec3 vColor;
-
-  void main() {
-    gl_FragColor = vec4(vColor, 1.0);
-  }
-`;
-
-// InstancedBufferAttribute로 색상 전달
-const colors = useMemo(() => {
-  const arr = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    const [r, g, b] = vehicleData.getColor(i);
-    arr[i * 3 + 0] = r;
-    arr[i * 3 + 1] = g;
-    arr[i * 3 + 2] = b;
-  }
-  return arr;
-}, [count]);
-
-<instancedMesh>
-  <bufferGeometry>
-    <instancedBufferAttribute
-      attach="attributes-instanceColor"
-      args={[colors, 3]}
-    />
-  </bufferGeometry>
-  <shaderMaterial
-    vertexShader={vertexShader}
-    fragmentShader={fragmentShader}
-  />
+// 좋은 예: 차량 1000대 = 1 draw call
+<instancedMesh count={1000}>
+  {/* GPU가 1000개 인스턴스를 한 번에 렌더링 */}
 </instancedMesh>
 ```
 
----
+**이유:**
+- Draw call 수를 획기적으로 감소 (성능 향상)
+- GPU 인스턴싱 활용 (병렬 처리)
+- 수십만 대 차량도 부드럽게 렌더링 가능
 
-### 2. `VehicleSharedMemoryMode` - shmMode 렌더링
+### Shader 기반 Transform
 
-SharedArrayBuffer를 직접 읽어서 렌더링합니다.
+InstancedMesh의 기본 instanceMatrix 대신 **Custom Shader**로 transform 수행합니다.
 
 ```typescript
-const VehicleSharedMemoryMode = ({ fabId }) => {
-  const sharedBufferRef = useRef<SharedArrayBuffer | null>(null);
-  const vehicleDataRef = useRef<Float32Array | null>(null);
+// Custom vertex shader
+attribute vec3 instancePosition;  // 차량 위치
+attribute float instanceRotation; // 차량 회전
 
-  useEffect(() => {
-    // MultiWorkerController로부터 SharedArrayBuffer 획득
-    const buffer = controller.getVehicleData(fabId);
-    sharedBufferRef.current = buffer;
-    vehicleDataRef.current = new Float32Array(buffer);
-
-    return () => {
-      // Cleanup (Worker는 별도로 정리)
-    };
-  }, [fabId]);
-
-  useFrame(() => {
-    if (!vehicleDataRef.current || !meshRef.current) return;
-
-    const data = vehicleDataRef.current;
-    const count = data.length / 22;
-
-    for (let i = 0; i < count; i++) {
-      const offset = i * 22;
-      const x = data[offset + 0];
-      const y = data[offset + 1];
-      const z = data[offset + 2];
-      const qx = data[offset + 3];
-      const qy = data[offset + 4];
-      const qz = data[offset + 5];
-      const qw = data[offset + 6];
-
-      tempPos.set(x, y, z);
-      tempQuat.set(qx, qy, qz, qw);
-      tempMatrix.compose(tempPos, tempQuat, SCALE);
-
-      meshRef.current.setMatrixAt(i, tempMatrix);
-    }
-
-    meshRef.current.instanceMatrix.needsUpdate = true;
-  });
-
-  return (
-    <instancedMesh ref={meshRef} args={[null, null, count]}>
-      <boxGeometry args={[1.2, 0.6, 0.3]} />
-      <meshStandardMaterial />
-    </instancedMesh>
-  );
-};
+void main() {
+  // Shader에서 직접 위치/회전 계산
+  vec3 transformed = rotateZ(instanceRotation) * position;
+  transformed += instancePosition;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+}
 ```
 
----
+**기존 방식 (instanceMatrix) vs Shader 방식:**
 
-### 3. `MapRenderer` - 맵 렌더링
+| 방식 | CPU 부담 | 메모리 | GC |
+|------|---------|--------|-----|
+| instanceMatrix | 매 프레임 Matrix4 계산 (무거움) | Matrix4 × N (176 bytes/차량) | 객체 생성 발생 |
+| Shader | Float 복사만 (가벼움) | Float × 4 (16 bytes/차량) | Zero-GC |
 
-Edge, Node, Station을 한번에 렌더링합니다.
+**이유:**
+- CPU 계산 최소화 (Matrix4 생성/연산 없음)
+- 메모리 사용량 1/11 감소
+- GC 압력 제거 (Zero-GC)
+- GPU가 병렬로 transform 수행
 
-```typescript
-const MapRenderer = () => {
-  const edges = useEdgeStore((state) => state.edges);
-  const nodes = useNodeStore((state) => state.nodes);
-  const stations = useStationStore((state) => state.stations);
+### Slot 기반 맵 렌더링
 
-  return (
-    <>
-      <EdgeRenderer edges={edges} />
-      <NodesRenderer nodes={nodes} />
-      <StationRenderer stations={stations} />
-    </>
-  );
-};
+**원본 맵 데이터 1개**만 저장하고, **slot offset**으로 여러 FAB을 렌더링합니다.
+
+```
+원본 맵 데이터 (1개)        Slot 기반 렌더링 (최대 25개)
+┌─────────┐               ┌─────┐ ┌─────┐ ┌─────┐
+│edge0001 │               │fab0 │ │fab1 │ │fab2 │ ...
+│node0001 │    →          │+0,0 │ │+110 │ │+220 │
+└─────────┘    offset     └─────┘ └─────┘ └─────┘
+                적용
 ```
 
+**동작:**
+1. 카메라 위치 변화 감지 (100 단위 이상 이동 시)
+2. 가장 가까운 25개 FAB 선택
+3. 각 FAB의 offset 계산
+4. slot offset으로 렌더링
+
+**이유:**
+- 맵 데이터 메모리를 1/N로 절약 (50개 FAB → 원본 1개만)
+- 화면에 보이는 FAB만 렌더링 (성능 최적화)
+- 카메라 이동 시에만 slot 업데이트 (불필요한 계산 방지)
+
 ---
 
-### 4. `InstancedText` - 대량 텍스트 렌더링
+## 코드 가이드 (API, 사용법)
 
-Troika-three-text를 사용한 instanced 텍스트입니다.
+### 렌더링 계층 구조
 
-```typescript
-import { Text } from "@react-three/drei";
-
-const InstancedText = ({ texts, positions }) => {
-  return (
-    <>
-      {texts.map((text, i) => (
-        <Text
-          key={i}
-          position={positions[i]}
-          fontSize={0.5}
-          color="white"
-        >
-          {text}
-        </Text>
-      ))}
-    </>
-  );
-};
+```
+ThreeMain.tsx
+├── MapRenderer                    ← 맵 전체 렌더링
+│   ├── EdgeRenderer               ← Edge 렌더링 (InstancedMesh)
+│   ├── NodesRenderer              ← Node 렌더링 (InstancedMesh)
+│   └── StationRenderer            ← Station 렌더링 (InstancedMesh)
+│
+└── VehiclesRenderer               ← 차량 렌더링 라우터
+    ├── VehicleArrayRenderer       ← array/shm 모드 (InstancedMesh + Shader)
+    └── VehicleRapierRenderer      ← rapier 모드 (실험용)
 ```
 
 ---
 
-## 성능 최적화
+### MapRenderer
 
-### InstancedMesh 사용
+**역할:** 맵 전체를 렌더링하고, 카메라 위치에 따라 slot을 업데이트합니다.
 
-```typescript
-// ❌ 개별 Mesh (10k 차량 = 10k draw calls)
-{vehicles.map((veh, i) => (
-  <mesh key={i} position={veh.position}>
-    <boxGeometry />
-    <meshStandardMaterial />
-  </mesh>
-))}
-
-// ✅ InstancedMesh (10k 차량 = 1 draw call)
-<instancedMesh args={[null, null, 10000]}>
-  <boxGeometry />
-  <meshStandardMaterial />
-</instancedMesh>
-```
-
-### LOD (Level of Detail)
+#### Slot 업데이트 로직
 
 ```typescript
-import { Lod } from "@react-three/drei";
+// MapRenderer.tsx
+const CAMERA_MOVE_THRESHOLD = 100;  // 100 단위 이상 이동 시 업데이트
 
-<Lod distances={[0, 50, 100]}>
-  {/* 가까이: 고해상도 모델 */}
-  <mesh geometry={highPolyGeometry} material={detailedMaterial} />
-
-  {/* 중간: 중간 모델 */}
-  <mesh geometry={midPolyGeometry} material={simpleMaterial} />
-
-  {/* 멀리: 단순 박스 */}
-  <mesh geometry={boxGeometry} material={flatMaterial} />
-</Lod>
-```
-
-### Frustum Culling
-
-```typescript
-// useFrame 내에서 카메라 절두체 체크
 useFrame(({ camera }) => {
-  const frustum = new Frustum();
-  frustum.setFromProjectionMatrix(
-    new Matrix4().multiplyMatrices(
-      camera.projectionMatrix,
-      camera.matrixWorldInverse
-    )
-  );
+  if (fabs.length <= 1) return;  // 단일 FAB은 스킵
 
-  for (let i = 0; i < count; i++) {
-    const [x, y, z] = vehicleData.getPosition(i);
-    const isVisible = frustum.containsPoint(new Vector3(x, y, z));
+  const { x: cx, y: cy } = camera.position;
+  const { x: lastX, y: lastY } = lastCameraPosRef.current;
 
-    if (!isVisible) {
-      // 보이지 않는 차량은 업데이트 스킵
-      continue;
-    }
-
-    // 렌더링 로직
+  // 임계값 이상 이동했을 때만 업데이트
+  const dx = cx - lastX;
+  const dy = cy - lastY;
+  if (dx * dx + dy * dy > CAMERA_MOVE_THRESHOLD * CAMERA_MOVE_THRESHOLD) {
+    lastCameraPosRef.current = { x: cx, y: cy };
+    updateSlots(cx, cy);  // fabStore의 slot 갱신
   }
 });
 ```
 
-### 메모리 관리
+#### 단일 FAB vs 멀티 FAB
 
 ```typescript
-useEffect(() => {
-  const geometry = new BoxGeometry(1, 1, 1);
-  const material = new MeshStandardMaterial();
+// 단일 FAB: store 데이터 직접 사용
+if (fabs.length <= 1 || slots.length === 0) {
+  return (
+    <group>
+      <EdgeRenderer edges={storeEdges} />
+      <NodesRenderer nodeIds={nodeIds} />
+      <StationRenderer stations={storeStations} />
+    </group>
+  );
+}
 
-  return () => {
-    // 필수: dispose로 메모리 해제
-    geometry.dispose();
-    material.dispose();
-  };
-}, []);
+// 멀티 FAB: 원본 데이터 + slot offset
+return (
+  <group>
+    {slots.map((slot) => (
+      <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+        <EdgeRenderer edges={originalMapData.edges} />
+        <NodesRenderer nodeIds={nodeIds} />
+        <StationRenderer stations={originalMapData.stations} />
+      </group>
+    ))}
+  </group>
+);
+```
+
+**slot 구조:**
+
+```typescript
+interface FabSlot {
+  slotId: string;       // 슬롯 ID
+  fabIndex: number;     // FAB 인덱스
+  offsetX: number;      // X offset (fab 위치)
+  offsetY: number;      // Y offset (fab 위치)
+}
 ```
 
 ---
 
-## 사용 예시
+### VehicleArrayRenderer
 
-### 기본 렌더링 설정
+**역할:** SharedArrayBuffer를 읽어 차량을 렌더링합니다. InstancedMesh + Shader 기반으로 고성능 렌더링을 수행합니다.
 
-```typescript
-// App.tsx 또는 Scene.tsx
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { VehiclesRenderer } from "./entities/renderers";
-import { MapRenderer } from "./entities/renderers";
-
-const Scene = () => {
-  return (
-    <Canvas camera={{ position: [0, 50, 50], fov: 60 }}>
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 5]} intensity={1} />
-
-      <MapRenderer />
-      <VehiclesRenderer />
-
-      <OrbitControls />
-    </Canvas>
-  );
-};
-```
-
-### 차량 색상 동적 변경
+#### 데이터 소스 선택
 
 ```typescript
-// 속도에 따라 색상 변경
-useFrame(() => {
-  for (let i = 0; i < count; i++) {
-    const speed = vehicleData.getSpeed(i);
-    const r = speed / 5.0;  // maxSpeed 5.0 기준
-    const g = 1.0 - r;
-    const b = 0.0;
+// mode에 따라 적절한 store에서 데이터 가져오기
+const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
-    vehicleData.setColor(i, r, g, b);
-  }
+const arrayActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
+const shmTotalVehicles = useShmSimulatorStore((state) => {
+  const total = Object.values(state.fabVehicleCounts).reduce((sum, count) => sum + count, 0);
+  return total > 0 ? total : state.actualNumVehicles;
 });
+
+const actualNumVehicles = isSharedMemory ? shmTotalVehicles : arrayActualNumVehicles;
 ```
 
-### 마우스 클릭으로 차량 선택
+#### Shader 기반 인스턴싱 설정
 
 ```typescript
-import { useThree } from "@react-three/fiber";
-import { Raycaster } from "three";
+// 1. Geometry에 instanced attributes 추가
+const bodyGeometry = useMemo(() => {
+  const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
 
-const VehicleSelector = () => {
-  const { camera, scene } = useThree();
-  const raycaster = useMemo(() => new Raycaster(), []);
+  const positionAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(initialCount * 3), 3
+  );
+  positionAttr.setUsage(THREE.DynamicDrawUsage);
 
-  const handleClick = useCallback((event: MouseEvent) => {
-    const mouse = new Vector2(
-      (event.clientX / window.innerWidth) * 2 - 1,
-      -(event.clientY / window.innerHeight) * 2 + 1
+  const rotationAttr = new THREE.InstancedBufferAttribute(
+    new Float32Array(initialCount), 1
+  );
+  rotationAttr.setUsage(THREE.DynamicDrawUsage);
+
+  geo.setAttribute('instancePosition', positionAttr);
+  geo.setAttribute('instanceRotation', rotationAttr);
+
+  return geo;
+}, [bodyLength, bodyWidth, bodyHeight, actualNumVehicles]);
+
+// 2. Material에 custom shader 주입
+const bodyMaterial = useMemo(() => {
+  const mat = new THREE.MeshStandardMaterial({ color: vehicleColor });
+
+  mat.onBeforeCompile = (shader) => {
+    // Vertex shader에 instanced attributes 추가
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      attribute vec3 instancePosition;
+      attribute float instanceRotation;
+
+      mat3 rotateZ(float angle) {
+        float c = cos(angle);
+        float s = sin(angle);
+        return mat3(c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0);
+      }`
     );
 
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
+    // Transform 로직 주입
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      transformed = rotateZ(instanceRotation) * transformed;
+      transformed += instancePosition;`
+    );
+  };
 
-    if (intersects.length > 0) {
-      const instanceId = intersects[0].instanceId;
-      console.log("Selected vehicle:", instanceId);
+  return mat;
+}, [vehicleColor]);
+```
+
+#### 매 프레임 업데이트 (Zero-GC)
+
+```typescript
+useFrame(() => {
+  const positionAttr = positionAttrRef.current;
+  const rotationAttr = rotationAttrRef.current;
+  if (!positionAttr || !rotationAttr) return;
+
+  // SharedArrayBuffer에서 직접 읽기 (Zero-Copy)
+  const data = isSharedMemory
+    ? useShmSimulatorStore.getState().getVehicleData()
+    : vehicleDataArray.getData();
+  if (!data) return;
+
+  const posArr = positionAttr.array as Float32Array;
+  const rotArr = rotationAttr.array as Float32Array;
+
+  // Float 배열에 직접 복사 (객체 생성 없음 = Zero-GC)
+  for (let i = 0; i < actualNumVehicles; i++) {
+    const ptr = i * VEHICLE_DATA_SIZE;
+    const i3 = i * 3;
+
+    // 위치
+    posArr[i3]     = data[ptr + MovementData.X];
+    posArr[i3 + 1] = data[ptr + MovementData.Y];
+    posArr[i3 + 2] = data[ptr + MovementData.Z];
+
+    // 회전 (도 → 라디안)
+    rotArr[i] = data[ptr + MovementData.ROTATION] * DEG_TO_RAD;
+  }
+
+  // GPU에 업데이트 알림
+  positionAttr.needsUpdate = true;
+  rotationAttr.needsUpdate = true;
+});
+```
+
+**Zero-GC 달성 방법:**
+- `new THREE.Vector3()` 없음
+- `new THREE.Matrix4()` 없음
+- 객체 리터럴 `{ x, y, z }` 없음
+- Float 배열에 직접 쓰기만 수행
+
+---
+
+### EdgeRenderer
+
+**역할:** Edge를 타입별로 그룹화하여 InstancedMesh로 렌더링합니다.
+
+#### Edge 타입별 그룹화
+
+```typescript
+const edgesByType = useMemo(() => {
+  const grouped: Record<string, Edge[]> = {
+    [EdgeType.LINEAR]: [],
+    [EdgeType.CURVE_90]: [],
+    [EdgeType.CURVE_180]: [],
+    [EdgeType.CURVE_CSC]: [],
+    [EdgeType.S_CURVE]: [],
+  };
+
+  for (const edge of edges) {
+    if (edge.rendering_mode === "preview") continue;
+
+    if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+      const type = edge.vos_rail_type || EdgeType.LINEAR;
+      if (grouped[type]) {
+        grouped[type].push(edge);
+      }
     }
-  }, [camera, scene, raycaster]);
+  }
 
-  useEffect(() => {
-    window.addEventListener("click", handleClick);
-    return () => window.removeEventListener("click", handleClick);
-  }, [handleClick]);
+  return grouped;
+}, [edges]);
+```
 
-  return null;
-};
+#### 단일 FAB vs 멀티 FAB (Slot)
+
+```typescript
+// 단일 FAB: offset 없이 렌더링
+if (fabs.length <= 1 || slots.length === 0) {
+  return (
+    <group>
+      <EdgeTypeRenderer edges={edgesByType[EdgeType.LINEAR]} ... />
+      <EdgeTypeRenderer edges={edgesByType[EdgeType.CURVE_90]} ... />
+      ...
+    </group>
+  );
+}
+
+// 멀티 FAB: 각 slot마다 offset 적용
+return (
+  <group>
+    {slots.map((slot) => (
+      <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+        <EdgeTypeRenderer edges={edgesByType[EdgeType.LINEAR]} ... />
+        <EdgeTypeRenderer edges={edgesByType[EdgeType.CURVE_90]} ... />
+        ...
+      </group>
+    ))}
+  </group>
+);
 ```
 
 ---
 
-## 개발 가이드
+## 렌더링 루프 (전체 흐름)
 
-### 새로운 Entity 추가
-
-1. `entities/` 폴더에 새 폴더 생성
-2. Renderer 컴포넌트 작성
-3. `MapRenderer` 또는 상위 컴포넌트에서 import
-
-```typescript
-// entities/custom/CustomEntity.tsx
-export const CustomEntity = ({ data }) => {
-  return (
-    <mesh position={data.position}>
-      <sphereGeometry args={[1, 32, 32]} />
-      <meshStandardMaterial color="red" />
-    </mesh>
-  );
-};
-
-// MapRenderer.tsx
-import { CustomEntity } from "./entities/custom/CustomEntity";
-
-<MapRenderer>
-  <CustomEntity data={customData} />
-</MapRenderer>
+```
+Main Thread (requestAnimationFrame)
+     │
+     ├─ useFrame() 콜백 호출 (React Three Fiber)
+     │       │
+     │       ├─ MapRenderer
+     │       │       │
+     │       │       ├─ 카메라 위치 확인
+     │       │       ├─ 임계값 초과 시 updateSlots()
+     │       │       │       └─ fabStore.updateSlots(cx, cy)
+     │       │       │           ├─ 카메라에서 가까운 25개 FAB 선택
+     │       │       │           └─ slot[] 업데이트
+     │       │       │
+     │       │       └─ EdgeRenderer, NodesRenderer, StationRenderer
+     │       │           └─ InstancedMesh 렌더링 (slot offset 적용)
+     │       │
+     │       └─ VehicleArrayRenderer
+     │               │
+     │               ├─ SharedArrayBuffer 읽기 (Zero-Copy)
+     │               │       └─ useShmSimulatorStore.getState().getVehicleData()
+     │               │
+     │               ├─ instancePosition[] 업데이트
+     │               │   posArr[i3]   = data[ptr + X]
+     │               │   posArr[i3+1] = data[ptr + Y]
+     │               │   posArr[i3+2] = data[ptr + Z]
+     │               │
+     │               ├─ instanceRotation[] 업데이트
+     │               │   rotArr[i] = data[ptr + ROTATION] * DEG_TO_RAD
+     │               │
+     │               ├─ needsUpdate = true (GPU에 알림)
+     │               │
+     │               └─ GPU가 Shader로 transform + 렌더링
+     │
+     └─ Three.js가 화면에 렌더링
 ```
 
-### Shader 작성 시 주의사항
+**핵심:**
+- `useFrame()`: 매 프레임마다 실행 (60 FPS 목표)
+- SharedArrayBuffer 읽기: Worker가 쓴 데이터를 읽기만 (Zero-Copy)
+- Instanced Attributes 업데이트: Float 배열에 직접 쓰기 (Zero-GC)
+- GPU Shader: 위치/회전 transform을 GPU에서 병렬 수행
+
+---
+
+## 최적화 기법 정리
+
+### 1. InstancedMesh
+
+**문제:** 차량 10만 대 = 10만 draw calls → GPU 병목
+**해결:** InstancedMesh로 1 draw call → GPU 인스턴싱
+
+### 2. Shader 기반 Transform
+
+**문제:** Matrix4 계산 + 복사 → CPU 병목 + GC 발생
+**해결:** Shader에서 직접 transform → CPU 부담 ↓, Zero-GC
+
+### 3. Zero-GC
+
+**문제:** 매 프레임 객체 생성 → GC 스파이크 → 프레임 드롭
+**해결:** Float 배열 재사용 → GC 압력 제거
+
+### 4. Slot 기반 렌더링
+
+**문제:** 50개 FAB 전체 렌더링 → 메모리 + GPU 부담
+**해결:** 가까운 25개만 렌더링 → 성능 향상
+
+### 5. 카메라 임계값
+
+**문제:** 매 프레임 slot 업데이트 → 불필요한 계산
+**해결:** 100 단위 이상 이동 시만 업데이트 → CPU 절약
+
+---
+
+## 성능 프로파일링
+
+### useFrame 측정
 
 ```typescript
-// ✅ Uniform 업데이트는 useFrame 외부에서
-const uniforms = useMemo(() => ({
-  uTime: { value: 0 }
-}), []);
-
-useFrame(({ clock }) => {
-  uniforms.uTime.value = clock.getElapsedTime();
-});
-
-// ❌ 매 프레임 새 객체 생성 (성능 저하)
 useFrame(() => {
-  const uniforms = { uTime: { value: performance.now() } };  // 나쁨
+  const start = performance.now();
+
+  // ... 렌더링 로직
+
+  const elapsed = performance.now() - start;
+  if (elapsed > 16.67) {  // 60 FPS 기준
+    console.warn(`[VehicleArrayRenderer] Slow frame: ${elapsed.toFixed(2)}ms`);
+  }
 });
 ```
 
-### 디버깅 도구
+### 메모리 사용량 추정
 
 ```typescript
-// Stats 표시 (FPS, 메모리 등)
-import { Stats } from "@react-three/drei";
+// InstancedMesh 메모리 (Shader 방식)
+const instanceMemory = actualNumVehicles * (
+  3 * 4 +  // instancePosition (vec3)
+  1 * 4    // instanceRotation (float)
+);  // = 16 bytes/차량
 
-<Canvas>
-  <Stats />
-  {/* ... */}
-</Canvas>
+// 예: 10만 대 차량
+// 100,000 × 16 bytes = 1.6 MB (매우 경량)
 
-// 메모리 사용량 체크
-import { useFrame } from "@react-three/fiber";
-
-useFrame(({ gl }) => {
-  const info = gl.info;
-  console.log({
-    geometries: info.memory.geometries,
-    textures: info.memory.textures,
-    programs: info.programs.length,
-    calls: info.render.calls,
-  });
-});
+// 비교: instanceMatrix 방식
+// 100,000 × 16 floats × 4 bytes = 6.4 MB (4배 무거움)
 ```
 
 ---
 
 ## 주의사항
 
-### 상태 관리
-- **Renderer는 읽기 전용**: Vehicle 상태를 절대 수정하지 않음
-- **Store에서만 읽기**: `useVehicleStore()` 또는 SharedArrayBuffer에서만 데이터 획득
-- **불필요한 리렌더링 방지**: `useMemo`, `useCallback` 활용
+### SharedArrayBuffer 읽기만
 
-### 메모리 누수 방지
+Main Thread는 **절대 SharedArrayBuffer에 쓰지 않습니다**.
+
 ```typescript
-// ✅ useEffect cleanup에서 dispose
-useEffect(() => {
-  const tex = new TextureLoader().load("/texture.png");
-  material.map = tex;
+// ✅ 올바른 사용
+const data = useShmSimulatorStore.getState().getVehicleData();
+const x = data[ptr + MovementData.X];  // 읽기만
 
-  return () => {
-    tex.dispose();
-    material.dispose();
-  };
-}, []);
-
-// ❌ dispose 누락 (메모리 누수)
-useEffect(() => {
-  const tex = new TextureLoader().load("/texture.png");
-  material.map = tex;
-  // return cleanup 없음
-}, []);
+// ❌ 금지 - Worker 데이터 손상
+data[ptr + MovementData.X] = newX;  // 쓰기 금지!
 ```
 
-### 반복문 규칙 (CLAUDE.md)
-```typescript
-// ❌ forEach 금지
-meshes.forEach((mesh) => scene.add(mesh));
+### useFrame 내 객체 생성 금지
 
-// ✅ for...of 사용
-for (const mesh of meshes) {
-  scene.add(mesh);
-}
+```typescript
+// ❌ 잘못된 예 - GC 발생
+useFrame(() => {
+  const position = new THREE.Vector3(x, y, z);  // 매 프레임 생성
+  const matrix = new THREE.Matrix4();           // 매 프레임 생성
+});
+
+// ✅ 올바른 예 - Zero-GC
+const tempVector = useMemo(() => new THREE.Vector3(), []);  // 1회만 생성
+useFrame(() => {
+  tempVector.set(x, y, z);  // 재사용
+});
+```
+
+### Slot 업데이트 임계값 조정
+
+```typescript
+// 임계값이 너무 작으면: 불필요한 업데이트 많음 (CPU 낭비)
+const CAMERA_MOVE_THRESHOLD = 10;  // 너무 민감
+
+// 임계값이 너무 크면: 화면에 FAB이 늦게 나타남 (사용자 경험 ↓)
+const CAMERA_MOVE_THRESHOLD = 1000;  // 너무 둔감
+
+// 적절한 값: 100 (FAB 간격의 1/10 정도)
+const CAMERA_MOVE_THRESHOLD = 100;
 ```
 
 ---
 
 ## 관련 문서
-- [시스템 전체 아키텍처](../../doc/README.md)
-- [shmSimulator 사용법](../shmSimulator/README.md)
-- [Vehicle 비즈니스 로직](../common/vehicle/README.md)
-- [Store 모드별 구현](../store/vehicle/README.md)
 
-## 외부 라이브러리
-- [React Three Fiber](https://docs.pmnd.rs/react-three-fiber)
-- [Three.js Docs](https://threejs.org/docs/)
-- [Drei (Helpers)](https://github.com/pmndrs/drei)
+- [시스템 아키텍처](../../doc/SYSTEM_ARCHITECTURE.md)
+- [Worker 시뮬레이션 엔진](../shmSimulator/README.md)
+- [Worker 핵심 컴포넌트](../shmSimulator/core/README.md)

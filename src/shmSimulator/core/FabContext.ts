@@ -158,7 +158,7 @@ export class FabContext {
 
     // Initialize AutoMgr with stations
     if (params.stationData) {
-      this.autoMgr.initStations(params.stationData, this.edgeNameToIndex, this.edges);
+      this.autoMgr.initStations(params.stationData, this.edgeNameToIndex);
     }
 
     console.log(`[FabContext:${this.fabId}] Initialized with ${this.actualNumVehicles} vehicles`);

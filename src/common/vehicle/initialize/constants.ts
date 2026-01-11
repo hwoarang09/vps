@@ -1,6 +1,13 @@
 // common/vehicle/initialize/constants.ts
 // Shared constants for vehicle data array structure
 
+export const HitZone = {
+  NONE: -1,
+  APPROACH: 0,
+  BRAKE: 1,
+  STOP: 2,
+} as const;
+
 // Vehicle status enum (Moving State)
 export const MovingStatus = {
   STOPPED: 0,
@@ -105,10 +112,3 @@ export const LogicData = {
 } as const;
 
 export const VEHICLE_DATA_SIZE = _lPtr;
-
-export const HitZone = {
-  NONE: -1,
-  APPROACH: 0,
-  BRAKE: 1,
-  STOP: 2,
-} as const;
