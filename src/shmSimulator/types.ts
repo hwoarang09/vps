@@ -24,14 +24,43 @@ export interface MemoryRegion {
 }
 
 /**
- * Fab별 메모리 할당 정보
+ * Fab별 메모리 할당 정보 (Worker 계산 영역만)
+ * 렌더 영역은 별도 버퍼로 분리됨 (FabRenderAssignment 참조)
  */
 export interface FabMemoryAssignment {
   fabId: string;
-  /** Vehicle 데이터 영역 */
+  /** Vehicle 데이터 영역 (Worker 계산용) */
   vehicleRegion: MemoryRegion;
-  /** Sensor 데이터 영역 */
+  /** Sensor 데이터 영역 (Worker 계산용) */
   sensorRegion: MemoryRegion;
+}
+
+/**
+ * 공유 맵 참조 (메모리 최적화용)
+ * 모든 Fab이 동일한 맵 데이터를 참조하여 복제 없이 사용
+ * "평행우주" 개념 - 같은 맵에서 시뮬레이션하지만 fab간 충돌 없음
+ */
+export interface SharedMapRef {
+  /** 원본 edges (renderingPoints 제외, 시뮬레이션용) */
+  edges: Edge[];
+  /** 원본 nodes */
+  nodes: Node[];
+  /** edge 이름 -> index 룩업 (공유) */
+  edgeNameToIndex: Map<string, number>;
+  /** node 이름 -> index 룩업 (공유) */
+  nodeNameToIndex: Map<string, number>;
+  /** 원본 stations */
+  stations: StationRawData[];
+}
+
+/**
+ * Fab별 렌더링 offset (출력 시 적용)
+ */
+export interface FabRenderOffset {
+  /** X 방향 offset */
+  x: number;
+  /** Y 방향 offset */
+  y: number;
 }
 
 // ============================================================================
@@ -197,6 +226,19 @@ export interface LegacyInitPayload {
 // [3] WORKER MESSAGES
 // ============================================================================
 
+/**
+ * Fab별 렌더 버퍼 할당 정보 (연속 레이아웃)
+ */
+export interface FabRenderAssignment {
+  fabId: string;
+  /** Vehicle 렌더 버퍼 내 시작 offset (bytes) */
+  vehicleRenderOffset: number;
+  /** Sensor 렌더 버퍼 내 시작 offset (bytes) */
+  sensorRenderOffset: number;
+  /** 이 fab의 실제 vehicle 수 */
+  actualVehicles: number;
+}
+
 // Main Thread -> Worker Messages
 export type WorkerMessage =
   | { type: "INIT"; payload: InitPayload }
@@ -207,6 +249,8 @@ export type WorkerMessage =
   | { type: "DISPOSE" }
   | { type: "COMMAND"; /** Unique identifier for the fab */ fabId: string; payload: unknown }
   | { type: "SET_TRANSFER_MODE"; /** Unique identifier for the fab */ fabId: string; mode: TransferMode }
+  // 렌더 버퍼 설정 (초기화 후 한 번만)
+  | { type: "SET_RENDER_BUFFER"; vehicleRenderBuffer: SharedArrayBuffer; sensorRenderBuffer: SharedArrayBuffer; fabAssignments: FabRenderAssignment[] }
   // Fab 동적 관리
   | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
   | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string };

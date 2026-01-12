@@ -6,17 +6,20 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
-// import VehicleTextRenderer from "@/components/three/entities/text/instanced/VehicleTextRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
+import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 
 const DEG_TO_RAD = Math.PI / 180;
 
 /**
- * VehicleArrayRenderer
- * - Unified renderer for array-single and shared-memory modes
- * - Reads from appropriate data source based on mode
- * - Uses InstancedMesh for performance
+ * Render 데이터 오프셋 (연속 레이아웃 - 4 floats per vehicle)
  */
+const RenderData = {
+  X: 0,
+  Y: 1,
+  Z: 2,
+  ROTATION: 3,
+} as const;
 
 interface VehicleArrayRendererProps {
   mode: VehicleSystemType;
@@ -32,14 +35,9 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   // Get actualNumVehicles from appropriate store based on mode
   const arrayActualNumVehicles = useVehicleArrayStore((state) => state.actualNumVehicles);
-  // 멀티 Fab: fabVehicleCounts 합산 사용 (selector에서 메서드 호출 금지 - re-render 안됨)
-  const shmTotalVehicles = useShmSimulatorStore((state) => {
-    const total = Object.values(state.fabVehicleCounts).reduce((sum, count) => sum + count, 0);
-    return total > 0 ? total : state.actualNumVehicles;
-  });
+  const shmTotalVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
   const actualNumVehicles = isSharedMemory ? shmTotalVehicles : arrayActualNumVehicles;
 
-  // Get vehicle config
   const [config, setConfig] = useState(() => getVehicleConfigSync());
 
   useEffect(() => {
@@ -53,15 +51,12 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     VEHICLE_COLOR: vehicleColor
   } = config;
 
-  // Refs for instanced attributes
   const positionAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
   const rotationAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
 
-  // Create body geometry with instanced attributes
   const bodyGeometry = useMemo(() => {
     const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
 
-    // Pre-allocate with reasonable initial size, will resize if needed
     const initialCount = Math.max(actualNumVehicles, 1000);
 
     const positionAttr = new THREE.InstancedBufferAttribute(
@@ -83,14 +78,12 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     return geo;
   }, [bodyLength, bodyWidth, bodyHeight, actualNumVehicles]);
 
-  // Create material with custom vertex shader injection
   const bodyMaterial = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(vehicleColor),
     });
 
     mat.onBeforeCompile = (shader) => {
-      // Add instanced attributes
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
@@ -108,7 +101,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         }`
       );
 
-      // Replace instance matrix transform with our custom transform
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
@@ -116,7 +108,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         transformed += instancePosition;`
       );
 
-      // Also need to transform normals
       shader.vertexShader = shader.vertexShader.replace(
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
@@ -127,10 +118,8 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     return mat;
   }, [vehicleColor]);
 
-  // Identity matrix for nullifying InstancedMesh's default instanceMatrix
   const identityMatrix = useMemo(() => new THREE.Matrix4(), []);
 
-  // Resize instanced attributes and set identity matrices
   useEffect(() => {
     const bodyMesh = bodyMeshRef.current;
     const positionAttr = positionAttrRef.current;
@@ -139,7 +128,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
     const currentCount = positionAttr.count;
     if (actualNumVehicles > currentCount) {
-      // Need to resize - create new larger arrays
       const newCount = Math.max(actualNumVehicles, currentCount * 2);
 
       const newPosArray = new Float32Array(newCount * 3);
@@ -159,7 +147,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       rotationAttrRef.current = newRotAttr;
     }
 
-    // Set all instanceMatrix to identity (nullifies default InstancedMesh transform)
     if (bodyMesh) {
       for (let i = 0; i < actualNumVehicles; i++) {
         bodyMesh.setMatrixAt(i, identityMatrix);
@@ -168,7 +155,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     }
   }, [actualNumVehicles, bodyGeometry, identityMatrix]);
 
-  // Cleanup when vehicles are deleted (numVehicles decreases to 0)
   useEffect(() => {
     if (prevNumVehiclesRef.current > actualNumVehicles && actualNumVehicles === 0) {
       console.log("[VehicleArrayRenderer] Vehicles deleted, cleaning up resources");
@@ -178,7 +164,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     prevNumVehiclesRef.current = actualNumVehicles;
   }, [actualNumVehicles, bodyGeometry, bodyMaterial]);
 
-  // Cleanup geometry and material on unmount
   useEffect(() => {
     return () => {
       bodyGeometry.dispose();
@@ -186,7 +171,8 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     };
   }, [bodyGeometry, bodyMaterial]);
 
-  // Update instanced attributes every frame (Zero GC, no CPU matrix compute)
+  // Update instanced attributes every frame
+  // SharedMemory 모드: 연속 레이아웃 렌더 버퍼 직접 사용 (복사 최소화)
   useFrame(() => {
     const positionAttr = positionAttrRef.current;
     const rotationAttr = rotationAttrRef.current;
@@ -200,14 +186,29 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const posArr = positionAttr.array as Float32Array;
     const rotArr = rotationAttr.array as Float32Array;
 
-    for (let i = 0; i < actualNumVehicles; i++) {
-      const ptr = i * VEHICLE_DATA_SIZE;
-      const i3 = i * 3;
+    if (isSharedMemory) {
+      // SharedMemory 모드: 연속 레이아웃 (4 floats per vehicle)
+      // Worker가 이미 연속으로 데이터를 씀
+      for (let i = 0; i < actualNumVehicles; i++) {
+        const ptr = i * VEHICLE_RENDER_SIZE;
+        const i3 = i * 3;
 
-      posArr[i3] = data[ptr + MovementData.X];
-      posArr[i3 + 1] = data[ptr + MovementData.Y];
-      posArr[i3 + 2] = data[ptr + MovementData.Z];
-      rotArr[i] = data[ptr + MovementData.ROTATION] * DEG_TO_RAD;
+        posArr[i3] = data[ptr + RenderData.X];
+        posArr[i3 + 1] = data[ptr + RenderData.Y];
+        posArr[i3 + 2] = data[ptr + RenderData.Z];
+        rotArr[i] = data[ptr + RenderData.ROTATION] * DEG_TO_RAD;
+      }
+    } else {
+      // Array 모드: 기존 Worker 영역 사용 (22 floats per vehicle)
+      for (let i = 0; i < actualNumVehicles; i++) {
+        const ptr = i * VEHICLE_DATA_SIZE;
+        const i3 = i * 3;
+
+        posArr[i3] = data[ptr + MovementData.X];
+        posArr[i3 + 1] = data[ptr + MovementData.Y];
+        posArr[i3 + 2] = data[ptr + MovementData.Z];
+        rotArr[i] = data[ptr + MovementData.ROTATION] * DEG_TO_RAD;
+      }
     }
 
     positionAttr.needsUpdate = true;
@@ -226,7 +227,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         frustumCulled={false}
       />
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
-      {/* <VehicleTextRenderer numVehicles={actualNumVehicles} mode={mode} /> */}
     </>
   );
 };

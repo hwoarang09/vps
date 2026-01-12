@@ -3,7 +3,17 @@
 
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
-import type { FabMemoryAssignment } from "./types";
+import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
+
+/**
+ * 렌더링용 Vehicle 데이터 크기 (x, y, z, rotation)
+ */
+export const VEHICLE_RENDER_SIZE = 4;
+
+/**
+ * 렌더링용 Sensor 데이터 크기 (전체 센서 포인트 - x,y에 offset 적용)
+ */
+export const SENSOR_RENDER_SIZE = SENSOR_DATA_SIZE;
 
 /**
  * Fab별 메모리 설정
@@ -14,15 +24,29 @@ export interface FabMemoryConfig {
 }
 
 /**
- * 전체 메모리 레이아웃 정보
+ * 전체 메모리 레이아웃 정보 (Worker 영역만)
  */
 export interface MemoryLayout {
-  /** Vehicle 버퍼 전체 크기 (bytes) */
+  /** Vehicle 버퍼 전체 크기 (bytes) - Worker 영역만 */
   vehicleBufferSize: number;
-  /** Sensor 버퍼 전체 크기 (bytes) */
+  /** Sensor 버퍼 전체 크기 (bytes) - Worker 영역만 */
   sensorBufferSize: number;
   /** Fab별 메모리 할당 정보 */
   fabAssignments: Map<string, FabMemoryAssignment>;
+}
+
+/**
+ * 렌더 버퍼 레이아웃 정보 (actualVehicles 기준 연속)
+ */
+export interface RenderBufferLayout {
+  /** Vehicle 렌더 버퍼 크기 (bytes) */
+  vehicleRenderBufferSize: number;
+  /** Sensor 렌더 버퍼 크기 (bytes) */
+  sensorRenderBufferSize: number;
+  /** 총 vehicle 수 */
+  totalVehicles: number;
+  /** Fab별 렌더 할당 정보 (연속 레이아웃) */
+  fabRenderAssignments: FabRenderAssignment[];
 }
 
 /**
@@ -36,24 +60,24 @@ export interface WorkerAssignment {
 
 /**
  * MemoryLayoutManager
- * - 전체 메모리 레이아웃 계산
+ * - Worker 영역 메모리 레이아웃 계산
  * - Fab별 메모리 영역 할당
  * - 워커별 Fab 분배
+ * - 렌더 버퍼 (연속 레이아웃) 계산
  */
 export class MemoryLayoutManager {
   /**
-   * 전체 메모리 레이아웃 계산
-   * 각 Fab에 연속된 메모리 영역을 할당
+   * Worker 메모리 레이아웃 계산 (렌더 영역 제외)
+   * 버퍼 구조: [ Worker 영역 (모든 fab) ]
    */
   calculateLayout(fabConfigs: FabMemoryConfig[]): MemoryLayout {
     let vehicleOffset = 0;
     let sensorOffset = 0;
+
     const fabAssignments = new Map<string, FabMemoryAssignment>();
 
     for (const fab of fabConfigs) {
-      // Vehicle 데이터 영역 크기 계산 (floats * 4 bytes)
       const vehicleSize = fab.maxVehicles * VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
-      // Sensor 데이터 영역 크기 계산
       const sensorSize = fab.maxVehicles * SENSOR_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
       const assignment: FabMemoryAssignment = {
@@ -84,26 +108,58 @@ export class MemoryLayoutManager {
   }
 
   /**
+   * 렌더 버퍼 레이아웃 계산 (actualVehicles 기준 연속)
+   * Worker 초기화 후 actualVehicles가 결정되면 호출
+   */
+  calculateRenderLayout(fabVehicleCounts: Map<string, number>): RenderBufferLayout {
+    let vehicleRenderOffset = 0;
+    let sensorRenderOffset = 0;
+    let totalVehicles = 0;
+
+    const fabRenderAssignments: FabRenderAssignment[] = [];
+
+    // fabId 순서대로 (Map 순회 순서 유지)
+    for (const [fabId, actualVehicles] of fabVehicleCounts) {
+      const vehicleSize = actualVehicles * VEHICLE_RENDER_SIZE * Float32Array.BYTES_PER_ELEMENT;
+      const sensorSize = actualVehicles * SENSOR_RENDER_SIZE * Float32Array.BYTES_PER_ELEMENT;
+
+      fabRenderAssignments.push({
+        fabId,
+        vehicleRenderOffset,
+        sensorRenderOffset,
+        actualVehicles,
+      });
+
+      vehicleRenderOffset += vehicleSize;
+      sensorRenderOffset += sensorSize;
+      totalVehicles += actualVehicles;
+    }
+
+    return {
+      vehicleRenderBufferSize: vehicleRenderOffset,
+      sensorRenderBufferSize: sensorRenderOffset,
+      totalVehicles,
+      fabRenderAssignments,
+    };
+  }
+
+  /**
    * Fab들을 워커 수에 맞게 분배
-   * 가능한 균등하게 분배, 빈 워커는 생성하지 않음
    */
   distributeToWorkers(
     fabConfigs: FabMemoryConfig[],
     workerCount: number,
     layout: MemoryLayout
   ): WorkerAssignment[] {
-    // 실제 필요한 워커 수 계산 (Fab 수보다 많으면 Fab 수로 제한)
     const actualWorkerCount = Math.min(workerCount, fabConfigs.length);
     const assignments: WorkerAssignment[] = [];
 
-    // 균등 분배 계산
     const fabsPerWorker = Math.ceil(fabConfigs.length / actualWorkerCount);
 
     for (let i = 0; i < actualWorkerCount; i++) {
       const startIdx = i * fabsPerWorker;
       const endIdx = Math.min(startIdx + fabsPerWorker, fabConfigs.length);
 
-      // 빈 assignment는 건너뜀
       if (startIdx >= fabConfigs.length) continue;
 
       const assignedFabs = fabConfigs.slice(startIdx, endIdx);
@@ -113,7 +169,7 @@ export class MemoryLayoutManager {
         .filter((a): a is FabMemoryAssignment => a !== undefined);
 
       assignments.push({
-        workerIndex: assignments.length,  // 연속된 인덱스 사용
+        workerIndex: assignments.length,
         fabIds,
         fabAssignments,
       });
@@ -123,9 +179,9 @@ export class MemoryLayoutManager {
   }
 
   /**
-   * SharedArrayBuffer 생성 (Main Thread에서 호출)
+   * Worker SharedArrayBuffer 생성
    */
-  createBuffers(layout: MemoryLayout): {
+  createWorkerBuffers(layout: MemoryLayout): {
     vehicleBuffer: SharedArrayBuffer;
     sensorBuffer: SharedArrayBuffer;
   } {
@@ -136,34 +192,23 @@ export class MemoryLayoutManager {
   }
 
   /**
-   * 특정 Fab의 Vehicle 데이터 뷰 생성 (Main Thread 렌더링용)
+   * Render SharedArrayBuffer 생성 (연속 레이아웃)
    */
-  createVehicleDataView(
-    buffer: SharedArrayBuffer,
-    assignment: FabMemoryAssignment
-  ): Float32Array {
-    const { offset, size } = assignment.vehicleRegion;
-    const floatLength = size / Float32Array.BYTES_PER_ELEMENT;
-    return new Float32Array(buffer, offset, floatLength);
-  }
-
-  /**
-   * 특정 Fab의 Sensor 데이터 뷰 생성
-   */
-  createSensorDataView(
-    buffer: SharedArrayBuffer,
-    assignment: FabMemoryAssignment
-  ): Float32Array {
-    const { offset, size } = assignment.sensorRegion;
-    const floatLength = size / Float32Array.BYTES_PER_ELEMENT;
-    return new Float32Array(buffer, offset, floatLength);
+  createRenderBuffers(renderLayout: RenderBufferLayout): {
+    vehicleRenderBuffer: SharedArrayBuffer;
+    sensorRenderBuffer: SharedArrayBuffer;
+  } {
+    return {
+      vehicleRenderBuffer: new SharedArrayBuffer(renderLayout.vehicleRenderBufferSize),
+      sensorRenderBuffer: new SharedArrayBuffer(renderLayout.sensorRenderBufferSize),
+    };
   }
 
   /**
    * 레이아웃 정보 출력 (디버그용)
    */
   printLayoutInfo(layout: MemoryLayout): void {
-    console.log("=== Memory Layout ===");
+    console.log("=== Worker Memory Layout ===");
     console.log(`Vehicle Buffer: ${(layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`Sensor Buffer: ${(layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`Total: ${((layout.vehicleBufferSize + layout.sensorBufferSize) / 1024 / 1024).toFixed(2)} MB`);
@@ -173,6 +218,21 @@ export class MemoryLayoutManager {
       console.log(`[${fabId}]`);
       console.log(`  Vehicle: offset=${assignment.vehicleRegion.offset}, size=${assignment.vehicleRegion.size}, maxVeh=${assignment.vehicleRegion.maxVehicles}`);
       console.log(`  Sensor:  offset=${assignment.sensorRegion.offset}, size=${assignment.sensorRegion.size}`);
+    }
+  }
+
+  /**
+   * 렌더 레이아웃 정보 출력 (디버그용)
+   */
+  printRenderLayoutInfo(renderLayout: RenderBufferLayout): void {
+    console.log("=== Render Buffer Layout (Continuous) ===");
+    console.log(`Vehicle Render: ${(renderLayout.vehicleRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Sensor Render: ${(renderLayout.sensorRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Total Vehicles: ${renderLayout.totalVehicles}`);
+    console.log("");
+
+    for (const fab of renderLayout.fabRenderAssignments) {
+      console.log(`[${fab.fabId}] actualVeh=${fab.actualVehicles}, vehOffset=${fab.vehicleRenderOffset}, sensorOffset=${fab.sensorRenderOffset}`);
     }
   }
 

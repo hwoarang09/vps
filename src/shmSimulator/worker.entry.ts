@@ -2,7 +2,7 @@
 // Worker thread entry point
 
 import { SimulationEngine } from "./core/SimulationEngine";
-import type { WorkerMessage, MainMessage, InitPayload, FabInitData, SimulationConfig } from "./types";
+import type { WorkerMessage, MainMessage, InitPayload, FabInitData, SimulationConfig, FabRenderAssignment } from "./types";
 
 let engine: SimulationEngine | null = null;
 
@@ -113,6 +113,19 @@ function handleDispose(): void {
   globalThis.postMessage(response);
 }
 
+function handleSetRenderBuffer(
+  vehicleRenderBuffer: SharedArrayBuffer,
+  sensorRenderBuffer: SharedArrayBuffer,
+  fabAssignments: FabRenderAssignment[]
+): void {
+  if (!engine) {
+    console.warn("[Worker] Engine not initialized");
+    return;
+  }
+  console.log("[Worker] Setting render buffers");
+  engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments);
+}
+
 // Handle messages from main thread
 globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
@@ -148,6 +161,9 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
     case "SET_TRANSFER_MODE":
       // TODO: Implement per-fab transfer mode change
       console.log(`[Worker] SET_TRANSFER_MODE for fab ${message.fabId}: ${message.mode}`);
+      break;
+    case "SET_RENDER_BUFFER":
+      handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments);
       break;
     default:
       console.warn("[Worker] Unknown message type:", (message as { type: string }).type);

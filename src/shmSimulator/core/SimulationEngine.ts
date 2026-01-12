@@ -1,18 +1,22 @@
 // shmSimulator/core/SimulationEngine.ts
 
 import { FabContext, FabInitParams } from "./FabContext";
-import type { InitPayload, SimulationConfig, FabInitData, SharedMapData } from "../types";
+import type { InitPayload, SimulationConfig, FabInitData, SharedMapData, SharedMapRef, FabRenderOffset, FabRenderAssignment } from "../types";
 import { createDefaultConfig } from "../types";
 import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
-import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import type { StationRawData } from "@/types/station";
-import * as THREE from "three";
 
 export class SimulationEngine {
   // === Fab Contexts ===
   /** Map of Fab ID (e.g., "fab_A", "fab_B") to FabContext instances */
   private readonly fabContexts: Map<string, FabContext> = new Map();
+
+  // === Shared Map Reference (최적화 모드) ===
+  /**
+   * 공유 맵 참조 - 모든 Fab이 같은 맵 데이터를 참조
+   * "평행우주" 개념: 같은 맵에서 시뮬레이션하지만 fab간 충돌 없음
+   */
+  private sharedMapRef: SharedMapRef | null = null;
 
   // === Runtime ===
   private config: SimulationConfig;
@@ -56,44 +60,54 @@ export class SimulationEngine {
 
     const fabVehicleCounts: Record<string, number> = {};
 
+    // [최적화 모드] sharedMapData가 있으면 SharedMapRef 한 번만 생성 (복제 없음!)
+    if (payload.sharedMapData) {
+      this.sharedMapRef = this.buildSharedMapRef(payload.sharedMapData);
+      console.log(`[SimulationEngine] Built shared map reference: ${this.sharedMapRef.edges.length} edges, ${this.sharedMapRef.nodes.length} nodes`);
+    }
+
     // Initialize each fab
     for (const fabData of payload.fabs) {
-      // sharedMapData가 있으면 fabOffset을 사용하여 fab별 데이터 계산
-      let edges: Edge[];
-      let nodes: Node[];
-      let stationData: StationRawData[];
+      let params: FabInitParams;
 
-      if (payload.sharedMapData && fabData.fabOffset) {
-        // sharedMapData에서 fab별 데이터 계산
-        const calculated = this.calculateFabData(
-          payload.sharedMapData,
-          fabData.fabOffset.fabIndex,
+      if (this.sharedMapRef && fabData.fabOffset) {
+        // [최적화 모드] 공유 맵 참조 + fab offset 사용 (복제 없음!)
+        const fabOffset = this.calculateFabOffset(
+          payload.sharedMapData!,
           fabData.fabOffset.col,
           fabData.fabOffset.row
         );
-        edges = calculated.edges;
-        nodes = calculated.nodes;
-        stationData = calculated.stations;
-      } else {
-        // 기존 방식: fabData에 포함된 데이터 사용
-        edges = fabData.edges ?? [];
-        nodes = fabData.nodes ?? [];
-        stationData = fabData.stationData ?? [];
-      }
 
-      const params: FabInitParams = {
-        fabId: fabData.fabId,
-        sharedBuffer: fabData.sharedBuffer,
-        sensorPointBuffer: fabData.sensorPointBuffer,
-        edges,
-        nodes,
-        config: this.config,
-        vehicleConfigs: fabData.vehicleConfigs,
-        numVehicles: fabData.numVehicles,
-        transferMode: fabData.transferMode,
-        stationData,
-        memoryAssignment: fabData.memoryAssignment,
-      };
+        params = {
+          fabId: fabData.fabId,
+          sharedBuffer: fabData.sharedBuffer,
+          sensorPointBuffer: fabData.sensorPointBuffer,
+          sharedMapRef: this.sharedMapRef,
+          fabOffset,
+          config: this.config,
+          vehicleConfigs: fabData.vehicleConfigs,
+          numVehicles: fabData.numVehicles,
+          transferMode: fabData.transferMode,
+          memoryAssignment: fabData.memoryAssignment,
+        };
+
+        console.log(`[SimulationEngine] Fab ${fabData.fabId} using shared map (optimized mode), offset: (${fabOffset.x.toFixed(1)}, ${fabOffset.y.toFixed(1)})`);
+      } else {
+        // [레거시 모드] fab별 데이터 직접 사용
+        params = {
+          fabId: fabData.fabId,
+          sharedBuffer: fabData.sharedBuffer,
+          sensorPointBuffer: fabData.sensorPointBuffer,
+          edges: fabData.edges ?? [],
+          nodes: fabData.nodes ?? [],
+          stationData: fabData.stationData ?? [],
+          config: this.config,
+          vehicleConfigs: fabData.vehicleConfigs,
+          numVehicles: fabData.numVehicles,
+          transferMode: fabData.transferMode,
+          memoryAssignment: fabData.memoryAssignment,
+        };
+      }
 
       const context = new FabContext(params);
       this.fabContexts.set(fabData.fabId, context);
@@ -107,84 +121,50 @@ export class SimulationEngine {
   }
 
   /**
-   * Calculate fab-specific data from shared map data
-   * (Based on fabUtils.ts createFabGridSeparated logic)
+   * Build shared map reference from SharedMapData (한 번만 호출)
+   * 모든 Fab이 이 참조를 공유하여 메모리 절약
    */
-  private calculateFabData(
-    sharedMapData: SharedMapData,
-    fabIndex: number,
-    col: number,
-    row: number
-  ): { edges: Edge[]; nodes: Node[]; stations: StationRawData[] } {
-    const { originalEdges, originalNodes, originalStations} = sharedMapData;
+  private buildSharedMapRef(sharedMapData: SharedMapData): SharedMapRef {
+    const { originalEdges, originalNodes, originalStations } = sharedMapData;
 
-    // Calculate bounds for offset
-    const bounds = this.getNodeBounds(originalNodes);
-    const xOffset = bounds.width * 1.1;
-    const yOffset = bounds.height * 1.1;
-
-    const idOffset = fabIndex * 1000;
-    const currentXOffset = col * xOffset;
-    const currentYOffset = row * yOffset;
-
-    if (fabIndex === 0) {
-      // Original fab (no offset)
-      return {
-        edges: [...originalEdges],
-        nodes: [...originalNodes],
-        stations: [...originalStations],
-      };
+    // edgeNameToIndex 빌드 (한 번만)
+    const edgeNameToIndex = new Map<string, number>();
+    for (let idx = 0; idx < originalEdges.length; idx++) {
+      edgeNameToIndex.set(originalEdges[idx].edge_name, idx);
     }
 
-    // Clone with offset
-    const nodes = originalNodes.map(node => ({
-      ...node,
-      node_name: this.addOffsetToId(node.node_name, idOffset),
-      editor_x: node.editor_x + currentXOffset,
-      editor_y: node.editor_y + currentYOffset,
-    }));
+    // nodeNameToIndex 빌드 (한 번만)
+    const nodeNameToIndex = new Map<string, number>();
+    for (let idx = 0; idx < originalNodes.length; idx++) {
+      nodeNameToIndex.set(originalNodes[idx].node_name, idx);
+    }
 
-    const edges = originalEdges.map(edge => {
-      const newWaypoints = edge.waypoints.map(wp => this.addOffsetToId(wp, idOffset));
-
-      let newRenderingPoints = edge.renderingPoints;
-      if (edge.renderingPoints) {
-        newRenderingPoints = edge.renderingPoints.map(point =>
-          new THREE.Vector3(
-            point.x + currentXOffset,
-            point.y + currentYOffset,
-            point.z
-          )
-        );
-      }
-
-      return {
-        ...edge,
-        edge_name: this.addOffsetToId(edge.edge_name, idOffset),
-        from_node: this.addOffsetToId(edge.from_node, idOffset),
-        to_node: this.addOffsetToId(edge.to_node, idOffset),
-        waypoints: newWaypoints,
-        renderingPoints: newRenderingPoints,
-      };
-    });
-
-    const stations = originalStations.map(station => ({
-      ...station,
-      station_name: this.createFabStationName(station.station_name, col, row),
-      nearest_edge: this.createFabEdgeName(station.nearest_edge, fabIndex),
-      editor_x: (Number.parseFloat(station.editor_x) + currentXOffset).toString(),
-      editor_y: (Number.parseFloat(station.editor_y) + currentYOffset).toString(),
-    }));
-
-    return { edges, nodes, stations };
+    return {
+      edges: originalEdges,
+      nodes: originalNodes,
+      edgeNameToIndex,
+      nodeNameToIndex,
+      stations: originalStations,
+    };
   }
 
   /**
-   * Helper: Get node bounds (from fabUtils.ts)
+   * Calculate fab render offset (렌더링용)
    */
-  private getNodeBounds(nodes: Node[]): { width: number; height: number; xMin: number; xMax: number; yMin: number; yMax: number } {
+  private calculateFabOffset(sharedMapData: SharedMapData, col: number, row: number): FabRenderOffset {
+    const bounds = this.getNodeBounds(sharedMapData.originalNodes);
+    return {
+      x: col * bounds.width * 1.1,
+      y: row * bounds.height * 1.1,
+    };
+  }
+
+  /**
+   * Helper: Get node bounds
+   */
+  private getNodeBounds(nodes: Node[]): { width: number; height: number } {
     if (nodes.length === 0) {
-      return { xMin: 0, xMax: 0, yMin: 0, yMax: 0, width: 0, height: 0 };
+      return { width: 0, height: 0 };
     }
 
     let xMin = Infinity;
@@ -200,51 +180,9 @@ export class SimulationEngine {
     }
 
     return {
-      xMin,
-      xMax,
-      yMin,
-      yMax,
       width: xMax - xMin,
       height: yMax - yMin,
     };
-  }
-
-  /**
-   * Helper: Add offset to ID (from fabUtils.ts)
-   */
-  private addOffsetToId(name: string, offset: number): string {
-    const match = /^(.*)(\d{4})$/.exec(name);
-    if (!match) {
-      return name;
-    }
-
-    const prefix = match[1];
-    const numStr = match[2];
-    const num = Number.parseInt(numStr, 10);
-    const newNum = num + offset;
-
-    return `${prefix}${newNum.toString().padStart(4, '0')}`;
-  }
-
-  /**
-   * Helper: Create fab station name (from fabUtils.ts)
-   */
-  private createFabStationName(originalName: string, col: number, row: number): string {
-    if (col === 0 && row === 0) {
-      return originalName;
-    }
-    return `${originalName}_fab_${col}_${row}`;
-  }
-
-  /**
-   * Helper: Create fab edge name (from fabUtils.ts)
-   */
-  private createFabEdgeName(originalEdgeName: string, fabIndex: number): string {
-    if (fabIndex === 0) {
-      return originalEdgeName;
-    }
-    const idOffset = fabIndex * 1000;
-    return this.addOffsetToId(originalEdgeName, idOffset);
   }
 
   /**
@@ -406,6 +344,36 @@ export class SimulationEngine {
   }
 
   /**
+   * Set render buffers for all fabs (연속 레이아웃)
+   * Main Thread에서 SET_RENDER_BUFFER 메시지로 호출됨
+   */
+  setRenderBuffers(
+    vehicleRenderBuffer: SharedArrayBuffer,
+    sensorRenderBuffer: SharedArrayBuffer,
+    fabAssignments: FabRenderAssignment[]
+  ): void {
+    console.log(`[SimulationEngine] Setting render buffers for ${fabAssignments.length} fabs`);
+
+    for (const assignment of fabAssignments) {
+      const context = this.fabContexts.get(assignment.fabId);
+      if (!context) {
+        console.warn(`[SimulationEngine] Fab not found for render buffer: ${assignment.fabId}`);
+        continue;
+      }
+
+      context.setRenderBuffer(
+        vehicleRenderBuffer,
+        sensorRenderBuffer,
+        assignment.vehicleRenderOffset,
+        assignment.sensorRenderOffset,
+        assignment.actualVehicles
+      );
+
+      console.log(`[SimulationEngine] Render buffer set for ${assignment.fabId}: vehOffset=${assignment.vehicleRenderOffset}, actualVeh=${assignment.actualVehicles}`);
+    }
+  }
+
+  /**
    * Dispose the engine
    */
   dispose(): void {
@@ -415,6 +383,9 @@ export class SimulationEngine {
       context.dispose();
     }
     this.fabContexts.clear();
+
+    // Clear shared map reference
+    this.sharedMapRef = null;
 
     console.log("[SimulationEngine] Disposed");
   }

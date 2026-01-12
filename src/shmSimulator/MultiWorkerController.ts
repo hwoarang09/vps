@@ -11,27 +11,25 @@ import type {
   SharedMapData,
 } from "./types";
 import { TransferMode, createDefaultConfig } from "./types";
-import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment } from "./MemoryLayoutManager";
+import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment, RenderBufferLayout } from "./MemoryLayoutManager";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
 
 /**
  * Fab 초기화 파라미터 (MultiWorkerController용)
- * FabInitParams와 호환되도록 설계
  */
 export interface MultiFabInitParams {
   fabId: string;
   edges: Edge[];
   nodes: Node[];
   numVehicles: number;
-  maxVehicles?: number;  // 기본값: config.maxVehicles
+  maxVehicles?: number;
   vehicleConfigs?: VehicleInitConfig[];
   transferMode?: TransferMode;
   stations: ReadonlyArray<unknown>;
 }
 
-// FabInitParams 호환 타입 (기존 store에서 사용)
 export type { FabInitParams } from "@/shmSimulator/index";
 
 /**
@@ -58,21 +56,26 @@ interface WorkerInfo {
 /**
  * MultiWorkerController
  * - 여러 워커를 생성하고 관리
- * - MemoryLayoutManager를 사용하여 메모리 레이아웃 계산
- * - 하나의 큰 SharedArrayBuffer를 여러 워커가 공유
+ * - Worker 버퍼와 Render 버퍼 분리
+ * - Render 버퍼는 actualVehicles 기준 연속 레이아웃
  */
 export class MultiWorkerController {
   private config: SimulationConfig = createDefaultConfig();
   private readonly layoutManager = new MemoryLayoutManager();
   private layout: MemoryLayout | null = null;
+  private renderLayout: RenderBufferLayout | null = null;
 
-  // 공유 버퍼
+  // Worker 버퍼 (계산용)
   private vehicleBuffer: SharedArrayBuffer | null = null;
   private sensorBuffer: SharedArrayBuffer | null = null;
 
+  // Render 버퍼 (렌더링용 - 연속 레이아웃)
+  private vehicleRenderBuffer: SharedArrayBuffer | null = null;
+  private sensorRenderBuffer: SharedArrayBuffer | null = null;
+
   // 워커 관리
   private workers: WorkerInfo[] = [];
-  private readonly fabToWorkerMap: Map<string, number> = new Map();  // fabId -> workerIndex
+  private readonly fabToWorkerMap: Map<string, number> = new Map();
 
   // Fab별 정보
   private readonly fabConfigs: Map<string, MultiFabInitParams> = new Map();
@@ -86,16 +89,10 @@ export class MultiWorkerController {
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
 
-  /**
-   * Set callback for performance stats (각 워커별 성능 정보 배열)
-   */
   onPerfStats(callback: (workerStats: WorkerPerfStats[]) => void): void {
     this.onPerfStatsCallback = callback;
   }
 
-  /**
-   * Set callback for errors
-   */
   onError(callback: (error: string) => void): void {
     this.onErrorCallback = callback;
   }
@@ -107,18 +104,12 @@ export class MultiWorkerController {
     fabs: MultiFabInitParams[];
     workerCount?: number;
     config?: Partial<SimulationConfig>;
-    /**
-     * 멀티 Fab 모드용 공유 맵 데이터
-     * 원본 맵 데이터를 한 번만 전송하여 메모리 절약
-     */
     sharedMapData?: SharedMapData;
   }): Promise<void> {
     const { fabs, config = {}, sharedMapData } = params;
 
-    // Merge config
     this.config = { ...createDefaultConfig(), ...config };
 
-    // 워커 수 결정 (기본: CPU 코어 수와 Fab 수 중 작은 값)
     const defaultWorkerCount = typeof navigator === 'undefined'
       ? Math.min(4, fabs.length)
       : Math.min(navigator.hardwareConcurrency || 4, fabs.length);
@@ -126,7 +117,7 @@ export class MultiWorkerController {
 
     console.log(`[MultiWorkerController] Initializing with ${fabs.length} fabs, ${workerCount} workers`);
 
-    // 1. Fab 설정 저장 및 메모리 레이아웃 계산
+    // 1. Fab 설정 저장 및 Worker 메모리 레이아웃 계산
     const fabMemoryConfigs: FabMemoryConfig[] = [];
     for (const fab of fabs) {
       this.fabConfigs.set(fab.fabId, fab);
@@ -139,12 +130,12 @@ export class MultiWorkerController {
     this.layout = this.layoutManager.calculateLayout(fabMemoryConfigs);
     this.layoutManager.printLayoutInfo(this.layout);
 
-    // 2. 공유 버퍼 생성
-    const buffers = this.layoutManager.createBuffers(this.layout);
-    this.vehicleBuffer = buffers.vehicleBuffer;
-    this.sensorBuffer = buffers.sensorBuffer;
+    // 2. Worker 버퍼 생성
+    const workerBuffers = this.layoutManager.createWorkerBuffers(this.layout);
+    this.vehicleBuffer = workerBuffers.vehicleBuffer;
+    this.sensorBuffer = workerBuffers.sensorBuffer;
 
-    console.log(`[MultiWorkerController] Created SharedArrayBuffers`);
+    console.log(`[MultiWorkerController] Created Worker Buffers`);
     console.log(`  Vehicle: ${(this.layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`  Sensor:  ${(this.layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
 
@@ -156,7 +147,7 @@ export class MultiWorkerController {
     );
     this.layoutManager.printWorkerAssignments(workerAssignments);
 
-    // 4. 워커 생성 및 초기화
+    // 4. 워커 생성 및 초기화 (INIT 메시지)
     const initPromises: Promise<void>[] = [];
 
     for (const assignment of workerAssignments) {
@@ -180,37 +171,66 @@ export class MultiWorkerController {
 
       this.workers.push(workerInfo);
 
-      // fabId -> workerIndex 매핑
       for (const fabId of assignment.fabIds) {
         this.fabToWorkerMap.set(fabId, assignment.workerIndex);
       }
 
-      // 워커 초기화
       const promise = this.initWorker(workerInfo, assignment, sharedMapData);
       initPromises.push(promise);
     }
 
     await Promise.all(initPromises);
 
+    // 5. 렌더 버퍼 생성 (actualVehicles가 확정된 후)
+    this.renderLayout = this.layoutManager.calculateRenderLayout(this.fabVehicleCounts);
+    this.layoutManager.printRenderLayoutInfo(this.renderLayout);
+
+    const renderBuffers = this.layoutManager.createRenderBuffers(this.renderLayout);
+    this.vehicleRenderBuffer = renderBuffers.vehicleRenderBuffer;
+    this.sensorRenderBuffer = renderBuffers.sensorRenderBuffer;
+
+    console.log(`[MultiWorkerController] Created Render Buffers (continuous layout)`);
+    console.log(`  Vehicle Render: ${(this.renderLayout.vehicleRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`  Sensor Render:  ${(this.renderLayout.sensorRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`  Total Vehicles: ${this.renderLayout.totalVehicles}`);
+
+    // 6. SET_RENDER_BUFFER 메시지 전송 (각 워커에게 렌더 버퍼 + offset 전달)
+    this.sendRenderBufferToWorkers();
+
     this.isInitialized = true;
     console.log(`[MultiWorkerController] All workers initialized`);
   }
 
   /**
-   * Initialize a single worker
+   * Send render buffer to all workers (초기화 시 한 번만)
    */
+  private sendRenderBufferToWorkers(): void {
+    if (!this.vehicleRenderBuffer || !this.sensorRenderBuffer || !this.renderLayout) return;
+
+    const message: WorkerMessage = {
+      type: "SET_RENDER_BUFFER",
+      vehicleRenderBuffer: this.vehicleRenderBuffer,
+      sensorRenderBuffer: this.sensorRenderBuffer,
+      fabAssignments: this.renderLayout.fabRenderAssignments,
+    };
+
+    for (const workerInfo of this.workers) {
+      workerInfo.worker.postMessage(message);
+    }
+
+    console.log(`[MultiWorkerController] SET_RENDER_BUFFER sent to ${this.workers.length} workers`);
+  }
+
   private initWorker(workerInfo: WorkerInfo, assignment: WorkerAssignment, sharedMapData?: SharedMapData): Promise<void> {
     return new Promise((resolve, reject) => {
       const { worker } = workerInfo;
 
-      // 메시지 핸들러 설정
       worker.onmessage = (e: MessageEvent<MainMessage>) => {
         this.handleWorkerMessage(workerInfo, e.data);
 
         if (e.data.type === "INITIALIZED") {
           workerInfo.isInitialized = true;
 
-          // 각 Fab의 실제 차량 수 저장
           for (const [fabId, count] of Object.entries(e.data.fabVehicleCounts)) {
             this.fabVehicleCounts.set(fabId, count);
           }
@@ -227,14 +247,12 @@ export class MultiWorkerController {
         reject(new Error(error.message));
       };
 
-      // Init 페이로드 생성
       const fabInitDataList: FabInitData[] = [];
 
       for (const fabAssignment of assignment.fabAssignments) {
         const fabConfig = this.fabConfigs.get(fabAssignment.fabId);
         if (!fabConfig) continue;
 
-        // fabId에서 col, row 파싱 (fab_col_row 형식)
         const fabIdMatch = /fab_(\d+)_(\d+)/.exec(fabAssignment.fabId);
         const col = fabIdMatch ? Number.parseInt(fabIdMatch[1], 10) : 0;
         const row = fabIdMatch ? Number.parseInt(fabIdMatch[2], 10) : 0;
@@ -244,11 +262,9 @@ export class MultiWorkerController {
           fabId: fabAssignment.fabId,
           sharedBuffer: this.vehicleBuffer!,
           sensorPointBuffer: this.sensorBuffer!,
-          // sharedMapData가 있으면 edges/nodes/stationData를 보내지 않음 (메모리 절약)
           edges: sharedMapData ? undefined : fabConfig.edges,
           nodes: sharedMapData ? undefined : fabConfig.nodes,
           stationData: sharedMapData ? undefined : (fabConfig.stations as StationRawData[]),
-          // sharedMapData가 있으면 fabOffset 추가
           fabOffset: sharedMapData ? { fabIndex, col, row } : undefined,
           vehicleConfigs: fabConfig.vehicleConfigs ?? [],
           numVehicles: fabConfig.numVehicles,
@@ -262,7 +278,6 @@ export class MultiWorkerController {
       const payload: InitPayload = {
         config: this.config,
         fabs: fabInitDataList,
-        // sharedMapData가 있으면 포함 (원본 맵 데이터 한 번만 전송)
         sharedMapData,
       };
 
@@ -273,9 +288,6 @@ export class MultiWorkerController {
     });
   }
 
-  /**
-   * Handle messages from workers
-   */
   private handleWorkerMessage(workerInfo: WorkerInfo, message: MainMessage): void {
     switch (message.type) {
       case "READY":
@@ -283,12 +295,10 @@ export class MultiWorkerController {
         break;
 
       case "PERF_STATS":
-        // 해당 워커의 성능 정보 업데이트
         workerInfo.perfStats.avgStepMs = message.avgStepMs;
         workerInfo.perfStats.minStepMs = message.minStepMs;
         workerInfo.perfStats.maxStepMs = message.maxStepMs;
 
-        // 모든 워커의 성능 정보를 콜백으로 전달
         if (this.onPerfStatsCallback) {
           const allStats = this.workers.map(w => ({ ...w.perfStats }));
           this.onPerfStatsCallback(allStats);
@@ -299,14 +309,9 @@ export class MultiWorkerController {
         console.error(`[MultiWorkerController] Worker ${workerInfo.workerIndex} error:`, message.error);
         this.onErrorCallback?.(message.error);
         break;
-
-      // INITIALIZED는 initWorker에서 처리
     }
   }
 
-  /**
-   * Start simulation on all workers
-   */
   start(): void {
     if (!this.isInitialized) {
       console.warn("[MultiWorkerController] Not initialized");
@@ -321,9 +326,6 @@ export class MultiWorkerController {
     console.log(`[MultiWorkerController] Started ${this.workers.length} workers`);
   }
 
-  /**
-   * Stop simulation on all workers
-   */
   stop(): void {
     for (const workerInfo of this.workers) {
       workerInfo.worker.postMessage({ type: "STOP" } as WorkerMessage);
@@ -333,31 +335,20 @@ export class MultiWorkerController {
     console.log(`[MultiWorkerController] Stopped`);
   }
 
-  /**
-   * Pause simulation
-   */
   pause(): void {
     for (const workerInfo of this.workers) {
       workerInfo.worker.postMessage({ type: "PAUSE" } as WorkerMessage);
     }
-
     this.isRunning = false;
   }
 
-  /**
-   * Resume simulation
-   */
   resume(): void {
     for (const workerInfo of this.workers) {
       workerInfo.worker.postMessage({ type: "RESUME" } as WorkerMessage);
     }
-
     this.isRunning = true;
   }
 
-  /**
-   * Send command to a specific fab
-   */
   sendCommand(fabId: string, payload: unknown): void {
     const workerIndex = this.fabToWorkerMap.get(fabId);
     if (workerIndex === undefined) {
@@ -372,10 +363,6 @@ export class MultiWorkerController {
     workerInfo.worker.postMessage(message);
   }
 
-  /**
-   * Dispose all workers
-   * 워커들이 정리를 완료할 때까지 대기 후 terminate
-   */
   dispose(): void {
     if (this.workers.length === 0) {
       console.log("[MultiWorkerController] No workers to dispose");
@@ -394,16 +381,16 @@ export class MultiWorkerController {
     this.fabVehicleCounts.clear();
     this.vehicleBuffer = null;
     this.sensorBuffer = null;
+    this.vehicleRenderBuffer = null;
+    this.sensorRenderBuffer = null;
     this.layout = null;
+    this.renderLayout = null;
     this.isInitialized = false;
     this.isRunning = false;
 
     console.log("[MultiWorkerController] Disposed");
   }
 
-  /**
-   * Dispose a single worker with proper cleanup
-   */
   private disposeWorker(workerInfo: WorkerInfo): void {
     const { worker, workerIndex } = workerInfo;
 
@@ -422,7 +409,6 @@ export class MultiWorkerController {
     worker.addEventListener("message", onMessage);
     worker.postMessage({ type: "DISPOSE" } as WorkerMessage);
 
-    // 안전장치: 500ms 후에도 DISPOSED 메시지가 없으면 강제 terminate
     setTimeout(() => {
       worker.removeEventListener("message", onMessage);
       terminateWorker();
@@ -430,79 +416,65 @@ export class MultiWorkerController {
   }
 
   // =========================================================================
-  // Data Access (for rendering)
+  // Data Access (for rendering) - 연속 레이아웃 렌더 버퍼 사용
   // =========================================================================
 
   /**
-   * Get vehicle data for a specific fab (렌더링용)
-   * fabId가 없으면 전체 버퍼 반환 (멀티 Fab 렌더링용)
+   * Get vehicle render buffer (연속 레이아웃, Main Thread에서 직접 사용)
    */
-  getVehicleData(fabId?: string): Float32Array | null {
-    if (!this.vehicleBuffer || !this.layout) return null;
-
-    // fabId가 없으면 전체 버퍼 반환
-    if (!fabId) {
-      return new Float32Array(this.vehicleBuffer);
-    }
-
-    const assignment = this.layout.fabAssignments.get(fabId);
-    if (!assignment) return null;
-
-    return this.layoutManager.createVehicleDataView(this.vehicleBuffer, assignment);
+  getVehicleRenderBuffer(): SharedArrayBuffer | null {
+    return this.vehicleRenderBuffer;
   }
 
   /**
-   * Get sensor point data for a specific fab (or all fabs if no fabId)
+   * Get sensor render buffer (연속 레이아웃, Main Thread에서 직접 사용)
    */
-  getSensorPointData(fabId?: string): Float32Array | null {
-    if (!this.sensorBuffer || !this.layout) return null;
-
-    // fabId가 없으면 전체 버퍼 반환
-    if (!fabId) {
-      return new Float32Array(this.sensorBuffer);
-    }
-
-    const assignment = this.layout.fabAssignments.get(fabId);
-    if (!assignment) return null;
-
-    return this.layoutManager.createSensorDataView(this.sensorBuffer, assignment);
+  getSensorRenderBuffer(): SharedArrayBuffer | null {
+    return this.sensorRenderBuffer;
   }
 
   /**
-   * Get actual number of vehicles for a specific fab
+   * Get vehicle render data as Float32Array (전체 연속 데이터)
    */
+  getVehicleData(): Float32Array | null {
+    if (!this.vehicleRenderBuffer) return null;
+    return new Float32Array(this.vehicleRenderBuffer);
+  }
+
+  /**
+   * Get sensor render data as Float32Array (전체 연속 데이터)
+   */
+  getSensorPointData(): Float32Array | null {
+    if (!this.sensorRenderBuffer) return null;
+    return new Float32Array(this.sensorRenderBuffer);
+  }
+
+  /**
+   * Get render layout info (렌더러에서 필요시 사용)
+   */
+  getRenderLayout(): RenderBufferLayout | null {
+    return this.renderLayout;
+  }
+
+  /**
+   * Get total vehicle count
+   */
+  getTotalVehicleCount(): number {
+    return this.renderLayout?.totalVehicles ?? 0;
+  }
+
   getActualNumVehicles(fabId: string): number {
     return this.fabVehicleCounts.get(fabId) ?? 0;
   }
 
-  /**
-   * Get all fab IDs
-   */
   getFabIds(): string[] {
     return Array.from(this.fabConfigs.keys());
   }
 
-  /**
-   * Get total vehicle count across all fabs
-   */
-  getTotalVehicleCount(): number {
-    let total = 0;
-    for (const count of this.fabVehicleCounts.values()) {
-      total += count;
-    }
-    return total;
-  }
-
-  /**
-   * Get worker count
-   */
   getWorkerCount(): number {
     return this.workers.length;
   }
 
-  /**
-   * Get worker assignment info (디버그용)
-   */
   getWorkerAssignments(): Array<{ workerIndex: number; fabIds: string[] }> {
     return this.workers.map(w => ({
       workerIndex: w.workerIndex,
@@ -510,16 +482,10 @@ export class MultiWorkerController {
     }));
   }
 
-  /**
-   * Check if running
-   */
   getIsRunning(): boolean {
     return this.isRunning;
   }
 
-  /**
-   * Check if initialized
-   */
   getIsInitialized(): boolean {
     return this.isInitialized;
   }

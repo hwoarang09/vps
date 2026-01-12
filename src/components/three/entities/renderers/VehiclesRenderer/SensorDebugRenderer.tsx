@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { SENSOR_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { getMarkerConfig } from "@/config/mapConfig";
 import { VehicleSystemType } from "@/types/vehicle";
 
@@ -64,9 +65,10 @@ interface InstancedQuadLinesProps {
   getData: () => Float32Array | null;
   dataOffset: number; // 0=outer, 1=middle, 2=inner
   isBody?: boolean;   // Body는 BL/BR 사용, Sensor는 SL/SR 사용
+  isSharedMemory?: boolean;
 }
 
-function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = false }: InstancedQuadLinesProps) {
+function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = false, isSharedMemory = false }: InstancedQuadLinesProps) {
   const meshRef = useRef<THREE.LineSegments>(null);
 
   // 1. Static Geometry (Topology)
@@ -75,14 +77,12 @@ function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = 
     geo.instanceCount = numVehicles;
 
     // 8 vertices for 4 lines (0,1, 2,3, 4,5, 6,7)
-    // position attribute is required for Three.js to know vertex count
     const vertexIndices = new Float32Array([0, 1, 2, 3, 4, 5, 6, 7]);
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3)); // dummy positions
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
     geo.setAttribute('vertexIndex', new THREE.BufferAttribute(vertexIndices, 1));
 
-    // Instance Attributes: xy=FL, zw=FR
+    // Instance Attributes
     geo.setAttribute('quadStartEnd', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
-    // Instance Attributes: xy=BL/SL, zw=BR/SR
     geo.setAttribute('quadOther', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
 
     return geo;
@@ -120,12 +120,13 @@ function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = 
     const arrStartEnd = startEndAttr.array as Float32Array;
     const arrOther = otherAttr.array as Float32Array;
 
-    // Update Uniforms
     material.uniforms.zHeight.value = getMarkerConfig().Z;
 
-    // Fast Data Copy - 8 floats per vehicle (vs 24 previously)
+    // 데이터 크기: SharedMemory는 연속 레이아웃 (SENSOR_RENDER_SIZE), Array는 기존 (SENSOR_DATA_SIZE)
+    const dataSize = isSharedMemory ? SENSOR_RENDER_SIZE : SENSOR_DATA_SIZE;
+
     for (let i = 0; i < numVehicles; i++) {
-      const base = i * SENSOR_DATA_SIZE + (dataOffset * SENSOR_POINT_SIZE);
+      const base = i * dataSize + (dataOffset * SENSOR_POINT_SIZE);
       const writeIdx = i * 4;
 
       // Common points
@@ -143,7 +144,6 @@ function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = 
         orx = data[base + SensorPoint.BR_X];
         ory = data[base + SensorPoint.BR_Y];
       } else {
-        // Sensor uses SL/SR (Sensor Left/Right)
         olx = data[base + SensorPoint.SL_X];
         oly = data[base + SensorPoint.SL_Y];
         orx = data[base + SensorPoint.SR_X];
@@ -180,12 +180,10 @@ interface SensorDebugRendererProps {
 
 /**
  * Render sensor wireframes for debugging
- * Shows 3-zone sensor quads (outer/approach, middle/brake, inner/stop) and body quad
  */
 export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererProps) {
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
 
-  // Data fetcher function reference
   const getData = () => isSharedMemory ? getShmSensorPointData() : sensorPointArray.getData();
 
   if (numVehicles === 0) return null;
@@ -198,6 +196,7 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
         color="#ffff00"
         getData={getData}
         dataOffset={0}
+        isSharedMemory={isSharedMemory}
       />
       {/* Middle / Brake (Orange) */}
       <InstancedQuadLines
@@ -205,6 +204,7 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
         color="#ff8800"
         getData={getData}
         dataOffset={1}
+        isSharedMemory={isSharedMemory}
       />
       {/* Inner / Stop (Red) */}
       <InstancedQuadLines
@@ -212,14 +212,16 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
         color="#ff0000"
         getData={getData}
         dataOffset={2}
+        isSharedMemory={isSharedMemory}
       />
-      {/* Body (Cyan) - Uses Offset 0 but reads BL/BR instead of SL/SR */}
+      {/* Body (Cyan) */}
       <InstancedQuadLines
         numVehicles={numVehicles}
         color="#00ffff"
         getData={getData}
         dataOffset={0}
         isBody={true}
+        isSharedMemory={isSharedMemory}
       />
     </>
   );
