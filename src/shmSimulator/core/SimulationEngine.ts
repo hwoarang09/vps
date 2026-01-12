@@ -350,14 +350,18 @@ export class SimulationEngine {
   setRenderBuffers(
     vehicleRenderBuffer: SharedArrayBuffer,
     sensorRenderBuffer: SharedArrayBuffer,
-    fabAssignments: FabRenderAssignment[]
+    fabAssignments: FabRenderAssignment[],
+    totalVehicles: number
   ): void {
-    console.log(`[SimulationEngine] Setting render buffers for ${fabAssignments.length} fabs`);
+    console.log(`[SimulationEngine] Setting render buffers for ${fabAssignments.length} fabs, total=${totalVehicles}`);
+
+    let vehicleStartIndex = 0;
 
     for (const assignment of fabAssignments) {
       const context = this.fabContexts.get(assignment.fabId);
       if (!context) {
         console.warn(`[SimulationEngine] Fab not found for render buffer: ${assignment.fabId}`);
+        vehicleStartIndex += assignment.actualVehicles;
         continue;
       }
 
@@ -365,11 +369,14 @@ export class SimulationEngine {
         vehicleRenderBuffer,
         sensorRenderBuffer,
         assignment.vehicleRenderOffset,
-        assignment.sensorRenderOffset,
-        assignment.actualVehicles
+        assignment.actualVehicles,
+        totalVehicles,
+        vehicleStartIndex
       );
 
-      console.log(`[SimulationEngine] Render buffer set for ${assignment.fabId}: vehOffset=${assignment.vehicleRenderOffset}, actualVeh=${assignment.actualVehicles}`);
+      console.log(`[SimulationEngine] Render buffer set for ${assignment.fabId}: vehOffset=${assignment.vehicleRenderOffset}, actualVeh=${assignment.actualVehicles}, startIdx=${vehicleStartIndex}`);
+
+      vehicleStartIndex += assignment.actualVehicles;
     }
   }
 

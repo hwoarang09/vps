@@ -116,14 +116,15 @@ function handleDispose(): void {
 function handleSetRenderBuffer(
   vehicleRenderBuffer: SharedArrayBuffer,
   sensorRenderBuffer: SharedArrayBuffer,
-  fabAssignments: FabRenderAssignment[]
+  fabAssignments: FabRenderAssignment[],
+  totalVehicles: number
 ): void {
   if (!engine) {
     console.warn("[Worker] Engine not initialized");
     return;
   }
-  console.log("[Worker] Setting render buffers");
-  engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments);
+  console.log(`[Worker] Setting render buffers, total=${totalVehicles}`);
+  engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments, totalVehicles);
 }
 
 // Handle messages from main thread
@@ -163,7 +164,7 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
       console.log(`[Worker] SET_TRANSFER_MODE for fab ${message.fabId}: ${message.mode}`);
       break;
     case "SET_RENDER_BUFFER":
-      handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments);
+      handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
       break;
     default:
       console.warn("[Worker] Unknown message type:", (message as { type: string }).type);

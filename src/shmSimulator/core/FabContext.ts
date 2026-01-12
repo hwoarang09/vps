@@ -2,7 +2,7 @@
 // Fab 단위로 모든 매니저와 메모리를 묶어서 관리하는 클래스
 
 import { VehicleDataArrayBase, MovementData, VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { SensorPointArrayBase, SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { SensorPointArrayBase, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE, SensorPoint } from "@/common/vehicle/memory/SensorPointArrayBase";
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr";
 import { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
@@ -13,7 +13,11 @@ import { EngineStore } from "./EngineStore";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
 import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
-import { VEHICLE_RENDER_SIZE, SENSOR_RENDER_SIZE } from "../MemoryLayoutManager";
+import {
+  VEHICLE_RENDER_SIZE,
+  SENSOR_ATTR_SIZE,
+  SensorSection,
+} from "../MemoryLayoutManager";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, TransferMode, VehicleInitConfig, FabMemoryAssignment, SharedMapRef, FabRenderOffset } from "../types";
@@ -49,6 +53,8 @@ export class FabContext {
   // === Render Data (별도 버퍼, 연속 레이아웃) ===
   private vehicleRenderData: Float32Array | null = null;
   private sensorRenderData: Float32Array | null = null;
+  private totalVehicles: number = 0;
+  private vehicleStartIndex: number = 0;
 
   // === Map Data ===
   private edges: Edge[] = [];
@@ -169,21 +175,31 @@ export class FabContext {
   /**
    * Set render buffer (연속 레이아웃)
    * Main Thread에서 SET_RENDER_BUFFER 메시지로 호출됨
+   *
+   * @param vehicleRenderBuffer - 전체 vehicle 렌더 버퍼
+   * @param sensorRenderBuffer - 전체 sensor 렌더 버퍼
+   * @param vehicleRenderOffset - vehicle 버퍼 내 이 Fab의 시작 오프셋 (bytes)
+   * @param actualVehicles - 이 Fab의 vehicle 수
+   * @param totalVehicles - 전체 vehicle 수 (모든 Fab 합산)
+   * @param vehicleStartIndex - 전체에서 이 Fab의 첫 vehicle 인덱스
    */
   setRenderBuffer(
     vehicleRenderBuffer: SharedArrayBuffer,
     sensorRenderBuffer: SharedArrayBuffer,
     vehicleRenderOffset: number,
-    sensorRenderOffset: number,
-    actualVehicles: number
+    actualVehicles: number,
+    totalVehicles: number,
+    vehicleStartIndex: number
   ): void {
     const vehicleRenderLength = actualVehicles * VEHICLE_RENDER_SIZE;
-    const sensorRenderLength = actualVehicles * SENSOR_RENDER_SIZE;
 
     this.vehicleRenderData = new Float32Array(vehicleRenderBuffer, vehicleRenderOffset, vehicleRenderLength);
-    this.sensorRenderData = new Float32Array(sensorRenderBuffer, sensorRenderOffset, sensorRenderLength);
+    // 센서 버퍼는 전체를 참조 (섹션별 연속 레이아웃이므로)
+    this.sensorRenderData = new Float32Array(sensorRenderBuffer);
+    this.totalVehicles = totalVehicles;
+    this.vehicleStartIndex = vehicleStartIndex;
 
-    console.log(`[FabContext:${this.fabId}] Render buffer set: vehOffset=${vehicleRenderOffset}, sensorOffset=${sensorRenderOffset}, vehicles=${actualVehicles}`);
+    console.log(`[FabContext:${this.fabId}] Render buffer set: vehOffset=${vehicleRenderOffset}, vehicles=${actualVehicles}, total=${totalVehicles}, startIdx=${vehicleStartIndex}`);
 
     // 초기 데이터를 렌더 버퍼에 복사
     this.writeToRenderRegion();
@@ -264,19 +280,33 @@ export class FabContext {
 
   /**
    * Write vehicle and sensor data to render buffer with fab offset applied
+   *
+   * 센서 렌더 버퍼 레이아웃 (섹션별 연속 - set() 최적화 가능):
+   *
+   * Section 0: zone0_startEnd - [Veh0_FL,FR | Veh1_FL,FR | ... | VehN_FL,FR]
+   * Section 1: zone0_other    - [Veh0_SL,SR | Veh1_SL,SR | ... | VehN_SL,SR]
+   * Section 2: zone1_startEnd - [...]
+   * Section 3: zone1_other    - [...]
+   * Section 4: zone2_startEnd - [...]
+   * Section 5: zone2_other    - [...]
+   * Section 6: body_other     - [Veh0_BL,BR | Veh1_BL,BR | ... | VehN_BL,BR]
+   *
+   * 총: 7 sections × totalVehicles × 4 floats
+   *
+   * 멀티 Fab 환경에서 각 Fab은 전체 버퍼에서 자기 vehicle 위치에 복사
    */
   private writeToRenderRegion(): void {
     if (!this.vehicleRenderData || !this.sensorRenderData) {
-      // 렌더 버퍼 미설정
       return;
     }
 
     const offsetX = this.fabOffset.x;
     const offsetY = this.fabOffset.y;
+    const numVeh = this.actualNumVehicles;
 
     // === Vehicle Render Data ===
     const workerVehicleData = this.vehicleDataArray.getData();
-    for (let i = 0; i < this.actualNumVehicles; i++) {
+    for (let i = 0; i < numVeh; i++) {
       const workerPtr = i * VEHICLE_DATA_SIZE;
       const renderPtr = i * VEHICLE_RENDER_SIZE;
 
@@ -286,16 +316,66 @@ export class FabContext {
       this.vehicleRenderData[renderPtr + 3] = workerVehicleData[workerPtr + MovementData.ROTATION];
     }
 
-    // === Sensor Render Data ===
+    // === Sensor Render Data (섹션별 연속 레이아웃) ===
     const workerSensorData = this.sensorPointArray.getData();
-    for (let i = 0; i < this.actualNumVehicles; i++) {
-      const workerPtr = i * SENSOR_DATA_SIZE;
-      const renderPtr = i * SENSOR_RENDER_SIZE;
 
-      for (let j = 0; j < SENSOR_DATA_SIZE; j += 2) {
-        this.sensorRenderData[renderPtr + j] = workerSensorData[workerPtr + j] + offsetX;
-        this.sensorRenderData[renderPtr + j + 1] = workerSensorData[workerPtr + j + 1] + offsetY;
-      }
+    // 전체 버퍼 기준 섹션 크기 (totalVehicles × 4)
+    const sectionSize = this.totalVehicles * SENSOR_ATTR_SIZE;
+    // 이 Fab의 vehicle들이 각 섹션에서 시작하는 오프셋
+    const fabOffset = this.vehicleStartIndex * SENSOR_ATTR_SIZE;
+
+    // 섹션별 시작 오프셋 (전체 버퍼 기준)
+    const zone0StartEndBase = SensorSection.ZONE0_STARTEND * sectionSize + fabOffset;
+    const zone0OtherBase = SensorSection.ZONE0_OTHER * sectionSize + fabOffset;
+    const zone1StartEndBase = SensorSection.ZONE1_STARTEND * sectionSize + fabOffset;
+    const zone1OtherBase = SensorSection.ZONE1_OTHER * sectionSize + fabOffset;
+    const zone2StartEndBase = SensorSection.ZONE2_STARTEND * sectionSize + fabOffset;
+    const zone2OtherBase = SensorSection.ZONE2_OTHER * sectionSize + fabOffset;
+    const bodyOtherBase = SensorSection.BODY_OTHER * sectionSize + fabOffset;
+
+    for (let i = 0; i < numVeh; i++) {
+      const vehPtr = i * SENSOR_ATTR_SIZE; // 4 floats per vehicle in each section
+
+      // Zone 0
+      const zone0Src = i * SENSOR_DATA_SIZE + 0 * SENSOR_POINT_SIZE;
+      // startEnd: FL, FR
+      this.sensorRenderData[zone0StartEndBase + vehPtr + 0] = workerSensorData[zone0Src + SensorPoint.FL_X] + offsetX;
+      this.sensorRenderData[zone0StartEndBase + vehPtr + 1] = workerSensorData[zone0Src + SensorPoint.FL_Y] + offsetY;
+      this.sensorRenderData[zone0StartEndBase + vehPtr + 2] = workerSensorData[zone0Src + SensorPoint.FR_X] + offsetX;
+      this.sensorRenderData[zone0StartEndBase + vehPtr + 3] = workerSensorData[zone0Src + SensorPoint.FR_Y] + offsetY;
+      // other: SL, SR
+      this.sensorRenderData[zone0OtherBase + vehPtr + 0] = workerSensorData[zone0Src + SensorPoint.SL_X] + offsetX;
+      this.sensorRenderData[zone0OtherBase + vehPtr + 1] = workerSensorData[zone0Src + SensorPoint.SL_Y] + offsetY;
+      this.sensorRenderData[zone0OtherBase + vehPtr + 2] = workerSensorData[zone0Src + SensorPoint.SR_X] + offsetX;
+      this.sensorRenderData[zone0OtherBase + vehPtr + 3] = workerSensorData[zone0Src + SensorPoint.SR_Y] + offsetY;
+
+      // Zone 1
+      const zone1Src = i * SENSOR_DATA_SIZE + 1 * SENSOR_POINT_SIZE;
+      this.sensorRenderData[zone1StartEndBase + vehPtr + 0] = workerSensorData[zone1Src + SensorPoint.FL_X] + offsetX;
+      this.sensorRenderData[zone1StartEndBase + vehPtr + 1] = workerSensorData[zone1Src + SensorPoint.FL_Y] + offsetY;
+      this.sensorRenderData[zone1StartEndBase + vehPtr + 2] = workerSensorData[zone1Src + SensorPoint.FR_X] + offsetX;
+      this.sensorRenderData[zone1StartEndBase + vehPtr + 3] = workerSensorData[zone1Src + SensorPoint.FR_Y] + offsetY;
+      this.sensorRenderData[zone1OtherBase + vehPtr + 0] = workerSensorData[zone1Src + SensorPoint.SL_X] + offsetX;
+      this.sensorRenderData[zone1OtherBase + vehPtr + 1] = workerSensorData[zone1Src + SensorPoint.SL_Y] + offsetY;
+      this.sensorRenderData[zone1OtherBase + vehPtr + 2] = workerSensorData[zone1Src + SensorPoint.SR_X] + offsetX;
+      this.sensorRenderData[zone1OtherBase + vehPtr + 3] = workerSensorData[zone1Src + SensorPoint.SR_Y] + offsetY;
+
+      // Zone 2
+      const zone2Src = i * SENSOR_DATA_SIZE + 2 * SENSOR_POINT_SIZE;
+      this.sensorRenderData[zone2StartEndBase + vehPtr + 0] = workerSensorData[zone2Src + SensorPoint.FL_X] + offsetX;
+      this.sensorRenderData[zone2StartEndBase + vehPtr + 1] = workerSensorData[zone2Src + SensorPoint.FL_Y] + offsetY;
+      this.sensorRenderData[zone2StartEndBase + vehPtr + 2] = workerSensorData[zone2Src + SensorPoint.FR_X] + offsetX;
+      this.sensorRenderData[zone2StartEndBase + vehPtr + 3] = workerSensorData[zone2Src + SensorPoint.FR_Y] + offsetY;
+      this.sensorRenderData[zone2OtherBase + vehPtr + 0] = workerSensorData[zone2Src + SensorPoint.SL_X] + offsetX;
+      this.sensorRenderData[zone2OtherBase + vehPtr + 1] = workerSensorData[zone2Src + SensorPoint.SL_Y] + offsetY;
+      this.sensorRenderData[zone2OtherBase + vehPtr + 2] = workerSensorData[zone2Src + SensorPoint.SR_X] + offsetX;
+      this.sensorRenderData[zone2OtherBase + vehPtr + 3] = workerSensorData[zone2Src + SensorPoint.SR_Y] + offsetY;
+
+      // Body other: BL, BR from zone0
+      this.sensorRenderData[bodyOtherBase + vehPtr + 0] = workerSensorData[zone0Src + SensorPoint.BL_X] + offsetX;
+      this.sensorRenderData[bodyOtherBase + vehPtr + 1] = workerSensorData[zone0Src + SensorPoint.BL_Y] + offsetY;
+      this.sensorRenderData[bodyOtherBase + vehPtr + 2] = workerSensorData[zone0Src + SensorPoint.BR_X] + offsetX;
+      this.sensorRenderData[bodyOtherBase + vehPtr + 3] = workerSensorData[zone0Src + SensorPoint.BR_Y] + offsetY;
     }
   }
 

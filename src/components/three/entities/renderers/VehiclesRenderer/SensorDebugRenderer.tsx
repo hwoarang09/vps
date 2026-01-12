@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
-import { SENSOR_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
+import { SENSOR_ATTR_SIZE, SensorSection } from "@/shmSimulator/MemoryLayoutManager";
 import { getMarkerConfig } from "@/config/mapConfig";
 import { VehicleSystemType } from "@/types/vehicle";
 
@@ -63,12 +63,24 @@ interface InstancedQuadLinesProps {
   numVehicles: number;
   color: string;
   getData: () => Float32Array | null;
-  dataOffset: number; // 0=outer, 1=middle, 2=inner
+  dataOffset: number; // 0=outer, 1=middle, 2=inner (Array mode용)
   isBody?: boolean;   // Body는 BL/BR 사용, Sensor는 SL/SR 사용
   isSharedMemory?: boolean;
+  // SharedMemory 모드용 섹션 인덱스 (set() 최적화)
+  startEndSection?: number;
+  otherSection?: number;
 }
 
-function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = false, isSharedMemory = false }: InstancedQuadLinesProps) {
+function InstancedQuadLines({
+  numVehicles,
+  color,
+  getData,
+  dataOffset,
+  isBody = false,
+  isSharedMemory = false,
+  startEndSection,
+  otherSection,
+}: InstancedQuadLinesProps) {
   const meshRef = useRef<THREE.LineSegments>(null);
 
   // 1. Static Geometry (Topology)
@@ -81,9 +93,14 @@ function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = 
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
     geo.setAttribute('vertexIndex', new THREE.BufferAttribute(vertexIndices, 1));
 
-    // Instance Attributes
-    geo.setAttribute('quadStartEnd', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
-    geo.setAttribute('quadOther', new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4));
+    // Instance Attributes with DynamicDrawUsage for better performance
+    const startEndAttr = new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4);
+    const otherAttr = new THREE.InstancedBufferAttribute(new Float32Array(numVehicles * 4), 4);
+    startEndAttr.setUsage(THREE.DynamicDrawUsage);
+    otherAttr.setUsage(THREE.DynamicDrawUsage);
+
+    geo.setAttribute('quadStartEnd', startEndAttr);
+    geo.setAttribute('quadOther', otherAttr);
 
     return geo;
   }, [numVehicles]);
@@ -122,44 +139,52 @@ function InstancedQuadLines({ numVehicles, color, getData, dataOffset, isBody = 
 
     material.uniforms.zHeight.value = getMarkerConfig().Z;
 
-    // 데이터 크기: SharedMemory는 연속 레이아웃 (SENSOR_RENDER_SIZE), Array는 기존 (SENSOR_DATA_SIZE)
-    const dataSize = isSharedMemory ? SENSOR_RENDER_SIZE : SENSOR_DATA_SIZE;
+    if (isSharedMemory && startEndSection !== undefined && otherSection !== undefined) {
+      // SharedMemory 모드: set() 한 번에 복사 (섹션별 연속 레이아웃)
+      const sectionSize = numVehicles * SENSOR_ATTR_SIZE;
+      const startEndOffset = startEndSection * sectionSize;
+      const otherOffset = otherSection * sectionSize;
 
-    for (let i = 0; i < numVehicles; i++) {
-      const base = i * dataSize + (dataOffset * SENSOR_POINT_SIZE);
-      const writeIdx = i * 4;
+      arrStartEnd.set(data.subarray(startEndOffset, startEndOffset + sectionSize));
+      arrOther.set(data.subarray(otherOffset, otherOffset + sectionSize));
+    } else {
+      // Array 모드: 기존 for 루프 방식
+      for (let i = 0; i < numVehicles; i++) {
+        const base = i * SENSOR_DATA_SIZE + (dataOffset * SENSOR_POINT_SIZE);
+        const writeIdx = i * 4;
 
-      // Common points
-      const flx = data[base + SensorPoint.FL_X];
-      const fly = data[base + SensorPoint.FL_Y];
-      const frx = data[base + SensorPoint.FR_X];
-      const fry = data[base + SensorPoint.FR_Y];
+        // Common points
+        const flx = data[base + SensorPoint.FL_X];
+        const fly = data[base + SensorPoint.FL_Y];
+        const frx = data[base + SensorPoint.FR_X];
+        const fry = data[base + SensorPoint.FR_Y];
 
-      // Points that differ between Body and Sensor
-      let olx, oly, orx, ory;
+        // Points that differ between Body and Sensor
+        let olx, oly, orx, ory;
 
-      if (isBody) {
-        olx = data[base + SensorPoint.BL_X];
-        oly = data[base + SensorPoint.BL_Y];
-        orx = data[base + SensorPoint.BR_X];
-        ory = data[base + SensorPoint.BR_Y];
-      } else {
-        olx = data[base + SensorPoint.SL_X];
-        oly = data[base + SensorPoint.SL_Y];
-        orx = data[base + SensorPoint.SR_X];
-        ory = data[base + SensorPoint.SR_Y];
+        if (isBody) {
+          olx = data[base + SensorPoint.BL_X];
+          oly = data[base + SensorPoint.BL_Y];
+          orx = data[base + SensorPoint.BR_X];
+          ory = data[base + SensorPoint.BR_Y];
+        } else {
+          olx = data[base + SensorPoint.SL_X];
+          oly = data[base + SensorPoint.SL_Y];
+          orx = data[base + SensorPoint.SR_X];
+          ory = data[base + SensorPoint.SR_Y];
+        }
+
+        // Fill Attributes
+        arrStartEnd[writeIdx] = flx;
+        arrStartEnd[writeIdx + 1] = fly;
+        arrStartEnd[writeIdx + 2] = frx;
+        arrStartEnd[writeIdx + 3] = fry;
+
+        arrOther[writeIdx] = olx;
+        arrOther[writeIdx + 1] = oly;
+        arrOther[writeIdx + 2] = orx;
+        arrOther[writeIdx + 3] = ory;
       }
-
-      // Fill Attributes
-      arrStartEnd[writeIdx] = flx;
-      arrStartEnd[writeIdx + 1] = fly;
-      arrStartEnd[writeIdx + 2] = frx;
-      arrStartEnd[writeIdx + 3] = fry;
-
-      arrOther[writeIdx] = olx;
-      arrOther[writeIdx + 1] = oly;
-      arrOther[writeIdx + 2] = orx;
-      arrOther[writeIdx + 3] = ory;
     }
 
     startEndAttr.needsUpdate = true;
@@ -180,6 +205,12 @@ interface SensorDebugRendererProps {
 
 /**
  * Render sensor wireframes for debugging
+ *
+ * SharedMemory 모드에서는 섹션별 연속 레이아웃을 사용하여 set() 최적화 적용:
+ * - zone0 (outer): startEnd=Section0, other=Section1
+ * - zone1 (middle): startEnd=Section2, other=Section3
+ * - zone2 (inner): startEnd=Section4, other=Section5
+ * - body: startEnd=Section0 (zone0과 동일), other=Section6 (body전용)
  */
 export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererProps) {
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
@@ -190,31 +221,37 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
 
   return (
     <>
-      {/* Outer / Approach (Yellow) */}
+      {/* Outer / Approach (Yellow) - zone0 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
         color="#ffff00"
         getData={getData}
         dataOffset={0}
         isSharedMemory={isSharedMemory}
+        startEndSection={SensorSection.ZONE0_STARTEND}
+        otherSection={SensorSection.ZONE0_OTHER}
       />
-      {/* Middle / Brake (Orange) */}
+      {/* Middle / Brake (Orange) - zone1 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
         color="#ff8800"
         getData={getData}
         dataOffset={1}
         isSharedMemory={isSharedMemory}
+        startEndSection={SensorSection.ZONE1_STARTEND}
+        otherSection={SensorSection.ZONE1_OTHER}
       />
-      {/* Inner / Stop (Red) */}
+      {/* Inner / Stop (Red) - zone2 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
         color="#ff0000"
         getData={getData}
         dataOffset={2}
         isSharedMemory={isSharedMemory}
+        startEndSection={SensorSection.ZONE2_STARTEND}
+        otherSection={SensorSection.ZONE2_OTHER}
       />
-      {/* Body (Cyan) */}
+      {/* Body (Cyan) - zone0 startEnd + body other */}
       <InstancedQuadLines
         numVehicles={numVehicles}
         color="#00ffff"
@@ -222,6 +259,8 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
         dataOffset={0}
         isBody={true}
         isSharedMemory={isSharedMemory}
+        startEndSection={SensorSection.ZONE0_STARTEND}
+        otherSection={SensorSection.BODY_OTHER}
       />
     </>
   );

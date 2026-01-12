@@ -9,17 +9,8 @@ import { SensorDebugRenderer } from "./SensorDebugRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
 import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 
-const DEG_TO_RAD = Math.PI / 180;
-
-/**
- * Render 데이터 오프셋 (연속 레이아웃 - 4 floats per vehicle)
- */
-const RenderData = {
-  X: 0,
-  Y: 1,
-  Z: 2,
-  ROTATION: 3,
-} as const;
+// GLSL에서 사용할 DEG_TO_RAD 상수 (Math.PI / 180)
+const DEG_TO_RAD_GLSL = "0.017453292519943295";
 
 interface VehicleArrayRendererProps {
   mode: VehicleSystemType;
@@ -51,29 +42,22 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     VEHICLE_COLOR: vehicleColor
   } = config;
 
-  const positionAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
-  const rotationAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
+  // instanceData: vec4 (x, y, z, rotation_deg)
+  const instanceDataRef = useRef<THREE.InstancedBufferAttribute | null>(null);
 
   const bodyGeometry = useMemo(() => {
     const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
 
     const initialCount = Math.max(actualNumVehicles, 1000);
 
-    const positionAttr = new THREE.InstancedBufferAttribute(
-      new Float32Array(initialCount * 3), 3
+    // vec4: x, y, z, rotation_deg (SharedMemory 레이아웃과 동일)
+    const instanceDataAttr = new THREE.InstancedBufferAttribute(
+      new Float32Array(initialCount * 4), 4
     );
-    positionAttr.setUsage(THREE.DynamicDrawUsage);
+    instanceDataAttr.setUsage(THREE.DynamicDrawUsage);
 
-    const rotationAttr = new THREE.InstancedBufferAttribute(
-      new Float32Array(initialCount), 1
-    );
-    rotationAttr.setUsage(THREE.DynamicDrawUsage);
-
-    geo.setAttribute('instancePosition', positionAttr);
-    geo.setAttribute('instanceRotation', rotationAttr);
-
-    positionAttrRef.current = positionAttr;
-    rotationAttrRef.current = rotationAttr;
+    geo.setAttribute('instanceData', instanceDataAttr);
+    instanceDataRef.current = instanceDataAttr;
 
     return geo;
   }, [bodyLength, bodyWidth, bodyHeight, actualNumVehicles]);
@@ -87,8 +71,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
-        attribute vec3 instancePosition;
-        attribute float instanceRotation;
+        attribute vec4 instanceData; // x, y, z, rotation_deg
 
         mat3 rotateZ(float angle) {
           float s = sin(angle);
@@ -104,14 +87,16 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-        transformed = rotateZ(instanceRotation) * transformed;
-        transformed += instancePosition;`
+        float rotation = instanceData.w * ${DEG_TO_RAD_GLSL};
+        transformed = rotateZ(rotation) * transformed;
+        transformed += instanceData.xyz;`
       );
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
-        objectNormal = rotateZ(instanceRotation) * objectNormal;`
+        float rotationNormal = instanceData.w * ${DEG_TO_RAD_GLSL};
+        objectNormal = rotateZ(rotationNormal) * objectNormal;`
       );
     };
 
@@ -122,29 +107,20 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   useEffect(() => {
     const bodyMesh = bodyMeshRef.current;
-    const positionAttr = positionAttrRef.current;
-    const rotationAttr = rotationAttrRef.current;
-    if (!positionAttr || !rotationAttr) return;
+    const instanceDataAttr = instanceDataRef.current;
+    if (!instanceDataAttr) return;
 
-    const currentCount = positionAttr.count;
+    const currentCount = instanceDataAttr.count;
     if (actualNumVehicles > currentCount) {
       const newCount = Math.max(actualNumVehicles, currentCount * 2);
 
-      const newPosArray = new Float32Array(newCount * 3);
-      newPosArray.set(positionAttr.array as Float32Array);
-      const newPosAttr = new THREE.InstancedBufferAttribute(newPosArray, 3);
-      newPosAttr.setUsage(THREE.DynamicDrawUsage);
+      const newDataArray = new Float32Array(newCount * 4);
+      newDataArray.set(instanceDataAttr.array as Float32Array);
+      const newDataAttr = new THREE.InstancedBufferAttribute(newDataArray, 4);
+      newDataAttr.setUsage(THREE.DynamicDrawUsage);
 
-      const newRotArray = new Float32Array(newCount);
-      newRotArray.set(rotationAttr.array as Float32Array);
-      const newRotAttr = new THREE.InstancedBufferAttribute(newRotArray, 1);
-      newRotAttr.setUsage(THREE.DynamicDrawUsage);
-
-      bodyGeometry.setAttribute('instancePosition', newPosAttr);
-      bodyGeometry.setAttribute('instanceRotation', newRotAttr);
-
-      positionAttrRef.current = newPosAttr;
-      rotationAttrRef.current = newRotAttr;
+      bodyGeometry.setAttribute('instanceData', newDataAttr);
+      instanceDataRef.current = newDataAttr;
     }
 
     if (bodyMesh) {
@@ -172,47 +148,36 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   }, [bodyGeometry, bodyMaterial]);
 
   // Update instanced attributes every frame
-  // SharedMemory 모드: 연속 레이아웃 렌더 버퍼 직접 사용 (복사 최소화)
+  // SharedMemory 모드: 레이아웃이 동일하므로 set()으로 한 번에 복사
   useFrame(() => {
-    const positionAttr = positionAttrRef.current;
-    const rotationAttr = rotationAttrRef.current;
-    if (!positionAttr || !rotationAttr) return;
+    const instanceDataAttr = instanceDataRef.current;
+    if (!instanceDataAttr) return;
 
     const data = isSharedMemory
       ? useShmSimulatorStore.getState().getVehicleData()
       : vehicleDataArray.getData();
     if (!data) return;
 
-    const posArr = positionAttr.array as Float32Array;
-    const rotArr = rotationAttr.array as Float32Array;
+    const dataArr = instanceDataAttr.array as Float32Array;
 
     if (isSharedMemory) {
-      // SharedMemory 모드: 연속 레이아웃 (4 floats per vehicle)
-      // Worker가 이미 연속으로 데이터를 씀
-      for (let i = 0; i < actualNumVehicles; i++) {
-        const ptr = i * VEHICLE_RENDER_SIZE;
-        const i3 = i * 3;
-
-        posArr[i3] = data[ptr + RenderData.X];
-        posArr[i3 + 1] = data[ptr + RenderData.Y];
-        posArr[i3 + 2] = data[ptr + RenderData.Z];
-        rotArr[i] = data[ptr + RenderData.ROTATION] * DEG_TO_RAD;
-      }
+      // SharedMemory 모드: 레이아웃이 동일 (4 floats per vehicle)
+      // for 루프 없이 한 번에 복사
+      dataArr.set(data.subarray(0, actualNumVehicles * VEHICLE_RENDER_SIZE));
     } else {
-      // Array 모드: 기존 Worker 영역 사용 (22 floats per vehicle)
+      // Array 모드: 22 floats per vehicle → 4 floats per vehicle 변환 필요
       for (let i = 0; i < actualNumVehicles; i++) {
-        const ptr = i * VEHICLE_DATA_SIZE;
-        const i3 = i * 3;
+        const srcPtr = i * VEHICLE_DATA_SIZE;
+        const dstPtr = i * 4;
 
-        posArr[i3] = data[ptr + MovementData.X];
-        posArr[i3 + 1] = data[ptr + MovementData.Y];
-        posArr[i3 + 2] = data[ptr + MovementData.Z];
-        rotArr[i] = data[ptr + MovementData.ROTATION] * DEG_TO_RAD;
+        dataArr[dstPtr] = data[srcPtr + MovementData.X];
+        dataArr[dstPtr + 1] = data[srcPtr + MovementData.Y];
+        dataArr[dstPtr + 2] = data[srcPtr + MovementData.Z];
+        dataArr[dstPtr + 3] = data[srcPtr + MovementData.ROTATION]; // deg (셰이더에서 변환)
       }
     }
 
-    positionAttr.needsUpdate = true;
-    rotationAttr.needsUpdate = true;
+    instanceDataAttr.needsUpdate = true;
   });
 
   if (actualNumVehicles <= 0) {

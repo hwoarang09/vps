@@ -2,7 +2,7 @@
 // 멀티 워커 환경에서 SharedArrayBuffer 메모리 레이아웃을 계산하고 관리
 
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { SENSOR_DATA_SIZE, SENSOR_ZONE_COUNT } from "@/common/vehicle/memory/SensorPointArrayBase";
 import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
 
 /**
@@ -11,9 +11,65 @@ import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
 export const VEHICLE_RENDER_SIZE = 4;
 
 /**
- * 렌더링용 Sensor 데이터 크기 (전체 센서 포인트 - x,y에 offset 적용)
+ * 센서 렌더링용 GPU-friendly 레이아웃 상수
+ *
+ * 버퍼 레이아웃 (섹션별 연속 - set() 최적화 가능):
+ *
+ * 전체 버퍼를 7개 섹션으로 분리, 각 섹션은 numVehicles × 4 floats
+ *
+ * Section 0: zone0_startEnd - [Veh0_FL,FR | Veh1_FL,FR | ...]
+ * Section 1: zone0_other    - [Veh0_SL,SR | Veh1_SL,SR | ...]
+ * Section 2: zone1_startEnd - [Veh0_FL,FR | Veh1_FL,FR | ...]
+ * Section 3: zone1_other    - [Veh0_SL,SR | Veh1_SL,SR | ...]
+ * Section 4: zone2_startEnd - [Veh0_FL,FR | Veh1_FL,FR | ...]
+ * Section 5: zone2_other    - [Veh0_SL,SR | Veh1_SL,SR | ...]
+ * Section 6: body_other     - [Veh0_BL,BR | Veh1_BL,BR | ...]
+ *
+ * 총: 7 sections × numVehicles × 4 floats = 28 × numVehicles floats
  */
-export const SENSOR_RENDER_SIZE = SENSOR_DATA_SIZE;
+export const SENSOR_ATTR_SIZE = 4; // FL,FR or SL,SR or BL,BR (4 floats: x,y,x,y)
+export const SENSOR_SECTION_COUNT = SENSOR_ZONE_COUNT * 2 + 1; // 3 zones × 2 (startEnd + other) + body_other = 7
+
+/**
+ * 렌더링용 Sensor 데이터 크기 (per vehicle)
+ * 7 sections × 4 floats = 28 floats per vehicle
+ */
+export const SENSOR_RENDER_SIZE = SENSOR_SECTION_COUNT * SENSOR_ATTR_SIZE; // 28
+
+/**
+ * 센서 렌더 버퍼 섹션 인덱스
+ */
+export const SensorSection = {
+  ZONE0_STARTEND: 0,
+  ZONE0_OTHER: 1,
+  ZONE1_STARTEND: 2,
+  ZONE1_OTHER: 3,
+  ZONE2_STARTEND: 4,
+  ZONE2_OTHER: 5,
+  BODY_OTHER: 6,
+} as const;
+
+/**
+ * 센서 렌더 버퍼 오프셋 계산 (섹션별)
+ * @param section - SensorSection 값
+ * @param numVehicles - 총 vehicle 수
+ * @returns 해당 섹션의 시작 오프셋 (floats 단위)
+ */
+export function getSensorSectionOffset(section: number, numVehicles: number): number {
+  return section * numVehicles * SENSOR_ATTR_SIZE;
+}
+
+/**
+ * zone별 startEnd/other 섹션 인덱스 계산
+ */
+export const SensorRenderOffset = {
+  /** zone N의 startEnd 섹션 인덱스 */
+  zoneStartEndSection: (zoneIndex: number) => zoneIndex * 2,
+  /** zone N의 other 섹션 인덱스 */
+  zoneOtherSection: (zoneIndex: number) => zoneIndex * 2 + 1,
+  /** body other 섹션 인덱스 */
+  bodyOtherSection: SensorSection.BODY_OTHER,
+} as const;
 
 /**
  * Fab별 메모리 설정

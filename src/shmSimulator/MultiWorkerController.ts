@@ -212,13 +212,14 @@ export class MultiWorkerController {
       vehicleRenderBuffer: this.vehicleRenderBuffer,
       sensorRenderBuffer: this.sensorRenderBuffer,
       fabAssignments: this.renderLayout.fabRenderAssignments,
+      totalVehicles: this.renderLayout.totalVehicles,
     };
 
     for (const workerInfo of this.workers) {
       workerInfo.worker.postMessage(message);
     }
 
-    console.log(`[MultiWorkerController] SET_RENDER_BUFFER sent to ${this.workers.length} workers`);
+    console.log(`[MultiWorkerController] SET_RENDER_BUFFER sent to ${this.workers.length} workers, total=${this.renderLayout.totalVehicles}`);
   }
 
   private initWorker(workerInfo: WorkerInfo, assignment: WorkerAssignment, sharedMapData?: SharedMapData): Promise<void> {
