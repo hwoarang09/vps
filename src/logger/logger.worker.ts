@@ -9,6 +9,7 @@ import {
   type LoggerWorkerMessage,
   type LoggerMainMessage,
   type LoggerMode,
+  type LogFileInfo,
 } from "./protocol";
 
 // OPFS Sync Access Handle 타입 (Worker 환경에서만 사용 가능)
@@ -172,6 +173,89 @@ function closeCloud(): void {
 }
 
 // ============================================================================
+// File Management (OPFS only)
+// ============================================================================
+
+async function listOPFSFiles(): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const files: LogFileInfo[] = [];
+
+    // @ts-expect-error - entries() is available in OPFS
+    for await (const [name, handle] of root.entries()) {
+      if (name.startsWith("edge_transit_") && name.endsWith(".bin")) {
+        if (handle.kind === "file") {
+          const file = await (handle as FileSystemFileHandle).getFile();
+          const size = file.size;
+          const recordCount = Math.floor(size / LOG_RECORD_SIZE);
+          
+          // Extract timestamp from filename
+          const match = /edge_transit_(\d+)/.exec(name);
+          const createdAt = match ? Number.parseInt(match[1], 10) : file.lastModified;
+
+          files.push({
+            fileName: name,
+            size,
+            recordCount,
+            createdAt,
+          });
+        }
+      }
+    }
+
+    // Sort by creation time (newest first)
+    files.sort((a, b) => b.createdAt - a.createdAt);
+
+    postMainMessage({ type: "FILE_LIST", files });
+  } catch (error) {
+    postMainMessage({
+      type: "ERROR",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function downloadOPFSFile(fileName: string): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const fileHandle = await root.getFileHandle(fileName, { create: false }) as FileSystemFileHandleWithSync;
+    const accessHandle = await fileHandle.createSyncAccessHandle();
+
+    const fileSize = accessHandle.getSize();
+    const buffer = new ArrayBuffer(fileSize);
+    const bytesRead = accessHandle.read(new Uint8Array(buffer), { at: 0 });
+    const recordCount = bytesRead / LOG_RECORD_SIZE;
+
+    accessHandle.close();
+
+    postMainMessage({
+      type: "DOWNLOADED",
+      buffer,
+      fileName,
+      recordCount,
+    });
+  } catch (error) {
+    postMainMessage({
+      type: "ERROR",
+      error: `Failed to download file: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+}
+
+async function deleteOPFSFile(fileName: string): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry(fileName);
+    postMainMessage({ type: "FILE_DELETED", fileName });
+  } catch (error) {
+    postMainMessage({
+      type: "ERROR",
+      error: `Failed to delete file: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+}
+
+// ============================================================================
 // Message Handlers
 // ============================================================================
 
@@ -226,6 +310,30 @@ function handleMessage(msg: LoggerWorkerMessage): void {
         downloadOPFS();
       } else {
         postMainMessage({ type: "ERROR", error: "Download not supported in CLOUD mode" });
+      }
+      break;
+
+    case "LIST_FILES":
+      if (mode === "OPFS") {
+        listOPFSFiles();
+      } else {
+        postMainMessage({ type: "ERROR", error: "File listing not supported in CLOUD mode" });
+      }
+      break;
+
+    case "DOWNLOAD_FILE":
+      if (mode === "OPFS") {
+        downloadOPFSFile(msg.fileName);
+      } else {
+        postMainMessage({ type: "ERROR", error: "File download not supported in CLOUD mode" });
+      }
+      break;
+
+    case "DELETE_FILE":
+      if (mode === "OPFS") {
+        deleteOPFSFile(msg.fileName);
+      } else {
+        postMainMessage({ type: "ERROR", error: "File deletion not supported in CLOUD mode" });
       }
       break;
   }

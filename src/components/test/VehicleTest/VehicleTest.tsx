@@ -19,6 +19,7 @@ import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
+import LogFileManager from "./LogFileManager";
 
 /**
  * VehicleTest
@@ -677,7 +678,7 @@ const VehicleTest: React.FC = () => {
           </button>
         </div>
 
-        {/* Log Download Button */}
+        {/* Log Download Section */}
         <div style={{
           display: "flex",
           alignItems: "center",
@@ -690,20 +691,21 @@ const VehicleTest: React.FC = () => {
             onClick={handleDownloadLog}
             disabled={!isSimInitialized}
             style={{
-              padding: "5px 15px",
+              padding: "5px 12px",
               background: isSimInitialized ? "#3498db" : "#555",
               color: "white",
               border: isSimInitialized ? "2px solid #2980b9" : "1px solid #666",
               borderRadius: "4px",
-              fontSize: "12px",
+              fontSize: "11px",
               cursor: isSimInitialized ? "pointer" : "not-allowed",
               fontWeight: "bold",
               opacity: isSimInitialized ? 1 : 0.5,
             }}
-            title={isSimInitialized ? "Download edge transit log" : "Start simulation first"}
+            title={isSimInitialized ? "Download current session log" : "Start simulation first"}
           >
-            📥 Download Log
+            📥 Latest
           </button>
+          <LogFileManager />
         </div>
       </div>
 

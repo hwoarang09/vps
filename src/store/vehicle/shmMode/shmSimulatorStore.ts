@@ -65,6 +65,9 @@ interface ShmSimulatorState {
   sendCommand: (payload: unknown, fabId?: string) => void;
   flushLogs: () => void;
   downloadLogs: () => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
+  listLogFiles: () => Promise<import("@/logger/protocol").LogFileInfo[] | null>;
+  downloadLogFile: (fileName: string) => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
+  deleteLogFile: (fileName: string) => Promise<void>;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -310,6 +313,24 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (!controller) return null;
     return controller.downloadLogs();
+  },
+
+  listLogFiles: async () => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.listLogFiles();
+  },
+
+  downloadLogFile: async (fileName: string) => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.downloadLogFile(fileName);
+  },
+
+  deleteLogFile: async (fileName: string) => {
+    const { controller } = get();
+    if (!controller) return;
+    return controller.deleteLogFile(fileName);
   },
 }));
 

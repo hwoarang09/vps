@@ -60,7 +60,7 @@ const ThreeScene: React.FC = () => {
         <MapRenderer />
 
         {/* Text rendering - displays node and edge labels */}
-        {/* <TextRenderer scale={0.2} nodeColor="#00e5ff" edgeColor="#ff9800" /> */}
+        <TextRenderer scale={0.2} nodeColor="#00e5ff" edgeColor="#ff9800" />
 
         {/* Vehicle System - Conditionally rendered when test is active */}
         <VehicleSystemRenderer />

@@ -181,4 +181,83 @@ export class LoggerController {
       this.worker.postMessage({ type: "DOWNLOAD" });
     });
   }
+
+  /**
+   * OPFS에 저장된 로그 파일 목록 조회
+   */
+  async listFiles(): Promise<import("./protocol").LogFileInfo[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "FILE_LIST") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve(e.data.files);
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "LIST_FILES" });
+    });
+  }
+
+  /**
+   * 특정 로그 파일 다운로드
+   */
+  async downloadFile(fileName: string): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number }> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "DOWNLOADED") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve({
+            buffer: e.data.buffer,
+            fileName: e.data.fileName,
+            recordCount: e.data.recordCount,
+          });
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "DOWNLOAD_FILE", fileName });
+    });
+  }
+
+  /**
+   * 특정 로그 파일 삭제
+   */
+  async deleteFile(fileName: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "FILE_DELETED") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve();
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "DELETE_FILE", fileName });
+    });
+  }
 }

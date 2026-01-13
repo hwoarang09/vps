@@ -87,6 +87,13 @@ export interface EdgeTransitRecord {
   edgeType: number;
 }
 
+export interface LogFileInfo {
+  fileName: string;
+  size: number;
+  recordCount: number;
+  createdAt: number; // timestamp
+}
+
 export type LoggerMode = "OPFS" | "CLOUD";
 
 // ============================================================================
@@ -98,7 +105,10 @@ export type LoggerWorkerMessage =
   | { type: "LOG"; buffer: ArrayBuffer }
   | { type: "FLUSH" }
   | { type: "CLOSE" }
-  | { type: "DOWNLOAD" };
+  | { type: "DOWNLOAD" }
+  | { type: "LIST_FILES" }
+  | { type: "DOWNLOAD_FILE"; fileName: string }
+  | { type: "DELETE_FILE"; fileName: string };
 
 export type LoggerMainMessage =
   | { type: "READY" }
@@ -106,6 +116,8 @@ export type LoggerMainMessage =
   | { type: "UPLOADED"; url: string; recordCount: number }
   | { type: "CLOSED"; totalRecords: number }
   | { type: "DOWNLOADED"; buffer: ArrayBuffer; fileName: string; recordCount: number }
+  | { type: "FILE_LIST"; files: LogFileInfo[] }
+  | { type: "FILE_DELETED"; fileName: string }
   | { type: "ERROR"; error: string };
 
 // ============================================================================

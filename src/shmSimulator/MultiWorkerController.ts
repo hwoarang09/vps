@@ -625,4 +625,40 @@ export class MultiWorkerController {
 
     return this.loggerController.download();
   }
+
+  /**
+   * List all log files in OPFS
+   */
+  async listLogFiles(): Promise<import("@/logger/protocol").LogFileInfo[] | null> {
+    if (!this.loggerController) {
+      console.warn("[MultiWorkerController] Logger not enabled");
+      return null;
+    }
+
+    return this.loggerController.listFiles();
+  }
+
+  /**
+   * Download specific log file by name
+   */
+  async downloadLogFile(fileName: string): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
+    if (!this.loggerController) {
+      console.warn("[MultiWorkerController] Logger not enabled");
+      return null;
+    }
+
+    return this.loggerController.downloadFile(fileName);
+  }
+
+  /**
+   * Delete specific log file by name
+   */
+  async deleteLogFile(fileName: string): Promise<void> {
+    if (!this.loggerController) {
+      console.warn("[MultiWorkerController] Logger not enabled");
+      return;
+    }
+
+    return this.loggerController.deleteFile(fileName);
+  }
 }
