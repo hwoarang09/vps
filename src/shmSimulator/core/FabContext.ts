@@ -13,6 +13,7 @@ import { EngineStore } from "./EngineStore";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
 import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
+import { EdgeTransitTracker } from "@/logger";
 import {
   VEHICLE_RENDER_SIZE,
   SENSOR_ATTR_SIZE,
@@ -76,6 +77,9 @@ export class FabContext {
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
   private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
+
+  // === Edge Transit Logging ===
+  private edgeTransitTracker: EdgeTransitTracker | null = null;
 
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
@@ -234,7 +238,33 @@ export class FabContext {
     this.routingMgr.receiveMessage(command);
   }
 
-  step(clampedDelta: number): void {
+  /**
+   * Logger Worker와 연결된 MessagePort 설정
+   * 이후 edge transit 로그가 자동으로 전송됨
+   */
+  setLoggerPort(port: MessagePort, workerId: number = 0): void {
+    // fabId에서 숫자 추출 시도 (예: "fab_0" -> 0)
+    let fabIdNum = 0;
+    const match = /\d+/.exec(this.fabId);
+    if (match) {
+      fabIdNum = Number.parseInt(match[0], 10) % 256;
+    }
+
+    this.edgeTransitTracker = new EdgeTransitTracker({
+      workerId: workerId % 256,
+      fabId: fabIdNum,
+    });
+    this.edgeTransitTracker.setLoggerPort(port);
+
+    // 초기 진입 시간 기록 (모든 차량이 현재 edge에 이미 있음)
+    // 초기화 시점의 시뮬레이션 시간은 0
+    for (let i = 0; i < this.actualNumVehicles; i++) {
+      const edgeIndex = this.store.getVehicleCurrentEdge(i);
+      this.edgeTransitTracker.onEdgeEnter(i, edgeIndex, 0);
+    }
+  }
+
+  step(clampedDelta: number, simulationTime: number = 0): void {
     // 1. Collision Check
     const collisionCtx: CollisionCheckContext = {
       vehicleArrayData: this.vehicleDataArray.getData(),
@@ -246,10 +276,13 @@ export class FabContext {
     checkCollisions(collisionCtx);
 
     // 2. Movement Update
+    const tracker = this.edgeTransitTracker;
+    const edges = this.edges;
+
     const movementCtx: MovementUpdateContext = {
       vehicleDataArray: this.vehicleDataArray,
       sensorPointArray: this.sensorPointArray,
-      edgeArray: this.edges,
+      edgeArray: edges,
       actualNumVehicles: this.actualNumVehicles,
       vehicleLoopMap: this.vehicleLoopMap,
       edgeNameToIndex: this.edgeNameToIndex,
@@ -261,6 +294,18 @@ export class FabContext {
       transferMgr: this.transferMgr,
       clampedDelta,
       config: this.config,
+      simulationTime,
+      onEdgeTransit: tracker
+        ? (vehId, fromEdgeIndex, toEdgeIndex, timestamp) => {
+            // 이전 edge 통과 로그
+            const fromEdge = edges[fromEdgeIndex];
+            if (fromEdge) {
+              tracker.onEdgeExit(vehId, fromEdgeIndex, timestamp, fromEdge);
+            }
+            // 새 edge 진입 기록
+            tracker.onEdgeEnter(vehId, toEdgeIndex, timestamp);
+          }
+        : undefined,
     };
     updateMovement(movementCtx);
 
@@ -380,6 +425,12 @@ export class FabContext {
   }
 
   dispose(): void {
+    // Edge transit tracker 정리
+    if (this.edgeTransitTracker) {
+      this.edgeTransitTracker.dispose();
+      this.edgeTransitTracker = null;
+    }
+
     this.store.dispose();
     this.sensorPointArray.dispose();
 

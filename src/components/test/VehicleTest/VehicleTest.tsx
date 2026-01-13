@@ -53,6 +53,8 @@ const VehicleTest: React.FC = () => {
   const [fabCountY, setFabCountY] = useState<number>(1);
   const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
 
+  const { downloadLogs, isInitialized: isSimInitialized } = useShmSimulatorStore();
+
   // Calculate max vehicle capacity from edges (fab 개수 반영)
   const maxVehicleCapacity = React.useMemo(() => {
     if (edges.length === 0) return 0;
@@ -62,6 +64,33 @@ const VehicleTest: React.FC = () => {
     }
     return baseCapacity;
   }, [edges, isFabApplied, fabCountX, fabCountY]);
+
+  // Handle log download - directly from Logger Worker
+  const handleDownloadLog = async () => {
+    try {
+      const result = await downloadLogs();
+
+      if (!result) {
+        alert("No active logger. Start simulation first.");
+        return;
+      }
+
+
+      // Create blob and trigger download
+      const blob = new Blob([result.buffer], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      alert(`Downloaded: ${result.fileName}\nRecords: ${result.recordCount}\nSize: ${(result.buffer.byteLength / 1024).toFixed(2)} KB`);
+    } catch (error) {
+      console.error("Failed to download log:", error);
+      alert(`Failed to download log: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
 
   useEffect(() => {
     setInputValue(selectedSetting.numVehicles.toString());
@@ -645,6 +674,35 @@ const VehicleTest: React.FC = () => {
           >
             <Pause size={14} />
             Pause
+          </button>
+        </div>
+
+        {/* Log Download Button */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginLeft: "15px",
+          paddingLeft: "15px",
+          borderLeft: "1px solid #555",
+        }}>
+          <button
+            onClick={handleDownloadLog}
+            disabled={!isSimInitialized}
+            style={{
+              padding: "5px 15px",
+              background: isSimInitialized ? "#3498db" : "#555",
+              color: "white",
+              border: isSimInitialized ? "2px solid #2980b9" : "1px solid #666",
+              borderRadius: "4px",
+              fontSize: "12px",
+              cursor: isSimInitialized ? "pointer" : "not-allowed",
+              fontWeight: "bold",
+              opacity: isSimInitialized ? 1 : 0.5,
+            }}
+            title={isSimInitialized ? "Download edge transit log" : "Start simulation first"}
+          >
+            📥 Download Log
           </button>
         </div>
       </div>

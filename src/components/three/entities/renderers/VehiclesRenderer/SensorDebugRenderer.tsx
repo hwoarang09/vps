@@ -80,7 +80,7 @@ function InstancedQuadLines({
   isSharedMemory = false,
   startEndSection,
   otherSection,
-}: InstancedQuadLinesProps) {
+}: Readonly<InstancedQuadLinesProps>) {
   const meshRef = useRef<THREE.LineSegments>(null);
 
   // 1. Static Geometry (Topology)

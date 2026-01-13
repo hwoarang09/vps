@@ -30,6 +30,8 @@ export class SimulationEngine {
 
   // === Timing ===
   private lastStepTime: number = 0;
+  /** 시뮬레이션 누적 시간 (ms) */
+  private simulationTime: number = 0;
 
   constructor() {
     this.config = createDefaultConfig();
@@ -295,9 +297,12 @@ export class SimulationEngine {
     const stepStart = performance.now();
     const clampedDelta = Math.min(delta, this.config.maxDelta);
 
+    // 시뮬레이션 시간 누적 (ms 단위)
+    this.simulationTime += clampedDelta * 1000;
+
     // Update all fab contexts
     for (const context of this.fabContexts.values()) {
-      context.step(clampedDelta);
+      context.step(clampedDelta, this.simulationTime);
     }
 
     // Measure step time
@@ -418,5 +423,26 @@ export class SimulationEngine {
       counts[fabId] = context.getActualNumVehicles();
     }
     return counts;
+  }
+
+  /**
+   * Set logger port for all fabs
+   * Edge transit 로그를 Logger Worker로 전송하기 위한 MessagePort 설정
+   *
+   * @param port MessagePort connected to Logger Worker
+   * @param workerId Worker ID (0~255) for logging
+   */
+  setLoggerPort(port: MessagePort, workerId: number = 0): void {
+    for (const context of this.fabContexts.values()) {
+      context.setLoggerPort(port, workerId);
+    }
+    console.log(`[SimulationEngine] Logger port set for ${this.fabContexts.size} fabs`);
+  }
+
+  /**
+   * Get current simulation time (ms)
+   */
+  getSimulationTime(): number {
+    return this.simulationTime;
   }
 }

@@ -31,6 +31,20 @@ export interface MovementConfig extends SpeedConfig, SensorPointsConfig {
   curveAcceleration: number;
 }
 
+/**
+ * Edge 통과 이벤트 콜백
+ * @param vehId Vehicle index
+ * @param fromEdgeIndex 떠나는 edge index
+ * @param toEdgeIndex 진입하는 edge index
+ * @param timestamp 현재 시뮬레이션 시간 (ms)
+ */
+export type OnEdgeTransitCallback = (
+  vehId: number,
+  fromEdgeIndex: number,
+  toEdgeIndex: number,
+  timestamp: number
+) => void;
+
 export interface MovementUpdateContext {
   vehicleDataArray: IVehicleDataArray;
   sensorPointArray: ISensorPointArray;
@@ -43,6 +57,10 @@ export interface MovementUpdateContext {
   transferMgr: TransferMgr;
   clampedDelta: number;
   config: MovementConfig;
+  /** 시뮬레이션 누적 시간 (ms) - 로깅용 */
+  simulationTime?: number;
+  /** Edge 통과 이벤트 콜백 (로깅용) */
+  onEdgeTransit?: OnEdgeTransitCallback;
 }
 
 // Zero-GC Scratchpads
@@ -284,10 +302,10 @@ function processEdgeTransitionLogic(
   if (shouldTransition) {
     // In MQTT_CONTROL mode, preserve TARGET_RATIO (don't overwrite with 1)
     const preserveTargetRatio = ctx.store.transferMode === TransferMode.MQTT_CONTROL;
-    
+
     // Check if there's a reserved target ratio for the next edge (fixes premature target application bug)
     const nextTargetRatio = ctx.transferMgr.consumeNextEdgeReservation(vehicleIndex);
-    
+
     handleEdgeTransition({
       vehicleDataArray: ctx.vehicleDataArray,
       store: ctx.store,
@@ -299,6 +317,16 @@ function processEdgeTransitionLogic(
       preserveTargetRatio: preserveTargetRatio,
       nextTargetRatio: nextTargetRatio
     });
+
+    // Edge transit 콜백 호출 (로깅용)
+    if (ctx.onEdgeTransit && out.finalEdgeIndex !== currentEdgeIndex) {
+      ctx.onEdgeTransit(
+        vehicleIndex,
+        currentEdgeIndex,
+        out.finalEdgeIndex,
+        ctx.simulationTime ?? 0
+      );
+    }
   } else {
     // Just update position on current edge
     out.finalEdgeIndex = currentEdgeIndex;

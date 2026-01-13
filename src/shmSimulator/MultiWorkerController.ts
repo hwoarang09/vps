@@ -9,12 +9,14 @@ import type {
   VehicleInitConfig,
   FabInitData,
   SharedMapData,
+  FabMemoryAssignment,
 } from "./types";
 import { TransferMode, createDefaultConfig } from "./types";
 import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment, RenderBufferLayout } from "./MemoryLayoutManager";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
+import { LoggerController, type LoggerMode } from "@/logger";
 
 /**
  * Fab 초기화 파라미터 (MultiWorkerController용)
@@ -84,6 +86,9 @@ export class MultiWorkerController {
   // 상태
   private isInitialized: boolean = false;
   private isRunning: boolean = false;
+
+  // Logger
+  private loggerController: LoggerController | null = null;
 
   // 콜백
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
@@ -222,10 +227,93 @@ export class MultiWorkerController {
     console.log(`[MultiWorkerController] SET_RENDER_BUFFER sent to ${this.workers.length} workers, total=${this.renderLayout.totalVehicles}`);
   }
 
+  /**
+   * Create FabInitData with shared map (grid mode)
+   */
+  private createFabInitDataWithSharedMap(
+    fabAssignment: FabMemoryAssignment,
+    fabConfig: MultiFabInitParams,
+    sharedMapData: SharedMapData
+  ): FabInitData {
+    const fabIdMatch = /fab_(\d+)_(\d+)/.exec(fabAssignment.fabId);
+    const col = fabIdMatch ? Number.parseInt(fabIdMatch[1], 10) : 0;
+    const row = fabIdMatch ? Number.parseInt(fabIdMatch[2], 10) : 0;
+    const fabIndex = row * sharedMapData.gridX + col;
+
+    return {
+      fabId: fabAssignment.fabId,
+      sharedBuffer: this.vehicleBuffer!,
+      sensorPointBuffer: this.sensorBuffer!,
+      edges: undefined,
+      nodes: undefined,
+      stationData: undefined,
+      fabOffset: { fabIndex, col, row },
+      vehicleConfigs: fabConfig.vehicleConfigs ?? [],
+      numVehicles: fabConfig.numVehicles,
+      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
+      memoryAssignment: fabAssignment,
+    };
+  }
+
+  /**
+   * Create FabInitData with local map (single fab mode)
+   */
+  private createFabInitDataWithLocalMap(
+    fabAssignment: FabMemoryAssignment,
+    fabConfig: MultiFabInitParams
+  ): FabInitData {
+    return {
+      fabId: fabAssignment.fabId,
+      sharedBuffer: this.vehicleBuffer!,
+      sensorPointBuffer: this.sensorBuffer!,
+      edges: fabConfig.edges,
+      nodes: fabConfig.nodes,
+      stationData: fabConfig.stations as StationRawData[],
+      fabOffset: undefined,
+      vehicleConfigs: fabConfig.vehicleConfigs ?? [],
+      numVehicles: fabConfig.numVehicles,
+      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
+      memoryAssignment: fabAssignment,
+    };
+  }
+
+  /**
+   * Prepare FabInitData list for worker initialization
+   */
+  private prepareFabInitDataList(
+    assignment: WorkerAssignment,
+    sharedMapData?: SharedMapData
+  ): FabInitData[] {
+    const fabInitDataList: FabInitData[] = [];
+
+    for (const fabAssignment of assignment.fabAssignments) {
+      const fabConfig = this.fabConfigs.get(fabAssignment.fabId);
+      if (!fabConfig) continue;
+
+      const fabInitData = sharedMapData
+        ? this.createFabInitDataWithSharedMap(fabAssignment, fabConfig, sharedMapData)
+        : this.createFabInitDataWithLocalMap(fabAssignment, fabConfig);
+
+      fabInitDataList.push(fabInitData);
+    }
+
+    return fabInitDataList;
+  }
+
   private initWorker(workerInfo: WorkerInfo, assignment: WorkerAssignment, sharedMapData?: SharedMapData): Promise<void> {
     return new Promise((resolve, reject) => {
       const { worker } = workerInfo;
 
+      // 1. Prepare initialization data
+      const fabInitDataList = this.prepareFabInitDataList(assignment, sharedMapData);
+
+      const payload: InitPayload = {
+        config: this.config,
+        fabs: fabInitDataList,
+        sharedMapData,
+      };
+
+      // 2. Setup event handlers
       worker.onmessage = (e: MessageEvent<MainMessage>) => {
         this.handleWorkerMessage(workerInfo, e.data);
 
@@ -248,40 +336,7 @@ export class MultiWorkerController {
         reject(new Error(error.message));
       };
 
-      const fabInitDataList: FabInitData[] = [];
-
-      for (const fabAssignment of assignment.fabAssignments) {
-        const fabConfig = this.fabConfigs.get(fabAssignment.fabId);
-        if (!fabConfig) continue;
-
-        const fabIdMatch = /fab_(\d+)_(\d+)/.exec(fabAssignment.fabId);
-        const col = fabIdMatch ? Number.parseInt(fabIdMatch[1], 10) : 0;
-        const row = fabIdMatch ? Number.parseInt(fabIdMatch[2], 10) : 0;
-        const fabIndex = sharedMapData ? (row * sharedMapData.gridX + col) : 0;
-
-        const fabInitData: FabInitData = {
-          fabId: fabAssignment.fabId,
-          sharedBuffer: this.vehicleBuffer!,
-          sensorPointBuffer: this.sensorBuffer!,
-          edges: sharedMapData ? undefined : fabConfig.edges,
-          nodes: sharedMapData ? undefined : fabConfig.nodes,
-          stationData: sharedMapData ? undefined : (fabConfig.stations as StationRawData[]),
-          fabOffset: sharedMapData ? { fabIndex, col, row } : undefined,
-          vehicleConfigs: fabConfig.vehicleConfigs ?? [],
-          numVehicles: fabConfig.numVehicles,
-          transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
-          memoryAssignment: fabAssignment,
-        };
-
-        fabInitDataList.push(fabInitData);
-      }
-
-      const payload: InitPayload = {
-        config: this.config,
-        fabs: fabInitDataList,
-        sharedMapData,
-      };
-
+      // 3. Send initialization message
       const message: WorkerMessage = { type: "INIT", payload };
       worker.postMessage(message);
 
@@ -364,7 +419,14 @@ export class MultiWorkerController {
     workerInfo.worker.postMessage(message);
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
+    // Logger 정리
+    if (this.loggerController) {
+      const totalRecords = await this.loggerController.close();
+      console.log(`[MultiWorkerController] Logger closed, total records: ${totalRecords}`);
+      this.loggerController = null;
+    }
+
     if (this.workers.length === 0) {
       console.log("[MultiWorkerController] No workers to dispose");
       return;
@@ -489,5 +551,78 @@ export class MultiWorkerController {
 
   getIsInitialized(): boolean {
     return this.isInitialized;
+  }
+
+  // =========================================================================
+  // Edge Transit Logging
+  // =========================================================================
+
+  /**
+   * Enable edge transit logging
+   *
+   * @param mode - "OPFS" for local disk, "CLOUD" for remote upload
+   * @param sessionId - Optional session identifier for log files
+   */
+  async enableLogging(mode: LoggerMode = "OPFS", sessionId?: string): Promise<void> {
+    if (this.loggerController) {
+      console.warn("[MultiWorkerController] Logger already enabled");
+      return;
+    }
+
+    this.loggerController = new LoggerController({
+      mode,
+      sessionId: sessionId ?? `sim_${Date.now()}`,
+      onReady: () => console.log("[MultiWorkerController] Logger ready"),
+      onFlushed: (count) => console.log(`[MultiWorkerController] Logger flushed, records: ${count}`),
+      onUploaded: (url, count) => console.log(`[MultiWorkerController] Logger uploaded: ${url}, records: ${count}`),
+      onClosed: (total) => console.log(`[MultiWorkerController] Logger closed, total: ${total}`),
+      onError: (error) => console.error(`[MultiWorkerController] Logger error: ${error}`),
+    });
+
+    await this.loggerController.init();
+
+    // 각 워커에게 Logger port 전달
+    for (const workerInfo of this.workers) {
+      const port = this.loggerController.createPortForWorker();
+      const message: WorkerMessage = {
+        type: "SET_LOGGER_PORT",
+        port,
+        workerId: workerInfo.workerIndex,
+      };
+      workerInfo.worker.postMessage(message, [port]);
+    }
+
+    console.log(`[MultiWorkerController] Logging enabled (${mode}), connected to ${this.workers.length} workers`);
+  }
+
+  /**
+   * Flush all buffered logs
+   */
+  flushLogs(): void {
+    if (!this.loggerController) {
+      console.warn("[MultiWorkerController] Logger not enabled");
+      return;
+    }
+    this.loggerController.flush();
+  }
+
+  /**
+   * Check if logging is enabled
+   */
+  isLoggingEnabled(): boolean {
+    return this.loggerController !== null;
+  }
+
+  /**
+   * Download current log file
+   * Returns the log data directly from Logger Worker
+   */
+  async downloadLogs(): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
+    if (!this.loggerController) {
+      console.warn("[MultiWorkerController] Logger not enabled");
+      return null;
+    }
+
+    return this.loggerController.download();
   }
 }

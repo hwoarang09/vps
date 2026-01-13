@@ -253,7 +253,9 @@ export type WorkerMessage =
   | { type: "SET_RENDER_BUFFER"; vehicleRenderBuffer: SharedArrayBuffer; sensorRenderBuffer: SharedArrayBuffer; fabAssignments: FabRenderAssignment[]; totalVehicles: number }
   // Fab 동적 관리
   | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
-  | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string };
+  | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string }
+  // Logger 설정
+  | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number };
 
 // Worker -> Main Thread Messages
 export type MainMessage =

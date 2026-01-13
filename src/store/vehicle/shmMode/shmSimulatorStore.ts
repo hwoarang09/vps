@@ -63,6 +63,8 @@ interface ShmSimulatorState {
   getTotalVehicleCount: () => number;
 
   sendCommand: (payload: unknown, fabId?: string) => void;
+  flushLogs: () => void;
+  downloadLogs: () => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -181,10 +183,21 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     throw new Error("Dynamic fab removal not supported. Use dispose() and re-init().");
   },
 
-  start: () => {
+  start: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
       console.log("[ShmSimulatorStore] Starting simulation...");
+
+      // Enable logging if not already enabled
+      if (!controller.isLoggingEnabled()) {
+        try {
+          await controller.enableLogging("OPFS");
+          console.log("[ShmSimulatorStore] Edge transit logging enabled");
+        } catch (error) {
+          console.warn("[ShmSimulatorStore] Failed to enable logging:", error);
+        }
+      }
+
       controller.start();
       set({ isRunning: true });
     }
@@ -208,10 +221,21 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     }
   },
 
-  resume: () => {
+  resume: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
       console.log("[ShmSimulatorStore] Resuming simulation...");
+
+      // Enable logging if not already enabled
+      if (!controller.isLoggingEnabled()) {
+        try {
+          await controller.enableLogging("OPFS");
+          console.log("[ShmSimulatorStore] Edge transit logging enabled");
+        } catch (error) {
+          console.warn("[ShmSimulatorStore] Failed to enable logging:", error);
+        }
+      }
+
       controller.resume();
       set({ isRunning: true });
     }
@@ -273,6 +297,19 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     if (controller) {
       controller.sendCommand(fabId, payload);
     }
+  },
+
+  flushLogs: () => {
+    const { controller } = get();
+    if (controller) {
+      controller.flushLogs();
+    }
+  },
+
+  downloadLogs: async () => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.downloadLogs();
   },
 }));
 

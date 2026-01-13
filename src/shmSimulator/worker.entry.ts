@@ -127,6 +127,15 @@ function handleSetRenderBuffer(
   engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments, totalVehicles);
 }
 
+function handleSetLoggerPort(port: MessagePort, workerId: number): void {
+  if (!engine) {
+    console.warn("[Worker] Engine not initialized");
+    return;
+  }
+  console.log(`[Worker] Setting logger port, workerId=${workerId}`);
+  engine.setLoggerPort(port, workerId);
+}
+
 // Handle messages from main thread
 globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
@@ -165,6 +174,9 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
       break;
     case "SET_RENDER_BUFFER":
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
+      break;
+    case "SET_LOGGER_PORT":
+      handleSetLoggerPort(message.port, message.workerId);
       break;
     default:
       console.warn("[Worker] Unknown message type:", (message as { type: string }).type);

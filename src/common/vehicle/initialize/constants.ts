@@ -1,6 +1,39 @@
 // common/vehicle/initialize/constants.ts
 // Shared constants for vehicle data array structure
 
+/**
+ * Vehicle Data Array Memory Layout (22 fields × 4 bytes = 88 bytes per vehicle)
+ *
+ * | Field              | Type    | Offset | Section    | Description                           |
+ * |--------------------|---------|--------|------------|---------------------------------------|
+ * | X                  | Float32 | 0      | Movement   | World X position                      |
+ * | Y                  | Float32 | 1      | Movement   | World Y position                      |
+ * | Z                  | Float32 | 2      | Movement   | World Z position                      |
+ * | ROTATION           | Float32 | 3      | Movement   | Y-axis rotation (radians)             |
+ * | VELOCITY           | Float32 | 4      | Movement   | Current velocity (m/s)                |
+ * | ACCELERATION       | Float32 | 5      | Movement   | Acceleration rate (m/s²)              |
+ * | DECELERATION       | Float32 | 6      | Movement   | Deceleration rate (m/s²)              |
+ * | EDGE_RATIO         | Float32 | 7      | Movement   | Progress on current edge (0.0~1.0)    |
+ * | MOVING_STATUS      | Float32 | 8      | Movement   | MovingStatus enum (0=STOPPED, 1=...)  |
+ * | CURRENT_EDGE       | Float32 | 9      | Movement   | Current edge ID                       |
+ * | NEXT_EDGE          | Float32 | 10     | Movement   | Next edge ID                          |
+ * | NEXT_EDGE_STATE    | Float32 | 11     | Movement   | NextEdgeState enum (0=EMPTY, 1=...)   |
+ * | TARGET_RATIO       | Float32 | 12     | Movement   | Target ratio for smooth transition    |
+ * | OFFSET             | Float32 | 13     | Movement   | Lane offset                           |
+ * | PRESET_IDX         | Float32 | 14     | Sensor     | PresetIndex enum (0=STRAIGHT, 1=...)  |
+ * | HIT_ZONE           | Float32 | 15     | Sensor     | HitZone enum (-1=NONE, 0=APPROACH...) |
+ * | COLLISION_TARGET   | Float32 | 16     | Sensor     | Target vehicle ID for collision       |
+ * | TRAFFIC_STATE      | Float32 | 17     | Logic      | TrafficState enum (0=FREE, 1=...)     |
+ * | STOP_REASON        | Float32 | 18     | Logic      | StopReason bitmask                    |
+ * | JOB_STATE          | Float32 | 19     | Logic      | JobState enum (0=INITIALIZING, 1=...) |
+ * | DESTINATION_EDGE   | Float32 | 20     | Logic      | Target edge ID for routing            |
+ * | PATH_REMAINING     | Float32 | 21     | Logic      | Remaining path length (meters)        |
+ */
+
+// ============================================================================
+// Enum Constants
+// ============================================================================
+
 export const HitZone = {
   NONE: -1,
   APPROACH: 0,
@@ -75,7 +108,10 @@ export const TransferMode = {
 } as const;
 export type TransferMode = typeof TransferMode[keyof typeof TransferMode];
 
-// --- ID Generator for Auto-Offsets ---
+// ============================================================================
+// Memory Layout - Auto-generated Offsets
+// ============================================================================
+
 let _mPtr = 0;
 export const MovementData = {
   X: _mPtr++,
