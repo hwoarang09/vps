@@ -17,13 +17,16 @@ function checkEdgeTailCollision(
 ): { hitZone: number; targetIdx: number } {
   const { edgeVehicleQueue, sensorPointArray } = ctx;
 
-  const targetQueue = edgeVehicleQueue.getData(nextEdgeIdx);
-  if (!targetQueue || targetQueue[0] === 0) {
+  // Direct access for performance
+  const queueData = edgeVehicleQueue.getDataDirect();
+  const offset = edgeVehicleQueue.getOffsetForEdge(nextEdgeIdx);
+  const count = queueData[offset];
+
+  if (count === 0) {
     return { hitZone: currentHitZone, targetIdx: -1 };
   }
 
-  const count = targetQueue[0];
-  const tailVehIdx = targetQueue[1 + count - 1];
+  const tailVehIdx = queueData[offset + 1 + count - 1];
   const hitZone = checkSensorCollision(sensorPointArray, myVehIdx, tailVehIdx);
 
   if (hitZone > currentHitZone) {
@@ -57,9 +60,14 @@ export function verifyNextPathCollision(
 ) {
   const { vehicleArrayData, edgeVehicleQueue, edgeArray, config } = ctx;
 
-  const myQueue = edgeVehicleQueue.getData(edgeIdx);
-  if (!myQueue || myQueue[0] === 0) return;
-  const myVehIdx = myQueue[1];
+  // Direct access for performance
+  const queueData = edgeVehicleQueue.getDataDirect();
+  const offset = edgeVehicleQueue.getOffsetForEdge(edgeIdx);
+  const count = queueData[offset];
+
+  if (count === 0) return;
+
+  const myVehIdx = queueData[offset + 1];
   const ptrMe = myVehIdx * VEHICLE_DATA_SIZE;
 
   let mostCriticalHitZone: number = HitZone.NONE;

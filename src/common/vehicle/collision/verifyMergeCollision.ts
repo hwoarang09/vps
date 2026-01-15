@@ -14,19 +14,20 @@ function getCurveTailLength(): number {
 function checkCompetitorVehicles(
   ctx: CollisionCheckContext,
   myVehId: number,
-  compQueue: Uint16Array | Int32Array,
+  queueData: Int32Array | Uint16Array,
+  queueOffset: number,
   currentMaxHitZone: number,
   data: Float32Array,
   compThreshold: number,
   compEdgeLen: number
 ): { maxHitZone: number; targetId: number } {
   const { sensorPointArray } = ctx;
-  const compCount = compQueue[0];
+  const compCount = queueData[queueOffset];
   let maxHitZone = currentMaxHitZone;
   let maxTargetId = -1;
 
   for (let j = 0; j < compCount; j++) {
-    const compVehId = compQueue[1 + j];
+    const compVehId = queueData[queueOffset + 1 + j];
     const compPtr = compVehId * VEHICLE_DATA_SIZE;
 
     const compRatio = data[compPtr + MovementData.EDGE_RATIO];
@@ -63,11 +64,16 @@ function checkAgainstCompetitors(
   let mostCriticalHitZone: number = HitZone.NONE;
   let criticalTargetId = -1;
 
+  // Direct access for performance
+  const queueData = edgeVehicleQueue.getDataDirect();
+
   for (const compEdgeIdx of edge.prevEdgeIndices) {
     if (compEdgeIdx === edgeIdx) continue;
 
-    const compQueue = edgeVehicleQueue.getData(compEdgeIdx);
-    if (!compQueue || compQueue[0] === 0) continue;
+    const compOffset = edgeVehicleQueue.getOffsetForEdge(compEdgeIdx);
+    const compCount = queueData[compOffset];
+
+    if (compCount === 0) continue;
 
     const compEdge = edgeArray[compEdgeIdx];
     if (!compEdge) continue;
@@ -80,7 +86,8 @@ function checkAgainstCompetitors(
     const result = checkCompetitorVehicles(
       ctx,
       vehId,
-      compQueue,
+      queueData,
+      compOffset,
       mostCriticalHitZone,
       data,
       compThreshold,
@@ -104,10 +111,14 @@ function checkAgainstCompetitors(
 export function verifyMergeZoneCollision(
   edgeIdx: number,
   edge: Edge,
-  ctx: CollisionCheckContext,
-  queue: Uint16Array | Int32Array
+  ctx: CollisionCheckContext
 ) {
-  const { vehicleArrayData, config } = ctx;
+  const { vehicleArrayData, edgeVehicleQueue, config } = ctx;
+
+  // Direct access for performance
+  const queueData = edgeVehicleQueue.getDataDirect();
+  const offset = edgeVehicleQueue.getOffsetForEdge(edgeIdx);
+  const count = queueData[offset];
 
   const tailLength = getCurveTailLength();
   const vehicleLen = config.bodyLength;
@@ -117,10 +128,8 @@ export function verifyMergeZoneCollision(
   const edgeLen = edge.distance;
   const dangerStartOffset = edgeLen - dangerZoneLen;
 
-  const count = queue[0];
-
   for (let i = 0; i < count; i++) {
-    const vehId = queue[1 + i];
+    const vehId = queueData[offset + 1 + i];
     const ptr = vehId * VEHICLE_DATA_SIZE;
 
     let currentOffset = 0;

@@ -11,6 +11,10 @@ import { verifyCurveCollision } from "./verifyCurveCollision";
 export interface IEdgeVehicleQueue {
   getData(edgeIdx: number): Int32Array | Uint16Array | null;
   getCount(edgeIdx: number): number;
+  // Direct access methods for performance (hot paths)
+  getDataDirect(): Int32Array | Uint16Array;
+  getOffsetForEdge(edgeIdx: number): number;
+  readonly edgeListSize: number;
 }
 
 export interface ISensorPointArray {

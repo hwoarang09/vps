@@ -14,15 +14,18 @@ export function verifyFollowingCollision(
 ) {
   const { vehicleArrayData, edgeVehicleQueue, sensorPointArray, config } = ctx;
 
-  const rawData = edgeVehicleQueue.getData(edgeIdx);
-  if (!rawData || rawData[0] <= 1) return;
+  // Direct access for performance (avoid subarray overhead)
+  const queueData = edgeVehicleQueue.getDataDirect();
+  const offset = edgeVehicleQueue.getOffsetForEdge(edgeIdx);
+  const count = queueData[offset];
 
-  const count = rawData[0];
+  if (count <= 1) return;
+
   const vehicleLength = config.bodyLength;
 
   for (let i = 1; i < count; i++) {
-    const frontVehId = rawData[1 + (i - 1)];
-    const backVehId = rawData[1 + i];
+    const frontVehId = queueData[offset + 1 + (i - 1)];
+    const backVehId = queueData[offset + 1 + i];
 
     const ptrFront = frontVehId * VEHICLE_DATA_SIZE;
     const ptrBack = backVehId * VEHICLE_DATA_SIZE;

@@ -11,13 +11,17 @@ export function verifyCurveCollision(
   edge: Edge,
   ctx: CollisionCheckContext
 ) {
-  const rawData = ctx.edgeVehicleQueue.getData(edgeIdx);
-  if (!rawData || rawData[0] === 0) return;
+  // Quick check: skip if no vehicles
+  const queueData = ctx.edgeVehicleQueue.getDataDirect();
+  const offset = ctx.edgeVehicleQueue.getOffsetForEdge(edgeIdx);
+  const count = queueData[offset];
+
+  if (count === 0) return;
 
   verifyNextPathCollision(edgeIdx, edge, ctx);
   verifyFollowingCollision(edgeIdx, edge, ctx);
 
   if (edge.toNodeIsMerge && edge.prevEdgeIndices && edge.prevEdgeIndices.length > 1) {
-    verifyMergeZoneCollision(edgeIdx, edge, ctx, rawData);
+    verifyMergeZoneCollision(edgeIdx, edge, ctx);
   }
 }
