@@ -39,9 +39,18 @@ export type { FabInitParams } from "@/shmSimulator/index";
  */
 export interface WorkerPerfStats {
   workerIndex: number;
+  // Basic stats
   avgStepMs: number;
   minStepMs: number;
   maxStepMs: number;
+  // Extended stats (GC spike detection)
+  variance: number;
+  stdDev: number;
+  cv: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  sampleCount: number;
 }
 
 /**
@@ -171,6 +180,13 @@ export class MultiWorkerController {
           avgStepMs: 0,
           minStepMs: 0,
           maxStepMs: 0,
+          variance: 0,
+          stdDev: 0,
+          cv: 0,
+          p50: 0,
+          p95: 0,
+          p99: 0,
+          sampleCount: 0,
         },
       };
 
@@ -354,6 +370,13 @@ export class MultiWorkerController {
         workerInfo.perfStats.avgStepMs = message.avgStepMs;
         workerInfo.perfStats.minStepMs = message.minStepMs;
         workerInfo.perfStats.maxStepMs = message.maxStepMs;
+        workerInfo.perfStats.variance = message.variance;
+        workerInfo.perfStats.stdDev = message.stdDev;
+        workerInfo.perfStats.cv = message.cv;
+        workerInfo.perfStats.p50 = message.p50;
+        workerInfo.perfStats.p95 = message.p95;
+        workerInfo.perfStats.p99 = message.p99;
+        workerInfo.perfStats.sampleCount = message.sampleCount;
 
         if (this.onPerfStatsCallback) {
           const allStats = this.workers.map(w => ({ ...w.perfStats }));

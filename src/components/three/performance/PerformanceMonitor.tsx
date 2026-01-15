@@ -23,6 +23,9 @@ export const PerformanceMonitorUI: React.FC = () => {
   const workerAvgMs = useShmSimulatorStore((state) => state.workerAvgMs);
   const workerMinMs = useShmSimulatorStore((state) => state.workerMinMs);
   const workerMaxMs = useShmSimulatorStore((state) => state.workerMaxMs);
+  const workerStdDev = useShmSimulatorStore((state) => state.workerStdDev);
+  const workerCV = useShmSimulatorStore((state) => state.workerCV);
+  const workerP99 = useShmSimulatorStore((state) => state.workerP99);
 
   useEffect(() => {
     const updatePerformance = (currentTime: number) => {
@@ -145,6 +148,15 @@ export const PerformanceMonitorUI: React.FC = () => {
             <div style={{ fontSize: "14px", color: "#f38181" }}>
               {workerMaxMs.toFixed(2)} ms
             </div>
+            <div style={{ fontSize: "14px", color: workerStdDev > 10 ? "#ff6b6b" : "#feca57" }} title="Standard Deviation (GC spike indicator)">
+              σ {workerStdDev.toFixed(2)}
+            </div>
+            <div style={{ fontSize: "14px", color: workerCV > 0.3 ? "#ff6b6b" : "#48dbfb" }} title="Coefficient of Variation">
+              CV {(workerCV * 100).toFixed(1)}%
+            </div>
+            <div style={{ fontSize: "14px", color: "#ee5a6f" }} title="99th Percentile">
+              P99 {workerP99.toFixed(2)}
+            </div>
           </button>
 
           {/* 펼쳐진 워커별 상세 정보 */}
@@ -169,6 +181,15 @@ export const PerformanceMonitorUI: React.FC = () => {
               <div style={{ fontSize: "13px", color: "#f38181" }}>
                 {stat.maxStepMs.toFixed(2)} ms
               </div>
+              <div style={{ fontSize: "13px", color: stat.stdDev > 10 ? "#ff6b6b" : "#feca57" }} title="Standard Deviation">
+                σ {stat.stdDev.toFixed(2)}
+              </div>
+              <div style={{ fontSize: "13px", color: stat.cv > 0.3 ? "#ff6b6b" : "#48dbfb" }} title="Coefficient of Variation">
+                CV {(stat.cv * 100).toFixed(1)}%
+              </div>
+              <div style={{ fontSize: "13px", color: "#ee5a6f" }} title="99th Percentile">
+                P99 {stat.p99.toFixed(2)}
+              </div>
             </div>
           ))}
         </>
@@ -184,6 +205,15 @@ export const PerformanceMonitorUI: React.FC = () => {
           </div>
           <div style={{ fontSize: "14px", color: "#f38181" }}>
             {workerMaxMs.toFixed(2)} ms
+          </div>
+          <div style={{ fontSize: "14px", color: workerStdDev > 10 ? "#ff6b6b" : "#feca57" }} title="Standard Deviation">
+            σ {workerStdDev.toFixed(2)}
+          </div>
+          <div style={{ fontSize: "14px", color: workerCV > 0.3 ? "#ff6b6b" : "#48dbfb" }} title="Coefficient of Variation">
+            CV {(workerCV * 100).toFixed(1)}%
+          </div>
+          <div style={{ fontSize: "14px", color: "#ee5a6f" }} title="99th Percentile">
+            P99 {workerP99.toFixed(2)}
           </div>
         </div>
       )}

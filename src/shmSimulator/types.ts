@@ -266,15 +266,26 @@ export type MainMessage =
   | { type: "STATS"; fps: number; vehicleCount: number }
   | {
       type: "PERF_STATS";
+      // Basic stats (backward compatibility)
       avgStepMs: number;
       minStepMs: number;
       maxStepMs: number;
+      // Extended stats (GC spike detection)
+      variance: number;        // Variance (ms²)
+      stdDev: number;          // Standard deviation (ms)
+      cv: number;              // Coefficient of variation (stdDev / mean)
+      p50: number;             // Median (50th percentile)
+      p95: number;             // 95th percentile
+      p99: number;             // 99th percentile
+      sampleCount: number;     // Number of samples
+      // Dijkstra stats
       dijkstra?: {
         count: number;
         avgTimeMs: number;
         minTimeMs: number;
         maxTimeMs: number;
       };
+      // Fab vehicle counts
       fabVehicleCounts: Record<string, number>;
     }
   | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }

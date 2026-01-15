@@ -24,6 +24,9 @@ interface ShmSimulatorState {
   workerAvgMs: number;
   workerMinMs: number;
   workerMaxMs: number;
+  workerStdDev: number;
+  workerCV: number;
+  workerP99: number;
 
   // Actions
   init: (params: {
@@ -81,6 +84,9 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   workerAvgMs: 0,
   workerMinMs: 0,
   workerMaxMs: 0,
+  workerStdDev: 0,
+  workerCV: 0,
+  workerP99: 0,
 
   init: async (params) => {
     const {
@@ -127,7 +133,17 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         const avgStepMs = workerStats.reduce((sum, s) => sum + s.avgStepMs, 0) / workerStats.length;
         const minStepMs = Math.min(...workerStats.map(s => s.minStepMs));
         const maxStepMs = Math.max(...workerStats.map(s => s.maxStepMs));
-        set({ workerAvgMs: avgStepMs, workerMinMs: minStepMs, workerMaxMs: maxStepMs });
+        const avgStdDev = workerStats.reduce((sum, s) => sum + s.stdDev, 0) / workerStats.length;
+        const avgCV = workerStats.reduce((sum, s) => sum + s.cv, 0) / workerStats.length;
+        const maxP99 = Math.max(...workerStats.map(s => s.p99));
+        set({
+          workerAvgMs: avgStepMs,
+          workerMinMs: minStepMs,
+          workerMaxMs: maxStepMs,
+          workerStdDev: avgStdDev,
+          workerCV: avgCV,
+          workerP99: maxP99,
+        });
       }
     });
 
@@ -261,6 +277,9 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       workerAvgMs: 0,
       workerMinMs: 0,
       workerMaxMs: 0,
+      workerStdDev: 0,
+      workerCV: 0,
+      workerP99: 0,
     });
   },
 

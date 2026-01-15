@@ -4,6 +4,7 @@ import { FabContext, FabInitParams } from "./FabContext";
 import type { InitPayload, SimulationConfig, FabInitData, SharedMapData, SharedMapRef, FabRenderOffset, FabRenderAssignment } from "../types";
 import { createDefaultConfig } from "../types";
 import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
+import { RollingPerformanceStats } from "@/common/performance/RollingPerformanceStats";
 import type { Node } from "@/types";
 
 export class SimulationEngine {
@@ -24,7 +25,7 @@ export class SimulationEngine {
   private loopHandle: ReturnType<typeof setInterval> | null = null;
 
   // === Performance Monitoring ===
-  private stepTimes: number[] = [];
+  private readonly perfStats: RollingPerformanceStats;
   private lastPerfReportTime: number = 0;
   private readonly PERF_REPORT_INTERVAL = 5000; // 5 seconds
 
@@ -35,6 +36,7 @@ export class SimulationEngine {
 
   constructor() {
     this.config = createDefaultConfig();
+    this.perfStats = new RollingPerformanceStats(5000, 60); // 5 second window, 60fps target
   }
 
   /**
@@ -307,7 +309,8 @@ export class SimulationEngine {
 
     // Measure step time
     const stepEnd = performance.now();
-    this.stepTimes.push(stepEnd - stepStart);
+    const stepTimeMs = stepEnd - stepStart;
+    this.perfStats.addSample(stepTimeMs);
 
     // Report performance stats periodically
     if (stepEnd - this.lastPerfReportTime >= this.PERF_REPORT_INTERVAL) {
@@ -320,12 +323,8 @@ export class SimulationEngine {
    * Report performance statistics to main thread
    */
   private reportPerfStats(): void {
-    if (this.stepTimes.length === 0) return;
-
-    const avgStepMs = this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length;
-    const minStepMs = Math.min(...this.stepTimes);
-    const maxStepMs = Math.max(...this.stepTimes);
-    this.stepTimes = [];
+    const metrics = this.perfStats.getMetrics();
+    if (!metrics) return;
 
     // Get Dijkstra stats
     const dijkstraStats = getDijkstraPerformanceStats();
@@ -335,15 +334,26 @@ export class SimulationEngine {
 
     self.postMessage({
       type: "PERF_STATS",
-      avgStepMs,
-      minStepMs,
-      maxStepMs,
+      // Basic stats (backward compatibility)
+      avgStepMs: metrics.mean,
+      minStepMs: metrics.min,
+      maxStepMs: metrics.max,
+      // Extended stats (NEW: GC spike detection)
+      variance: metrics.variance,
+      stdDev: metrics.stdDev,
+      cv: metrics.cv,
+      p50: metrics.p50,
+      p95: metrics.p95,
+      p99: metrics.p99,
+      sampleCount: metrics.sampleCount,
+      // Dijkstra stats
       dijkstra: dijkstraStats.count > 0 ? {
         count: dijkstraStats.count,
         avgTimeMs: dijkstraStats.totalTime / dijkstraStats.count,
         minTimeMs: dijkstraStats.minTime,
         maxTimeMs: dijkstraStats.maxTime,
       } : undefined,
+      // Fab vehicle counts
       fabVehicleCounts,
     });
   }
