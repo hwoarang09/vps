@@ -188,8 +188,8 @@ export class TransferMgr {
       return currentEdge.nextEdgeIndices![0];
     }
 
-    if (mode === TransferMode.MQTT_CONTROL) {
-      // MQTT_CONTROL
+    if (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE) {
+      // MQTT_CONTROL or AUTO_ROUTE - both use reserved paths/commands
       return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex);
     } else if (mode === TransferMode.LOOP) {
       // LOOP
