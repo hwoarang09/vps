@@ -12,7 +12,7 @@ import {
   StopReason,
   TrafficState,
 } from "@/common/vehicle/initialize/constants";
-import { calculateNextSpeed, type SpeedConfig } from "@/common/vehicle/physics/speedCalculator";
+import { calculateNextSpeed, calculateBrakeDistance, type SpeedConfig } from "@/common/vehicle/physics/speedCalculator";
 import { handleEdgeTransition, type EdgeTransitionResult, type IEdgeTransitionStore } from "./edgeTransition";
 import { interpolatePositionTo, type PositionResult } from "./positionInterpolator";
 import { updateSensorPoints, type SensorPointsConfig } from "@/common/vehicle/helpers/sensorPoints";
@@ -29,6 +29,8 @@ export interface MovementConfig extends SpeedConfig, SensorPointsConfig {
   vehicleZOffset: number;
   curveMaxSpeed: number;
   curveAcceleration: number;
+  /** 곡선 사전 감속에 사용할 감속도 (음수, m/s²) */
+  curvePreBrakeDeceleration?: number;
 }
 
 /**
@@ -155,10 +157,27 @@ export function updateMovement(ctx: MovementUpdateContext) {
       continue;
     }
 
+    // 곡선 사전 감속 체크 (가속 전에 먼저 확인)
+    const curveBrakeResult = checkCurvePreBraking(
+      i,
+      currentEdge,
+      edgeRatio,
+      velocity,
+      edgeArray,
+      edgeNameToIndex,
+      transferMgr,
+      config,
+      clampedDelta
+    );
+
+    // 감속 중이면 가속 막기
+    const finalAccel = curveBrakeResult.shouldBrake ? 0 : appliedAccel;
+    const finalDecel = curveBrakeResult.shouldBrake ? curveBrakeResult.deceleration : appliedDecel;
+
     let newVelocity = calculateNextSpeed(
       velocity,
-      appliedAccel,
-      appliedDecel,
+      finalAccel,
+      finalDecel,
       currentEdge,
       clampedDelta,
       config
@@ -326,6 +345,14 @@ function processEdgeTransitionLogic(
         out.finalEdgeIndex,
         ctx.simulationTime ?? 0
       );
+    }
+
+    // Edge 전환 완료 - 경로에서 지나간 Edge 제거
+    if (out.finalEdgeIndex !== currentEdgeIndex) {
+      const passedEdge = ctx.edgeArray[out.finalEdgeIndex];
+      if (passedEdge) {
+        ctx.transferMgr.onEdgeTransition(vehicleIndex, passedEdge.edge_name);
+      }
     }
   } else {
     // Just update position on current edge
@@ -529,4 +556,87 @@ function processSameEdgeLogic(
   return true;
 }
 
+interface CurveBrakeCheckResult {
+  shouldBrake: boolean;
+  deceleration: number;
+  distanceToCurve: number;
+}
+
+/**
+ * 곡선 사전 감속 체크
+ * calculateNextSpeed 전에 호출하여 감속 필요 여부 판단
+ */
+function checkCurvePreBraking(
+  vehId: number,
+  currentEdge: Edge,
+  currentRatio: number,
+  currentVelocity: number,
+  edgeArray: Edge[],
+  edgeNameToIndex: Map<string, number>,
+  transferMgr: TransferMgr,
+  config: MovementConfig,
+  _delta: number
+): CurveBrakeCheckResult {
+  const preBrakeDecel = config.curvePreBrakeDeceleration ?? -2;
+  const brakeState = transferMgr.getCurveBrakeState(vehId);
+
+  const noResult: CurveBrakeCheckResult = {
+    shouldBrake: false,
+    deceleration: 0,
+    distanceToCurve: Infinity
+  };
+
+  // 현재 Edge가 곡선이면 감속 상태 초기화
+  if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
+    if (brakeState.isBraking) {
+      transferMgr.clearCurveBrakeState(vehId);
+    }
+    return noResult;
+  }
+
+  // 경로에서 다음 곡선 찾기
+  const curveInfo = transferMgr.findDistanceToNextCurve(
+    vehId,
+    currentEdge,
+    currentRatio,
+    edgeArray,
+    edgeNameToIndex
+  );
+
+  // 경로에 곡선 없음
+  if (!curveInfo) {
+    if (brakeState.isBraking) {
+      transferMgr.clearCurveBrakeState(vehId);
+    }
+    return noResult;
+  }
+
+  // 감속 필요 거리 계산 (체크포인트)
+  const brakeDistance = calculateBrakeDistance(
+    config.linearMaxSpeed,
+    config.curveMaxSpeed,
+    preBrakeDecel
+  );
+
+  const distanceToCurve = curveInfo.distance;
+  const checkpointDistance = distanceToCurve - brakeDistance;
+
+  // 체크포인트 지났는지 확인
+  if (!brakeState.isBraking && checkpointDistance <= 0) {
+    transferMgr.startCurveBraking(vehId, curveInfo.curveEdge);
+  }
+
+  // 감속 필요 여부 판단
+  const shouldBrake = brakeState.isBraking || checkpointDistance <= 0;
+
+  if (shouldBrake && currentVelocity > config.curveMaxSpeed) {
+    return {
+      shouldBrake: true,
+      deceleration: preBrakeDecel,
+      distanceToCurve
+    };
+  }
+
+  return noResult;
+}
 

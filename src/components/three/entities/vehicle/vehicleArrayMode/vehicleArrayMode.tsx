@@ -11,7 +11,7 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
 import { getVehicleConfigSync, waitForConfig, getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
-import { getMaxDelta, getApproachMinSpeed, getBrakeMinSpeed, getLinearMaxSpeed, getCurveMaxSpeed, getCurveAcceleration } from "@/config/movementConfig";
+import { getMaxDelta, getApproachMinSpeed, getBrakeMinSpeed, getLinearMaxSpeed, getCurveMaxSpeed, getCurveAcceleration, getLinearDeceleration } from "@/config/movementConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";
@@ -172,6 +172,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
       vehicleZOffset: 0.15,
       bodyLength: getBodyLength(),
       bodyWidth: getBodyWidth(),
+      curvePreBrakeDeceleration: -getLinearDeceleration(), // 곡선 사전 감속용 (음수)
     };
 
     const transferModeValue = store.transferMode;
