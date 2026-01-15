@@ -375,7 +375,7 @@ export class SimulationEngine {
     for (const assignment of fabAssignments) {
       const context = this.fabContexts.get(assignment.fabId);
       if (!context) {
-        console.warn(`[SimulationEngine] Fab not found for render buffer: ${assignment.fabId}`);
+        // Skip silently - fab may not be initialized yet
         vehicleStartIndex += assignment.actualVehicles;
         continue;
       }

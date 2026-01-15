@@ -57,6 +57,19 @@ export class FabContext {
   private totalVehicles: number = 0;
   private vehicleStartIndex: number = 0;
 
+  // === Cached Sensor Section Offsets (매 프레임 재계산 방지) ===
+  private sectionOffsets: {
+    sectionSize: number;
+    fabOffsetValue: number;
+    zone0StartEndBase: number;
+    zone0OtherBase: number;
+    zone1StartEndBase: number;
+    zone1OtherBase: number;
+    zone2StartEndBase: number;
+    zone2OtherBase: number;
+    bodyOtherBase: number;
+  } | null = null;
+
   // === Map Data ===
   private edges: Edge[] = [];
   private nodes: Node[] = [];
@@ -203,10 +216,34 @@ export class FabContext {
     this.totalVehicles = totalVehicles;
     this.vehicleStartIndex = vehicleStartIndex;
 
+    // 센서 섹션 오프셋 사전 계산 (매 프레임 재계산 방지)
+    this.calculateSectionOffsets();
+
     console.log(`[FabContext:${this.fabId}] Render buffer set: vehOffset=${vehicleRenderOffset}, vehicles=${actualVehicles}, total=${totalVehicles}, startIdx=${vehicleStartIndex}`);
 
     // 초기 데이터를 렌더 버퍼에 복사
     this.writeToRenderRegion();
+  }
+
+  /**
+   * 센서 섹션 오프셋 사전 계산 (매 프레임 재계산 방지)
+   * setRenderBuffer()에서 한 번만 호출됨
+   */
+  private calculateSectionOffsets(): void {
+    const sectionSize = this.totalVehicles * SENSOR_ATTR_SIZE;
+    const fabOffsetValue = this.vehicleStartIndex * SENSOR_ATTR_SIZE;
+
+    this.sectionOffsets = {
+      sectionSize,
+      fabOffsetValue,
+      zone0StartEndBase: SensorSection.ZONE0_STARTEND * sectionSize + fabOffsetValue,
+      zone0OtherBase: SensorSection.ZONE0_OTHER * sectionSize + fabOffsetValue,
+      zone1StartEndBase: SensorSection.ZONE1_STARTEND * sectionSize + fabOffsetValue,
+      zone1OtherBase: SensorSection.ZONE1_OTHER * sectionSize + fabOffsetValue,
+      zone2StartEndBase: SensorSection.ZONE2_STARTEND * sectionSize + fabOffsetValue,
+      zone2OtherBase: SensorSection.ZONE2_OTHER * sectionSize + fabOffsetValue,
+      bodyOtherBase: SensorSection.BODY_OTHER * sectionSize + fabOffsetValue,
+    };
   }
 
   private buildVehicleLoopMap(): void {
@@ -364,19 +401,17 @@ export class FabContext {
     // === Sensor Render Data (섹션별 연속 레이아웃) ===
     const workerSensorData = this.sensorPointArray.getData();
 
-    // 전체 버퍼 기준 섹션 크기 (totalVehicles × 4)
-    const sectionSize = this.totalVehicles * SENSOR_ATTR_SIZE;
-    // 이 Fab의 vehicle들이 각 섹션에서 시작하는 오프셋
-    const fabOffset = this.vehicleStartIndex * SENSOR_ATTR_SIZE;
-
-    // 섹션별 시작 오프셋 (전체 버퍼 기준)
-    const zone0StartEndBase = SensorSection.ZONE0_STARTEND * sectionSize + fabOffset;
-    const zone0OtherBase = SensorSection.ZONE0_OTHER * sectionSize + fabOffset;
-    const zone1StartEndBase = SensorSection.ZONE1_STARTEND * sectionSize + fabOffset;
-    const zone1OtherBase = SensorSection.ZONE1_OTHER * sectionSize + fabOffset;
-    const zone2StartEndBase = SensorSection.ZONE2_STARTEND * sectionSize + fabOffset;
-    const zone2OtherBase = SensorSection.ZONE2_OTHER * sectionSize + fabOffset;
-    const bodyOtherBase = SensorSection.BODY_OTHER * sectionSize + fabOffset;
+    // 사전 계산된 섹션 오프셋 사용 (매 프레임 재계산 방지)
+    if (!this.sectionOffsets) return; // Early exit if not initialized
+    const {
+      zone0StartEndBase,
+      zone0OtherBase,
+      zone1StartEndBase,
+      zone1OtherBase,
+      zone2StartEndBase,
+      zone2OtherBase,
+      bodyOtherBase,
+    } = this.sectionOffsets;
 
     for (let i = 0; i < numVeh; i++) {
       const vehPtr = i * SENSOR_ATTR_SIZE; // 4 floats per vehicle in each section

@@ -5,6 +5,7 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import {
     VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
@@ -212,21 +213,29 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     if (collisionTarget !== -1) {
         if (isShmMode) {
             const data = useShmSimulatorStore.getState().getVehicleData();
-            if (data) {
+            const actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
+
+            // Validate collision target is within valid range
+            if (data && collisionTarget >= 0 && collisionTarget < actualNumVehicles) {
                 const tData = readShmVehicleData(data, collisionTarget);
                 const tEdgeIdx = tData.movement.currentEdge;
                 const tEdgeRatio = tData.movement.edgeRatio;
                 const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
                 targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
-                targetRatioInfo = tEdgeRatio.toFixed(3);
+                targetRatioInfo = tEdgeRatio !== undefined ? tEdgeRatio.toFixed(3) : "N/A";
             }
         } else {
-            const tData = vehicleDataArray.get(collisionTarget);
-            const tEdgeIdx = tData.movement.currentEdge;
-            const tEdgeRatio = tData.movement.edgeRatio;
-            const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
-            targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
-            targetRatioInfo = tEdgeRatio.toFixed(3);
+            const actualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
+
+            // Validate collision target is within valid range
+            if (collisionTarget >= 0 && collisionTarget < actualNumVehicles) {
+                const tData = vehicleDataArray.get(collisionTarget);
+                const tEdgeIdx = tData.movement.currentEdge;
+                const tEdgeRatio = tData.movement.edgeRatio;
+                const tEdgeName = useEdgeStore.getState().getEdgeByIndex(tEdgeIdx)?.edge_name || "Unknown";
+                targetEdgeInfo = `${tEdgeName} (#${tEdgeIdx})`;
+                targetRatioInfo = tEdgeRatio !== undefined ? tEdgeRatio.toFixed(3) : "N/A";
+            }
         }
     }
 

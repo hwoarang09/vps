@@ -2,10 +2,8 @@
 // Shared collision check logic for vehicleArrayMode and shmSimulator
 
 import type { Edge } from "@/types/edge";
-import { EdgeType } from "@/types";
 import type { CollisionConfig } from "./collisionCommon";
-import { verifyLinearCollision } from "./verifyLinearCollision";
-import { verifyCurveCollision } from "./verifyCurveCollision";
+import { verifyEdgeCollision } from "./verifyEdgeCollision";
 
 // Interfaces for dependency injection
 export interface IEdgeVehicleQueue {
@@ -39,10 +37,6 @@ export function checkCollisions(ctx: CollisionCheckContext) {
     const count = edgeVehicleQueue.getCount(edgeIdx);
     if (count === 0) continue;
 
-    if (edge.vos_rail_type === EdgeType.LINEAR) {
-      verifyLinearCollision(edgeIdx, edge, ctx);
-    } else {
-      verifyCurveCollision(edgeIdx, edge, ctx);
-    }
+    verifyEdgeCollision(edgeIdx, edge, ctx);
   }
 }

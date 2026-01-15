@@ -271,8 +271,8 @@ function recordPerformance(elapsedTime: number): void {
   perfStats.minTime = Math.min(perfStats.minTime, elapsedTime);
   perfStats.maxTime = Math.max(perfStats.maxTime, elapsedTime);
 
-  // Log every 1000 calls (reduced from 100 to avoid spam)
-  if (perfStats.count % 1000 === 0) {
+  // Log every 100000 calls
+  if (perfStats.count % 100000 === 0) {
     logPerformanceStats();
   }
 }
