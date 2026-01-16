@@ -16,6 +16,7 @@ import {
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
+import { MAX_PATH_LENGTH } from "@/common/vehicle/logic/TransferMgr";
 
 // Helper to decode StopReason bitmask
 const getStopReasons = (reasonMask: number): string[] => {
@@ -144,7 +145,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 
     const getCurrentSensorPreset = () => {
         if (isShmMode) {
-            const data = useShmSimulatorStore.getState().getVehicleData();
+            const data = useShmSimulatorStore.getState().getVehicleFullData();
             if (!data) return 0;
             return data[vehicleIndex * SHM_VEHICLE_DATA_SIZE + ShmSensorData.PRESET_IDX];
         }
@@ -158,7 +159,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     let destinationEdgeIdx: number | undefined, pathRemaining: number | undefined;
 
     if (isShmMode) {
-        const data = useShmSimulatorStore.getState().getVehicleData();
+        const data = useShmSimulatorStore.getState().getVehicleFullData();
         if (!data) {
             return <div className="text-gray-500">No SHM data available</div>;
         }
@@ -194,6 +195,8 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     }
     
     const vehicleInfo = vehicles.get(vehicleIndex);
+    // Generate ID from index if not in vehicles map (e.g., SHM mode)
+    const vehicleId = vehicleInfo?.id || `VEH${String(vehicleIndex).padStart(5, '0')}`;
     const stopReasons = getStopReasons(stopReasonMask);
 
     // Debug Info: Self
@@ -212,7 +215,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 
     if (collisionTarget !== -1) {
         if (isShmMode) {
-            const data = useShmSimulatorStore.getState().getVehicleData();
+            const data = useShmSimulatorStore.getState().getVehicleFullData();
             const actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
 
             // Validate collision target is within valid range
@@ -296,7 +299,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                 <div className="space-y-1 text-sm bg-white p-2 rounded border border-gray-100">
                     <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
                         <span className="text-gray-500">ID / Index</span>
-                        <span className="font-mono font-bold">{vehicleInfo?.id || "Unknown"} <span className="text-gray-400 text-xs">#{vehicleIndex}</span></span>
+                        <span className="font-mono font-bold">{vehicleId} <span className="text-gray-400 text-xs">#{vehicleIndex}</span></span>
                     </div>
 
                     <div className="flex justify-between">
@@ -331,6 +334,52 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                             <span className="font-mono">{destinationEdgeName} (Hops: {pathRemaining?.toFixed(0)})</span>
                         </div>
                     )}
+
+                    {/* Path Display */}
+                    {isShmMode && (() => {
+                        const pathData = useShmSimulatorStore.getState().getPathData();
+                        if (!pathData) return null;
+
+                        const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+                        const currentIdx = pathData[pathPtr + 0];
+                        const totalLen = pathData[pathPtr + 1];
+
+                        if (totalLen === 0 || currentIdx >= totalLen) return null;
+
+                        const remainingPath: { edgeIdx: number; edgeName: string }[] = [];
+                        for (let i = currentIdx; i < totalLen && i < currentIdx + 10; i++) {
+                            const edgeIdx = pathData[pathPtr + 2 + i];
+                            if (edgeIdx >= 0) {
+                                const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
+                                remainingPath.push({
+                                    edgeIdx,
+                                    edgeName: edge?.edge_name || `Edge#${edgeIdx}`
+                                });
+                            }
+                        }
+
+                        if (remainingPath.length === 0) return null;
+
+                        return (
+                            <details className="text-xs mt-2">
+                                <summary className="cursor-pointer text-purple-700 font-medium hover:text-purple-900">
+                                    Path ({remainingPath.length}{totalLen - currentIdx > 10 ? `+${totalLen - currentIdx - 10}` : ''} edges)
+                                </summary>
+                                <div className="mt-1 pl-2 space-y-0.5 max-h-32 overflow-y-auto text-gray-600">
+                                    {remainingPath.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between font-mono">
+                                            <span>{idx + 1}.</span>
+                                            <span>{item.edgeName}</span>
+                                            <span className="text-gray-400">#{item.edgeIdx}</span>
+                                        </div>
+                                    ))}
+                                    {totalLen - currentIdx > 10 && (
+                                        <div className="text-gray-400 text-center">... +{totalLen - currentIdx - 10} more</div>
+                                    )}
+                                </div>
+                            </details>
+                        );
+                    })()}
 
                     <div className="my-2 border-t border-gray-200"></div>
 

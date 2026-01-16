@@ -11,6 +11,14 @@ import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
 export const VEHICLE_RENDER_SIZE = 4;
 
 /**
+ * Path buffer 상수
+ * Layout: [pathLen, edge0, edge1, ..., edge98, edge99]
+ * - pathLen: 경로 길이 (0 = no path)
+ * - edge0~edge99: edge indices
+ */
+export const MAX_PATH_LENGTH = 100;
+
+/**
  * 센서 렌더링용 GPU-friendly 레이아웃 상수
  *
  * 버퍼 레이아웃 (섹션별 연속 - set() 최적화 가능):
@@ -87,6 +95,8 @@ export interface MemoryLayout {
   vehicleBufferSize: number;
   /** Sensor 버퍼 전체 크기 (bytes) - Worker 영역만 */
   sensorBufferSize: number;
+  /** Path 버퍼 전체 크기 (bytes) - Worker 영역만 */
+  pathBufferSize: number;
   /** Fab별 메모리 할당 정보 */
   fabAssignments: Map<string, FabMemoryAssignment>;
 }
@@ -129,12 +139,14 @@ export class MemoryLayoutManager {
   calculateLayout(fabConfigs: FabMemoryConfig[]): MemoryLayout {
     let vehicleOffset = 0;
     let sensorOffset = 0;
+    let pathOffset = 0;
 
     const fabAssignments = new Map<string, FabMemoryAssignment>();
 
     for (const fab of fabConfigs) {
       const vehicleSize = fab.maxVehicles * VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
       const sensorSize = fab.maxVehicles * SENSOR_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
+      const pathSize = fab.maxVehicles * MAX_PATH_LENGTH * Int32Array.BYTES_PER_ELEMENT;
 
       const assignment: FabMemoryAssignment = {
         fabId: fab.fabId,
@@ -148,17 +160,24 @@ export class MemoryLayoutManager {
           size: sensorSize,
           maxVehicles: fab.maxVehicles,
         },
+        pathRegion: {
+          offset: pathOffset,
+          size: pathSize,
+          maxVehicles: fab.maxVehicles,
+        },
       };
 
       fabAssignments.set(fab.fabId, assignment);
 
       vehicleOffset += vehicleSize;
       sensorOffset += sensorSize;
+      pathOffset += pathSize;
     }
 
     return {
       vehicleBufferSize: vehicleOffset,
       sensorBufferSize: sensorOffset,
+      pathBufferSize: pathOffset,
       fabAssignments,
     };
   }
@@ -240,10 +259,12 @@ export class MemoryLayoutManager {
   createWorkerBuffers(layout: MemoryLayout): {
     vehicleBuffer: SharedArrayBuffer;
     sensorBuffer: SharedArrayBuffer;
+    pathBuffer: SharedArrayBuffer;
   } {
     return {
       vehicleBuffer: new SharedArrayBuffer(layout.vehicleBufferSize),
       sensorBuffer: new SharedArrayBuffer(layout.sensorBufferSize),
+      pathBuffer: new SharedArrayBuffer(layout.pathBufferSize),
     };
   }
 
@@ -267,13 +288,15 @@ export class MemoryLayoutManager {
     console.log("=== Worker Memory Layout ===");
     console.log(`Vehicle Buffer: ${(layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`Sensor Buffer: ${(layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Total: ${((layout.vehicleBufferSize + layout.sensorBufferSize) / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Path Buffer: ${(layout.pathBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Total: ${((layout.vehicleBufferSize + layout.sensorBufferSize + layout.pathBufferSize) / 1024 / 1024).toFixed(2)} MB`);
     console.log("");
 
     for (const [fabId, assignment] of layout.fabAssignments) {
       console.log(`[${fabId}]`);
       console.log(`  Vehicle: offset=${assignment.vehicleRegion.offset}, size=${assignment.vehicleRegion.size}, maxVeh=${assignment.vehicleRegion.maxVehicles}`);
       console.log(`  Sensor:  offset=${assignment.sensorRegion.offset}, size=${assignment.sensorRegion.size}`);
+      console.log(`  Path:    offset=${assignment.pathRegion.offset}, size=${assignment.pathRegion.size}`);
     }
   }
 

@@ -11,16 +11,25 @@ function getCurveTailLength(): number {
   return 0.5;
 }
 
-function checkCompetitorVehicles(
-  ctx: CollisionCheckContext,
-  myVehId: number,
-  queueData: Int32Array | Uint16Array,
-  queueOffset: number,
-  currentMaxHitZone: number,
-  data: Float32Array,
-  compThreshold: number,
-  compEdgeLen: number
-): { maxHitZone: number; targetId: number } {
+function checkCompetitorVehicles({
+  ctx,
+  myVehId,
+  queueData,
+  queueOffset,
+  currentMaxHitZone,
+  data,
+  compThreshold,
+  compEdgeLen,
+}: {
+  ctx: CollisionCheckContext;
+  myVehId: number;
+  queueData: Int32Array | Uint16Array;
+  queueOffset: number;
+  currentMaxHitZone: number;
+  data: Float32Array;
+  compThreshold: number;
+  compEdgeLen: number;
+}): { maxHitZone: number; targetId: number } {
   const { sensorPointArray } = ctx;
   const compCount = queueData[queueOffset];
   let maxHitZone = currentMaxHitZone;
@@ -83,16 +92,16 @@ function checkAgainstCompetitors(
       compThreshold = compEdge.distance - dangerZoneLen;
     }
 
-    const result = checkCompetitorVehicles(
+    const result = checkCompetitorVehicles({
       ctx,
-      vehId,
+      myVehId: vehId,
       queueData,
-      compOffset,
-      mostCriticalHitZone,
+      queueOffset: compOffset,
+      currentMaxHitZone: mostCriticalHitZone,
       data,
       compThreshold,
-      compEdge.distance
-    );
+      compEdgeLen: compEdge.distance,
+    });
 
     if (result.maxHitZone > mostCriticalHitZone) {
       mostCriticalHitZone = result.maxHitZone;

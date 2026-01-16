@@ -28,6 +28,7 @@ export interface FabInitParams {
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
+  pathBuffer: SharedArrayBuffer;
   edges?: Edge[];
   nodes?: Node[];
   stationData?: StationRawData[];
@@ -119,13 +120,27 @@ export class FabContext {
 
     // Worker 버퍼 설정 (계산용)
     if (params.memoryAssignment) {
-      const { vehicleRegion, sensorRegion } = params.memoryAssignment;
+      const { vehicleRegion, sensorRegion, pathRegion } = params.memoryAssignment;
       this.store.setSharedBufferWithRegion(params.sharedBuffer, vehicleRegion);
       this.sensorPointArray.setBufferWithRegion(params.sensorPointBuffer, sensorRegion);
+
+      // Path buffer 설정
+      const pathBufferView = new Int32Array(
+        params.pathBuffer,
+        pathRegion.offset,
+        pathRegion.size / Int32Array.BYTES_PER_ELEMENT
+      );
+      this.transferMgr.setPathBuffer(pathBufferView);
+
       console.log(`[FabContext:${this.fabId}] Worker buffers connected with region restriction`);
     } else {
       this.store.setSharedBuffer(params.sharedBuffer);
       this.sensorPointArray.setBuffer(params.sensorPointBuffer);
+
+      // Path buffer 설정 (전체 버퍼)
+      const pathBufferView = new Int32Array(params.pathBuffer);
+      this.transferMgr.setPathBuffer(pathBufferView);
+
       console.log(`[FabContext:${this.fabId}] Worker buffers connected (full buffer)`);
     }
 

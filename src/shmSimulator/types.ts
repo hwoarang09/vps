@@ -33,6 +33,8 @@ export interface FabMemoryAssignment {
   vehicleRegion: MemoryRegion;
   /** Sensor 데이터 영역 (Worker 계산용) */
   sensorRegion: MemoryRegion;
+  /** Path 데이터 영역 (Worker 계산용) */
+  pathRegion: MemoryRegion;
 }
 
 /**
@@ -162,6 +164,7 @@ export interface FabInitData {
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
+  pathBuffer: SharedArrayBuffer;
 
   /**
    * Fab별 edges (단일 Fab 모드에서 사용)

@@ -79,6 +79,7 @@ export class MultiWorkerController {
   // Worker 버퍼 (계산용)
   private vehicleBuffer: SharedArrayBuffer | null = null;
   private sensorBuffer: SharedArrayBuffer | null = null;
+  private pathBuffer: SharedArrayBuffer | null = null;
 
   // Render 버퍼 (렌더링용 - 연속 레이아웃)
   private vehicleRenderBuffer: SharedArrayBuffer | null = null;
@@ -148,10 +149,12 @@ export class MultiWorkerController {
     const workerBuffers = this.layoutManager.createWorkerBuffers(this.layout);
     this.vehicleBuffer = workerBuffers.vehicleBuffer;
     this.sensorBuffer = workerBuffers.sensorBuffer;
+    this.pathBuffer = workerBuffers.pathBuffer;
 
     console.log(`[MultiWorkerController] Created Worker Buffers`);
     console.log(`  Vehicle: ${(this.layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
     console.log(`  Sensor:  ${(this.layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`  Path:    ${(this.layout.pathBufferSize / 1024 / 1024).toFixed(2)} MB`);
 
     // 3. 워커별 Fab 분배
     const workerAssignments = this.layoutManager.distributeToWorkers(
@@ -260,6 +263,7 @@ export class MultiWorkerController {
       fabId: fabAssignment.fabId,
       sharedBuffer: this.vehicleBuffer!,
       sensorPointBuffer: this.sensorBuffer!,
+      pathBuffer: this.pathBuffer!,
       edges: undefined,
       nodes: undefined,
       stationData: undefined,
@@ -282,6 +286,7 @@ export class MultiWorkerController {
       fabId: fabAssignment.fabId,
       sharedBuffer: this.vehicleBuffer!,
       sensorPointBuffer: this.sensorBuffer!,
+      pathBuffer: this.pathBuffer!,
       edges: fabConfig.edges,
       nodes: fabConfig.nodes,
       stationData: fabConfig.stations as StationRawData[],
@@ -467,6 +472,7 @@ export class MultiWorkerController {
     this.fabVehicleCounts.clear();
     this.vehicleBuffer = null;
     this.sensorBuffer = null;
+    this.pathBuffer = null;
     this.vehicleRenderBuffer = null;
     this.sensorRenderBuffer = null;
     this.layout = null;
@@ -536,10 +542,43 @@ export class MultiWorkerController {
   }
 
   /**
+   * Get vehicle full data (worker buffer - 22 floats per vehicle)
+   * Use this for reading complete vehicle state (e.g., IndividualControlPanel)
+   */
+  getVehicleFullData(): Float32Array | null {
+    if (!this.vehicleBuffer) return null;
+    return new Float32Array(this.vehicleBuffer);
+  }
+
+  /**
+   * Get sensor full data (worker buffer)
+   */
+  getSensorFullData(): Float32Array | null {
+    if (!this.sensorBuffer) return null;
+    return new Float32Array(this.sensorBuffer);
+  }
+
+  /**
+   * Get path data (worker buffer - Int32Array)
+   * Layout: [pathLen, edge0, edge1, ..., edge99] per vehicle
+   */
+  getPathData(): Int32Array | null {
+    if (!this.pathBuffer) return null;
+    return new Int32Array(this.pathBuffer);
+  }
+
+  /**
    * Get render layout info (렌더러에서 필요시 사용)
    */
   getRenderLayout(): RenderBufferLayout | null {
     return this.renderLayout;
+  }
+
+  /**
+   * Get worker layout info (for accessing full vehicle data)
+   */
+  getWorkerLayout(): MemoryLayout | null {
+    return this.layout;
   }
 
   /**

@@ -50,15 +50,20 @@ interface ShmSimulatorState {
   addFab: (params: FabInitParams) => Promise<number>;
   removeFab: (fabId: string) => Promise<void>;
 
-  start: () => void;
+  start: () => Promise<void>;
   stop: () => void;
   pause: () => void;
-  resume: () => void;
+  resume: () => Promise<void>;
   dispose: () => void;
 
   // Data access - 연속 레이아웃 렌더 버퍼 사용
   getVehicleData: () => Float32Array | null;
   getSensorPointData: () => Float32Array | null;
+  // Full data access - worker 버퍼 (22 floats per vehicle)
+  getVehicleFullData: () => Float32Array | null;
+  getSensorFullData: () => Float32Array | null;
+  // Path data access - Int32Array (MAX_PATH_LENGTH ints per vehicle)
+  getPathData: () => Int32Array | null;
   getActualNumVehicles: (fabId?: string) => number;
 
   // Fab 관리
@@ -294,6 +299,26 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (!controller) return null;
     return controller.getSensorPointData();
+  },
+
+  // Full data access - worker 버퍼 (22 floats per vehicle)
+  getVehicleFullData: () => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.getVehicleFullData();
+  },
+
+  getSensorFullData: () => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.getSensorFullData();
+  },
+
+  // Path data access - Int32Array
+  getPathData: () => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.getPathData();
   },
 
   getActualNumVehicles: (fabId = DEFAULT_FAB_ID) => {

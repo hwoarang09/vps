@@ -36,7 +36,7 @@ export interface PerformanceMetrics {
  * - CV > 0.5 → Unstable (50%+ variation)
  */
 export class RollingPerformanceStats {
-  private samples: number[] = [];
+  private readonly samples: number[] = [];
   private readonly maxSamples: number;
 
   /**
@@ -93,7 +93,7 @@ export class RollingPerformanceStats {
 
     // Percentiles (require sorted array)
     const sorted = [...this.samples].sort((a, b) => a - b);
-    const p50 = this.getPercentile(sorted, 0.50);
+    const p50 = this.getPercentile(sorted, 0.5);
     const p95 = this.getPercentile(sorted, 0.95);
     const p99 = this.getPercentile(sorted, 0.99);
 

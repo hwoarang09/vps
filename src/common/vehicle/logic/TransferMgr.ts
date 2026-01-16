@@ -10,6 +10,15 @@ import {
   MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 
+/**
+ * Path buffer layout constants
+ * Layout: [currentIdx, totalLen, edge0, edge1, ..., edge97]
+ */
+export const MAX_PATH_LENGTH = 100;
+export const PATH_CURRENT_IDX = 0;
+export const PATH_TOTAL_LEN = 1;
+export const PATH_EDGES_START = 2;
+
 export type VehicleLoop = {
   edgeSequence: string[];
 };
@@ -58,11 +67,18 @@ export class TransferMgr {
   private transferQueue: number[] = [];
   // Store reserved next edge for each vehicle: vehId -> ReservedEdge[]
   private readonly reservedNextEdges: Map<number, ReservedEdge[]> = new Map();
-  // Store reserved path for each vehicle: vehId -> Array<{edgeId, targetRatio}>
-  // Used for multi-edge reservation to enable speed control optimization
-  private readonly reservedPaths: Map<number, Array<ReservedEdge>> = new Map();
+  // Path buffer reference (SharedArrayBuffer - Int32Array)
+  // Layout: [currentIdx, totalLen, edge0, edge1, ..., edge97] per vehicle
+  private pathBuffer: Int32Array | null = null;
   // 곡선 감속 상태 (단순화)
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
+
+  /**
+   * Set path buffer reference (called from EngineStore or FabContext)
+   */
+  setPathBuffer(pathBuffer: Int32Array): void {
+    this.pathBuffer = pathBuffer;
+  }
 
   enqueueVehicleTransfer(vehicleIndex: number) {
     this.transferQueue.push(vehicleIndex);
@@ -78,9 +94,14 @@ export class TransferMgr {
   hasPendingCommands(vehId: number): boolean {
     const queue = this.reservedNextEdges.get(vehId);
     if (queue && queue.length > 0) return true;
-    
-    const path = this.reservedPaths.get(vehId);
-    if (path && path.length > 0) return true;
+
+    // Check path buffer
+    if (this.pathBuffer) {
+      const ptr = vehId * MAX_PATH_LENGTH;
+      const currentIdx = this.pathBuffer[ptr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBuffer[ptr + PATH_TOTAL_LEN];
+      if (currentIdx < totalLen) return true;
+    }
 
     return false;
   }
@@ -88,8 +109,28 @@ export class TransferMgr {
   clearQueue() {
     this.transferQueue = [];
     this.reservedNextEdges.clear();
-    this.reservedPaths.clear();
     this.curveBrakeStates.clear();
+
+    // Clear path buffer
+    if (this.pathBuffer) {
+      this.pathBuffer.fill(0);
+    }
+  }
+
+  /**
+   * Clear path buffer for a specific vehicle
+   */
+  clearVehiclePath(vehId: number): void {
+    if (!this.pathBuffer) return;
+
+    const pathPtr = vehId * MAX_PATH_LENGTH;
+    for (let i = 0; i < MAX_PATH_LENGTH; i++) {
+      this.pathBuffer[pathPtr + i] = 0;
+    }
+
+    // Also clear reservations
+    this.reservedNextEdges.delete(vehId);
+    this.curveBrakeStates.delete(vehId);
   }
 
   /**
@@ -253,20 +294,33 @@ export class TransferMgr {
   /**
    * Consumes and returns the reserved target ratio for the given vehicle.
    * This is called when the vehicle actually transitions to the next edge.
+   * Also advances currentIdx in path buffer.
    */
   consumeNextEdgeReservation(vehId: number): number | undefined {
+    // Advance path buffer currentIdx (if path exists)
+    if (this.pathBuffer) {
+      const pathPtr = vehId * MAX_PATH_LENGTH;
+      const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
+
+      if (currentIdx < totalLen) {
+        this.pathBuffer[pathPtr + PATH_CURRENT_IDX] = currentIdx + 1;
+      }
+    }
+
+    // Handle reservedNextEdges queue
     const queue = this.reservedNextEdges.get(vehId);
     if (!queue || queue.length === 0) return undefined;
 
     // Shift the first reservation
     const reservation = queue.shift()!;
     const ratio = reservation.targetRatio;
-    
+
     // Cleanup if empty
     if (queue.length === 0) {
       this.reservedNextEdges.delete(vehId);
     }
-    
+
     return ratio;
   }
 
@@ -342,7 +396,10 @@ export class TransferMgr {
     // Clear existing reservations when a new path is processed
     this.reservedNextEdges.delete(vehId);
 
+    // Validate path connectivity
     let prevEdge = currentEdge;
+    const edgeIndices: number[] = [];
+
     for (const pathItem of path) {
       const pathEdgeId = pathItem.edgeId;
       const pathEdgeIndex = edgeNameToIndex.get(pathEdgeId);
@@ -357,13 +414,20 @@ export class TransferMgr {
         return;
       }
 
+      edgeIndices.push(pathEdgeIndex);
       prevEdge = edgeArray[pathEdgeIndex];
     }
 
-    this.reservedPaths.set(vehId, path.map(p => ({
-      edgeId: p.edgeId,
-      targetRatio: p.targetRatio
-    })));
+    // Write to path buffer
+    if (this.pathBuffer) {
+      const pathPtr = vehId * MAX_PATH_LENGTH;
+      this.pathBuffer[pathPtr + PATH_CURRENT_IDX] = 0;
+      this.pathBuffer[pathPtr + PATH_TOTAL_LEN] = edgeIndices.length;
+
+      for (let i = 0; i < edgeIndices.length && i < MAX_PATH_LENGTH - PATH_EDGES_START; i++) {
+        this.pathBuffer[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
+      }
+    }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
   }
@@ -450,48 +514,25 @@ export class TransferMgr {
     edgeNameToIndex: Map<string, number>,
     currentEdgeName?: string
   ): number | null {
-    const path = this.reservedPaths.get(vehicleIndex);
-    if (!path || path.length === 0) return null;
+    if (!this.pathBuffer) return null;
 
-    // 현재 Edge와 같은 이름의 Edge는 건너뛰기 (경로가 오래된 경우 대비)
-    while (path.length > 0 && currentEdgeName && path[0].edgeId === currentEdgeName) {
-      path.shift();
-    }
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
+    const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
 
-    if (path.length === 0) {
-      this.reservedPaths.delete(vehicleIndex);
-      return null;
-    }
+    if (currentIdx >= totalLen) return null;
 
-    const nextEdge = path.shift()!;
-    const idx = edgeNameToIndex.get(nextEdge.edgeId);
+    // Get next edge index from path buffer
+    const nextEdgeIdx = this.pathBuffer[pathPtr + PATH_EDGES_START + currentIdx];
 
-    if (idx === undefined) {
-      return null;
-    }
+    // Validate edge index
+    if (nextEdgeIdx < 0) return null;
 
-    const queue = this.reservedNextEdges.get(vehicleIndex) || [];
-    if (!this.reservedNextEdges.has(vehicleIndex)) {
-      this.reservedNextEdges.set(vehicleIndex, queue);
-    }
+    // Skip current edge if it matches (path might be stale)
+    // This shouldn't happen normally, but defensive check
+    // Note: We can't easily check edge name without edgeArray, so just return the index
 
-    let rRatio: number | undefined = undefined;
-    if (path.length > 0) {
-      rRatio = 1;
-    } else if (nextEdge.targetRatio !== undefined) {
-      rRatio = nextEdge.targetRatio;
-    }
-
-    queue.push({
-      edgeId: nextEdge.edgeId,
-      targetRatio: rRatio
-    });
-
-    if (path.length === 0) {
-      this.reservedPaths.delete(vehicleIndex);
-    }
-
-    return idx;
+    return nextEdgeIdx;
   }
 
   // ============================================================================
@@ -499,26 +540,59 @@ export class TransferMgr {
   // ============================================================================
 
   /**
-   * 차량의 전체 예약 경로 반환 (현재 Edge 제외)
+   * 차량의 전체 예약 경로 반환 (edge indices)
+   * @returns Array of edge indices from current position to end
    */
-  getFullReservedPath(vehId: number): string[] {
-    const result: string[] = [];
+  getFullReservedPath(vehId: number): number[] {
+    const result: number[] = [];
 
-    const queue = this.reservedNextEdges.get(vehId);
-    if (queue) {
-      for (const e of queue) {
-        result.push(e.edgeId);
-      }
-    }
+    // Get from path buffer
+    if (this.pathBuffer) {
+      const pathPtr = vehId * MAX_PATH_LENGTH;
+      const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
 
-    const path = this.reservedPaths.get(vehId);
-    if (path) {
-      for (const e of path) {
-        result.push(e.edgeId);
+      for (let i = currentIdx; i < totalLen; i++) {
+        const edgeIdx = this.pathBuffer[pathPtr + PATH_EDGES_START + i];
+        if (edgeIdx >= 0) {
+          result.push(edgeIdx);
+        }
       }
     }
 
     return result;
+  }
+
+  /**
+   * 예약된 경로에서 다음 곡선을 찾는 헬퍼 함수
+   */
+  private findCurveInReservedPath(
+    vehId: number,
+    edgeArray: Edge[],
+    initialDistance: number
+  ): { distance: number; curveEdge: string; curveType: string } | null {
+    const fullPath = this.getFullReservedPath(vehId);
+    if (fullPath.length === 0) return null;
+
+    let accumulatedDistance = initialDistance;
+
+    for (const edgeIndex of fullPath) {
+      const edge = edgeArray[edgeIndex];
+      if (!edge) continue;
+
+      // 곡선 발견!
+      if (edge.vos_rail_type !== EdgeType.LINEAR) {
+        return {
+          distance: accumulatedDistance,
+          curveEdge: edge.edge_name,
+          curveType: edge.vos_rail_type
+        };
+      }
+
+      accumulatedDistance += edge.distance;
+    }
+
+    return null;
   }
 
   /**
@@ -529,54 +603,27 @@ export class TransferMgr {
     vehId: number,
     currentEdge: Edge,
     currentRatio: number,
-    edgeArray: Edge[],
-    edgeNameToIndex: Map<string, number>
+    edgeArray: Edge[]
   ): { distance: number; curveEdge: string; curveType: string } | null {
     // 현재 Edge 남은 거리
-    let accumulatedDistance = currentEdge.distance * (1 - currentRatio);
-    const currentEdgeName = currentEdge.edge_name;
+    const remainingDistance = currentEdge.distance * (1 - currentRatio);
 
     // 1. 먼저 예약된 경로에서 찾기 (MQTT_CONTROL, AUTO_ROUTE 모드)
-    const fullPath = this.getFullReservedPath(vehId);
-
-    if (fullPath.length > 0) {
-      // 현재 Edge 이후의 경로만 사용 (현재 Edge와 같은 이름은 건너뜀)
-      let foundCurrentEdge = false;
-
-      for (const edgeId of fullPath) {
-        // 현재 Edge와 같은 이름이면 건너뜀 (경로가 오래된 경우 대비)
-        if (edgeId === currentEdgeName) {
-          foundCurrentEdge = true;
-          continue;
-        }
-
-        const edgeIndex = edgeNameToIndex.get(edgeId);
-        if (edgeIndex === undefined) continue;
-
-        const edge = edgeArray[edgeIndex];
-        if (!edge) continue;
-
-        // 곡선 발견!
-        if (edge.vos_rail_type !== EdgeType.LINEAR) {
-          return {
-            distance: accumulatedDistance,
-            curveEdge: edge.edge_name,
-            curveType: edge.vos_rail_type
-          };
-        }
-
-        accumulatedDistance += edge.distance;
-      }
-
-      // 경로에서 곡선을 못 찾았으면 nextEdgeIndices로 폴백
-      if (!foundCurrentEdge) {
-        return null;
-      }
+    const curveInPath = this.findCurveInReservedPath(vehId, edgeArray, remainingDistance);
+    if (curveInPath) {
+      return curveInPath;
     }
 
-    // 2. 예약 경로 없거나 현재 Edge 이후로 곡선 없으면 nextEdgeIndices 따라가기
+    // 예약된 경로가 있었다면 그 안에 곡선이 없다는 의미이므로 null 반환
+    const fullPath = this.getFullReservedPath(vehId);
+    if (fullPath.length > 0) {
+      return null;
+    }
+
+    // 2. 예약 경로 없으면 nextEdgeIndices 따라가기 (폴백)
     const MAX_LOOKAHEAD = 10;
     let edge = currentEdge;
+    let accumulatedDistance = remainingDistance;
     const visited = new Set<string>();
     visited.add(edge.edge_name);
 
@@ -651,13 +698,6 @@ export class TransferMgr {
       }
     }
 
-    // reservedPaths에서 제거
-    const path = this.reservedPaths.get(vehId);
-    if (path && path.length > 0 && path[0].edgeId === passedEdgeName) {
-      path.shift();
-      if (path.length === 0) {
-        this.reservedPaths.delete(vehId);
-      }
-    }
+    // Path buffer는 consumeNextEdgeReservation에서 자동으로 currentIdx 증가
   }
 }

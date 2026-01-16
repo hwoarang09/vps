@@ -839,6 +839,116 @@ function calculateStableVector(
 
 ## Merge Node 제어 (LockMgr 연동)
 
+### 0. 왜 interpolatePositionTo를 2번 호출하는가?
+
+**핵심 개념:** Merge 대기 로직에서 차량이 대기 지점을 넘어간 경우, ratio를 대기 지점으로 되돌리고 좌표를 재계산해야 합니다.
+
+#### 시나리오 설명
+
+```
+Merge Node 대기 상황:
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│ Edge A (distance = 10m)                                          │
+│ ●──────────────────────────────────────────►● Merge Node       │
+│ 0.0                             8m (wait) 10m                    │
+│                                                                  │
+│ 차량 VEH0 상태:                                                  │
+│ - 현재 위치: ratio=0.75 (7.5m)                                   │
+│ - 현재 속도: 2 m/s                                               │
+│ - 프레임 델타: 0.5초                                             │
+│                                                                  │
+│ === Phase 1: 물리 계산 ===                                       │
+│ newVelocity = 2 m/s                                              │
+│ rawNewRatio = 0.75 + (2 * 0.5) / 10 = 0.75 + 0.1 = 0.85         │
+│ → 차량이 8.5m까지 이동하려고 함 (대기 지점 8m을 넘음!)          │
+│                                                                  │
+│ === Phase 2: Edge 전환 ===                                       │
+│ 전환 없음 (ratio < 1.0)                                          │
+│ finalRatio = 0.85                                                │
+│                                                                  │
+│ === Phase 3: 위치 업데이트 (1차) ===                             │
+│ ✅ 1차 interpolatePositionTo(ratio=0.85)                         │
+│    → 위치 A = (x:8.5, y:5.0, z:0.0)                              │
+│    → 차량이 8.5m 위치에 있음                                     │
+│                                                                  │
+│ === Merge 대기 체크 ===                                          │
+│ waitDist = 8m                                                    │
+│ currentDist = 0.85 * 10 = 8.5m                                   │
+│ currentDist >= waitDist? → YES! (8.5 >= 8.0)                    │
+│                                                                  │
+│ ⚠️ 문제: 차량이 대기 지점을 0.5m 넘어갔다!                       │
+│                                                                  │
+│ === 해결: 위치 재조정 ===                                        │
+│ target.x = waitDist / distance = 8 / 10 = 0.80                  │
+│ finalRatio = 0.80 (8m로 되돌림)                                  │
+│                                                                  │
+│ ✅ 2차 interpolatePositionTo(ratio=0.80)                         │
+│    → 위치 B = (x:8.0, y:5.0, z:0.0)                              │
+│    → 차량이 정확히 대기 지점에 멈춤                               │
+│                                                                  │
+│ finalVelocity = 0 (대기 중)                                      │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 코드 흐름
+
+```typescript
+// Phase 3: updateVehiclePosition
+function updateVehiclePosition(...) {
+  // 1차 위치 보간: 속도 계산 후의 위치
+  if (activeEdge) {
+    interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS, ...);
+    // finalRatio=0.85 → 위치 A (8.5m)
+  }
+
+  // Merge 대기 체크
+  const shouldWait = checkAndProcessMergeWait(...);
+
+  if (shouldWait) {
+    // 차량이 대기 지점을 넘어갔음!
+    finalRatio = SCRATCH_MERGE_POS.x;  // 0.85 → 0.80으로 변경
+
+    // 2차 위치 보간: 변경된 ratio로 재계산
+    if (activeEdge) {
+      interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS, ...);
+      // finalRatio=0.80 → 위치 B (8.0m, 대기 지점)
+    }
+    finalVelocity = 0;  // 멈춤
+  }
+}
+```
+
+#### 왜 2번 호출이 필요한가?
+
+1. **1차 호출**: 물리 계산 결과를 반영한 위치
+   - 차량이 속도와 가속도에 따라 이동한 위치
+   - 대기 지점을 고려하지 않음
+
+2. **2차 호출 (조건부)**: 대기 지점으로 보정된 위치
+   - 차량이 대기 지점을 넘어간 경우에만 발생
+   - ratio를 대기 지점으로 되돌림
+   - **ratio가 변경되었으므로 좌표(x, y, z)도 다시 계산 필요**
+
+#### 대기 지점을 넘지 않은 경우
+
+```
+차량이 대기 지점 이전에 있는 경우:
+- currentDist = 7m
+- waitDist = 8m
+- currentDist < waitDist → shouldWait = false
+- interpolatePositionTo 1번만 호출 (재계산 불필요)
+```
+
+#### 핵심 정리
+
+- `shouldWait = true` = 차량이 대기 지점을 **넘어갔음**
+- ratio가 변경되면 좌표도 변경되므로 재계산 필수
+- 이것은 성능 저하가 아닌 **정확한 시뮬레이션을 위한 필수 로직**
+
+---
+
 ### 1. Merge 대기 처리
 
 ```typescript
@@ -906,11 +1016,14 @@ function processMergeLogicInline(
   const waitDist = lockMgr.getWaitDistance(currentEdge);
   const currentDist = currentRatio * currentEdge.distance;
 
+  // 핵심: 차량이 대기 지점을 넘어갔는지 체크
   if (currentDist >= waitDist) {
-    // waitDistance에서 정지
+    // 차량이 너무 멀리 갔으므로 대기 지점으로 되돌림
     data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+    // ⚠️ 중요: target.x에 새로운 ratio를 저장
+    // 호출자(updateVehiclePosition)가 이 값으로 위치를 재계산함
     target.x = waitDist / currentEdge.distance;  // 새로운 ratio
-    return true;  // 대기 필요
+    return true;  // 위치 재계산 필요!
   }
 
   // 아직 waitDistance 도달 안 함

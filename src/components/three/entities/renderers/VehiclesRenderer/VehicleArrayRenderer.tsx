@@ -1,5 +1,5 @@
-import { useRef, useMemo, useEffect, useState } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useRef, useMemo, useEffect, useState, useCallback } from "react";
+import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
@@ -8,6 +8,8 @@ import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
 import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
+import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
+import { useMenuStore } from "@/store/ui/menuStore";
 
 // GLSL에서 사용할 DEG_TO_RAD 상수 (Math.PI / 180)
 const DEG_TO_RAD_GLSL = "0.017453292519943295";
@@ -180,6 +182,20 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     instanceDataAttr.needsUpdate = true;
   });
 
+  // Vehicle click handler - opens IndividualControlPanel
+  const handleVehicleClick = useCallback((e: ThreeEvent<PointerEvent>) => {
+    // instanceId is the index of the clicked instance
+    const instanceId = e.instanceId;
+    if (instanceId === undefined) return;
+
+    // Stop propagation to prevent camera controls from interfering
+    e.stopPropagation();
+
+    // Select vehicle and open panel
+    useVehicleControlStore.getState().selectVehicle(instanceId);
+    useMenuStore.getState().setRightPanelOpen(true);
+  }, []);
+
   if (actualNumVehicles <= 0) {
     return null;
   }
@@ -190,6 +206,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         ref={bodyMeshRef}
         args={[bodyGeometry, bodyMaterial, actualNumVehicles]}
         frustumCulled={false}
+        onPointerDown={handleVehicleClick}
       />
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
     </>
