@@ -29,9 +29,9 @@ const VehicleSelector: React.FC = () => {
         let yOffset: number;
 
         if (isShmMode) {
-            // SHM mode: use shmSimulatorStore
+            // SHM mode: use shmSimulatorStore - use FULL data (22 floats per vehicle)
             actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
-            data = useShmSimulatorStore.getState().getVehicleData();
+            data = useShmSimulatorStore.getState().getVehicleFullData();
             dataSize = SHM_VEHICLE_DATA_SIZE;
             xOffset = ShmMovementData.X;
             yOffset = ShmMovementData.Y;
@@ -49,14 +49,24 @@ const VehicleSelector: React.FC = () => {
         let minDistSq = Infinity;
         let nearestVehicleId = -1;
 
+        console.log(`[VehicleSelector] Click at (${clickX.toFixed(2)}, ${clickY.toFixed(2)}), checking ${actualNumVehicles} vehicles`);
+        console.log(`[VehicleSelector] Mode: ${isShmMode ? 'SHM' : 'Array'}, dataSize=${dataSize}, xOffset=${xOffset}, yOffset=${yOffset}, data.length=${data.length}`);
+
         for (let i = 0; i < actualNumVehicles; i++) {
             const ptr = i * dataSize;
             const x = data[ptr + xOffset];
             const y = data[ptr + yOffset];
 
+            if (x === undefined || y === undefined) {
+                console.warn(`  Vehicle #${i}: UNDEFINED data at ptr=${ptr}, x=${x}, y=${y}`);
+                continue;
+            }
+
             const dx = x - clickX;
             const dy = y - clickY;
             const distSq = dx * dx + dy * dy;
+
+            console.log(`  Vehicle #${i}: pos=(${x.toFixed(2)}, ${y.toFixed(2)}), dist=${Math.sqrt(distSq).toFixed(2)}m`);
 
             if (distSq < minDistSq) {
                 minDistSq = distSq;
