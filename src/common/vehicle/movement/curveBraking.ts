@@ -122,6 +122,10 @@ export function checkCurvePreBraking({
     preBrakeDecel
   );
   if (activeBrakingResult !== null) {
+    // 감속이 완료되었으면 상태 초기화
+    if (!activeBrakingResult.shouldBrake && brakeState.isBraking) {
+      transferMgr.clearCurveBrakeState(vehId);
+    }
     return activeBrakingResult;
   }
 
@@ -157,7 +161,7 @@ export function checkCurvePreBraking({
 
   // 감속 필요 거리 계산 (체크포인트)
   const brakeDistance = calculateBrakeDistance(
-    config.linearMaxSpeed,
+    currentVelocity,
     config.curveMaxSpeed,
     preBrakeDecel
   );
