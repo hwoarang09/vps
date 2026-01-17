@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import { MultiWorkerController, MultiFabInitParams, WorkerPerfStats } from "@/shmSimulator/MultiWorkerController";
-import { createDefaultConfig, TransferMode } from "@/shmSimulator";
+import { TransferMode } from "@/shmSimulator";
 import type { SimulationConfig, VehicleInitConfig, SharedMapData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";

@@ -96,8 +96,8 @@ export class FabContext {
   private edgeTransitTracker: EdgeTransitTracker | null = null;
 
   // === Collision & Curve Brake Check Timers ===
-  private collisionCheckTimers: Map<number, number> = new Map();
-  private curveBrakeCheckTimers: Map<number, number> = new Map();
+  private readonly collisionCheckTimers: Map<number, number> = new Map();
+  private readonly curveBrakeCheckTimers: Map<number, number> = new Map();
 
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;

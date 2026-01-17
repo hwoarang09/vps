@@ -143,6 +143,11 @@ export function shouldCheckCollision(
     return true;
   }
 
+  // -1이면 항상 체크
+  if (checkInterval === -1) {
+    return true;
+  }
+
   const elapsed = (collisionCheckTimers.get(vehId) ?? 0) + delta * 1000; // delta는 초 단위, ms로 변환
 
   // 아직 interval이 지나지 않았으면 체크 스킵

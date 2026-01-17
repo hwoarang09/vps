@@ -6,8 +6,7 @@ import { useNodeStore } from "@/store/map/nodeStore";
 import { useFabStore } from "@/store/map/fabStore";
 import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
 import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
-import { getMarkerConfig } from "@/config/renderConfig";
-import { getNodeConfig } from "@/config/renderConfig";
+import { getNodeConfig, getMarkerConfig } from "@/config/renderConfig";
 
 interface NodesRendererProps {
   nodeIds: string[];

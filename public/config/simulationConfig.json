@@ -3,8 +3,8 @@
     "maxVehicles": 200000,
     "targetFps": 60,
     "maxDelta": 0.1,
-    "collisionCheckInterval": 33,
-    "curvePreBrakeCheckInterval": 100
+    "collisionCheckInterval": -1,
+    "curvePreBrakeCheckInterval": -1
   },
   "vehicle": {
     "body": {
