@@ -99,6 +99,169 @@ const ParamInput: React.FC<ParamInputProps> = ({
   );
 };
 
+// Request Mode 선택 컴포넌트 (immediate / distance)
+type RequestMode = "immediate" | "distance";
+
+interface RequestModeInputProps {
+  value: number | undefined;
+  baseValue: number;
+  onChange: (value: number | undefined) => void;
+}
+
+const RequestModeInput: React.FC<RequestModeInputProps> = ({
+  value,
+  baseValue,
+  onChange,
+}) => {
+  const isOverridden = value !== undefined;
+  const effectiveValue = value ?? baseValue;
+  const currentMode: RequestMode = effectiveValue < 0 ? "immediate" : "distance";
+  const baseMode: RequestMode = baseValue < 0 ? "immediate" : "distance";
+
+  // distance 모드일 때 거리값 (immediate면 기본 5.0 사용)
+  const [distanceValue, setDistanceValue] = useState<string>(
+    currentMode === "distance" ? String(effectiveValue) : "5.0"
+  );
+
+  // 외부 value가 변경되면 distanceValue도 업데이트
+  useEffect(() => {
+    if (currentMode === "distance") {
+      setDistanceValue(String(effectiveValue));
+    }
+  }, [effectiveValue, currentMode]);
+
+  const handleModeChange = (newMode: RequestMode) => {
+    if (newMode === "immediate") {
+      onChange(-1);
+    } else {
+      // distance 모드로 전환 시, 저장된 거리값 또는 기본값 사용
+      const dist = Number.parseFloat(distanceValue);
+      onChange(Number.isNaN(dist) || dist <= 0 ? 5.0 : dist);
+    }
+  };
+
+  const handleDistanceChange = (newDist: number) => {
+    if (newDist > 0) {
+      onChange(newDist);
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+        <label style={{ width: "180px", fontSize: "12px", color: "#ccc" }}>
+          Request Mode
+          <span style={{ fontSize: "10px", color: "#888", display: "block" }}>
+            락 요청 시점 결정 방식
+          </span>
+        </label>
+        <div style={{ display: "flex", gap: "4px" }}>
+          <button
+            onClick={() => handleModeChange("immediate")}
+            style={{
+              padding: "4px 12px",
+              background: currentMode === "immediate" ? "#e74c3c" : "#333",
+              color: currentMode === "immediate" ? "#fff" : "#888",
+              border: currentMode === "immediate" ? "1px solid #e74c3c" : "1px solid #555",
+              borderRadius: "4px 0 0 4px",
+              fontSize: "11px",
+              cursor: "pointer",
+              fontWeight: currentMode === "immediate" ? "bold" : "normal",
+            }}
+          >
+            Immediate
+          </button>
+          <button
+            onClick={() => handleModeChange("distance")}
+            style={{
+              padding: "4px 12px",
+              background: currentMode === "distance" ? "#27ae60" : "#333",
+              color: currentMode === "distance" ? "#fff" : "#888",
+              border: currentMode === "distance" ? "1px solid #27ae60" : "1px solid #555",
+              borderRadius: "0 4px 4px 0",
+              fontSize: "11px",
+              cursor: "pointer",
+              fontWeight: currentMode === "distance" ? "bold" : "normal",
+            }}
+          >
+            Distance
+          </button>
+        </div>
+        {isOverridden && (
+          <button
+            onClick={() => onChange(undefined)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#888",
+              cursor: "pointer",
+              padding: "2px",
+            }}
+            title="Reset to base value"
+          >
+            <X size={14} />
+          </button>
+        )}
+        <span style={{ fontSize: "10px", color: "#666" }}>
+          (base: {baseMode})
+        </span>
+      </div>
+
+      {/* Distance 모드일 때만 거리 입력 표시 */}
+      {currentMode === "distance" && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingLeft: "180px" }}>
+          <span style={{ fontSize: "11px", color: "#888" }}>Distance:</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={distanceValue}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setDistanceValue(raw);
+              if (raw === "" || raw === ".") return;
+              const val = Number.parseFloat(raw);
+              if (!Number.isNaN(val) && val > 0) {
+                handleDistanceChange(val);
+              }
+            }}
+            onBlur={() => {
+              const val = Number.parseFloat(distanceValue);
+              if (Number.isNaN(val) || val <= 0) {
+                setDistanceValue(String(effectiveValue > 0 ? effectiveValue : 5.0));
+              } else {
+                setDistanceValue(String(val));
+                handleDistanceChange(val);
+              }
+            }}
+            style={{
+              width: "60px",
+              padding: "4px 8px",
+              background: isOverridden ? "#2a4a3a" : "#333",
+              color: isOverridden ? "#4ecdc4" : "#fff",
+              border: isOverridden ? "1px solid #4ecdc4" : "1px solid #555",
+              borderRadius: "4px",
+              fontSize: "12px",
+            }}
+          />
+          <span style={{ fontSize: "11px", color: "#888" }}>m</span>
+          <span style={{ fontSize: "10px", color: "#666" }}>
+            (toNode 앞 거리)
+          </span>
+        </div>
+      )}
+
+      {/* Immediate 모드일 때 설명 */}
+      {currentMode === "immediate" && (
+        <div style={{ paddingLeft: "180px" }}>
+          <span style={{ fontSize: "10px", color: "#888" }}>
+            엣지 진입 즉시 락 요청
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SectionProps {
   title: string;
   color: string;
@@ -249,13 +412,10 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
           unit="m"
           description="toNode 앞 대기 지점"
         />
-        <ParamInput
-          label="Request Distance"
+        <RequestModeInput
           value={override.lock?.requestDistance}
           baseValue={baseConfig.lock.requestDistance}
           onChange={(v) => updateOverride(["lock", "requestDistance"], v)}
-          unit="m"
-          description="-1이면 진입 즉시 요청"
         />
       </Section>
 
@@ -409,8 +569,16 @@ const SimulationParamsModal: React.FC = () => {
                 <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.waitDistance} m</span>
               </div>
               <div>
-                <span style={{ color: "#888" }}>Request Distance:</span>
-                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.requestDistance} m</span>
+                <span style={{ color: "#888" }}>Request Mode:</span>
+                <span style={{
+                  color: baseConfig.lock.requestDistance < 0 ? "#e74c3c" : "#27ae60",
+                  marginLeft: "8px",
+                  fontWeight: "bold"
+                }}>
+                  {baseConfig.lock.requestDistance < 0
+                    ? "Immediate"
+                    : `Distance (${baseConfig.lock.requestDistance} m)`}
+                </span>
               </div>
             </div>
           </Section>
