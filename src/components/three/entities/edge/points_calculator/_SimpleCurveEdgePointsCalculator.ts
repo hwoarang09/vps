@@ -34,7 +34,6 @@ export class SimpleCurveEdgePointsCalculator {
 
     const config = CURVE_CONFIGS[vos_rail_type];
     if (!config) {
-      console.warn(`Unknown curve type: ${vos_rail_type} for edge: ${edge_name}`);
       return [];
     }
 
@@ -44,9 +43,6 @@ export class SimpleCurveEdgePointsCalculator {
     );
 
     if (resolvedNodes.some((n) => !n)) {
-      console.warn(
-        `${vos_rail_type} waypoint nodes not found for edge: ${edge_name}`
-      );
       return [];
     }
 

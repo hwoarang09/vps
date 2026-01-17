@@ -154,7 +154,6 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
   // Cleanup when stations are deleted (instanceCount decreases to 0)
   useEffect(() => {
     if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
-      console.log("[StationTypeRenderer] Stations deleted, cleaning up resources");
       geometry.dispose();
       material.dispose();
     }

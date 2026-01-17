@@ -92,7 +92,6 @@ export class LogBuffer {
   flush(): void {
     if (this.recordCount === 0) return;
     if (!this.loggerPort) {
-      console.warn("[LogBuffer] Logger port not set, discarding logs");
       this.reset();
       return;
     }

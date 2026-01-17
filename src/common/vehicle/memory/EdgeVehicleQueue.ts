@@ -29,7 +29,6 @@ export class EdgeVehicleQueue {
 
   addVehicle(edgeIndex: number, vehicleIndex: number): void {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return;
     }
 
@@ -37,18 +36,12 @@ export class EdgeVehicleQueue {
     const count = this.data[offset];
 
     if (count >= MAX_VEHICLES_PER_EDGE) {
-      console.error(
-        `Edge ${edgeIndex} is full (max ${MAX_VEHICLES_PER_EDGE} vehicles)`
-      );
       return;
     }
 
     // Check for duplicates
     for (let i = 0; i < count; i++) {
       if (this.data[offset + 1 + i] === vehicleIndex) {
-        console.warn(
-          `[EdgeQueue] DUPLICATE! VEH${vehicleIndex} already in Edge${edgeIndex} at position ${i}`
-        );
         return;
       }
     }
@@ -59,7 +52,6 @@ export class EdgeVehicleQueue {
 
   removeVehicle(edgeIndex: number, vehicleIndex: number): void {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return;
     }
 
@@ -77,14 +69,10 @@ export class EdgeVehicleQueue {
       }
     }
 
-    console.warn(
-      `[EdgeQueue] Vehicle ${vehicleIndex} not found in edge ${edgeIndex}`
-    );
   }
 
   getVehicles(edgeIndex: number): number[] {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return [];
     }
 
@@ -101,7 +89,6 @@ export class EdgeVehicleQueue {
 
   getCount(edgeIndex: number): number {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return 0;
     }
 
@@ -110,7 +97,6 @@ export class EdgeVehicleQueue {
 
   getData(edgeIndex: number): Int32Array | null {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return null;
     }
 
@@ -142,7 +128,6 @@ export class EdgeVehicleQueue {
 
   clearEdge(edgeIndex: number): void {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return;
     }
 
@@ -172,7 +157,6 @@ export class EdgeVehicleQueue {
 
   getVehicleAt(edgeIndex: number, position: number): number {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return -1;
     }
 
@@ -188,7 +172,6 @@ export class EdgeVehicleQueue {
 
   sortByEdgeRatio(edgeIndex: number, vehicleData: Float32Array): void {
     if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
-      console.error(`Invalid edge index: ${edgeIndex}`);
       return;
     }
 

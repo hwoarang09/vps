@@ -121,7 +121,6 @@ export class ShmSimulatorController {
     };
 
     this.worker.onerror = (error) => {
-      console.error("[ShmSimulatorController] Worker error:", error);
       if (this.onErrorCallback) {
         this.onErrorCallback(error.message);
       }
@@ -261,7 +260,6 @@ export class ShmSimulatorController {
    * Handle initialization complete message
    */
   private handleInitialized(fabVehicleCounts: Record<string, number>): void {
-    console.log("[ShmSimulatorController] Initialized fabs:", Object.keys(fabVehicleCounts));
 
     // Update actual vehicle counts
     for (const [fabId, count] of Object.entries(fabVehicleCounts)) {
@@ -283,7 +281,6 @@ export class ShmSimulatorController {
   private handleWorkerMessage(message: MainMessage): void {
     switch (message.type) {
       case "READY":
-        console.log("[ShmSimulatorController] Worker ready");
         break;
 
       case "INITIALIZED": {
@@ -292,7 +289,6 @@ export class ShmSimulatorController {
       }
 
       case "ERROR":
-        console.error("[ShmSimulatorController] Worker error:", message.error);
         if (this.onErrorCallback) {
           this.onErrorCallback(message.error);
           this.onErrorCallback = null;
@@ -310,14 +306,12 @@ export class ShmSimulatorController {
         break;
 
       case "FAB_ADDED":
-        console.log(`[ShmSimulatorController] Fab added: ${message.fabId} with ${message.actualNumVehicles} vehicles`);
         if (this.onFabAddedCallback) {
           this.onFabAddedCallback(message.fabId, message.actualNumVehicles);
         }
         break;
 
       case "FAB_REMOVED":
-        console.log(`[ShmSimulatorController] Fab removed: ${message.fabId}`);
         if (this.onFabRemovedCallback) {
           this.onFabRemovedCallback(message.fabId);
         }
@@ -330,7 +324,6 @@ export class ShmSimulatorController {
    */
   start(): void {
     if (!this.worker || !this.isInitialized) {
-      console.warn("[ShmSimulatorController] Cannot start: not initialized");
       return;
     }
 
@@ -399,7 +392,6 @@ export class ShmSimulatorController {
     this.isInitialized = false;
     this.isRunning = false;
 
-    console.log("[ShmSimulatorController] Disposed");
   }
 
   /**

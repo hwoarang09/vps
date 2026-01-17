@@ -27,7 +27,6 @@ const loadMovementConfig = async (): Promise<MovementConfig> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading movement config:', error);
     // Fallback to default values
     return {
       linear: {
@@ -73,7 +72,6 @@ let movementConfig: MovementConfig = {
 // Load config immediately
 loadMovementConfig().then(config => {
   movementConfig = config;
-  console.log('[MovementConfig] Loaded:', config);
 });
 
 // Export synchronous getter

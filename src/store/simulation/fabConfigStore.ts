@@ -3,12 +3,14 @@ import { create } from "zustand";
 import {
   getLockWaitDistance,
   getLockRequestDistance,
+  getLockGrantStrategy,
   getLinearMaxSpeed,
   getLinearAcceleration,
   getLinearDeceleration,
   getLinearPreBrakeDeceleration,
   getCurveMaxSpeed,
   getCurveAcceleration,
+  type GrantStrategy,
 } from "@/config/simulationConfig";
 
 /**
@@ -17,7 +19,10 @@ import {
 export interface LockConfigOverride {
   waitDistance?: number;
   requestDistance?: number; // -1이면 진입 즉시 요청
+  grantStrategy?: GrantStrategy;
 }
+
+export { type GrantStrategy };
 
 /**
  * Fab별로 오버라이드 가능한 Movement 설정
@@ -50,6 +55,7 @@ export interface BaseSimulationConfig {
   lock: {
     waitDistance: number;
     requestDistance: number;
+    grantStrategy: GrantStrategy;
   };
   movement: {
     linear: {
@@ -84,7 +90,7 @@ interface FabConfigStore {
 
   // Getters
   getFabConfig: (fabIndex: number) => {
-    lock: { waitDistance: number; requestDistance: number };
+    lock: { waitDistance: number; requestDistance: number; grantStrategy: GrantStrategy };
     movement: {
       linear: { maxSpeed: number; acceleration: number; deceleration: number; preBrakeDeceleration: number };
       curve: { maxSpeed: number; acceleration: number };
@@ -104,6 +110,7 @@ function loadBaseConfigFromSimulation(): BaseSimulationConfig {
     lock: {
       waitDistance: getLockWaitDistance(),
       requestDistance: getLockRequestDistance(),
+      grantStrategy: getLockGrantStrategy(),
     },
     movement: {
       linear: {
@@ -176,6 +183,7 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
       lock: {
         waitDistance: override.lock?.waitDistance ?? baseConfig.lock.waitDistance,
         requestDistance: override.lock?.requestDistance ?? baseConfig.lock.requestDistance,
+        grantStrategy: override.lock?.grantStrategy ?? baseConfig.lock.grantStrategy,
       },
       movement: {
         linear: {

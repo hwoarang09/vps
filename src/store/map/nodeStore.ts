@@ -47,7 +47,6 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
     const { nodes } = get();
     if (nodes.length === 0 || edges.length === 0) return;
 
-    console.time("NodeTopologyCalc");
 
     // 연결 카운트 계산
     const nodeIncomingCount = new Map<string, number>();
@@ -73,7 +72,6 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
       };
     });
 
-    console.timeEnd("NodeTopologyCalc");
     set({ nodes: updatedNodes });
   },
 

@@ -18,10 +18,8 @@ const MapLoader: React.FC = () => {
     case 'maploader-menu-1': // CFG 파일 불러오기
       return <CFGLoader />;
     case 'maploader-menu-2': // Import (TODO)
-      console.log('Import functionality not implemented yet');
       return null;
     case 'maploader-menu-3': // Export (TODO)
-      console.log('Export functionality not implemented yet');
       return null;
     default:
       return null;

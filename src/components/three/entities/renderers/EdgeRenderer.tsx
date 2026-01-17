@@ -250,7 +250,6 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   useEffect(() => {
     if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
       // Data was deleted - cleanup resources
-      console.log(`[EdgeTypeRenderer:${edgeType}] Data deleted, cleaning up resources`);
       geometry.dispose();
       shaderMaterial.dispose();
     }

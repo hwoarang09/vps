@@ -120,7 +120,6 @@ export class FabContext {
   }
 
   private init(params: FabInitParams): void {
-    console.log(`[FabContext:${this.fabId}] Initializing...`);
 
     // Worker 버퍼 설정 (계산용)
     if (params.memoryAssignment) {
@@ -136,7 +135,6 @@ export class FabContext {
       );
       this.transferMgr.setPathBuffer(pathBufferView);
 
-      console.log(`[FabContext:${this.fabId}] Worker buffers connected with region restriction`);
     } else {
       this.store.setSharedBuffer(params.sharedBuffer);
       this.sensorPointArray.setBuffer(params.sensorPointBuffer);
@@ -145,11 +143,9 @@ export class FabContext {
       const pathBufferView = new Int32Array(params.pathBuffer);
       this.transferMgr.setPathBuffer(pathBufferView);
 
-      console.log(`[FabContext:${this.fabId}] Worker buffers connected (full buffer)`);
     }
 
     this.store.setTransferMode(params.transferMode);
-    console.log(`[FabContext:${this.fabId}] TransferMode: ${params.transferMode}`);
 
     // 맵 데이터 설정
     if (params.sharedMapRef) {
@@ -160,7 +156,6 @@ export class FabContext {
         this.nodeNameToIndex.set(name, idx);
       }
       this.fabOffset = params.fabOffset ?? { x: 0, y: 0 };
-      console.log(`[FabContext:${this.fabId}] Using shared map reference, offset: (${this.fabOffset.x.toFixed(1)}, ${this.fabOffset.y.toFixed(1)})`);
     } else {
       this.edges = params.edges ?? [];
       this.nodes = params.nodes ?? [];
@@ -172,10 +167,8 @@ export class FabContext {
       for (let idx = 0; idx < this.nodes.length; idx++) {
         this.nodeNameToIndex.set(this.nodes[idx].node_name, idx);
       }
-      console.log(`[FabContext:${this.fabId}] Using local edges/nodes`);
     }
 
-    console.log(`[FabContext:${this.fabId}] Loaded ${this.edges.length} edges, ${this.nodes.length} nodes`);
 
     this.lockMgr.initFromEdges(this.edges);
 
@@ -185,16 +178,13 @@ export class FabContext {
       requestDistance: this.config.lockRequestDistance,
     });
 
-    // Fab별 config 적용 로그
-    console.log(`[FabContext:${this.fabId}] Config applied:`, {
-      linearMaxSpeed: this.config.linearMaxSpeed,
-      curveMaxSpeed: this.config.curveMaxSpeed,
-      linearAcceleration: this.config.linearAcceleration,
-      linearDeceleration: this.config.linearDeceleration,
-      curveAcceleration: this.config.curveAcceleration,
-      lockWaitDistance: this.config.lockWaitDistance,
-      lockRequestDistance: this.config.lockRequestDistance,
+    // config에서 lock 정책 적용
+    this.lockMgr.setLockPolicy({
+      grantStrategy: this.config.lockGrantStrategy,
     });
+
+    // Fab별 config 적용 로그
+    console.log(`[FabContext:${this.fabId}] Lock policy: grantStrategy=${this.config.lockGrantStrategy}`);
 
     const result: InitializationResult = initializeVehicles({
       edges: this.edges,
@@ -222,7 +212,6 @@ export class FabContext {
     }
 
     // 렌더 버퍼는 나중에 SET_RENDER_BUFFER로 설정됨
-    console.log(`[FabContext:${this.fabId}] Initialized with ${this.actualNumVehicles} vehicles (render buffer pending)`);
   }
 
   /**
@@ -255,7 +244,6 @@ export class FabContext {
     // 센서 섹션 오프셋 사전 계산 (매 프레임 재계산 방지)
     this.calculateSectionOffsets();
 
-    console.log(`[FabContext:${this.fabId}] Render buffer set: vehOffset=${vehicleRenderOffset}, vehicles=${actualVehicles}, total=${totalVehicles}, startIdx=${vehicleStartIndex}`);
 
     // 초기 데이터를 렌더 버퍼에 복사
     this.writeToRenderRegion();
@@ -525,7 +513,6 @@ export class FabContext {
     this.fabOffset = { x: 0, y: 0 };
     this.actualNumVehicles = 0;
 
-    console.log(`[FabContext:${this.fabId}] Disposed`);
   }
 
   getActualNumVehicles(): number {

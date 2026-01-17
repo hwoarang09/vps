@@ -8,7 +8,6 @@ let engine: SimulationEngine | null = null;
 
 function handleInit(payload: InitPayload): void {
   try {
-    console.log("[Worker] Received INIT message");
 
     engine = new SimulationEngine();
     const fabVehicleCounts = engine.init(payload);
@@ -19,7 +18,6 @@ function handleInit(payload: InitPayload): void {
     };
     globalThis.postMessage(response);
 
-    console.log("[Worker] Engine initialized, sending INITIALIZED response");
   } catch (error) {
     const errorResponse: MainMessage = {
       type: "ERROR",
@@ -31,7 +29,6 @@ function handleInit(payload: InitPayload): void {
 
 function handleAddFab(fab: FabInitData, config: SimulationConfig): void {
   if (!engine) {
-    console.warn("[Worker] Engine not initialized");
     return;
   }
 
@@ -54,7 +51,6 @@ function handleAddFab(fab: FabInitData, config: SimulationConfig): void {
 
 function handleRemoveFab(fabId: string): void {
   if (!engine) {
-    console.warn("[Worker] Engine not initialized");
     return;
   }
 
@@ -70,7 +66,6 @@ function handleRemoveFab(fabId: string): void {
 
 function handleCommand(fabId: string, payload: unknown): void {
   if (!engine) {
-    console.warn("[Worker] Engine not initialized");
     return;
   }
   engine.handleCommand(fabId, payload);
@@ -78,7 +73,6 @@ function handleCommand(fabId: string, payload: unknown): void {
 
 function handleStart(): void {
   if (!engine) return;
-  console.log("[Worker] Starting simulation");
   engine.start();
 
   const response: MainMessage = { type: "READY" };
@@ -87,24 +81,20 @@ function handleStart(): void {
 
 function handleStop(): void {
   if (!engine) return;
-  console.log("[Worker] Stopping simulation");
   engine.stop();
 }
 
 function handlePause(): void {
   if (!engine) return;
-  console.log("[Worker] Pausing simulation");
   engine.stop();
 }
 
 function handleResume(): void {
   if (!engine) return;
-  console.log("[Worker] Resuming simulation");
   engine.start();
 }
 
 function handleDispose(): void {
-  console.log("[Worker] Disposing engine");
   if (engine) {
     engine.dispose();
     engine = null;
@@ -120,19 +110,15 @@ function handleSetRenderBuffer(
   totalVehicles: number
 ): void {
   if (!engine) {
-    console.warn("[Worker] Engine not initialized");
     return;
   }
-  console.log(`[Worker] Setting render buffers, total=${totalVehicles}`);
   engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments, totalVehicles);
 }
 
 function handleSetLoggerPort(port: MessagePort, workerId: number): void {
   if (!engine) {
-    console.warn("[Worker] Engine not initialized");
     return;
   }
-  console.log(`[Worker] Setting logger port, workerId=${workerId}`);
   engine.setLoggerPort(port, workerId);
 }
 
@@ -170,7 +156,6 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
       break;
     case "SET_TRANSFER_MODE":
       // TODO: Implement per-fab transfer mode change
-      console.log(`[Worker] SET_TRANSFER_MODE for fab ${message.fabId}: ${message.mode}`);
       break;
     case "SET_RENDER_BUFFER":
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
@@ -179,7 +164,6 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
       handleSetLoggerPort(message.port, message.workerId);
       break;
     default:
-      console.warn("[Worker] Unknown message type:", (message as { type: string }).type);
   }
 };
 
@@ -191,7 +175,6 @@ function getErrorMessage(error: unknown): string {
 
 // Handle errors
 globalThis.onerror = (error) => {
-  console.error("[Worker] Unhandled error:", error);
   const response: MainMessage = {
     type: "ERROR",
     error: getErrorMessage(error),
@@ -199,4 +182,3 @@ globalThis.onerror = (error) => {
   globalThis.postMessage(response);
 };
 
-console.log("[Worker] SHM Simulator worker initialized");

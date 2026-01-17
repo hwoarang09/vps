@@ -34,9 +34,6 @@ export class EdgePointsCalculator {
       case EdgeType.LINEAR:
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
       default:
-        console.log(
-          `⚪ Processing UNKNOWN rail type: ${vosRailType} for edge ${edgeName} - using LINEAR`
-        );
         return StraightPointsCalculator.calculate(edgeRowData, nodes);
     }
   }

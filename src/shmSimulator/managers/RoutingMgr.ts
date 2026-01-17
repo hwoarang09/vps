@@ -12,7 +12,6 @@ export class RoutingMgr {
    * The message is expected to be a raw command object
    */
   public receiveMessage(payload: any): void {
-    console.log("[RoutingMgr] Received payload:", payload);
     
     // In the future, this might route to different managers based on payload type
     // For now, assume it's a command for a vehicle and route to DispatchMgr
@@ -23,7 +22,6 @@ export class RoutingMgr {
    * Route command to DispatchMgr
    */
   private routeToDispatch(payload: any): void {
-    console.log("[RoutingMgr] Routing to DispatchMgr");
     this.dispatchMgr.dispatch(payload);
   }
 }

@@ -8,7 +8,8 @@
   },
   "lock": {
     "waitDistance": 2.9,
-    "requestDistance": 5.1
+    "requestDistance": 5.1,
+    "grantStrategy": "FIFO"
   },
   "vehicle": {
     "body": {

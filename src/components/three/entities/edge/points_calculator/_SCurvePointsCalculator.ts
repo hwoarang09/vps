@@ -31,9 +31,6 @@ export class SCurvePointsCalculator {
     const n6 = nodes.find((n) => n.node_name === nodeNames[5]);
 
     if (!n1 || !n2 || !n3 || !n4 || !n5 || !n6) {
-      console.warn(
-        `${vos_rail_type} waypoint nodes not found for edge: ${edge_name}`
-      );
       return [];
     }
 

@@ -18,7 +18,6 @@ export class StraightPointsCalculator {
     const toNode = nodes.find((n: Node) => n.node_name === to_node);
 
     if (!fromNode || !toNode) {
-      console.warn(`LINEAR nodes not found: ${from_node} or ${to_node}`);
       return [];
     }
 
@@ -48,7 +47,6 @@ export class StraightPointsCalculator {
     segments: number
   ): THREE.Vector3[] {
     if (segments < 2) {
-      console.warn(`Invalid segments count: ${segments}. Using minimum 2.`);
       segments = 2;
     }
 

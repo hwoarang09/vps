@@ -33,16 +33,13 @@ const VehicleTestRunner: React.FC<VehicleTestRunnerProps> = ({
   useEffect(() => {
     const startTestAsync = async () => {
       try {
-        console.log(`[VehicleTestRunner] Starting test: ${mode} with ${numVehicles} vehicles (useVehicleConfig: ${useVehicleConfig})`);
 
         // Wait a bit for map to render and settle
         setTimeout(() => {
           // Start the test in the store
           startTest(mode, numVehicles, useVehicleConfig);
-          console.log(`[VehicleTestRunner] Test started on ${mapName}`);
         }, 100);
       } catch (err) {
-        console.error("[VehicleTestRunner] Failed to start test:", err);
       }
     };
 

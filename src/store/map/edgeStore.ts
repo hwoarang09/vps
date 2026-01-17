@@ -21,7 +21,6 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
 
   // [핵심] 맵 로딩 시 이 함수만 호출하면 됨
   setEdges: (rawEdges) => {
-    console.time("EdgeTopologyCalc");
     const nodeStore = useNodeStore.getState();
     const nodes = nodeStore.nodes;
     
@@ -113,8 +112,6 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
         // axis: Already included in ...edge from config
       };
     });
-
-    console.timeEnd("EdgeTopologyCalc");
 
     set({ 
       edges: connectedEdges, 

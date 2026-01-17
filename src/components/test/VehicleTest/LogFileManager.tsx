@@ -20,7 +20,6 @@ const LogFileManager: React.FC = () => {
         const result = await listLogFiles();
         setFiles(result || []);
       } catch (error) {
-        console.error("Failed to list log files:", error);
         alert(`Failed to list log files: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         setIsLoading(false);
@@ -47,7 +46,6 @@ const LogFileManager: React.FC = () => {
 
       alert(`Downloaded: ${result.fileName}\nRecords: ${result.recordCount}\nSize: ${(result.buffer.byteLength / 1024).toFixed(2)} KB`);
     } catch (error) {
-      console.error("Failed to download file:", error);
       alert(`Failed to download: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
@@ -64,7 +62,6 @@ const LogFileManager: React.FC = () => {
       const result = await listLogFiles();
       setFiles(result || []);
     } catch (error) {
-      console.error("Failed to delete file:", error);
       alert(`Failed to delete: ${error instanceof Error ? error.message : String(error)}`);
     }
   };

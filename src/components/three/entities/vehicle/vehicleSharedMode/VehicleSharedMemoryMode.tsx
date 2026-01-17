@@ -58,8 +58,6 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
 
     initRef.current = true;
 
-    console.log("[VehicleSharedMemoryMode] Initializing SHM Simulator...");
-    console.log(`[VehicleSharedMemoryMode] Edges: ${edges.length}, Nodes: ${nodes.length}`);
 
     // Build config from cfgStore values
     const config = {
@@ -86,7 +84,6 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       // 버퍼 오버플로우 방지를 위해 10% 여유 추가
       const maxVehiclesPerFab = Math.ceil(vehiclesPerFab * 1.1);
 
-      console.log(`[VehicleSharedMemoryMode] Multi-Fab mode: ${fabCountX}x${fabCountY}=${totalFabs} fabs, ${vehiclesPerFab} vehicles per fab (max: ${maxVehiclesPerFab})`);
 
       // 각 Fab별로 분리된 데이터 생성 (fabId만 필요)
       const fabDataList = createFabGridSeparated(
@@ -116,10 +113,10 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           curveAcceleration: fabConfig.movement.curve.acceleration,
           lockWaitDistance: fabConfig.lock.waitDistance,
           lockRequestDistance: fabConfig.lock.requestDistance,
+          lockGrantStrategy: fabConfig.lock.grantStrategy,
         } : undefined;
 
         if (configOverride) {
-          console.log(`[VehicleSharedMemoryMode] Fab ${fabData.fabIndex} config override:`, configOverride);
         }
 
         return {
@@ -149,18 +146,14 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       };
 
       const workerCount = getWorkerCount(fabs.length);
-      console.log(`[VehicleSharedMemoryMode] Using ${workerCount} workers`);
 
       initMultiFab({ fabs, config, sharedMapData, workerCount })
         .then(() => {
-          console.log(`[VehicleSharedMemoryMode] Multi-Fab SHM Simulator initialized with ${totalFabs} fabs (using sharedMapData)`);
         })
         .catch((error) => {
-          console.error("[VehicleSharedMemoryMode] Failed to initialize multi-fab:", error);
         });
     } else {
       // 단일 Fab 모드: 기존 방식
-      console.log("[VehicleSharedMemoryMode] Single-Fab mode");
 
       initSimulator({
         edges,
@@ -171,16 +164,13 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         stations,
       })
         .then(() => {
-          console.log("[VehicleSharedMemoryMode] SHM Simulator initialized");
         })
         .catch((error) => {
-          console.error("[VehicleSharedMemoryMode] Failed to initialize:", error);
         });
     }
 
     // Cleanup on unmount
     return () => {
-      console.log("[VehicleSharedMemoryMode] Disposing SHM Simulator...");
       disposeSimulator();
       initRef.current = false;
     };

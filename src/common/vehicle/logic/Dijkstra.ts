@@ -285,11 +285,6 @@ function logPerformanceStats(): void {
   const hitRate = perfStats.cacheHits + perfStats.cacheMisses > 0
     ? ((perfStats.cacheHits / (perfStats.cacheHits + perfStats.cacheMisses)) * 100).toFixed(1)
     : "0.0";
-  console.log(
-    `[Dijkstra] ${perfStats.count} calls | Avg: ${avg.toFixed(3)}ms | ` +
-    `Min: ${perfStats.minTime.toFixed(3)}ms | Max: ${perfStats.maxTime.toFixed(3)}ms | ` +
-    `Cache: ${hitRate}% (${perfStats.cacheHits}/${perfStats.cacheHits + perfStats.cacheMisses})`
-  );
 }
 
 /**

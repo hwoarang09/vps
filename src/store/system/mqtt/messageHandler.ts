@@ -50,7 +50,6 @@ export const handleMqttMessage = (
   get: MqttStoreGetter
 ): void => {
   const msgString = message.toString();
-  console.log(`[MQTT] Received on ${topic}:`, msgString);
 
   // Add to logs (truncate long messages)
   const logMsg = msgString.length > 50 ? `${msgString.substring(0, 50)}...` : msgString;
@@ -80,7 +79,6 @@ const routeMessage = (topic: string, message: unknown): void => {
   const parsed = parseTopic(topic);
 
   if (!parsed) {
-    console.log(`[MQTT] Invalid topic format: ${topic}`);
     return;
   }
 
@@ -91,7 +89,6 @@ const routeMessage = (topic: string, message: unknown): void => {
   }
 
   // Log unhandled receivers
-  console.log(`[MQTT] Unhandled receiver: ${parsed.receiver}`, message);
 };
 
 /**
@@ -103,7 +100,6 @@ const handleTransferMgrMessage = (
   service: string,
   message: unknown
 ): void => {
-  console.log(`[MQTT] TransferMgr message from ${sender}, service: ${service}`);
 
   switch (service) {
     case TOPICS.MOVE:
@@ -123,26 +119,21 @@ const handleTransferMgrMessage = (
       break;
 
     default:
-      console.log(`[MQTT] Unknown service: ${service}`, message);
       break;
   }
 };
 
 // Service Handlers (to be implemented)
 const handleMoveCommand = (sender: string, _message: unknown): void => {
-  console.log(`[MQTT] MOVE command from ${sender} message ${JSON.stringify(_message)}`);
   useShmSimulatorStore.getState().sendCommand(_message);
 };
 
 const handleTransferCommand = (sender: string, _message: unknown): void => {
-  console.log(`[MQTT] TRANSFER command from ${sender} message ${JSON.stringify(_message)}`);
   useShmSimulatorStore.getState().sendCommand(_message);
 };
 
 const handleStopCommand = (sender: string, _message: unknown): void => {
-  console.log(`[MQTT] STOP command from ${sender} message ${JSON.stringify(_message)}`);
 };
 
 const handleStatus = (sender: string, _message: unknown): void => {
-  console.log(`[MQTT] STATUS from ${sender} message ${JSON.stringify(_message)}`);
 };

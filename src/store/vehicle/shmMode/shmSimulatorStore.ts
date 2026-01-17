@@ -124,11 +124,9 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 
     const existing = get().controller;
     if (existing) {
-      console.log("[ShmSimulatorStore] Disposing existing controller...");
       existing.dispose();
     }
 
-    console.log(`[ShmSimulatorStore] Creating MultiWorkerController with ${fabs.length} fab(s)...`);
     const controller = new MultiWorkerController();
 
     controller.onPerfStats((workerStats) => {
@@ -153,7 +151,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     });
 
     controller.onError((error) => {
-      console.error("[ShmSimulatorStore] Worker error:", error);
     });
 
     try {
@@ -183,10 +180,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         fabVehicleCounts,
       });
 
-      console.log(`[ShmSimulatorStore] Initialized with ${totalVehicles} total vehicles across ${fabs.length} fab(s), ${controller.getWorkerCount()} workers`);
-      console.log(`[ShmSimulatorStore] Worker assignments:`, controller.getWorkerAssignments());
     } catch (error) {
-      console.error("[ShmSimulatorStore] Init failed:", error);
       set({
         controller: null,
         workerCount: 0,
@@ -210,15 +204,12 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   start: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
-      console.log("[ShmSimulatorStore] Starting simulation...");
 
       // Enable logging if not already enabled
       if (!controller.isLoggingEnabled()) {
         try {
           await controller.enableLogging("OPFS");
-          console.log("[ShmSimulatorStore] Edge transit logging enabled");
         } catch (error) {
-          console.warn("[ShmSimulatorStore] Failed to enable logging:", error);
         }
       }
 
@@ -230,7 +221,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   stop: () => {
     const { controller } = get();
     if (controller) {
-      console.log("[ShmSimulatorStore] Stopping simulation...");
       controller.stop();
       set({ isRunning: false });
     }
@@ -239,7 +229,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   pause: () => {
     const { controller } = get();
     if (controller) {
-      console.log("[ShmSimulatorStore] Pausing simulation...");
       controller.pause();
       set({ isRunning: false });
     }
@@ -248,15 +237,12 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   resume: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
-      console.log("[ShmSimulatorStore] Resuming simulation...");
 
       // Enable logging if not already enabled
       if (!controller.isLoggingEnabled()) {
         try {
           await controller.enableLogging("OPFS");
-          console.log("[ShmSimulatorStore] Edge transit logging enabled");
         } catch (error) {
-          console.warn("[ShmSimulatorStore] Failed to enable logging:", error);
         }
       }
 
@@ -268,7 +254,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   dispose: () => {
     const { controller } = get();
     if (controller) {
-      console.log("[ShmSimulatorStore] Disposing controller...");
       controller.dispose();
     }
     set({

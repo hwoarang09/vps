@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { useFabConfigStore, type FabConfigOverride } from "@/store/simulation/fabConfigStore";
+import { useFabConfigStore, type FabConfigOverride, type GrantStrategy } from "@/store/simulation/fabConfigStore";
 import { useFabStore } from "@/store/map/fabStore";
 
 interface ParamInputProps {
@@ -262,6 +262,85 @@ const RequestModeInput: React.FC<RequestModeInputProps> = ({
   );
 };
 
+// Grant Strategy 선택 컴포넌트 (FIFO / BATCH)
+interface GrantStrategyInputProps {
+  value: GrantStrategy | undefined;
+  baseValue: GrantStrategy;
+  onChange: (value: GrantStrategy | undefined) => void;
+}
+
+const GrantStrategyInput: React.FC<GrantStrategyInputProps> = ({
+  value,
+  baseValue,
+  onChange,
+}) => {
+  const isOverridden = value !== undefined;
+  const currentStrategy = value ?? baseValue;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+      <label style={{ width: "180px", fontSize: "12px", color: "#ccc" }}>
+        Grant Strategy
+        <span style={{ fontSize: "10px", color: "#888", display: "block" }}>
+          락 승인 우선순위 전략
+        </span>
+      </label>
+      <div style={{ display: "flex", gap: "4px" }}>
+        <button
+          onClick={() => onChange("FIFO")}
+          style={{
+            padding: "4px 12px",
+            background: currentStrategy === "FIFO" ? "#3498db" : "#333",
+            color: currentStrategy === "FIFO" ? "#fff" : "#888",
+            border: currentStrategy === "FIFO" ? "1px solid #3498db" : "1px solid #555",
+            borderRadius: "4px 0 0 4px",
+            fontSize: "11px",
+            cursor: "pointer",
+            fontWeight: currentStrategy === "FIFO" ? "bold" : "normal",
+          }}
+          title="선입선출 방식"
+        >
+          FIFO
+        </button>
+        <button
+          onClick={() => onChange("BATCH")}
+          style={{
+            padding: "4px 12px",
+            background: currentStrategy === "BATCH" ? "#f39c12" : "#333",
+            color: currentStrategy === "BATCH" ? "#fff" : "#888",
+            border: currentStrategy === "BATCH" ? "1px solid #f39c12" : "1px solid #555",
+            borderRadius: "0 4px 4px 0",
+            fontSize: "11px",
+            cursor: "pointer",
+            fontWeight: currentStrategy === "BATCH" ? "bold" : "normal",
+          }}
+          title="같은 방향 묶음 승인"
+        >
+          BATCH
+        </button>
+      </div>
+      {isOverridden && (
+        <button
+          onClick={() => onChange(undefined)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#888",
+            cursor: "pointer",
+            padding: "2px",
+          }}
+          title="Reset to base value"
+        >
+          <X size={14} />
+        </button>
+      )}
+      <span style={{ fontSize: "10px", color: "#666" }}>
+        (base: {baseValue})
+      </span>
+    </div>
+  );
+};
+
 interface SectionProps {
   title: string;
   color: string;
@@ -310,7 +389,7 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
   const { baseConfig, fabOverrides, setFabOverride } = useFabConfigStore();
   const override = fabOverrides[fabIndex] || {};
 
-  const updateOverride = (path: string[], value: number | undefined) => {
+  const updateOverride = (path: string[], value: number | string | undefined) => {
     const newOverride: FabConfigOverride = JSON.parse(JSON.stringify(override));
 
     if (path.length === 2) {
@@ -323,10 +402,10 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
             delete newOverride.lock;
           }
         } else {
-          (newOverride.lock as Record<string, number>)[key] = value;
+          (newOverride.lock as Record<string, number | string>)[key] = value;
         }
       }
-    } else if (path.length === 3) {
+    } else if (path.length === 3 && typeof value !== "string") {
       const [section, subsection, key] = path;
       if (section === "movement") {
         newOverride.movement = newOverride.movement || {};
@@ -416,6 +495,11 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
           value={override.lock?.requestDistance}
           baseValue={baseConfig.lock.requestDistance}
           onChange={(v) => updateOverride(["lock", "requestDistance"], v)}
+        />
+        <GrantStrategyInput
+          value={override.lock?.grantStrategy}
+          baseValue={baseConfig.lock.grantStrategy}
+          onChange={(v) => updateOverride(["lock", "grantStrategy"], v)}
         />
       </Section>
 
@@ -578,6 +662,16 @@ const SimulationParamsModal: React.FC = () => {
                   {baseConfig.lock.requestDistance < 0
                     ? "Immediate"
                     : `Distance (${baseConfig.lock.requestDistance} m)`}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: "#888" }}>Grant Strategy:</span>
+                <span style={{
+                  color: baseConfig.lock.grantStrategy === "FIFO" ? "#3498db" : "#f39c12",
+                  marginLeft: "8px",
+                  fontWeight: "bold"
+                }}>
+                  {baseConfig.lock.grantStrategy}
                 </span>
               </div>
             </div>

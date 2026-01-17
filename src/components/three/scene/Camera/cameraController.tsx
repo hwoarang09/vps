@@ -13,17 +13,6 @@ const _scratchOffset = new THREE.Vector3();
 const CameraController: React.FC = () => {
   const { camera, controls } = useThree(); // controls는 drei가 set해줌
 
-  // Debug: Print camera position and target every frame
-  // useFrame(() => {
-  //   if (controls) {
-  //     const orbitControls = controls as OrbitControls;
-  //     console.log('[Camera Debug]', {
-  //       position: camera.position.toArray(),
-  //       target: orbitControls.target.toArray(),
-  //     });
-  //   }
-  // });
-
   // Camera store state
   const rotateZDeg = useCameraStore((s) => s.rotateZDeg);
   const _resetRotateZ = useCameraStore((s) => s._resetRotateZ);
@@ -65,10 +54,6 @@ const CameraController: React.FC = () => {
 
     initializedRef.current = true;
 
-    console.log('[CameraController] Initial camera set:', {
-      position: position.toArray(),
-      target: target.toArray()
-    });
   }, [camera, controls, position, target]); // Include dependencies
 
   // Z-up 보정 (항상 유지)
@@ -217,10 +202,6 @@ const CameraController: React.FC = () => {
 
       _resetCameraUpdate();
 
-      console.log('[CameraController] Camera updated:', {
-        position: position.toArray(),
-        target: target.toArray()
-      });
     }
   }, [camera, controls, shouldUpdateCamera, position, target, _resetCameraUpdate, activeMainMenu, activeSubMenu]);
 

@@ -90,7 +90,6 @@ const VehicleTest: React.FC = () => {
 
       alert(`Downloaded: ${result.fileName}\nRecords: ${result.recordCount}\nSize: ${(result.buffer.byteLength / 1024).toFixed(2)} KB`);
     } catch (error) {
-      console.error("Failed to download log:", error);
       alert(`Failed to download log: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
@@ -128,9 +127,7 @@ const VehicleTest: React.FC = () => {
 
     try {
       // Load the new map
-      console.log(`[VehicleTest] Loading map: ${setting.mapName}...`);
       await loadCFGFiles(setting.mapName);
-      console.log(`[VehicleTest] ✓ Map loaded successfully: ${setting.mapName}`);
 
       // Initialize LockMgr
       const edges = useEdgeStore.getState().edges;
@@ -139,16 +136,13 @@ const VehicleTest: React.FC = () => {
       // Set camera position if configured
       if (setting.camera) {
         setCameraView(setting.camera.position, setting.camera.target);
-        console.log(`[VehicleTest] ✓ Camera positioned`);
       }
 
       // Auto-create vehicles only if requested
       if (autoCreateVehicles) {
         // Wait for map to render and edges renderingPoints to be calculated
-        console.log(`[VehicleTest] Waiting for edges to calculate renderingPoints...`);
         vehicleCreateTimeoutRef.current = setTimeout(() => {
           // Auto-create vehicles using vehicles.cfg
-          console.log(`[VehicleTest] ✓ Creating vehicles from vehicles.cfg`);
           setUseVehicleConfig(true); // Use vehicles.cfg
           setIsTestCreated(true);
           setTestKey(prev => prev + 1); // Force remount to create vehicles
@@ -156,7 +150,6 @@ const VehicleTest: React.FC = () => {
         }, 800);
       }
     } catch (error) {
-      console.error("[VehicleTest] ✗ Failed to load map:", error);
     }
   };
 
@@ -171,7 +164,6 @@ const VehicleTest: React.FC = () => {
   useEffect(() => {
     if (prevModeRef.current && prevModeRef.current !== activeSubMenu) {
       // Mode changed - cleanup previous mode
-      console.log(`[VehicleTest] Mode changed: ${prevModeRef.current} -> ${activeSubMenu}`);
 
       // Dispose SHM simulator if switching away from shared-memory mode
       if (prevModeRef.current === "test-shared-memory") {
@@ -248,7 +240,6 @@ const VehicleTest: React.FC = () => {
     const stations = useStationStore.getState().stations;
 
     if (nodes.length === 0 || edges.length === 0) {
-      console.warn("[FAB] No nodes or edges to clone");
       return;
     }
 
@@ -260,7 +251,6 @@ const VehicleTest: React.FC = () => {
     disposeShmSimulator();
 
     const totalFabs = fabCountX * fabCountY;
-    console.log(`[FAB] Creating ${fabCountX}x${fabCountY}=${totalFabs} fabs from ${nodes.length} nodes, ${edges.length} edges, ${stations.length} stations`);
 
     // 원본 데이터 저장 (멀티 워커용)
     useFabStore.getState().setOriginalMapData({
@@ -275,11 +265,9 @@ const VehicleTest: React.FC = () => {
     // Create fab infos and save to fabStore
     const fabInfos = createFabInfos(fabCountX, fabCountY, bounds);
     useFabStore.getState().setFabGrid(fabCountX, fabCountY, fabInfos);
-    console.log(`[FAB] Created ${fabInfos.length} fab infos`);
 
     // Initialize render slots (슬롯 기반 렌더링용)
     useFabStore.getState().initSlots();
-    console.log(`[FAB] Initialized render slots`);
 
     // Store에는 원본만 저장 (메모리 절약)
     // Worker는 sharedMapData로 원본을 받아서 자체적으로 fab별 offset 계산
@@ -296,7 +284,6 @@ const VehicleTest: React.FC = () => {
     getLockMgr().initFromEdges(edges);
 
     setIsFabApplied(true);
-    console.log(`[FAB] ✓ Created ${totalFabs} fabs (using original: ${nodes.length} nodes, ${edges.length} edges, ${stations.length} stations)`);
   };
 
   // Update text store with fab-separated data
@@ -387,12 +374,10 @@ const VehicleTest: React.FC = () => {
     textStore.forceUpdate();
 
     // 로그
-    console.log(`[FAB] Text stored for ${totalFabs} fabs (first fab: ${textsByFab[0].nodeTexts.length} nodes)`);
   };
 
   // Handle FAB Clear - reload map to reset to original state (no auto vehicle creation)
   const handleFabClear = async () => {
-    console.log("[FAB] Clearing FAB, reloading map...");
 
     // 1. Stop test and cleanup vehicles first
     if (isTestCreated) {

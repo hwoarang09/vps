@@ -156,7 +156,6 @@ export class TransferMgr {
     const currentEdge = edgeArray![currentEdgeIndex];
 
     if (!currentEdge) {
-      console.error(`[TransferMgr] Vehicle ${vehId} has invalid current edge ${currentEdgeIndex}`);
       return;
     }
 
@@ -378,7 +377,6 @@ export class TransferMgr {
     edgeNameToIndex: Map<string, number> | undefined
   ): boolean {
     if (!vehicleDataArray || !edgeArray || !edgeNameToIndex) {
-      console.error(`[TransferMgr] Missing required data for command validation`);
       return false;
     }
     return true;
@@ -405,12 +403,10 @@ export class TransferMgr {
       const pathEdgeIndex = edgeNameToIndex.get(pathEdgeId);
 
       if (pathEdgeIndex === undefined) {
-        console.error(`[TransferMgr] Path edge ${pathEdgeId} not found`);
         return;
       }
 
       if (!prevEdge.nextEdgeIndices?.includes(pathEdgeIndex)) {
-        console.error(`[TransferMgr] Path edge ${pathEdgeId} not connected to ${prevEdge.edge_name}`);
         return;
       }
 

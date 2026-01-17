@@ -18,7 +18,6 @@ const loadCameraConfig = async (): Promise<CameraSettings> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading camera config:', error);
     // Fallback to default values
     return {
       DEFAULT_CAMERA: {

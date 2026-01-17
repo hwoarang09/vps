@@ -67,7 +67,6 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading render config:', error);
     // Fallback to default values
     return {
       nodes: {
@@ -221,7 +220,6 @@ let renderConfig: RenderConfig = {
 // Load config immediately
 loadRenderConfig().then(config => {
   renderConfig = config;
-  console.log('[RenderConfig] Loaded:', config);
 });
 
 // Export synchronous getter

@@ -67,9 +67,6 @@ const calculateStationPosition = (
   );
 
   if (!edge) {
-    console.warn(
-      `[StationStore] Edge not found: ${rawStation.nearest_edge} for station ${rawStation.station_name}`
-    );
     return { x: 0, y: 0, z: getStationZ(rawStation.station_type) };
   }
 
@@ -78,18 +75,12 @@ const calculateStationPosition = (
   const toNode = nodeStore.getNodeByName(edge.to_node);
 
   if (!fromNode || !toNode) {
-    console.warn(
-      `[StationStore] Nodes not found for edge ${edge.edge_name}: ${edge.from_node} or ${edge.to_node}`
-    );
     return { x: 0, y: 0, z: getStationZ(rawStation.station_type) };
   }
 
   // Calculate ratio (t) based on barcode
   const barcodeDiff = toNode.barcode - fromNode.barcode;
   if (barcodeDiff === 0) {
-    console.warn(
-      `[StationStore] Zero barcode difference for edge ${edge.edge_name}`
-    );
     return {
       x: fromNode.editor_x,
       y: fromNode.editor_y,

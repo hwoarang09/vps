@@ -21,7 +21,6 @@ const CFGLoader: React.FC = () => {
         const folders = await getAvailableMapFolders();
         setAvailableFolders(folders);
       } catch (error) {
-        console.error("Failed to load map folders:", error);
       } finally {
         setLoadingFolders(false);
       }
@@ -46,7 +45,6 @@ const CFGLoader: React.FC = () => {
     try {
       await loadCFGFiles(folder);
     } catch (error) {
-      console.error("Failed to load CFG files:", error);
     }
   };
 

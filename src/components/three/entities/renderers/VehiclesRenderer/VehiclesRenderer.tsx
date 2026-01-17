@@ -22,7 +22,6 @@ const VehiclesRenderer: React.FC<VehiclesRendererProps> = ({
   // Get actualNumVehicles from rapierStore for rapier-dict mode
   const rapierActualNumVehicles = useVehicleRapierStore((state) => state.actualNumVehicles);
 
-  console.log(`[VehiclesRenderer] mode: ${mode}, numVehicles: ${numVehicles}`);
 
   // Route to appropriate renderer based on mode
   if (mode === VehicleSystemType.RapierDict) {
@@ -32,7 +31,6 @@ const VehiclesRenderer: React.FC<VehiclesRendererProps> = ({
     return <VehicleArrayRenderer mode={mode} />;
   }
 
-  console.warn(`[VehiclesRenderer] Unknown mode: ${mode}`);
   return null;
 };
 

@@ -46,7 +46,6 @@ export class DispatchMgr {
       return Number.parseInt(match[0], 10);
     }
 
-    console.warn(`[DispatchMgr] Invalid vehId format: ${vehId}, defaulting to 0`);
     return 0;
   }
 
@@ -54,10 +53,8 @@ export class DispatchMgr {
    * Dispatch a command to a vehicle
    */
   public dispatch(command: VehicleCommand & { vehId?: number | string }): void {
-    console.log("[DispatchMgr] Dispatching command:", command);
 
     const vehId = this.parseVehId(command.vehId);
-    console.log(`[DispatchMgr] Parsed vehId: ${vehId}`);
 
     this.assignToVehicle(vehId, command);
   }
@@ -66,7 +63,6 @@ export class DispatchMgr {
    * Assign the command to the specific vehicle via TransferMgr
    */
   private assignToVehicle(vehId: number, command: VehicleCommand): void {
-    console.log(`[DispatchMgr] Assigning to Vehicle ${vehId}`);
     this.transferMgr.assignCommand(
       vehId,
       command,

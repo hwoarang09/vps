@@ -58,12 +58,10 @@ export const useCameraStore = create<CameraState>((set) => {
     _resetCameraUpdate: () => set({ shouldUpdateCamera: false }),
 
     followVehicle: (vehicleId, offset = [-10, -10, 15]) => {
-      console.log(`[CameraStore] Following vehicle ${vehicleId}`);
       set({ followingVehicleId: vehicleId, followOffset: offset });
     },
 
     stopFollowingVehicle: () => {
-      console.log('[CameraStore] Stopped following vehicle');
       set({ followingVehicleId: null });
     },
   };

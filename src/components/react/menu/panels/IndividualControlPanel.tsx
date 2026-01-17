@@ -104,7 +104,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     const handleStop = () => {
         if (isShmMode) {
             // SHM mode: read-only (worker controls state)
-            console.warn("[IndividualControl] Control not supported in SHM mode");
             return;
         }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.STOPPED);
@@ -114,7 +113,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 
     const handlePause = () => {
         if (isShmMode) {
-            console.warn("[IndividualControl] Control not supported in SHM mode");
             return;
         }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.PAUSED);
@@ -124,7 +122,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 
     const handleResume = () => {
         if (isShmMode) {
-            console.warn("[IndividualControl] Control not supported in SHM mode");
             return;
         }
         vehicleDataArray.setMovingStatus(vehicleIndex, MovingStatus.MOVING);
@@ -135,7 +132,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 
     const handleChangeSensor = () => {
         if (isShmMode) {
-            console.warn("[IndividualControl] Control not supported in SHM mode");
             return;
         }
         const vehicleData = vehicleDataArray.get(vehicleIndex);

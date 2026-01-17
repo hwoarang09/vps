@@ -28,7 +28,6 @@ export const getNextEdgeInLoop = (
   const currentPosition = edgeSequence.indexOf(currentEdgeName);
 
   if (currentPosition === -1) {
-    console.warn(`Current edge ${currentEdgeName} not found in sequence, returning first edge`);
     return edgeSequence[0];
   }
 

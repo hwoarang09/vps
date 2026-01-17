@@ -37,7 +37,6 @@ const loadTestSettingConfig = async (): Promise<TestSettingConfig> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading test setting config:', error);
     // Fallback to default values
     return {
       TEST_SETTINGS: [

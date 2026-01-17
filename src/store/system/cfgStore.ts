@@ -40,7 +40,6 @@ const parseCSV = <T>(content: string): T[] => {
   });
 
   if (result.errors.length > 0) {
-    console.warn("CSV parsing warnings:", result.errors);
   }
 
   return result.data;
@@ -176,10 +175,6 @@ const calculateEdgeRenderingPoints = (
 
     return PointsCalculator.calculateRenderingPoints(edgeRowData);
   } catch (error) {
-    console.warn(
-      `Failed to calculate rendering points for edge ${edgeName}:`,
-      error
-    );
     return [];
   }
 };
@@ -475,7 +470,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       const edges = parseEdgesCFG(edgesContent, nodes);
 
       const edgesWithPoints = edges.filter((e) => e.renderingPoints && e.renderingPoints.length > 0);
-      console.log(`[CFGStore] Parsed ${edges.length} edges, ${edgesWithPoints.length} have renderingPoints`);
 
       // 4. Load and parse vehicles.cfg (optional)
       let vehicleConfigs: VehicleConfig[] = [];
@@ -483,7 +477,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         const vehiclesContent = await loadCFGFile(mapFolder, "vehicles.cfg");
         vehicleConfigs = parseVehiclesCFG(vehiclesContent);
       } catch (error) {
-        console.warn("[CFGStore] No vehicles.cfg found or failed to parse, skipping vehicle configs ", error);
       }
 
       // 5. Load and parse station.map (optional)
@@ -492,7 +485,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         const stationContent = await loadCFGFile(mapFolder, "station.map");
         stationRawData = parseStationMap(stationContent);
       } catch (error) {
-        console.warn("[CFGStore] No station.map found or failed to parse, skipping stations ", error);
       }
 
       // 6. Set edges to store
@@ -535,7 +527,6 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       set({ error: errorMessage, isLoading: false });
-      console.error("Failed to load CFG files:", error);
       throw error;
     }
   },

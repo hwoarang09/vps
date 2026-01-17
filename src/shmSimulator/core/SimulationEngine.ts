@@ -46,7 +46,6 @@ export class SimulationEngine {
   handleCommand(fabId: string, command: unknown): void {
     const context = this.fabContexts.get(fabId);
     if (!context) {
-      console.warn(`[SimulationEngine] Fab not found: ${fabId}`);
       return;
     }
     context.handleCommand(command);
@@ -57,7 +56,6 @@ export class SimulationEngine {
    * @returns Record of Fab ID to actual vehicle count
    */
   init(payload: InitPayload): Record<string, number> {
-    console.log("[SimulationEngine] Initializing...");
 
     // Update config from payload
     this.config = payload.config;
@@ -67,7 +65,6 @@ export class SimulationEngine {
     // [최적화 모드] sharedMapData가 있으면 SharedMapRef 한 번만 생성 (복제 없음!)
     if (payload.sharedMapData) {
       this.sharedMapRef = this.buildSharedMapRef(payload.sharedMapData);
-      console.log(`[SimulationEngine] Built shared map reference: ${this.sharedMapRef.edges.length} edges, ${this.sharedMapRef.nodes.length} nodes`);
     }
 
     // Initialize each fab
@@ -80,7 +77,6 @@ export class SimulationEngine {
         : this.config;
 
       if (fabData.config) {
-        console.log(`[SimulationEngine] Fab ${fabData.fabId} config override:`, fabData.config);
       }
 
       if (this.sharedMapRef && fabData.fabOffset) {
@@ -105,7 +101,6 @@ export class SimulationEngine {
           memoryAssignment: fabData.memoryAssignment,
         };
 
-        console.log(`[SimulationEngine] Fab ${fabData.fabId} using shared map (optimized mode), offset: (${fabOffset.x.toFixed(1)}, ${fabOffset.y.toFixed(1)})`);
       } else {
         // [레거시 모드] fab별 데이터 직접 사용
         params = {
@@ -128,10 +123,8 @@ export class SimulationEngine {
       this.fabContexts.set(fabData.fabId, context);
       fabVehicleCounts[fabData.fabId] = context.getActualNumVehicles();
 
-      console.log(`[SimulationEngine] Fab ${fabData.fabId} initialized with ${context.getActualNumVehicles()} vehicles`);
     }
 
-    console.log(`[SimulationEngine] Initialized ${this.fabContexts.size} fab(s)`);
     return fabVehicleCounts;
   }
 
@@ -205,7 +198,6 @@ export class SimulationEngine {
    */
   addFab(fabData: FabInitData, globalConfig: SimulationConfig): number {
     if (this.fabContexts.has(fabData.fabId)) {
-      console.warn(`[SimulationEngine] Fab already exists: ${fabData.fabId}`);
       return this.fabContexts.get(fabData.fabId)!.getActualNumVehicles();
     }
 
@@ -232,7 +224,6 @@ export class SimulationEngine {
     const context = new FabContext(params);
     this.fabContexts.set(fabData.fabId, context);
 
-    console.log(`[SimulationEngine] Fab ${fabData.fabId} added with ${context.getActualNumVehicles()} vehicles`);
     return context.getActualNumVehicles();
   }
 
@@ -243,14 +234,12 @@ export class SimulationEngine {
   removeFab(fabId: string): boolean {
     const context = this.fabContexts.get(fabId);
     if (!context) {
-      console.warn(`[SimulationEngine] Fab not found: ${fabId}`);
       return false;
     }
 
     context.dispose();
     this.fabContexts.delete(fabId);
 
-    console.log(`[SimulationEngine] Fab ${fabId} removed`);
     return true;
   }
 
@@ -279,7 +268,6 @@ export class SimulationEngine {
     this.isRunning = true;
     const targetInterval = 1000 / this.config.targetFps;
 
-    console.log(`[SimulationEngine] Starting simulation loop (${this.config.targetFps} FPS)`);
 
     // Initialize timing
     this.lastStepTime = performance.now();
@@ -305,7 +293,6 @@ export class SimulationEngine {
       this.loopHandle = null;
     }
 
-    console.log("[SimulationEngine] Simulation stopped");
   }
 
   /**
@@ -386,7 +373,6 @@ export class SimulationEngine {
     fabAssignments: FabRenderAssignment[],
     totalVehicles: number
   ): void {
-    console.log(`[SimulationEngine] Setting render buffers for ${fabAssignments.length} fabs, total=${totalVehicles}`);
 
     let vehicleStartIndex = 0;
 
@@ -407,7 +393,6 @@ export class SimulationEngine {
         vehicleStartIndex
       );
 
-      console.log(`[SimulationEngine] Render buffer set for ${assignment.fabId}: vehOffset=${assignment.vehicleRenderOffset}, actualVeh=${assignment.actualVehicles}, startIdx=${vehicleStartIndex}`);
 
       vehicleStartIndex += assignment.actualVehicles;
     }
@@ -427,7 +412,6 @@ export class SimulationEngine {
     // Clear shared map reference
     this.sharedMapRef = null;
 
-    console.log("[SimulationEngine] Disposed");
   }
 
   /**
@@ -464,7 +448,6 @@ export class SimulationEngine {
     for (const context of this.fabContexts.values()) {
       context.setLoggerPort(port, workerId);
     }
-    console.log(`[SimulationEngine] Logger port set for ${this.fabContexts.size} fabs`);
   }
 
   /**

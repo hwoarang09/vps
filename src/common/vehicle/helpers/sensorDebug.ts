@@ -26,13 +26,6 @@ export function logSensorData(
   const sr = [data[offset + SensorPoint.SR_X], data[offset + SensorPoint.SR_Y]];
 
   if (DEBUG) {
-    console.log(`[SensorDebug] ${label} VEH${vehIdx}:`);
-    console.log(`  FL: (${fl[0].toFixed(2)}, ${fl[1].toFixed(2)})`);
-    console.log(`  FR: (${fr[0].toFixed(2)}, ${fr[1].toFixed(2)})`);
-    console.log(`  BL: (${bl[0].toFixed(2)}, ${bl[1].toFixed(2)})`);
-    console.log(`  BR: (${br[0].toFixed(2)}, ${br[1].toFixed(2)})`);
-    console.log(`  SL: (${sl[0].toFixed(2)}, ${sl[1].toFixed(2)})`);
-    console.log(`  SR: (${sr[0].toFixed(2)}, ${sr[1].toFixed(2)})`);
   }
 }
 
@@ -65,9 +58,6 @@ export function logSensorSummary(
     }
   }
 
-  console.log(
-    `[SensorDebug] Summary: ${nonZeroCount} initialized, ${zeroCount} zero (total: ${numVehicles})`
-  );
 
   if (nonZeroCount > 0) {
     for (let i = 0; i < numVehicles; i++) {

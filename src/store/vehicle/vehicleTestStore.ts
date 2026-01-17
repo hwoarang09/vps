@@ -36,12 +36,10 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
   useVehicleConfig: false,
 
   startTest: (mode: VehicleSystemType, numVehicles = 50, useVehicleConfig = false) => {
-    console.log(`[VehicleTestStore] Starting test: ${mode} with ${numVehicles} vehicles (useVehicleConfig: ${useVehicleConfig})`);
     set({ isTestActive: true, testMode: mode, numVehicles, isPanelVisible: true, isPaused: true, useVehicleConfig });
   },
 
   stopTest: () => {
-    console.log("[VehicleTestStore] Stopping test");
     set({ isTestActive: false, testMode: null, isPanelVisible: true, isPaused: true, initialVehicleDistribution: null, useVehicleConfig: false });
   },
 
@@ -54,7 +52,6 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
   },
 
   setPaused: (paused: boolean) => {
-    console.log(`[VehicleTestStore] ${paused ? 'Pausing' : 'Resuming'} simulation`);
     set({ isPaused: paused });
   },
 

@@ -5,6 +5,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
 import { StationRawData } from "@/types/station";
+import type { GrantStrategy } from "@/config/simulationConfig";
 
 // ============================================================================
 // [0] MEMORY REGION (Multi-Worker Support)
@@ -96,6 +97,8 @@ export interface SimulationConfig {
   lockWaitDistance: number;
   /** Lock 요청 거리 (-1이면 진입 즉시 요청) */
   lockRequestDistance: number;
+  /** Lock 승인 전략 */
+  lockGrantStrategy: GrantStrategy;
 
   // Simulation
   targetFps: number;
@@ -137,6 +140,7 @@ export function createDefaultConfig(): SimulationConfig {
     crossEdgeSafeDistance: 1,
     lockWaitDistance: 1.89,
     lockRequestDistance: 5.1,
+    lockGrantStrategy: 'FIFO',
     targetFps: 60,
     maxDelta: 0.1,
   };
@@ -326,3 +330,4 @@ export { TransferMode } from "@/common/vehicle/initialize/constants";
 export type { Edge } from "@/types/edge";
 export type { Node } from "@/types";
 export type { VehicleCommand } from "@/common/vehicle/logic/TransferMgr";
+export type { GrantStrategy } from "@/config/simulationConfig";

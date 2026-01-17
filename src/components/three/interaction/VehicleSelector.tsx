@@ -76,7 +76,6 @@ const VehicleSelector: React.FC = () => {
             const menuStore = useMenuStore.getState();
             menuStore.setRightPanelOpen(true);
 
-            console.log(`[VehicleSelector] Selected Vehicle #${nearestVehicleId} (Dist: ${Math.sqrt(minDistSq).toFixed(2)}m)`);
         }
     };
 

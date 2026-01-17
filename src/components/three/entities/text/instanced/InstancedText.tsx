@@ -51,7 +51,6 @@ export default function InstancedText({
   // Cleanup when text groups are deleted
   React.useEffect(() => {
     if (prevGroupsLengthRef.current > groups.length && groups.length === 0) {
-      console.log("[InstancedText] Text groups deleted, cleaning up resources");
       // Dispose InstancedMesh resources
       for (const mesh of instRefs.current) {
         if (mesh) {

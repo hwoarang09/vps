@@ -132,7 +132,6 @@ export class MultiWorkerController {
       : Math.min(navigator.hardwareConcurrency || 4, fabs.length);
     const workerCount = params.workerCount ?? defaultWorkerCount;
 
-    console.log(`[MultiWorkerController] Initializing with ${fabs.length} fabs, ${workerCount} workers`);
 
     // 1. Fab 설정 저장 및 Worker 메모리 레이아웃 계산
     const fabMemoryConfigs: FabMemoryConfig[] = [];
@@ -153,10 +152,6 @@ export class MultiWorkerController {
     this.sensorBuffer = workerBuffers.sensorBuffer;
     this.pathBuffer = workerBuffers.pathBuffer;
 
-    console.log(`[MultiWorkerController] Created Worker Buffers`);
-    console.log(`  Vehicle: ${(this.layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  Sensor:  ${(this.layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  Path:    ${(this.layout.pathBufferSize / 1024 / 1024).toFixed(2)} MB`);
 
     // 3. 워커별 Fab 분배
     const workerAssignments = this.layoutManager.distributeToWorkers(
@@ -215,16 +210,11 @@ export class MultiWorkerController {
     this.vehicleRenderBuffer = renderBuffers.vehicleRenderBuffer;
     this.sensorRenderBuffer = renderBuffers.sensorRenderBuffer;
 
-    console.log(`[MultiWorkerController] Created Render Buffers (continuous layout)`);
-    console.log(`  Vehicle Render: ${(this.renderLayout.vehicleRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  Sensor Render:  ${(this.renderLayout.sensorRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  Total Vehicles: ${this.renderLayout.totalVehicles}`);
 
     // 6. SET_RENDER_BUFFER 메시지 전송 (각 워커에게 렌더 버퍼 + offset 전달)
     this.sendRenderBufferToWorkers();
 
     this.isInitialized = true;
-    console.log(`[MultiWorkerController] All workers initialized`);
   }
 
   /**
@@ -245,7 +235,6 @@ export class MultiWorkerController {
       workerInfo.worker.postMessage(message);
     }
 
-    console.log(`[MultiWorkerController] SET_RENDER_BUFFER sent to ${this.workers.length} workers, total=${this.renderLayout.totalVehicles}`);
   }
 
   /**
@@ -356,7 +345,6 @@ export class MultiWorkerController {
       };
 
       worker.onerror = (error) => {
-        console.error(`[MultiWorkerController] Worker ${workerInfo.workerIndex} error:`, error);
         this.onErrorCallback?.(error.message);
         reject(new Error(error.message));
       };
@@ -365,14 +353,12 @@ export class MultiWorkerController {
       const message: WorkerMessage = { type: "INIT", payload };
       worker.postMessage(message);
 
-      console.log(`[MultiWorkerController] Worker ${workerInfo.workerIndex} init sent with ${fabInitDataList.length} fabs`);
     });
   }
 
   private handleWorkerMessage(workerInfo: WorkerInfo, message: MainMessage): void {
     switch (message.type) {
       case "READY":
-        console.log(`[MultiWorkerController] Worker ${workerInfo.workerIndex} ready`);
         break;
 
       case "PERF_STATS":
@@ -394,7 +380,6 @@ export class MultiWorkerController {
         break;
 
       case "ERROR":
-        console.error(`[MultiWorkerController] Worker ${workerInfo.workerIndex} error:`, message.error);
         this.onErrorCallback?.(message.error);
         break;
     }
@@ -402,7 +387,6 @@ export class MultiWorkerController {
 
   start(): void {
     if (!this.isInitialized) {
-      console.warn("[MultiWorkerController] Not initialized");
       return;
     }
 
@@ -411,7 +395,6 @@ export class MultiWorkerController {
     }
 
     this.isRunning = true;
-    console.log(`[MultiWorkerController] Started ${this.workers.length} workers`);
   }
 
   stop(): void {
@@ -420,7 +403,6 @@ export class MultiWorkerController {
     }
 
     this.isRunning = false;
-    console.log(`[MultiWorkerController] Stopped`);
   }
 
   pause(): void {
@@ -440,7 +422,6 @@ export class MultiWorkerController {
   sendCommand(fabId: string, payload: unknown): void {
     const workerIndex = this.fabToWorkerMap.get(fabId);
     if (workerIndex === undefined) {
-      console.warn(`[MultiWorkerController] Fab not found: ${fabId}`);
       return;
     }
 
@@ -455,16 +436,13 @@ export class MultiWorkerController {
     // Logger 정리
     if (this.loggerController) {
       const totalRecords = await this.loggerController.close();
-      console.log(`[MultiWorkerController] Logger closed, total records: ${totalRecords}`);
       this.loggerController = null;
     }
 
     if (this.workers.length === 0) {
-      console.log("[MultiWorkerController] No workers to dispose");
       return;
     }
 
-    console.log(`[MultiWorkerController] Disposing ${this.workers.length} workers...`);
 
     for (const workerInfo of this.workers) {
       this.disposeWorker(workerInfo);
@@ -484,7 +462,6 @@ export class MultiWorkerController {
     this.isInitialized = false;
     this.isRunning = false;
 
-    console.log("[MultiWorkerController] Disposed");
   }
 
   private disposeWorker(workerInfo: WorkerInfo): void {
@@ -492,7 +469,6 @@ export class MultiWorkerController {
 
     const terminateWorker = () => {
       worker.terminate();
-      console.log(`[MultiWorkerController] Worker ${workerIndex} terminated`);
     };
 
     const onMessage = (e: MessageEvent<MainMessage>) => {
@@ -631,18 +607,17 @@ export class MultiWorkerController {
    */
   async enableLogging(mode: LoggerMode = "OPFS", sessionId?: string): Promise<void> {
     if (this.loggerController) {
-      console.warn("[MultiWorkerController] Logger already enabled");
       return;
     }
 
     this.loggerController = new LoggerController({
       mode,
       sessionId: sessionId ?? `sim_${Date.now()}`,
-      onReady: () => console.log("[MultiWorkerController] Logger ready"),
-      onFlushed: (count) => console.log(`[MultiWorkerController] Logger flushed, records: ${count}`),
-      onUploaded: (url, count) => console.log(`[MultiWorkerController] Logger uploaded: ${url}, records: ${count}`),
-      onClosed: (total) => console.log(`[MultiWorkerController] Logger closed, total: ${total}`),
-      onError: (error) => console.error(`[MultiWorkerController] Logger error: ${error}`),
+      onReady: () => {},
+      onFlushed: (count) => {},
+      onUploaded: (url, count) => {},
+      onClosed: (total) => {},
+      onError: (error) => {},
     });
 
     await this.loggerController.init();
@@ -658,7 +633,6 @@ export class MultiWorkerController {
       workerInfo.worker.postMessage(message, [port]);
     }
 
-    console.log(`[MultiWorkerController] Logging enabled (${mode}), connected to ${this.workers.length} workers`);
   }
 
   /**
@@ -666,7 +640,6 @@ export class MultiWorkerController {
    */
   flushLogs(): void {
     if (!this.loggerController) {
-      console.warn("[MultiWorkerController] Logger not enabled");
       return;
     }
     this.loggerController.flush();
@@ -685,7 +658,6 @@ export class MultiWorkerController {
    */
   async downloadLogs(): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
     if (!this.loggerController) {
-      console.warn("[MultiWorkerController] Logger not enabled");
       return null;
     }
 
@@ -697,7 +669,6 @@ export class MultiWorkerController {
    */
   async listLogFiles(): Promise<import("@/logger/protocol").LogFileInfo[] | null> {
     if (!this.loggerController) {
-      console.warn("[MultiWorkerController] Logger not enabled");
       return null;
     }
 
@@ -709,7 +680,6 @@ export class MultiWorkerController {
    */
   async downloadLogFile(fileName: string): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
     if (!this.loggerController) {
-      console.warn("[MultiWorkerController] Logger not enabled");
       return null;
     }
 
@@ -721,7 +691,6 @@ export class MultiWorkerController {
    */
   async deleteLogFile(fileName: string): Promise<void> {
     if (!this.loggerController) {
-      console.warn("[MultiWorkerController] Logger not enabled");
       return;
     }
 

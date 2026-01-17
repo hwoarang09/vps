@@ -285,18 +285,8 @@ export class MemoryLayoutManager {
    * 레이아웃 정보 출력 (디버그용)
    */
   printLayoutInfo(layout: MemoryLayout): void {
-    console.log("=== Worker Memory Layout ===");
-    console.log(`Vehicle Buffer: ${(layout.vehicleBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Sensor Buffer: ${(layout.sensorBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Path Buffer: ${(layout.pathBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Total: ${((layout.vehicleBufferSize + layout.sensorBufferSize + layout.pathBufferSize) / 1024 / 1024).toFixed(2)} MB`);
-    console.log("");
 
     for (const [fabId, assignment] of layout.fabAssignments) {
-      console.log(`[${fabId}]`);
-      console.log(`  Vehicle: offset=${assignment.vehicleRegion.offset}, size=${assignment.vehicleRegion.size}, maxVeh=${assignment.vehicleRegion.maxVehicles}`);
-      console.log(`  Sensor:  offset=${assignment.sensorRegion.offset}, size=${assignment.sensorRegion.size}`);
-      console.log(`  Path:    offset=${assignment.pathRegion.offset}, size=${assignment.pathRegion.size}`);
     }
   }
 
@@ -304,14 +294,8 @@ export class MemoryLayoutManager {
    * 렌더 레이아웃 정보 출력 (디버그용)
    */
   printRenderLayoutInfo(renderLayout: RenderBufferLayout): void {
-    console.log("=== Render Buffer Layout (Continuous) ===");
-    console.log(`Vehicle Render: ${(renderLayout.vehicleRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Sensor Render: ${(renderLayout.sensorRenderBufferSize / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`Total Vehicles: ${renderLayout.totalVehicles}`);
-    console.log("");
 
     for (const fab of renderLayout.fabRenderAssignments) {
-      console.log(`[${fab.fabId}] actualVeh=${fab.actualVehicles}, vehOffset=${fab.vehicleRenderOffset}, sensorOffset=${fab.sensorRenderOffset}`);
     }
   }
 
@@ -319,9 +303,7 @@ export class MemoryLayoutManager {
    * 워커 분배 정보 출력 (디버그용)
    */
   printWorkerAssignments(assignments: WorkerAssignment[]): void {
-    console.log("=== Worker Assignments ===");
     for (const wa of assignments) {
-      console.log(`Worker ${wa.workerIndex}: ${wa.fabIds.join(", ")}`);
     }
   }
 }

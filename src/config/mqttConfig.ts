@@ -32,7 +32,6 @@ export const loadMqttConfig = async (): Promise<MqttConfig> => {
     }
     return await response.json();
   } catch (error) {
-    console.error("Error loading MQTT config:", error);
     return defaultMqttConfig;
   }
 };

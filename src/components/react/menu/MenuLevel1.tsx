@@ -11,13 +11,6 @@ const MenuLevel1: React.FC = () => {
 
   const handleMenuClick = (menuId: MainMenuType) => {
     // Toggle menu if same menu is clicked, otherwise activate the clicked menu
-    console.log(
-      "menuId : ",
-      menuId,
-      activeMainMenu === menuId ? null : menuId,
-      "activeMainMenu : ",
-      activeMainMenu
-    );
     setActiveMainMenu(activeMainMenu === menuId ? null : menuId);
   };
 

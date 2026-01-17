@@ -94,7 +94,6 @@ function updateSensorPointsWrapper(
 export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
   const { edges, numVehicles, store, vehicleConfigs, transferMode } = params;
 
-  console.log(`[VehicleArrayMode] Initializing...`);
 
   // 1. Initialize memory
   store.initArrayMemory();
@@ -153,7 +152,6 @@ export interface RapierInitializationParams {
 export function initializeRapierVehicles(params: RapierInitializationParams) {
   const { numVehicles, mode, edges, setInitialized, onPlacementComplete } = params;
 
-  console.log(`[initializeRapierVehicles] Initializing ${mode} mode with Rapier physics`);
 
   const store = useVehicleRapierStore.getState();
   store.initRapierMode();
@@ -163,10 +161,6 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
 
   const result = calculateVehiclePlacements(numVehicles, edgeArray);
 
-  console.log(`[initializeRapierVehicles] ✅ Placement calculation completed!`);
-  console.log(`[initializeRapierVehicles]    - Requested vehicles: ${numVehicles}`);
-  console.log(`[initializeRapierVehicles]    - Calculated placements: ${result.placements.length}`);
-  console.log(`[initializeRapierVehicles]    - Max capacity: ${result.maxCapacity}`);
 
   if (onPlacementComplete) {
     onPlacementComplete({
@@ -183,7 +177,6 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
     const batchNumber = Math.floor(startIndex / BATCH_SIZE) + 1;
     const totalBatches = Math.ceil(totalPlacements / BATCH_SIZE);
 
-    console.log(`[initializeRapierVehicles] 🚗 Creating batch ${batchNumber}/${totalBatches} (vehicles ${startIndex}-${endIndex - 1})`);
 
     const vehicleBatch = createVehicleBatch(startIndex, endIndex, result.placements, nameToIndex);
     store.batchAddVehicles(vehicleBatch);
@@ -191,7 +184,6 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
     if (endIndex < totalPlacements) {
       setTimeout(() => processBatch(endIndex), 0);
     } else {
-      console.log(`[initializeRapierVehicles] ✅ All ${totalPlacements} vehicles initialized!`);
 
       const distribution = createVehicleDistribution(result.placements, nameToIndex);
       useVehicleTestStore.getState().setInitialVehicleDistribution(distribution);
@@ -199,7 +191,6 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
       store.setActualNumVehicles(result.placements.length);
       store.setMaxPlaceableVehicles(result.maxCapacity);
       setInitialized(true);
-      console.log(`[initializeRapierVehicles] setInitialized(true) called`);
     }
   };
 
@@ -258,10 +249,8 @@ function getVehiclePlacements(
   edgeArray: any[]
 ): CommonVehiclePlacement[] {
   if (vehicleConfigs && vehicleConfigs.length > 0) {
-    console.log(`[VehicleArrayMode] Using ${vehicleConfigs.length} vehicles from vehicles.cfg`);
     return createPlacementsFromVehicleConfigs(vehicleConfigs, edgeArray);
   } else {
-    console.log(`[VehicleArrayMode] Auto-placing ${numVehicles} vehicles`);
     const result = calculateVehiclePlacements(numVehicles, edgeArray);
     return result.placements;
   }

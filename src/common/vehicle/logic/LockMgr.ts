@@ -3,7 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
-import { getLockWaitDistance, getLockRequestDistance } from "@/config/simulationConfig";
+import { getLockWaitDistance, getLockRequestDistance, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
 
 const DEBUG = false;
 
@@ -14,6 +14,15 @@ export interface LockConfig {
   waitDistance: number;
   requestDistance: number; // -1이면 진입 즉시 요청
 }
+
+/**
+ * Lock 정책 인터페이스
+ */
+export interface LockPolicy {
+  grantStrategy: GrantStrategy;
+}
+
+export { type GrantStrategy };
 
 // Ring buffer for O(1) enqueue/dequeue
 export class RingBuffer<T> {
@@ -109,11 +118,29 @@ export class LockMgr {
   // Fab별 설정 가능한 lock 파라미터
   private lockWaitDistance: number;
   private lockRequestDistance: number;
+  private grantStrategy: GrantStrategy;
 
-  constructor() {
+  constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴
     this.lockWaitDistance = getLockWaitDistance();
     this.lockRequestDistance = getLockRequestDistance();
+    this.grantStrategy = policy?.grantStrategy ?? getLockGrantStrategy();
+    this.applyStrategy();
+  }
+
+  /**
+   * grantStrategy에 따라 currentStrategy 설정
+   * TODO: BATCH 전략은 추후 구현
+   */
+  private applyStrategy() {
+    if (this.grantStrategy === 'BATCH') {
+      // TODO: BATCH 전략 함수 구현 후 할당
+      this.currentStrategy = FIFO_Strategy;
+      console.log(`[LockMgr] grantStrategy=${this.grantStrategy} -> currentStrategy=FIFO (BATCH 미구현)`);
+    } else {
+      this.currentStrategy = FIFO_Strategy;
+      console.log(`[LockMgr] grantStrategy=${this.grantStrategy} -> currentStrategy=FIFO`);
+    }
   }
 
   /**
@@ -122,7 +149,16 @@ export class LockMgr {
   setLockConfig(config: LockConfig) {
     this.lockWaitDistance = config.waitDistance;
     this.lockRequestDistance = config.requestDistance;
-    console.log(`[LockMgr] Config set: waitDistance=${config.waitDistance}, requestDistance=${config.requestDistance}`);
+  }
+
+  /**
+   * Lock 정책 변경 (fab별 오버라이드 적용 시 사용)
+   */
+  setLockPolicy(policy: LockPolicy) {
+    const prev = this.grantStrategy;
+    this.grantStrategy = policy.grantStrategy;
+    console.log(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
+    this.applyStrategy();
   }
 
   /**
@@ -133,6 +169,20 @@ export class LockMgr {
       waitDistance: this.lockWaitDistance,
       requestDistance: this.lockRequestDistance,
     };
+  }
+
+  /**
+   * 현재 lock 정책 반환
+   */
+  getLockPolicy(): LockPolicy {
+    return { grantStrategy: this.grantStrategy };
+  }
+
+  /**
+   * 현재 grantStrategy 반환
+   */
+  getGrantStrategy(): GrantStrategy {
+    return this.grantStrategy;
   }
 
   /**
@@ -183,7 +233,6 @@ export class LockMgr {
       };
     }
     if (Object.keys(this.lockTable).length > 0) {
-      console.log(`[LockMgr] Initialized ${Object.keys(this.lockTable).length} merge nodes`);
     }
   }
 
@@ -219,8 +268,6 @@ export class LockMgr {
 
     const existing = node.requests.find((r) => r.vehId === vehId);
     if (!existing && node.granted?.veh !== vehId) {
-      if (DEBUG)
-        console.log(`[LockMgr ${nodeName} VEH${vehId}] REQUEST (Edge: ${edgeName})`);
       node.requests.push({
         vehId,
         edgeName,
@@ -238,7 +285,6 @@ export class LockMgr {
     if (!node) return;
 
     if (node.granted?.veh === vehId) {
-      if (DEBUG) console.log(`[LockMgr ${nodeName} VEH${vehId}] RELEASE`);
       const grantedEdge = node.granted.edge;
       node.granted = null;
 
@@ -249,32 +295,22 @@ export class LockMgr {
 
       if (DEBUG) this.logNodeState(nodeName);
       this.tryGrant(nodeName);
-    } else if (DEBUG)
-      console.warn(
-        `[LockMgr ${nodeName} VEH${vehId}] RELEASE IGNORED (Holder: ${node.granted?.veh})`
-      );
+    }
   }
 
   tryGrant(nodeName: string) {
     const node = this.lockTable[nodeName];
     if (!node) return;
     if (node.granted) {
-      if (DEBUG) console.log(`[LockMgr ${nodeName}] TryGrant: Blocked by ${node.granted.veh}`);
       return;
     }
 
     const decision = this.currentStrategy(node);
 
     if (decision) {
-      if (DEBUG)
-        console.log(`[LockMgr ${nodeName} VEH${decision.veh}] GRANT`);
       node.granted = decision;
       node.requests = node.requests.filter((r) => r.vehId !== decision.veh);
       if (DEBUG) this.logNodeState(nodeName);
-    } else if (DEBUG) {
-      console.log(
-        `[LockMgr ${nodeName}] TryGrant: No one selected (Queue len: ${node.requests.length})`
-      );
     }
   }
 
@@ -284,7 +320,6 @@ export class LockMgr {
     if (!node) return;
     const queue = node.requests.map((r) => r.vehId).join(", ");
     const cur = node.granted ? `[${node.granted.veh}]` : "[FREE]";
-    console.log(`[LockMgr ${nodeName}] STATE: Holder=${cur}, Queue={${queue}}`);
   }
 }
 

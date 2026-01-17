@@ -1,6 +1,9 @@
 // Simulation configuration (all simulation logic parameters)
 import type { SimulationConfig } from "@/shmSimulator/types";
 
+/** Lock 승인 전략 타입 */
+export type GrantStrategy = 'FIFO' | 'BATCH';
+
 interface SimulationConfigFile {
   simulation: {
     maxVehicles: number;
@@ -14,6 +17,8 @@ interface SimulationConfigFile {
     waitDistance: number;
     /** 요청 시점 - toNode 앞 거리 (m). 직선이 이보다 짧으면 진입 즉시 요청 */
     requestDistance: number;
+    /** 승인 전략: FIFO 또는 BATCH */
+    grantStrategy: GrantStrategy;
   };
   vehicle: {
     body: {
@@ -66,7 +71,6 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading simulation config:', error);
     // Fallback to default values
     return {
       simulation: {
@@ -79,6 +83,7 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
       lock: {
         waitDistance: 1.89,
         requestDistance: 5.1,
+        grantStrategy: 'FIFO',
       },
       vehicle: {
         body: {
@@ -136,6 +141,7 @@ let simulationConfig: SimulationConfigFile = {
   lock: {
     waitDistance: 1.89,
     requestDistance: 5.1,
+    grantStrategy: 'FIFO',
   },
   vehicle: {
     body: {
@@ -182,7 +188,6 @@ let simulationConfig: SimulationConfigFile = {
 // Load config immediately
 loadSimulationConfig().then(config => {
   simulationConfig = config;
-  console.log('[SimulationConfig] Loaded:', config);
 });
 
 // Export synchronous getter (flattened for SimulationConfig type)
@@ -216,6 +221,7 @@ export const getSimulationConfig = (): SimulationConfig => {
     // Lock
     lockWaitDistance: simulationConfig.lock.waitDistance,
     lockRequestDistance: simulationConfig.lock.requestDistance,
+    lockGrantStrategy: simulationConfig.lock.grantStrategy,
   };
 };
 
@@ -254,3 +260,4 @@ export const getBrakeMinSpeed = () => simulationConfig.movement.brake.minSpeed;
 // Individual getters - Lock
 export const getLockWaitDistance = () => simulationConfig.lock.waitDistance;
 export const getLockRequestDistance = () => simulationConfig.lock.requestDistance;
+export const getLockGrantStrategy = () => simulationConfig.lock.grantStrategy;

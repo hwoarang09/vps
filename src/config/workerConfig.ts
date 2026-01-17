@@ -17,7 +17,6 @@ const loadWorkerConfig = async (): Promise<WorkerConfig> => {
     }
     return await response.json();
   } catch (error) {
-    console.error('Error loading worker config:', error);
     // Fallback to default values
     return {
       WORKER_COUNT: -1

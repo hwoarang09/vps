@@ -285,7 +285,6 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
   // Cleanup when nodes are deleted (instanceCount decreases to 0)
   useEffect(() => {
     if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
-      console.log("[NodesCore] Nodes deleted, cleaning up resources");
       geometry.dispose();
       normalMarkerGeometry.dispose();
       tmpMarkerGeometry.dispose();

@@ -135,7 +135,6 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   useEffect(() => {
     if (prevNumVehiclesRef.current > actualNumVehicles && actualNumVehicles === 0) {
-      console.log("[VehicleArrayRenderer] Vehicles deleted, cleaning up resources");
       bodyGeometry.dispose();
       bodyMaterial.dispose();
     }

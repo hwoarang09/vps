@@ -92,7 +92,6 @@ export function clearAllVehicles(
 ): void {
   edgeVehicleQueue.clearAll();
   vehicleDataArray.clearAll();
-  console.log(`${logPrefix} All vehicles cleared`);
 }
 
 /**

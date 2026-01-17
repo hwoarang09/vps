@@ -210,7 +210,6 @@ function processEdgeTransitions(
     const overflow = (ratio - 1) * edge.distance;
     const vehicleLoop = loops.find((vl) => vl.vehicleIndex === vehicleIndex);
     if (!vehicleLoop) {
-      console.warn(`[Vehicle ${vehicleIndex}] No loop found, stopping`);
       break;
     }
 
@@ -221,9 +220,6 @@ function processEdgeTransitions(
     );
     const nextEdgeIndex = edgeNameToIndex.get(nextEdgeName);
     if (nextEdgeIndex === undefined) {
-      console.warn(
-        `[Vehicle ${vehicleIndex}] Next edge ${nextEdgeName} not found in map`
-      );
       break;
     }
 

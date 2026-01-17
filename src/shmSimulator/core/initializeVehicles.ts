@@ -83,13 +83,11 @@ function createUpdateSensorPointsWrapper(
 export function initializeVehicles(params: InitializeVehiclesParams): InitializationResult {
   const { edges, numVehicles, store, lockMgr, sensorPointArray, config, transferMode } = params;
 
-  console.log(`[shmSimulator] Initializing ${numVehicles} vehicles...`);
 
   // Use shared placement calculation (same as arrayMode)
   const placementResult = calculateVehiclePlacements(numVehicles, edges);
   const placements = placementResult.placements;
 
-  console.log(`[shmSimulator] Placement: requested=${numVehicles}, actual=${placements.length}, maxCapacity=${placementResult.maxCapacity}`);
 
   // Use common initialization logic
   const result = initializeVehiclesCommon({
@@ -102,7 +100,6 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     updateSensorPoints: createUpdateSensorPointsWrapper(sensorPointArray, config),
   });
 
-  console.log(`[shmSimulator] Initialized ${placements.length} vehicles`);
 
   return result;
 }

@@ -34,7 +34,6 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   useEffect(() => {
     waitForConfig().then(loadedConfig => {
       setConfig(loadedConfig);
-      console.log(`[Vehicle${rendererName}Renderer] Config loaded from JSON:`, loadedConfig);
     });
   }, [rendererName]);
 
@@ -64,7 +63,6 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   // Cleanup when vehicles are deleted (numVehicles decreases to 0)
   useEffect(() => {
     if (prevNumVehiclesRef.current > numVehicles && numVehicles === 0) {
-      console.log(`[Vehicle${rendererName}Renderer] Vehicles deleted, cleaning up resources`);
       bodyGeometry.dispose();
       sensorGeometry.dispose();
       bodyMaterial.dispose();
@@ -96,7 +94,6 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
     bodyMeshRef.current.instanceMatrix.needsUpdate = true;
     if (showSensor && sensorMeshRef.current) sensorMeshRef.current.instanceMatrix.needsUpdate = true;
 
-    console.log(`[Vehicle${rendererName}Renderer] Initialized ${numVehicles} vehicles`);
   }, [numVehicles, showSensor, rendererName, tempInitMatrix]);
 
   // 렌더링 루프 (핵심)

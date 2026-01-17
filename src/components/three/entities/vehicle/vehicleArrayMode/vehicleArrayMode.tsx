@@ -35,9 +35,6 @@ import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
  * Log safety configuration on mount
  */
 function logSafetyConfig(bodyLength: number, sensorLength: number, vehicleSpacing: number, sameEdgeSafeDistance: number, resumeDistance: number) {
-  console.log(`[VehicleArrayMode] Safety Config:`);
-  console.log(`  Body Length: ${bodyLength}m, Sensor Length: ${sensorLength}m, Spacing: ${vehicleSpacing}m`);
-  console.log(`  Safe Distance: ${sameEdgeSafeDistance.toFixed(2)}m   Resume Distance: ${resumeDistance.toFixed(2)}m`);
 }
 
 interface VehicleArrayModeProps {
@@ -66,7 +63,6 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   useEffect(() => {
     waitForConfig().then(loadedConfig => {
       setConfig(loadedConfig);
-      console.log(`[VehicleArrayMode] Config loaded from JSON:`, loadedConfig);
     });
   }, []);
 
@@ -98,18 +94,15 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
     if (!initRef.current) {
       // Check if edges are ready (must have edges with renderingPoints)
       if (edges.length === 0) {
-        console.warn('[VehicleArrayMode] No edges available, skipping vehicle initialization');
         return;
       }
 
       // Check if edges have renderingPoints
       const edgesWithPoints = edges.filter(e => e.renderingPoints && e.renderingPoints.length > 0);
       if (edgesWithPoints.length === 0) {
-        console.warn('[VehicleArrayMode] No edges with renderingPoints, skipping vehicle initialization');
         return;
       }
 
-      console.log(`[VehicleArrayMode] Edges ready: ${edges.length} total, ${edgesWithPoints.length} with renderingPoints`);
 
       const result = initializeVehicles({
         edges,
@@ -119,7 +112,6 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
         transferMode: store.transferMode,
       });
 
-      console.log(`[VehicleArrayMode] Initializing with ${useVehicleConfig ? 'vehicles.cfg' : 'auto-placement'}, ${vehicleConfigs.length} configs available`);
 
       // Store results in refs for use in useFrame
       edgeNameToIndexRef.current = result.edgeNameToIndex;

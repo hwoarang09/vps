@@ -103,13 +103,11 @@ export const createPlacementsFromVehicleConfigs = (
     const config = vehicleConfigs[index];
     const edge = edgeMap.get(config.edgeName);
     if (!edge) {
-      console.warn(`[VehiclePlacement] Edge ${config.edgeName} not found for vehicle ${config.vehId}`);
       continue;
     }
 
     const points = edge.renderingPoints || [];
     if (points.length < 2) {
-      console.warn(`[VehiclePlacement] Edge ${config.edgeName} has insufficient rendering points`);
       continue;
     }
 
