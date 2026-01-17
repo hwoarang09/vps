@@ -3,6 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
+import { getLockWaitDistance } from "@/config/simulationConfig";
 
 const DEBUG = false;
 
@@ -160,8 +161,9 @@ export class LockMgr {
       return 0;
     }
 
-    if (edge.distance >= 3) {
-      return edge.distance - 3;
+    const waitDistance = getLockWaitDistance();
+    if (edge.distance >= waitDistance) {
+      return edge.distance - waitDistance;
     } else {
       return 0;
     }

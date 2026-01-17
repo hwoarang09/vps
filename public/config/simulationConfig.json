@@ -6,6 +6,10 @@
     "collisionCheckInterval": -1,
     "curvePreBrakeCheckInterval": -1
   },
+  "lock": {
+    "waitDistance": 2.9,
+    "requestDistance": 5.1
+  },
   "vehicle": {
     "body": {
       "length": 0.8,

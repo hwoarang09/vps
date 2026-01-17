@@ -9,6 +9,12 @@ interface SimulationConfigFile {
     collisionCheckInterval?: number;
     curvePreBrakeCheckInterval?: number;
   };
+  lock: {
+    /** 대기 지점 - toNode 앞 거리 (m) */
+    waitDistance: number;
+    /** 요청 시점 - toNode 앞 거리 (m). 직선이 이보다 짧으면 진입 즉시 요청 */
+    requestDistance: number;
+  };
   vehicle: {
     body: {
       length: number;
@@ -70,6 +76,10 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         collisionCheckInterval: 33,
         curvePreBrakeCheckInterval: 100,
       },
+      lock: {
+        waitDistance: 1.89,
+        requestDistance: 5.1,
+      },
       vehicle: {
         body: {
           length: 1.2,
@@ -122,6 +132,10 @@ let simulationConfig: SimulationConfigFile = {
     maxDelta: 0.1,
     collisionCheckInterval: 33,
     curvePreBrakeCheckInterval: 100,
+  },
+  lock: {
+    waitDistance: 1.89,
+    requestDistance: 5.1,
   },
   vehicle: {
     body: {
@@ -234,3 +248,7 @@ export const getCurveMaxSpeed = () => simulationConfig.movement.curve.maxSpeed;
 export const getCurveAcceleration = () => simulationConfig.movement.curve.acceleration;
 export const getApproachMinSpeed = () => simulationConfig.movement.approach.minSpeed;
 export const getBrakeMinSpeed = () => simulationConfig.movement.brake.minSpeed;
+
+// Individual getters - Lock
+export const getLockWaitDistance = () => simulationConfig.lock.waitDistance;
+export const getLockRequestDistance = () => simulationConfig.lock.requestDistance;

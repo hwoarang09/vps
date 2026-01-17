@@ -1,7 +1,6 @@
 // common/vehicle/movement/vehiclePosition.ts
 
 import {
-  VEHICLE_DATA_SIZE,
   MovementData,
   LogicData,
   StopReason,
@@ -10,8 +9,10 @@ import {
 import { interpolatePositionTo, type PositionResult } from "./positionInterpolator";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
 import type { Edge } from "@/types/edge";
+import { EdgeType } from "@/types";
 import type { VehicleTransitionResult } from "./vehicleTransition";
 import type { MovementUpdateContext } from "./movementUpdate";
+import { getLockRequestDistance } from "@/config/simulationConfig";
 
 // ============================================================================
 // 위치 계산 결과 타입
@@ -221,7 +222,27 @@ function processMergeLogicInline(
     return false;
   }
 
-  // 처음 진입 시 Lock 요청
+  // Lock 요청 시점 계산
+  const requestDistance = getLockRequestDistance();
+  let shouldRequest = true;
+  if (currentEdge.vos_rail_type === EdgeType.LINEAR && currentEdge.distance >= requestDistance) {
+    const distToNode = currentEdge.distance * (1 - currentRatio);
+    if (distToNode > requestDistance) {
+      shouldRequest = false;
+    }
+  }
+
+  // 아직 요청 시점이 아니면 FREE 유지하고 통과
+  if (!shouldRequest) {
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
+    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+    return false;
+  }
+
+  // 요청 시점 도달 - Lock 요청 (FREE일 때만, 중복 요청 방지)
   const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
   if (currentTrafficState === TrafficState.FREE) {
     lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
