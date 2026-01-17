@@ -113,33 +113,33 @@ export type LockTable = Record<string, MergeLockNode>;
 
 export class LockMgr {
   private lockTable: LockTable = {};
-  private currentStrategy: MergeStrategy = FIFO_Strategy;
+  private strategy: MergeStrategy = FIFO_Strategy;
 
   // Fab별 설정 가능한 lock 파라미터
   private lockWaitDistance: number;
   private lockRequestDistance: number;
-  private grantStrategy: GrantStrategy;
+  private strategyType: GrantStrategy;
 
   constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴
     this.lockWaitDistance = getLockWaitDistance();
     this.lockRequestDistance = getLockRequestDistance();
-    this.grantStrategy = policy?.grantStrategy ?? getLockGrantStrategy();
+    this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
     this.applyStrategy();
   }
 
   /**
-   * grantStrategy에 따라 currentStrategy 설정
+   * strategyType에 따라 strategy 설정
    * TODO: BATCH 전략은 추후 구현
    */
   private applyStrategy() {
-    if (this.grantStrategy === 'BATCH') {
+    if (this.strategyType === 'BATCH') {
       // TODO: BATCH 전략 함수 구현 후 할당
-      this.currentStrategy = FIFO_Strategy;
-      console.log(`[LockMgr] grantStrategy=${this.grantStrategy} -> currentStrategy=FIFO (BATCH 미구현)`);
+      this.strategy = FIFO_Strategy;
+      console.log(`[LockMgr] strategyType=${this.strategyType} -> strategy=FIFO (BATCH 미구현)`);
     } else {
-      this.currentStrategy = FIFO_Strategy;
-      console.log(`[LockMgr] grantStrategy=${this.grantStrategy} -> currentStrategy=FIFO`);
+      this.strategy = FIFO_Strategy;
+      console.log(`[LockMgr] strategyType=${this.strategyType} -> strategy=FIFO`);
     }
   }
 
@@ -155,8 +155,8 @@ export class LockMgr {
    * Lock 정책 변경 (fab별 오버라이드 적용 시 사용)
    */
   setLockPolicy(policy: LockPolicy) {
-    const prev = this.grantStrategy;
-    this.grantStrategy = policy.grantStrategy;
+    const prev = this.strategyType;
+    this.strategyType = policy.grantStrategy;
     console.log(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
     this.applyStrategy();
   }
@@ -175,14 +175,14 @@ export class LockMgr {
    * 현재 lock 정책 반환
    */
   getLockPolicy(): LockPolicy {
-    return { grantStrategy: this.grantStrategy };
+    return { grantStrategy: this.strategyType };
   }
 
   /**
-   * 현재 grantStrategy 반환
+   * 현재 strategyType 반환
    */
   getGrantStrategy(): GrantStrategy {
-    return this.grantStrategy;
+    return this.strategyType;
   }
 
   /**
@@ -193,7 +193,7 @@ export class LockMgr {
   }
 
   setStrategy(strategy: MergeStrategy) {
-    this.currentStrategy = strategy;
+    this.strategy = strategy;
   }
 
   reset() {
@@ -305,7 +305,7 @@ export class LockMgr {
       return;
     }
 
-    const decision = this.currentStrategy(node);
+    const decision = this.strategy(node);
 
     if (decision) {
       node.granted = decision;
