@@ -97,23 +97,20 @@ export type MergeLockNode = {
   strategyState: Record<string, unknown>;
 };
 
-export type MergeStrategy = (node: MergeLockNode) => Grant | null;
-
-const FIFO_Strategy: MergeStrategy = (node) => {
-  if (node.granted) return null;
+/**
+ * requests 배열에서 다음 grant 대상을 반환하는 유틸리티 함수
+ */
+function getNextFromQueue(node: MergeLockNode): Grant | null {
   if (node.requests.length === 0) return null;
-
-  node.requests.sort((a, b) => a.requestTime - b.requestTime);
 
   const target = node.requests[0];
   return { veh: target.vehId, edge: target.edgeName };
-};
+}
 
 export type LockTable = Record<string, MergeLockNode>;
 
 export class LockMgr {
   private lockTable: LockTable = {};
-  private strategy: MergeStrategy = FIFO_Strategy;
 
   // Fab별 설정 가능한 lock 파라미터
   private lockWaitDistance: number;
@@ -125,22 +122,7 @@ export class LockMgr {
     this.lockWaitDistance = getLockWaitDistance();
     this.lockRequestDistance = getLockRequestDistance();
     this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
-    this.applyStrategy();
-  }
-
-  /**
-   * strategyType에 따라 strategy 설정
-   * TODO: BATCH 전략은 추후 구현
-   */
-  private applyStrategy() {
-    if (this.strategyType === 'BATCH') {
-      // TODO: BATCH 전략 함수 구현 후 할당
-      this.strategy = FIFO_Strategy;
-      console.log(`[LockMgr] strategyType=${this.strategyType} -> strategy=FIFO (BATCH 미구현)`);
-    } else {
-      this.strategy = FIFO_Strategy;
-      console.log(`[LockMgr] strategyType=${this.strategyType} -> strategy=FIFO`);
-    }
+    console.log(`[LockMgr] strategyType=${this.strategyType}`);
   }
 
   /**
@@ -158,7 +140,6 @@ export class LockMgr {
     const prev = this.strategyType;
     this.strategyType = policy.grantStrategy;
     console.log(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
-    this.applyStrategy();
   }
 
   /**
@@ -190,10 +171,6 @@ export class LockMgr {
    */
   getRequestDistance(): number {
     return this.lockRequestDistance;
-  }
-
-  setStrategy(strategy: MergeStrategy) {
-    this.strategy = strategy;
   }
 
   reset() {
@@ -232,8 +209,6 @@ export class LockMgr {
         strategyState: {},
       };
     }
-    if (Object.keys(this.lockTable).length > 0) {
-    }
   }
 
   getTable() {
@@ -267,50 +242,65 @@ export class LockMgr {
     if (!node) return;
 
     const existing = node.requests.find((r) => r.vehId === vehId);
-    if (!existing && node.granted?.veh !== vehId) {
-      node.requests.push({
-        vehId,
-        edgeName,
-        requestTime: Date.now(),
-      });
-      node.edgeQueues[edgeName]?.enqueue(vehId);
-      if (DEBUG) this.logNodeState(nodeName);
-    }
+    if (existing || node.granted?.veh === vehId) return;
 
-    this.tryGrant(nodeName);
+    // 큐에 추가
+    node.requests.push({
+      vehId,
+      edgeName,
+      requestTime: Date.now(),
+    });
+    node.edgeQueues[edgeName]?.enqueue(vehId);
+    if (DEBUG) this.logNodeState(nodeName);
+
+    // 전략별 처리
+    if (this.strategyType === 'FIFO') {
+      this.handleFIFO_Request(node);
+    } else if (this.strategyType === 'BATCH') {
+      // TODO: BATCH 구현
+    }
   }
 
   releaseLock(nodeName: string, vehId: number) {
     const node = this.lockTable[nodeName];
     if (!node) return;
+    if (node.granted?.veh !== vehId) return;
 
-    if (node.granted?.veh === vehId) {
-      const grantedEdge = node.granted.edge;
-      node.granted = null;
+    const grantedEdge = node.granted.edge;
+    node.granted = null;
 
-      node.requests = node.requests.filter((r) => r.vehId !== vehId);
+    node.requests = node.requests.filter((r) => r.vehId !== vehId);
 
-      // grant 받은 veh는 해당 edge queue의 맨 앞에 있으므로 dequeue로 O(1) 제거
-      node.edgeQueues[grantedEdge]?.dequeue();
+    // grant 받은 veh는 해당 edge queue의 맨 앞에 있으므로 dequeue로 O(1) 제거
+    node.edgeQueues[grantedEdge]?.dequeue();
 
-      if (DEBUG) this.logNodeState(nodeName);
-      this.tryGrant(nodeName);
+    if (DEBUG) this.logNodeState(nodeName);
+
+    // 전략별 처리
+    if (this.strategyType === 'FIFO') {
+      this.handleFIFO_Release(node);
+    } else if (this.strategyType === 'BATCH') {
+      // TODO: BATCH 구현
     }
   }
 
-  tryGrant(nodeName: string) {
-    const node = this.lockTable[nodeName];
-    if (!node) return;
-    if (node.granted) {
-      return;
-    }
+  private handleFIFO_Request(node: MergeLockNode) {
+    if (node.granted) return;
 
-    const decision = this.strategy(node);
-
+    const decision = getNextFromQueue(node);
     if (decision) {
       node.granted = decision;
-      node.requests = node.requests.filter((r) => r.vehId !== decision.veh);
-      if (DEBUG) this.logNodeState(nodeName);
+      node.requests.shift(); // 첫 번째 제거
+      if (DEBUG) this.logNodeState(node.name);
+    }
+  }
+
+  private handleFIFO_Release(node: MergeLockNode) {
+    const decision = getNextFromQueue(node);
+    if (decision) {
+      node.granted = decision;
+      node.requests.shift(); // 첫 번째 제거
+      if (DEBUG) this.logNodeState(node.name);
     }
   }
 
