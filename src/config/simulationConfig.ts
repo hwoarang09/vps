@@ -199,8 +199,6 @@ export const getSimulationConfig = (): SimulationConfig => {
     bodyLength: simulationConfig.vehicle.body.length,
     bodyWidth: simulationConfig.vehicle.body.width,
     bodyHeight: simulationConfig.vehicle.body.height,
-    sensorLength: simulationConfig.vehicle.sensor.length,
-    sensorWidth: simulationConfig.vehicle.sensor.width,
     vehicleZOffset: simulationConfig.vehicle.body.zOffset,
     vehicleSpacing: simulationConfig.vehicle.spacing.vehicleSpacing,
     edgeMargin: simulationConfig.vehicle.spacing.edgeMargin,
@@ -214,6 +212,10 @@ export const getSimulationConfig = (): SimulationConfig => {
     curveAcceleration: simulationConfig.movement.curve.acceleration,
     approachMinSpeed: simulationConfig.movement.approach.minSpeed,
     brakeMinSpeed: simulationConfig.movement.brake.minSpeed,
+
+    // Lock
+    lockWaitDistance: simulationConfig.lock.waitDistance,
+    lockRequestDistance: simulationConfig.lock.requestDistance,
   };
 };
 

@@ -30,6 +30,8 @@ export interface MultiFabInitParams {
   vehicleConfigs?: VehicleInitConfig[];
   transferMode?: TransferMode;
   stations: ReadonlyArray<unknown>;
+  /** Fab별 SimulationConfig 오버라이드 (linearMaxSpeed, curveMaxSpeed, lockWaitDistance 등) */
+  config?: Partial<SimulationConfig>;
 }
 
 export type { FabInitParams } from "@/shmSimulator/index";
@@ -272,6 +274,7 @@ export class MultiWorkerController {
       numVehicles: fabConfig.numVehicles,
       transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
       memoryAssignment: fabAssignment,
+      config: fabConfig.config,
     };
   }
 
@@ -295,6 +298,7 @@ export class MultiWorkerController {
       numVehicles: fabConfig.numVehicles,
       transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
       memoryAssignment: fabAssignment,
+      config: fabConfig.config,
     };
   }
 

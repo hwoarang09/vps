@@ -3,9 +3,17 @@
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
-import { getLockWaitDistance } from "@/config/simulationConfig";
+import { getLockWaitDistance, getLockRequestDistance } from "@/config/simulationConfig";
 
 const DEBUG = false;
+
+/**
+ * Lock 설정 인터페이스
+ */
+export interface LockConfig {
+  waitDistance: number;
+  requestDistance: number; // -1이면 진입 즉시 요청
+}
 
 // Ring buffer for O(1) enqueue/dequeue
 export class RingBuffer<T> {
@@ -98,12 +106,49 @@ export class LockMgr {
   private lockTable: LockTable = {};
   private currentStrategy: MergeStrategy = FIFO_Strategy;
 
+  // Fab별 설정 가능한 lock 파라미터
+  private lockWaitDistance: number;
+  private lockRequestDistance: number;
+
+  constructor() {
+    // 기본값은 전역 config에서 가져옴
+    this.lockWaitDistance = getLockWaitDistance();
+    this.lockRequestDistance = getLockRequestDistance();
+  }
+
+  /**
+   * Lock 설정 변경 (fab별 오버라이드 적용 시 사용)
+   */
+  setLockConfig(config: LockConfig) {
+    this.lockWaitDistance = config.waitDistance;
+    this.lockRequestDistance = config.requestDistance;
+    console.log(`[LockMgr] Config set: waitDistance=${config.waitDistance}, requestDistance=${config.requestDistance}`);
+  }
+
+  /**
+   * 현재 lock 설정 반환
+   */
+  getLockConfig(): LockConfig {
+    return {
+      waitDistance: this.lockWaitDistance,
+      requestDistance: this.lockRequestDistance,
+    };
+  }
+
+  /**
+   * Request Distance 반환 (-1이면 진입 즉시 요청)
+   */
+  getRequestDistance(): number {
+    return this.lockRequestDistance;
+  }
+
   setStrategy(strategy: MergeStrategy) {
     this.currentStrategy = strategy;
   }
 
   reset() {
     this.lockTable = {};
+    // 설정값은 유지 (reset은 테이블만 초기화)
   }
 
   initFromEdges(edges: Edge[]) {
@@ -161,9 +206,8 @@ export class LockMgr {
       return 0;
     }
 
-    const waitDistance = getLockWaitDistance();
-    if (edge.distance >= waitDistance) {
-      return edge.distance - waitDistance;
+    if (edge.distance >= this.lockWaitDistance) {
+      return edge.distance - this.lockWaitDistance;
     } else {
       return 0;
     }

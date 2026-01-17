@@ -1,6 +1,6 @@
 // shmSimulator/core/SimulationEngine.ts
 
-import { FabContext, FabInitParams } from "./FabContext";
+import { FabContext, type FabInitParams } from "./FabContext";
 import type { InitPayload, SimulationConfig, FabInitData, SharedMapData, SharedMapRef, FabRenderOffset, FabRenderAssignment } from "../types";
 import { createDefaultConfig } from "../types";
 import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
@@ -74,6 +74,15 @@ export class SimulationEngine {
     for (const fabData of payload.fabs) {
       let params: FabInitParams;
 
+      // Fab별 config 병합 (전역 config + fab override)
+      const fabConfig: SimulationConfig = fabData.config
+        ? { ...this.config, ...fabData.config }
+        : this.config;
+
+      if (fabData.config) {
+        console.log(`[SimulationEngine] Fab ${fabData.fabId} config override:`, fabData.config);
+      }
+
       if (this.sharedMapRef && fabData.fabOffset) {
         // [최적화 모드] 공유 맵 참조 + fab offset 사용 (복제 없음!)
         const fabOffset = this.calculateFabOffset(
@@ -89,7 +98,7 @@ export class SimulationEngine {
           pathBuffer: fabData.pathBuffer,
           sharedMapRef: this.sharedMapRef,
           fabOffset,
-          config: this.config,
+          config: fabConfig,
           vehicleConfigs: fabData.vehicleConfigs,
           numVehicles: fabData.numVehicles,
           transferMode: fabData.transferMode,
@@ -107,7 +116,7 @@ export class SimulationEngine {
           edges: fabData.edges ?? [],
           nodes: fabData.nodes ?? [],
           stationData: fabData.stationData ?? [],
-          config: this.config,
+          config: fabConfig,
           vehicleConfigs: fabData.vehicleConfigs,
           numVehicles: fabData.numVehicles,
           transferMode: fabData.transferMode,
@@ -194,11 +203,17 @@ export class SimulationEngine {
   /**
    * Add a new fab dynamically
    */
-  addFab(fabData: FabInitData, config: SimulationConfig): number {
+  addFab(fabData: FabInitData, globalConfig: SimulationConfig): number {
     if (this.fabContexts.has(fabData.fabId)) {
       console.warn(`[SimulationEngine] Fab already exists: ${fabData.fabId}`);
       return this.fabContexts.get(fabData.fabId)!.getActualNumVehicles();
     }
+
+    // Fab별 config 병합 (전역 config + fab override)
+    const fabConfig: SimulationConfig = fabData.config
+      ? { ...globalConfig, ...fabData.config }
+      : globalConfig;
+
     const params: FabInitParams = {
       fabId: fabData.fabId,
       sharedBuffer: fabData.sharedBuffer,
@@ -206,7 +221,7 @@ export class SimulationEngine {
       pathBuffer: fabData.pathBuffer,
       edges: fabData.edges ?? [],
       nodes: fabData.nodes ?? [],
-      config: config,
+      config: fabConfig,
       vehicleConfigs: fabData.vehicleConfigs,
       numVehicles: fabData.numVehicles,
       transferMode: fabData.transferMode,

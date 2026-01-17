@@ -12,7 +12,6 @@ import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
 import type { VehicleTransitionResult } from "./vehicleTransition";
 import type { MovementUpdateContext } from "./movementUpdate";
-import { getLockRequestDistance } from "@/config/simulationConfig";
 
 // ============================================================================
 // 위치 계산 결과 타입
@@ -223,9 +222,10 @@ function processMergeLogicInline(
   }
 
   // Lock 요청 시점 계산
-  const requestDistance = getLockRequestDistance();
+  // requestDistance가 -1이면 진입 즉시 요청 (무조건 shouldRequest = true)
+  const requestDistance = lockMgr.getRequestDistance();
   let shouldRequest = true;
-  if (currentEdge.vos_rail_type === EdgeType.LINEAR && currentEdge.distance >= requestDistance) {
+  if (requestDistance >= 0 && currentEdge.vos_rail_type === EdgeType.LINEAR && currentEdge.distance >= requestDistance) {
     const distToNode = currentEdge.distance * (1 - currentRatio);
     if (distToNode > requestDistance) {
       shouldRequest = false;

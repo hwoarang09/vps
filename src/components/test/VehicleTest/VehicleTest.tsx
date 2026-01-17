@@ -9,7 +9,9 @@ import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "@/types/vehicle";
 import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Settings } from "lucide-react";
+import SimulationParamsModal from "./SimulationParamsModal";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
@@ -627,6 +629,26 @@ const VehicleTest: React.FC = () => {
           >
             Clear
           </button>
+          <button
+            onClick={() => useFabConfigStore.getState().setModalOpen(true)}
+            style={{
+              padding: "5px 12px",
+              background: "#9b59b6",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              fontSize: "12px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            title="Configure simulation parameters per fab"
+          >
+            <Settings size={14} />
+            Params
+          </button>
         </div>
 
         {/* Play/Pause buttons */}
@@ -720,6 +742,9 @@ const VehicleTest: React.FC = () => {
           useVehicleConfig={useVehicleConfig}
         />
       )}
+
+      {/* Simulation Parameters Modal */}
+      <SimulationParamsModal />
     </>
   );
 };

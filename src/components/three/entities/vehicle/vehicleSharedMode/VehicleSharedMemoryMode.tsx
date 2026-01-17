@@ -5,6 +5,7 @@ import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useStationStore } from "@/store/map/stationStore";
 import { useFabStore } from "@/store/map/fabStore";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import {
   getLinearMaxSpeed,
   getLinearAcceleration,
@@ -98,20 +99,45 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
 
       // initMultiFab 호출
       // edges/nodes/stations를 각 fab에 포함하지 않고, sharedMapData로 한 번만 전송
-      const fabs = fabDataList.map(fabData => ({
-        fabId: fabData.fabId,
-        edges: [], // sharedMapData 사용하므로 빈 배열
-        nodes: [], // sharedMapData 사용하므로 빈 배열
-        numVehicles: vehiclesPerFab,
-        maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
-        transferMode,
-        stations: [], // sharedMapData 사용하므로 빈 배열
-        fabOffset: {
-          fabIndex: fabData.fabIndex,
-          col: fabData.col,
-          row: fabData.row,
-        },
-      }));
+      const fabConfigStore = useFabConfigStore.getState();
+      // simulationConfig.json에서 최신 값 동기화
+      fabConfigStore.syncFromSimulationConfig();
+
+      const fabs = fabDataList.map(fabData => {
+        // Fab별 설정 적용 (baseConfig + override)
+        const fabConfig = fabConfigStore.getFabConfig(fabData.fabIndex);
+
+        // Fab별 config override 생성 (SimulationConfig의 Partial)
+        const configOverride = fabConfigStore.hasOverride(fabData.fabIndex) ? {
+          linearMaxSpeed: fabConfig.movement.linear.maxSpeed,
+          linearAcceleration: fabConfig.movement.linear.acceleration,
+          linearDeceleration: fabConfig.movement.linear.deceleration,
+          curveMaxSpeed: fabConfig.movement.curve.maxSpeed,
+          curveAcceleration: fabConfig.movement.curve.acceleration,
+          lockWaitDistance: fabConfig.lock.waitDistance,
+          lockRequestDistance: fabConfig.lock.requestDistance,
+        } : undefined;
+
+        if (configOverride) {
+          console.log(`[VehicleSharedMemoryMode] Fab ${fabData.fabIndex} config override:`, configOverride);
+        }
+
+        return {
+          fabId: fabData.fabId,
+          edges: [], // sharedMapData 사용하므로 빈 배열
+          nodes: [], // sharedMapData 사용하므로 빈 배열
+          numVehicles: vehiclesPerFab,
+          maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
+          transferMode,
+          stations: [], // sharedMapData 사용하므로 빈 배열
+          fabOffset: {
+            fabIndex: fabData.fabIndex,
+            col: fabData.col,
+            row: fabData.row,
+          },
+          config: configOverride,
+        };
+      });
 
       // 공유 맵 데이터 생성 (원본 데이터 한 번만 전송)
       const sharedMapData = {

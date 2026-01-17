@@ -179,6 +179,23 @@ export class FabContext {
 
     this.lockMgr.initFromEdges(this.edges);
 
+    // config에서 lock 설정 적용
+    this.lockMgr.setLockConfig({
+      waitDistance: this.config.lockWaitDistance,
+      requestDistance: this.config.lockRequestDistance,
+    });
+
+    // Fab별 config 적용 로그
+    console.log(`[FabContext:${this.fabId}] Config applied:`, {
+      linearMaxSpeed: this.config.linearMaxSpeed,
+      curveMaxSpeed: this.config.curveMaxSpeed,
+      linearAcceleration: this.config.linearAcceleration,
+      linearDeceleration: this.config.linearDeceleration,
+      curveAcceleration: this.config.curveAcceleration,
+      lockWaitDistance: this.config.lockWaitDistance,
+      lockRequestDistance: this.config.lockRequestDistance,
+    });
+
     const result: InitializationResult = initializeVehicles({
       edges: this.edges,
       nodes: this.nodes,

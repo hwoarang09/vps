@@ -91,6 +91,12 @@ export interface SimulationConfig {
   vehicleSpacing: number;
   crossEdgeSafeDistance: number;
 
+  // Lock parameters
+  /** Lock 대기 거리 (edge 끝에서부터) */
+  lockWaitDistance: number;
+  /** Lock 요청 거리 (-1이면 진입 즉시 요청) */
+  lockRequestDistance: number;
+
   // Simulation
   targetFps: number;
   maxDelta: number;
@@ -129,9 +135,10 @@ export function createDefaultConfig(): SimulationConfig {
     edgeMargin: 0.5,
     vehicleSpacing: 0.6,
     crossEdgeSafeDistance: 1,
+    lockWaitDistance: 1.89,
+    lockRequestDistance: 5.1,
     targetFps: 60,
     maxDelta: 0.1,
-    movementUpdateInterval: 100,
   };
 }
 
@@ -203,6 +210,12 @@ export interface FabInitData {
    * 없으면 전체 버퍼 사용 (하위호환)
    */
   memoryAssignment?: FabMemoryAssignment;
+
+  /**
+   * Fab별 SimulationConfig 오버라이드
+   * 없으면 전역 설정 사용, 있으면 전역 설정에 병합
+   */
+  config?: Partial<SimulationConfig>;
 }
 
 // 멀티 Fab 지원 Init Payload
