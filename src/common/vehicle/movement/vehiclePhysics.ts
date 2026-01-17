@@ -11,6 +11,7 @@ import {
 } from "@/common/vehicle/initialize/constants";
 import { calculateNextSpeed } from "@/common/vehicle/physics/speedCalculator";
 import { checkCurvePreBraking } from "./curveBraking";
+import { checkMergePreBraking } from "./mergeBraking";
 import type { MovementUpdateContext } from "./movementUpdate";
 
 // ============================================================================
@@ -118,9 +119,27 @@ export function calculateVehiclePhysics(
     curveBrakeCheckTimers: ctx.curveBrakeCheckTimers,
   });
 
-  // 감속 중이면 가속 막기
-  const finalAccel = curveBrakeResult.shouldBrake ? 0 : appliedAccel;
-  const finalDecel = curveBrakeResult.shouldBrake ? curveBrakeResult.deceleration : appliedDecel;
+  // 합류점 사전 감속 (곡선 감속이 없을 때만)
+  const mergeBrakeResult = curveBrakeResult.shouldBrake
+    ? { shouldBrake: false, deceleration: 0, distanceToMerge: Infinity }
+    : checkMergePreBraking({
+        vehId: vehicleIndex,
+        currentEdge,
+        currentRatio: edgeRatio,
+        currentVelocity: velocity,
+        edgeArray,
+        lockMgr: ctx.lockMgr,
+        transferMgr,
+        config,
+        data,
+        ptr,
+      });
+
+  // 최종 가감속 결정 (곡선 감속 > 합류점 감속 우선순위)
+  const finalAccel = (curveBrakeResult.shouldBrake || mergeBrakeResult.shouldBrake) ? 0 : appliedAccel;
+  const finalDecel = curveBrakeResult.shouldBrake
+    ? curveBrakeResult.deceleration
+    : (mergeBrakeResult.shouldBrake ? mergeBrakeResult.deceleration : appliedDecel);
 
   // 새 속도 계산
   const newVelocity = calculateNextSpeed(

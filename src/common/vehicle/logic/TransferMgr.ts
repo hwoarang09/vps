@@ -653,6 +653,99 @@ export class TransferMgr {
   }
 
   /**
+   * 다음 merge point까지의 거리 찾기
+   * lockMgr를 사용해서 merge node 확인
+   */
+  findDistanceToNextMerge(
+    vehId: number,
+    currentEdge: Edge,
+    currentRatio: number,
+    edgeArray: Edge[],
+    isMergeNode: (nodeName: string) => boolean
+  ): { distance: number; mergeEdge: Edge } | null {
+    // 현재 Edge 남은 거리
+    const remainingDistance = currentEdge.distance * (1 - currentRatio);
+
+    // 1. 먼저 예약된 경로에서 찾기
+    const mergeInPath = this.findMergeInReservedPath(vehId, edgeArray, remainingDistance, isMergeNode);
+    if (mergeInPath) {
+      return mergeInPath;
+    }
+
+    // 예약된 경로가 있었다면 그 안에 merge가 없다는 의미이므로 null 반환
+    const fullPath = this.getFullReservedPath(vehId);
+    if (fullPath.length > 0) {
+      return null;
+    }
+
+    // 2. 예약 경로 없으면 nextEdgeIndices 따라가기
+    const MAX_LOOKAHEAD = 10;
+    let edge = currentEdge;
+    let accumulatedDistance = remainingDistance;
+    const visited = new Set<string>();
+    visited.add(edge.edge_name);
+
+    for (let i = 0; i < MAX_LOOKAHEAD; i++) {
+      if (!edge.nextEdgeIndices || edge.nextEdgeIndices.length === 0) {
+        break;
+      }
+
+      const nextEdgeIndex = edge.nextEdgeIndices[0];
+      const nextEdge = edgeArray[nextEdgeIndex];
+      if (!nextEdge) break;
+
+      if (visited.has(nextEdge.edge_name)) {
+        break;
+      }
+      visited.add(nextEdge.edge_name);
+
+      // merge node 체크
+      if (isMergeNode(nextEdge.to_node)) {
+        return {
+          distance: accumulatedDistance,
+          mergeEdge: nextEdge
+        };
+      }
+
+      accumulatedDistance += nextEdge.distance;
+      edge = nextEdge;
+    }
+
+    return null;
+  }
+
+  /**
+   * 예약된 경로에서 merge edge 찾기
+   */
+  private findMergeInReservedPath(
+    vehId: number,
+    edgeArray: Edge[],
+    currentEdgeRemainingDistance: number,
+    isMergeNode: (nodeName: string) => boolean
+  ): { distance: number; mergeEdge: Edge } | null {
+    const fullPath = this.getFullReservedPath(vehId);
+    if (fullPath.length === 0) return null;
+
+    let accumulatedDistance = currentEdgeRemainingDistance;
+
+    for (const edgeIndex of fullPath) {
+      const edge = edgeArray[edgeIndex];
+      if (!edge) continue;
+
+      if (isMergeNode(edge.to_node)) {
+        return {
+          distance: accumulatedDistance,
+          mergeEdge: edge
+        };
+      }
+
+      accumulatedDistance += edge.distance;
+    }
+
+    return null;
+  }
+
+  /**
    * 감속 상태 조회
    */
   getCurveBrakeState(vehId: number): CurveBrakeState {
