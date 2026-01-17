@@ -93,6 +93,10 @@ export type BatchState = {
   batchGrantedCount: number;
   batchReleasedCount: number;
   batchSize: number;
+  edgePassCount: number; // 현재 edge에서 통과한 총 차량 수
+  passLimit: number; // 한 edge에서 최대 통과 가능 대수
+  lastUsedEdge: string | null; // round-robin을 위한 마지막 사용 edge
+  passLimitReached: boolean; // passLimit 도달 여부 (새 grant 중단)
 };
 
 /**
@@ -102,12 +106,16 @@ export type BatchState = {
 class BatchController {
   private state: BatchState;
 
-  constructor(batchSize: number) {
+  constructor(batchSize: number, passLimit = 5) {
     this.state = {
       currentBatchEdge: null,
       batchGrantedCount: 0,
       batchReleasedCount: 0,
       batchSize,
+      edgePassCount: 0,
+      passLimit,
+      lastUsedEdge: null,
+      passLimitReached: false,
     };
   }
 
@@ -125,6 +133,12 @@ class BatchController {
    * 새 batch 시작 시 batchSize만큼 한 번에 grant 반환
    */
   step(node: MergeLockNode): Grant[] {
+    // passLimit 도달 시 새 grant 중단
+    if (this.state.passLimitReached) {
+      if (DEBUG) console.log(`[BATCH] passLimit reached, waiting for all vehicles to pass`);
+      return [];
+    }
+
     // 새 batch 시작
     if (!this.state.currentBatchEdge) {
       const nextEdge = this.selectNextBatchEdge(node);
@@ -135,7 +149,9 @@ class BatchController {
       this.state.currentBatchEdge = nextEdge;
       this.state.batchGrantedCount = 0;
       this.state.batchReleasedCount = 0;
-      if (DEBUG) console.log(`[BATCH] Starting new batch on edge: ${nextEdge}, batchSize: ${this.state.batchSize}`);
+      this.state.edgePassCount = 0; // passCount 초기화
+      this.state.passLimitReached = false; // 플래그 초기화
+      if (DEBUG) console.log(`[BATCH] Starting new batch on edge: ${nextEdge}, batchSize: ${this.state.batchSize}, passLimit: ${this.state.passLimit}`);
     }
 
     // 현재 batch edge에서 아직 grant 안 받은 request들 확인
@@ -166,22 +182,53 @@ class BatchController {
 
   /**
    * release 이벤트 처리
-   * released count만 증가시키고 batch 완료 시 상태 초기화
+   * released count와 passCount 증가
+   * passLimit 도달 시 새 grant 중단하고, 모든 차량 통과 후 다음 edge로 전환
    */
-  onRelease(): void {
+  onRelease(node: MergeLockNode): void {
     if (!this.state.currentBatchEdge) return;
 
     this.state.batchReleasedCount++;
-    if (DEBUG) console.log(`[BATCH] Released (${this.state.batchReleasedCount}/${this.state.batchGrantedCount})`);
+    this.state.edgePassCount++; // 통과 차량 수 증가
+    if (DEBUG) console.log(`[BATCH] Released (${this.state.batchReleasedCount}/${this.state.batchGrantedCount}), edgePassCount: ${this.state.edgePassCount}/${this.state.passLimit}`);
+
+    // passLimit 도달 체크
+    if (this.state.edgePassCount >= this.state.passLimit && !this.state.passLimitReached) {
+      this.state.passLimitReached = true;
+      if (DEBUG) console.log(`[BATCH] passLimit reached (${this.state.edgePassCount}/${this.state.passLimit}), stopping new grants on edge: ${this.state.currentBatchEdge}`);
+    }
 
     // Batch 완료 체크
     if (this.isBatchComplete()) {
-      if (DEBUG) console.log(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}`);
+      const currentQueue = node.edgeQueues[this.state.currentBatchEdge];
+      const hasMoreVehicles = currentQueue && currentQueue.size > 0;
 
-      // 현재 batch 종료 - 다음 batch는 step()에서 시작
-      this.state.currentBatchEdge = null;
-      this.state.batchGrantedCount = 0;
-      this.state.batchReleasedCount = 0;
+      // passLimit 도달했고 모든 차량이 통과했으면 다음 edge로 전환
+      if (this.state.passLimitReached) {
+        if (DEBUG) console.log(`[BATCH] All vehicles passed after passLimit, switching to next edge`);
+        this.state.lastUsedEdge = this.state.currentBatchEdge;
+        this.state.currentBatchEdge = null;
+        this.state.batchGrantedCount = 0;
+        this.state.batchReleasedCount = 0;
+        this.state.edgePassCount = 0;
+        this.state.passLimitReached = false;
+      } else if (!hasMoreVehicles) {
+        // 현재 edge 큐가 비어있으면 즉시 다음 edge로 전환
+        if (DEBUG) console.log(`[BATCH] Current edge ${this.state.currentBatchEdge} queue empty, switching to next edge`);
+        this.state.lastUsedEdge = this.state.currentBatchEdge;
+        this.state.currentBatchEdge = null;
+        this.state.batchGrantedCount = 0;
+        this.state.batchReleasedCount = 0;
+        this.state.edgePassCount = 0;
+        this.state.passLimitReached = false;
+      } else {
+        // passLimit 미달이고 차량 있으면 같은 edge 유지 (다음 batch)
+        if (DEBUG) console.log(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}, continuing (${this.state.edgePassCount}/${this.state.passLimit})`);
+        // currentBatchEdge는 유지 (null로 설정하지 않음)
+        this.state.batchGrantedCount = 0;
+        this.state.batchReleasedCount = 0;
+        // edgePassCount는 유지 (누적)
+      }
     }
   }
 
@@ -193,15 +240,38 @@ class BatchController {
   }
 
   /**
-   * edgeQueues에서 대기 중인 차량이 있는 edge 선택
+   * edgeQueues에서 대기 중인 차량이 있는 edge 선택 (round-robin)
+   * lastUsedEdge 다음 edge부터 순회하며 차량이 있는 첫 번째 edge 선택
    */
   private selectNextBatchEdge(node: MergeLockNode): string | null {
-    for (const edgeName of Object.keys(node.edgeQueues)) {
+    const edgeNames = Object.keys(node.edgeQueues);
+    if (edgeNames.length === 0) return null;
+
+    // lastUsedEdge가 없으면 처음부터 시작
+    if (!this.state.lastUsedEdge) {
+      for (const edgeName of edgeNames) {
+        const queue = node.edgeQueues[edgeName];
+        if (queue && queue.size > 0) {
+          return edgeName;
+        }
+      }
+      return null;
+    }
+
+    // lastUsedEdge 다음부터 순회 (round-robin)
+    const lastIndex = edgeNames.indexOf(this.state.lastUsedEdge);
+    const startIndex = lastIndex === -1 ? 0 : (lastIndex + 1) % edgeNames.length;
+
+    // startIndex부터 한 바퀴 순회
+    for (let i = 0; i < edgeNames.length; i++) {
+      const index = (startIndex + i) % edgeNames.length;
+      const edgeName = edgeNames[index];
       const queue = node.edgeQueues[edgeName];
       if (queue && queue.size > 0) {
         return edgeName;
       }
     }
+
     return null;
   }
 }
@@ -474,7 +544,7 @@ export class LockMgr {
       const controller = this.batchControllers.get(nodeName);
       if (controller) {
         if (DEBUG) console.log(`[releaseLock] Calling controller.onRelease()`);
-        controller.onRelease();
+        controller.onRelease(node);
       } else {
         if (DEBUG) console.log(`[releaseLock] No controller for ${nodeName}`);
       }
