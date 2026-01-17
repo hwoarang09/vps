@@ -80,7 +80,7 @@ export class RingBuffer<T> {
 export type Grant = {
   edge: string;
   veh: number;
-} | null;
+};
 
 export type LockRequest = {
   vehId: number;
@@ -122,20 +122,14 @@ class BatchController {
   /**
    * 매 프레임 호출되는 step 함수
    * 현재 batch 상태를 확인하고 grant를 결정
+   * 새 batch 시작 시 batchSize만큼 한 번에 grant 반환
    */
-  step(node: MergeLockNode): Grant | null {
-    // 이미 grant된 상태면 스킵
-    if (node.granted) {
-      if (DEBUG) console.log(`[BatchController.step] node already has grant: ${node.granted.veh}`);
-      return null;
-    }
-
+  step(node: MergeLockNode): Grant[] {
     // 새 batch 시작
     if (!this.state.currentBatchEdge) {
       const nextEdge = this.selectNextBatchEdge(node);
       if (!nextEdge) {
-        if (DEBUG) console.log(`[BatchController.step] No edge with waiting vehicles`);
-        return null;
+        return [];
       }
 
       this.state.currentBatchEdge = nextEdge;
@@ -144,21 +138,30 @@ class BatchController {
       if (DEBUG) console.log(`[BATCH] Starting new batch on edge: ${nextEdge}, batchSize: ${this.state.batchSize}`);
     }
 
-    // 현재 batch에서 grant
-    if (this.state.batchGrantedCount < this.state.batchSize) {
-      const nextReq = node.requests.find((r) => r.edgeName === this.state.currentBatchEdge);
-      if (nextReq) {
-        this.state.batchGrantedCount++;
-        if (DEBUG) console.log(`[BATCH] Granted to veh ${nextReq.vehId} from edge ${nextReq.edgeName} (${this.state.batchGrantedCount}/${this.state.batchSize})`);
-        return { veh: nextReq.vehId, edge: nextReq.edgeName };
-      } else {
-        if (DEBUG) console.log(`[BatchController.step] No more requests for currentBatchEdge ${this.state.currentBatchEdge}, granted=${this.state.batchGrantedCount}, released=${this.state.batchReleasedCount}`);
+    // 현재 batch edge에서 아직 grant 안 받은 request들 확인
+    const requestsFromEdge = node.requests.filter((r) => r.edgeName === this.state.currentBatchEdge);
+
+    // batchSize 도달 여부 확인
+    if (this.state.batchGrantedCount >= this.state.batchSize) {
+      if (DEBUG && requestsFromEdge.length > 0) {
+        console.log(`[BatchController.step] Batch full (${this.state.batchGrantedCount}/${this.state.batchSize}), waiting for releases`);
       }
-    } else {
-      if (DEBUG) console.log(`[BatchController.step] Batch full (${this.state.batchGrantedCount}/${this.state.batchSize}), waiting for releases (${this.state.batchReleasedCount})`);
+      return [];
     }
 
-    return null;
+    // batchSize까지 여유가 있으면 추가 grant
+    const grants: Grant[] = [];
+    const availableSlots = this.state.batchSize - this.state.batchGrantedCount;
+    const grantCount = Math.min(availableSlots, requestsFromEdge.length);
+
+    for (let i = 0; i < grantCount; i++) {
+      const req = requestsFromEdge[i];
+      grants.push({ veh: req.vehId, edge: req.edgeName });
+      this.state.batchGrantedCount++;
+      if (DEBUG) console.log(`[BATCH] Granted to veh ${req.vehId} from edge ${req.edgeName} (${this.state.batchGrantedCount}/${this.state.batchSize})`);
+    }
+
+    return grants;
   }
 
   /**
@@ -208,15 +211,15 @@ export type MergeLockNode = {
   requests: LockRequest[];
   edgeQueues: Record<string, RingBuffer<number>>;
   mergedQueue: number[];
-  granted: Grant;
+  granted: Grant[]; // 여러 대에게 동시 grant 가능
   strategyState: Record<string, unknown>;
 };
 
 /**
  * requests 배열에서 다음 grant 대상을 반환하는 유틸리티 함수
  */
-function getNextFromQueue(node: MergeLockNode): Grant | null {
-  if (node.requests.length === 0) return null;
+function getNextFromQueue(node: MergeLockNode): Grant | undefined {
+  if (node.requests.length === 0) return undefined;
 
   const target = node.requests[0];
   return { veh: target.vehId, edge: target.edgeName };
@@ -339,7 +342,7 @@ export class LockMgr {
         requests: [],
         edgeQueues,
         mergedQueue: [],
-        granted: null,
+        granted: [],
         strategyState: {},
       };
 
@@ -361,7 +364,7 @@ export class LockMgr {
   checkGrant(nodeName: string, vehId: number): boolean {
     const node = this.lockTable[nodeName];
     if (!node) return true;
-    return node.granted?.veh === vehId;
+    return node.granted.some(g => g.veh === vehId);
   }
 
   /**
@@ -372,8 +375,6 @@ export class LockMgr {
     if (this.strategyType !== 'BATCH') return;
 
     for (const [nodeName, node] of Object.entries(this.lockTable)) {
-      if (node.granted) continue; // 이미 grant된 상태면 스킵
-
       let controller = this.batchControllers.get(nodeName);
       if (!controller) {
         // Controller가 없으면 즉시 생성 (lazy initialization)
@@ -386,14 +387,16 @@ export class LockMgr {
         console.log(`[LockMgr.step] Calling controller.step for ${nodeName}, requests: ${node.requests.map(r => r.vehId).join(',')}`);
       }
 
-      const nextGrant = controller.step(node);
-      if (nextGrant) {
-        node.granted = nextGrant;
-        node.requests = node.requests.filter((r) => r.vehId !== nextGrant.veh);
-        if (DEBUG) console.log(`[LockMgr.step] Granted to veh ${nextGrant.veh} at ${nodeName}`);
+      const newGrants = controller.step(node);
+      if (newGrants.length > 0) {
+        // 여러 대에게 추가 grant (기존 granted에 append)
+        node.granted.push(...newGrants);
+        const grantedVehIds = newGrants.map(g => g.veh);
+        node.requests = node.requests.filter((r) => !grantedVehIds.includes(r.vehId));
+        if (DEBUG) console.log(`[LockMgr.step] Granted to vehs ${grantedVehIds.join(',')} at ${nodeName}`);
         if (DEBUG) this.logNodeState(nodeName);
       } else if (DEBUG && node.requests.length > 0) {
-        console.log(`[LockMgr.step] controller.step returned null for ${nodeName}`);
+        console.log(`[LockMgr.step] controller.step returned empty array for ${nodeName}`);
       }
     }
   }
@@ -415,7 +418,8 @@ export class LockMgr {
     if (!node) return;
 
     const existing = node.requests.find((r) => r.vehId === vehId);
-    if (existing || node.granted?.veh === vehId) return;
+    const alreadyGranted = node.granted.some(g => g.veh === vehId);
+    if (existing || alreadyGranted) return;
 
     // 큐에 추가
     if (DEBUG) console.log(`[requestLock] veh ${vehId} requesting ${nodeName} via ${edgeName}`);
@@ -443,14 +447,18 @@ export class LockMgr {
   releaseLock(nodeName: string, vehId: number) {
     const node = this.lockTable[nodeName];
     if (!node) return;
-    if (node.granted?.veh !== vehId) {
-      if (DEBUG) console.log(`[releaseLock] veh ${vehId} tried to release ${nodeName} but granted is ${node.granted?.veh}`);
+
+    const grantIdx = node.granted.findIndex(g => g.veh === vehId);
+    if (grantIdx === -1) {
+      if (DEBUG) console.log(`[releaseLock] veh ${vehId} tried to release ${nodeName} but not in granted list`);
       return;
     }
 
-    const grantedEdge = node.granted.edge;
+    const grantedEdge = node.granted[grantIdx].edge;
     if (DEBUG) console.log(`[releaseLock] veh ${vehId} releasing ${nodeName} (edge: ${grantedEdge})`);
-    node.granted = null;
+
+    // granted 배열에서 제거
+    node.granted.splice(grantIdx, 1);
 
     node.requests = node.requests.filter((r) => r.vehId !== vehId);
 
@@ -475,11 +483,11 @@ export class LockMgr {
   }
 
   private handleFIFO_Request(node: MergeLockNode) {
-    if (node.granted) return;
+    if (node.granted.length > 0) return;
 
     const decision = getNextFromQueue(node);
     if (decision) {
-      node.granted = decision;
+      node.granted = [decision]; // 배열로 래핑
       node.requests.shift(); // 첫 번째 제거
       if (DEBUG) this.logNodeState(node.name);
     }
@@ -488,7 +496,7 @@ export class LockMgr {
   private handleFIFO_Release(node: MergeLockNode) {
     const decision = getNextFromQueue(node);
     if (decision) {
-      node.granted = decision;
+      node.granted = [decision]; // 배열로 래핑
       node.requests.shift(); // 첫 번째 제거
       if (DEBUG) this.logNodeState(node.name);
     }
@@ -498,7 +506,8 @@ export class LockMgr {
     if (!DEBUG) return;
     const node = this.lockTable[nodeName];
     if (!node) return;
-    console.log(`[LockMgr] ${nodeName} - granted: ${node.granted?.veh ?? 'FREE'}, requests: ${node.requests.map((r) => r.vehId).join(", ")}`);
+    const grantedVehs = node.granted.length > 0 ? node.granted.map(g => g.veh).join(',') : 'FREE';
+    console.log(`[LockMgr] ${nodeName} - granted: [${grantedVehs}], requests: ${node.requests.map((r) => r.vehId).join(", ")}`);
   }
 }
 
