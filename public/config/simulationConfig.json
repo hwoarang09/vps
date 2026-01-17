@@ -9,7 +9,7 @@
   "lock": {
     "waitDistance": 2.9,
     "requestDistance": 5.1,
-    "grantStrategy": "FIFO"
+    "grantStrategy": "BATCH"
   },
   "vehicle": {
     "body": {
