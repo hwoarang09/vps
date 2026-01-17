@@ -29,8 +29,10 @@ export interface MovementConfig extends SpeedConfig, SensorPointsConfig {
   vehicleZOffset: number;
   curveMaxSpeed: number;
   curveAcceleration: number;
-  /** 곡선 사전 감속에 사용할 감속도 (음수, m/s²) */
-  curvePreBrakeDeceleration?: number;
+  /** 곡선 사전 감속에 사용할 감속도 (음수, m/s²) - 직선 구간에서 적용 */
+  linearPreBrakeDeceleration?: number;
+  /** 곡선 사전 감속 체크 주기 (ms) */
+  curvePreBrakeCheckInterval?: number;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface MovementUpdateContext {
   simulationTime?: number;
   /** Edge 통과 이벤트 콜백 (로깅용) */
   onEdgeTransit?: OnEdgeTransitCallback;
+  /** 곡선 사전 감속 체크를 위한 차량별 누적 시간 (ms) */
+  curveBrakeCheckTimers?: Map<number, number>;
 }
 
 // Zero-GC Scratchpads
@@ -244,7 +248,8 @@ function calculateVehiclePhysics(
     edgeArray,
     transferMgr,
     config,
-    _delta: clampedDelta,
+    delta: clampedDelta,
+    curveBrakeCheckTimers: ctx.curveBrakeCheckTimers,
   });
 
   // 감속 중이면 가속 막기
@@ -513,6 +518,7 @@ export function updateMovement(ctx: MovementUpdateContext) {
     edgeNameToIndex,
     store,
     transferMgr,
+    clampedDelta,
   } = ctx;
 
   const data = vehicleDataArray.getData();
@@ -887,6 +893,7 @@ interface CurveBrakeCheckResult {
 /**
  * 곡선 사전 감속 체크
  * calculateNextSpeed 전에 호출하여 감속 필요 여부 판단
+ * config.curvePreBrakeCheckInterval 주기로만 새로운 체크 수행
  */
 function checkCurvePreBraking({
   vehId,
@@ -896,7 +903,8 @@ function checkCurvePreBraking({
   edgeArray,
   transferMgr,
   config,
-  _delta,
+  delta,
+  curveBrakeCheckTimers,
 }: {
   vehId: number;
   currentEdge: Edge;
@@ -905,9 +913,10 @@ function checkCurvePreBraking({
   edgeArray: Edge[];
   transferMgr: TransferMgr;
   config: MovementConfig;
-  _delta: number;
+  delta: number;
+  curveBrakeCheckTimers?: Map<number, number>;
 }): CurveBrakeCheckResult {
-  const preBrakeDecel = config.curvePreBrakeDeceleration ?? -2;
+  const preBrakeDecel = config.linearPreBrakeDeceleration ?? -2;
   const brakeState = transferMgr.getCurveBrakeState(vehId);
 
   const noResult: CurveBrakeCheckResult = {
@@ -921,7 +930,39 @@ function checkCurvePreBraking({
     if (brakeState.isBraking) {
       transferMgr.clearCurveBrakeState(vehId);
     }
+    // 타이머도 초기화
+    if (curveBrakeCheckTimers) {
+      curveBrakeCheckTimers.delete(vehId);
+    }
     return noResult;
+  }
+
+  // 이미 감속 중이면 항상 감속 계속 (체크 스킵 없이)
+  if (brakeState.isBraking) {
+    if (currentVelocity > config.curveMaxSpeed) {
+      return {
+        shouldBrake: true,
+        deceleration: preBrakeDecel,
+        distanceToCurve: 0  // 이미 감속 중이므로 거리는 중요하지 않음
+      };
+    }
+    return noResult;
+  }
+
+  // 감속 중이 아닐 때만 주기적 체크 수행
+  const checkInterval = config.curvePreBrakeCheckInterval ?? 100; // 기본값 100ms
+
+  if (curveBrakeCheckTimers) {
+    const elapsed = (curveBrakeCheckTimers.get(vehId) ?? 0) + delta * 1000; // delta는 초 단위, ms로 변환
+
+    // 아직 interval이 지나지 않았으면 체크 스킵
+    if (elapsed < checkInterval) {
+      curveBrakeCheckTimers.set(vehId, elapsed);
+      return noResult;
+    }
+
+    // interval 지났으면 타이머 리셋하고 체크 수행
+    curveBrakeCheckTimers.set(vehId, 0);
   }
 
   // 경로에서 다음 곡선 찾기
@@ -934,9 +975,6 @@ function checkCurvePreBraking({
 
   // 경로에 곡선 없음
   if (!curveInfo) {
-    if (brakeState.isBraking) {
-      transferMgr.clearCurveBrakeState(vehId);
-    }
     return noResult;
   }
 
@@ -951,19 +989,16 @@ function checkCurvePreBraking({
   const checkpointDistance = distanceToCurve - brakeDistance;
 
   // 체크포인트 지났는지 확인
-  if (!brakeState.isBraking && checkpointDistance <= 0) {
+  if (checkpointDistance <= 0) {
     transferMgr.startCurveBraking(vehId, curveInfo.curveEdge);
-  }
 
-  // 감속 필요 여부 판단
-  const shouldBrake = brakeState.isBraking || checkpointDistance <= 0;
-
-  if (shouldBrake && currentVelocity > config.curveMaxSpeed) {
-    return {
-      shouldBrake: true,
-      deceleration: preBrakeDecel,
-      distanceToCurve
-    };
+    if (currentVelocity > config.curveMaxSpeed) {
+      return {
+        shouldBrake: true,
+        deceleration: preBrakeDecel,
+        distanceToCurve
+      };
+    }
   }
 
   return noResult;

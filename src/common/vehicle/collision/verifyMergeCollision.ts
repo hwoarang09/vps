@@ -4,7 +4,7 @@ import { EdgeType } from "@/types";
 import type { Edge } from "@/types/edge";
 import { MovementData, VEHICLE_DATA_SIZE, HitZone } from "@/common/vehicle/initialize/constants";
 import { checkSensorCollision } from "./sensorCollision";
-import { applyCollisionZoneLogic } from "./collisionCommon";
+import { applyCollisionZoneLogic, shouldCheckCollision } from "./collisionCommon";
 import type { CollisionCheckContext } from "./collisionCheck";
 
 function getCurveTailLength(): number {
@@ -122,7 +122,7 @@ export function verifyMergeZoneCollision(
   edge: Edge,
   ctx: CollisionCheckContext
 ) {
-  const { vehicleArrayData, edgeVehicleQueue, config } = ctx;
+  const { vehicleArrayData, edgeVehicleQueue, config, delta, collisionCheckTimers } = ctx;
 
   // Direct access for performance
   const queueData = edgeVehicleQueue.getDataDirect();
@@ -137,8 +137,16 @@ export function verifyMergeZoneCollision(
   const edgeLen = edge.distance;
   const dangerStartOffset = edgeLen - dangerZoneLen;
 
+  const checkInterval = config.collisionCheckInterval ?? 33; // 기본값 33ms
+
   for (let i = 0; i < count; i++) {
     const vehId = queueData[offset + 1 + i];
+
+    // 충돌 체크 타이머 확인 - 타이머가 안 지났으면 스킵 (이전 HIT_ZONE 유지)
+    if (!shouldCheckCollision(vehId, delta, collisionCheckTimers, checkInterval)) {
+      continue;
+    }
+
     const ptr = vehId * VEHICLE_DATA_SIZE;
 
     let currentOffset = 0;

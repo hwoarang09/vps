@@ -11,7 +11,16 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
 import { getVehicleConfigSync, waitForConfig, getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
-import { getMaxDelta, getApproachMinSpeed, getBrakeMinSpeed, getLinearMaxSpeed, getCurveMaxSpeed, getCurveAcceleration, getLinearDeceleration } from "@/config/movementConfig";
+import {
+  getMaxDelta,
+  getApproachMinSpeed,
+  getBrakeMinSpeed,
+  getLinearMaxSpeed,
+  getCurveMaxSpeed,
+  getCurveAcceleration,
+  getLinearPreBrakeDeceleration,
+  getSimulationConfig
+} from "@/config/simulationConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";
@@ -49,6 +58,8 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
   const edgeArrayRef = useRef<any[]>([]);
   const actualNumVehiclesRef = useRef(0);
   const transferMgrRef = useRef(new TransferMgr());
+  const collisionCheckTimersRef = useRef(new Map<number, number>());
+  const curveBrakeCheckTimersRef = useRef(new Map<number, number>());
   const [config, setConfig] = useState(() => getVehicleConfigSync());
 
   // Wait for config to load from JSON
@@ -151,6 +162,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
     const actualNumVehicles = actualNumVehiclesRef.current;
 
     // 1. Collision Check
+    const simConfig = getSimulationConfig();
     const collisionCtx: CollisionCheckContext = {
       vehicleArrayData,
       edgeArray,
@@ -160,7 +172,10 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
         approachMinSpeed: getApproachMinSpeed(),
         brakeMinSpeed: getBrakeMinSpeed(),
         bodyLength: getBodyLength(),
+        collisionCheckInterval: simConfig.collisionCheckInterval,
       },
+      delta: clampedDelta,
+      collisionCheckTimers: collisionCheckTimersRef.current,
     };
     checkCollisions(collisionCtx);
 
@@ -172,7 +187,8 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
       vehicleZOffset: 0.15,
       bodyLength: getBodyLength(),
       bodyWidth: getBodyWidth(),
-      curvePreBrakeDeceleration: -getLinearDeceleration(), // 곡선 사전 감속용 (음수)
+      linearPreBrakeDeceleration: getLinearPreBrakeDeceleration(), // 곡선 사전 감속용 (음수) - 직선에서 적용
+      curvePreBrakeCheckInterval: simConfig.curvePreBrakeCheckInterval,
     };
 
     const transferModeValue = store.transferMode;
@@ -192,6 +208,7 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
       transferMgr: transferMgrRef.current,
       clampedDelta,
       config: movementConfig,
+      curveBrakeCheckTimers: curveBrakeCheckTimersRef.current,
     };
 
     updateMovement(movementCtx);

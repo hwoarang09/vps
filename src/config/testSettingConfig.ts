@@ -173,6 +173,14 @@ loadTestSettingConfig().then(config => {
 export const getTestSettings = () => testSettingConfig.TEST_SETTINGS;
 export const getDefaultSetting = () => testSettingConfig.DEFAULT_SETTING;
 
+// Get available map folders from test settings
+export const getAvailableMapFolders = (): string[] => {
+  const testSettings = getTestSettings();
+  const mapNames = testSettings.map(setting => setting.mapName);
+  // Remove duplicates using Set
+  return [...new Set(mapNames)];
+};
+
 // Get test setting by ID
 
 

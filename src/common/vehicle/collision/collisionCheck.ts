@@ -25,6 +25,10 @@ export interface CollisionCheckContext {
   edgeVehicleQueue: IEdgeVehicleQueue;
   sensorPointArray: ISensorPointArray;
   config: CollisionConfig;
+  /** 프레임 delta 시간 (초 단위) */
+  delta?: number;
+  /** 차량별 충돌 체크 누적 시간 (ms) */
+  collisionCheckTimers?: Map<number, number>;
 }
 
 export function checkCollisions(ctx: CollisionCheckContext) {

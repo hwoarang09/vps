@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { SENSOR_ATTR_SIZE, SensorSection } from "@/shmSimulator/MemoryLayoutManager";
-import { getMarkerConfig } from "@/config/mapConfig";
+import { getMarkerConfig } from "@/config/renderConfig";
 import { VehicleSystemType } from "@/types/vehicle";
 
 // -----------------------------------------------------------------------------

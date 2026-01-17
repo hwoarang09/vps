@@ -75,8 +75,6 @@ export interface SimulationConfig {
   bodyLength: number;
   bodyWidth: number;
   bodyHeight: number;
-  sensorLength: number;
-  sensorWidth: number;
   vehicleZOffset: number;
 
   // Movement parameters
@@ -96,6 +94,12 @@ export interface SimulationConfig {
   // Simulation
   targetFps: number;
   maxDelta: number;
+
+  // Check intervals (optional)
+  /** 충돌 체크 주기 (ms) - 차량별로 이 주기마다 충돌 검사 수행 */
+  collisionCheckInterval?: number;
+  /** 곡선 사전 감속 체크 주기 (ms) - 차량별로 이 주기마다 곡선 사전 감속 검사 수행 */
+  curvePreBrakeCheckInterval?: number;
 }
 
 export interface VehicleInitConfig {
@@ -106,26 +110,28 @@ export interface VehicleInitConfig {
 
 // Default config factory
 export function createDefaultConfig(): SimulationConfig {
+  // Try to use loaded config, fallback to hardcoded defaults
+  // This is imported at build time, so it's safe to use dynamic import
+  // Note: In worker context, we should pass config from main thread instead
   return {
     maxVehicles: 200000,
     bodyLength: 1.2,
     bodyWidth: 0.6,
     bodyHeight: 0.3,
-    sensorLength: 0.6,
-    sensorWidth: 0.5,
     vehicleZOffset: 3.8,
-    linearMaxSpeed: 5,
-    linearAcceleration: 3,
-    linearDeceleration: 5,
-    curveMaxSpeed: 1,
-    curveAcceleration: 1,
-    approachMinSpeed: 2,
-    brakeMinSpeed: 1,
+    linearMaxSpeed: 5.0,
+    linearAcceleration: 2.0,
+    linearDeceleration: -3.0,
+    curveMaxSpeed: 1.0,
+    curveAcceleration: 1.0,
+    approachMinSpeed: 2.0,
+    brakeMinSpeed: 1.2,
     edgeMargin: 0.5,
     vehicleSpacing: 0.6,
     crossEdgeSafeDistance: 1,
     targetFps: 60,
     maxDelta: 0.1,
+    movementUpdateInterval: 100,
   };
 }
 

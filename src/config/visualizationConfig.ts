@@ -1,69 +1,28 @@
-// Visualization configuration interface
-interface VisualizationConfig {
-  RAPIER_MODE: {
-    SHOW_PHYSICS_DEBUG: boolean;
-    SHOW_SENSOR_EDGES: boolean;
-  };
-  ARRAY_MODE: {
-    SHOW_SENSOR_EDGES: boolean;
-  };
-  SHARED_MEMORY_MODE: {
-    SHOW_SENSOR_EDGES: boolean;
-  };
-}
+// Visualization configuration (delegates to renderConfig)
+// This file is kept for backward compatibility
+import { getVehicleRenderConfig } from "./renderConfig";
 
-// Load visualization configuration from JSON file
-const loadVisualizationConfig = async (): Promise<VisualizationConfig> => {
-  try {
-    const response = await fetch('/config/visualizationConfig.json');
-    if (!response.ok) {
-      throw new Error(`Failed to load visualization config: ${response.statusText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error loading visualization config:', error);
-    // Fallback to default values
-    return {
-      RAPIER_MODE: {
-        SHOW_PHYSICS_DEBUG: true,
-        SHOW_SENSOR_EDGES: false
-      },
-      ARRAY_MODE: {
-        SHOW_SENSOR_EDGES: true
-      },
-      SHARED_MEMORY_MODE: {
-        SHOW_SENSOR_EDGES: false
-      }
-    };
-  }
+// Synchronous getter for RAPIER mode
+export const getRapierModeConfig = () => {
+  const config = getVehicleRenderConfig();
+  return {
+    SHOW_PHYSICS_DEBUG: config.showPhysicsDebug.RAPIER_MODE,
+    SHOW_SENSOR_EDGES: config.showSensorEdges.RAPIER_MODE,
+  };
 };
 
-// Export config loader
-
-
-// For synchronous access (will use default until loaded)
-let visualizationConfig: VisualizationConfig = {
-  RAPIER_MODE: {
-    SHOW_PHYSICS_DEBUG: true,
-    SHOW_SENSOR_EDGES: false
-  },
-  ARRAY_MODE: {
-    SHOW_SENSOR_EDGES: false
-  },
-  SHARED_MEMORY_MODE: {
-    SHOW_SENSOR_EDGES: false
-  }
+// Synchronous getter for ARRAY mode
+export const getArrayModeConfig = () => {
+  const config = getVehicleRenderConfig();
+  return {
+    SHOW_SENSOR_EDGES: config.showSensorEdges.ARRAY_MODE,
+  };
 };
 
-// Load config immediately
-loadVisualizationConfig().then(config => {
-  visualizationConfig = config;
-});
-
-// Synchronous getters for each mode
-export const getRapierModeConfig = () => visualizationConfig.RAPIER_MODE;
-
-
-// Synchronous getter for entire config
-
-
+// Synchronous getter for SHARED_MEMORY mode
+export const getSharedMemoryModeConfig = () => {
+  const config = getVehicleRenderConfig();
+  return {
+    SHOW_SENSOR_EDGES: config.showSensorEdges.SHARED_MEMORY_MODE,
+  };
+};

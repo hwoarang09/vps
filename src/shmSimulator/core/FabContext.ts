@@ -95,6 +95,10 @@ export class FabContext {
   // === Edge Transit Logging ===
   private edgeTransitTracker: EdgeTransitTracker | null = null;
 
+  // === Collision & Curve Brake Check Timers ===
+  private collisionCheckTimers: Map<number, number> = new Map();
+  private curveBrakeCheckTimers: Map<number, number> = new Map();
+
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
     this.config = params.config;
@@ -324,6 +328,8 @@ export class FabContext {
       edgeVehicleQueue: this.edgeVehicleQueue,
       sensorPointArray: this.sensorPointArray,
       config: this.config,
+      delta: clampedDelta,
+      collisionCheckTimers: this.collisionCheckTimers,
     };
     checkCollisions(collisionCtx);
 
@@ -358,6 +364,7 @@ export class FabContext {
             tracker.onEdgeEnter(vehId, toEdgeIndex, timestamp);
           }
         : undefined,
+      curveBrakeCheckTimers: this.curveBrakeCheckTimers,
     };
     updateMovement(movementCtx);
 

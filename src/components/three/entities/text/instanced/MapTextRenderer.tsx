@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { getRendererConfig } from "@/config/mapConfig";
+import { getMapRenderConfig as getRendererConfig } from "@/config/renderConfig";
 import { getStationTextConfig } from "@/config/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";

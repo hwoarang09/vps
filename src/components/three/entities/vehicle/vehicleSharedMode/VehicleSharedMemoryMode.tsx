@@ -12,7 +12,7 @@ import {
   getCurveMaxSpeed,
   getApproachMinSpeed,
   getBrakeMinSpeed,
-} from "@/config/movementConfig";
+} from "@/config/simulationConfig";
 import { getWorkerCount } from "@/config/workerConfig";
 import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";

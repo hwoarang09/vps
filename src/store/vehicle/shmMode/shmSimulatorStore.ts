@@ -7,7 +7,7 @@ import { createDefaultConfig, TransferMode } from "@/shmSimulator";
 import type { SimulationConfig, VehicleInitConfig, SharedMapData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import { getMaxDelta } from "@/config/movementConfig";
+import { getSimulationConfig } from "@/config/simulationConfig";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -163,7 +163,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
           transferMode: fab.transferMode ?? TransferMode.RANDOM,
         })),
         workerCount,
-        config: { ...createDefaultConfig(), maxDelta: getMaxDelta(), ...config },
+        config: { ...getSimulationConfig(), ...config },
         sharedMapData,
       });
 

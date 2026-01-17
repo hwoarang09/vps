@@ -1,5 +1,5 @@
 import React from "react";
-import { getRendererConfig } from "@/config/mapConfig";
+import { getMapRenderConfig as getRendererConfig } from "@/config/renderConfig";
 import { useTextStore } from "@store/map/textStore";
 import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";

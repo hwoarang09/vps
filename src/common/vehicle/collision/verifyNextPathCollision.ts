@@ -3,7 +3,7 @@
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types/index";
 import { HitZone, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
-import { applyCollisionZoneLogic } from "./collisionCommon";
+import { applyCollisionZoneLogic, shouldCheckCollision } from "./collisionCommon";
 import { checkSensorCollision } from "./sensorCollision";
 import type { CollisionCheckContext } from "./collisionCheck";
 
@@ -58,7 +58,7 @@ export function verifyNextPathCollision(
   edge: Edge,
   ctx: CollisionCheckContext
 ) {
-  const { vehicleArrayData, edgeVehicleQueue, edgeArray, config } = ctx;
+  const { vehicleArrayData, edgeVehicleQueue, edgeArray, config, delta, collisionCheckTimers } = ctx;
 
   // Direct access for performance
   const queueData = edgeVehicleQueue.getDataDirect();
@@ -68,6 +68,13 @@ export function verifyNextPathCollision(
   if (count === 0) return;
 
   const myVehIdx = queueData[offset + 1];
+
+  // 충돌 체크 타이머 확인 - 타이머가 안 지났으면 스킵 (이전 HIT_ZONE 유지)
+  const checkInterval = config.collisionCheckInterval ?? 33; // 기본값 33ms
+  if (!shouldCheckCollision(myVehIdx, delta, collisionCheckTimers, checkInterval)) {
+    return;
+  }
+
   const ptrMe = myVehIdx * VEHICLE_DATA_SIZE;
 
   let mostCriticalHitZone: number = HitZone.NONE;

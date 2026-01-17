@@ -13,6 +13,8 @@ export interface CollisionConfig {
   approachMinSpeed: number;
   brakeMinSpeed: number;
   bodyLength: number;
+  /** 충돌 체크 주기 (ms) - 차량별로 이 주기마다 충돌 검사 수행 */
+  collisionCheckInterval?: number;
 }
 
 export function getCollisionCheckParams(
@@ -124,4 +126,32 @@ export function calculateEuclideanDistance(
   const xB = data[ptrB + MovementData.X];
   const yB = data[ptrB + MovementData.Y];
   return Math.hypot(xA - xB, yA - yB);
+}
+
+/**
+ * 차량별 충돌 체크 타이머 확인
+ * @returns true면 충돌 체크 수행, false면 스킵 (이전 HIT_ZONE 유지)
+ */
+export function shouldCheckCollision(
+  vehId: number,
+  delta: number | undefined,
+  collisionCheckTimers: Map<number, number> | undefined,
+  checkInterval: number | undefined
+): boolean {
+  // 타이머가 없으면 항상 체크
+  if (!collisionCheckTimers || delta === undefined || checkInterval === undefined) {
+    return true;
+  }
+
+  const elapsed = (collisionCheckTimers.get(vehId) ?? 0) + delta * 1000; // delta는 초 단위, ms로 변환
+
+  // 아직 interval이 지나지 않았으면 체크 스킵
+  if (elapsed < checkInterval) {
+    collisionCheckTimers.set(vehId, elapsed);
+    return false;
+  }
+
+  // interval 지났으면 타이머 리셋하고 체크 수행
+  collisionCheckTimers.set(vehId, 0);
+  return true;
 }

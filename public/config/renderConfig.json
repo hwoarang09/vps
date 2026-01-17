@@ -1,0 +1,72 @@
+{
+  "nodes": {
+    "defaultSize": 1.0,
+    "selectedColor": "#ff6b6b",
+    "selectedSize": 0.1,
+    "markerColor": "#ff69b4",
+    "markerRadius": 0.05,
+    "markerSegments": 6,
+    "tmpMarkerColor": "#888888",
+    "tmpMarkerRadius": 0.025
+  },
+  "edges": {
+    "colors": {
+      "LINEAR": "#0066ff",
+      "CURVE_90": "#0066ff",
+      "CURVE_180": "#0066ff",
+      "CURVE_CSC": "#0066ff",
+      "S_CURVE": "#0066ff",
+      "DEFAULT": "#888888"
+    },
+    "lineWidth": 1.0,
+    "selectedColor": "#ff9800"
+  },
+  "vehicles": {
+    "defaultColor": "#ffffff",
+    "showSensorEdges": {
+      "RAPIER_MODE": true,
+      "ARRAY_MODE": true,
+      "SHARED_MEMORY_MODE": false
+    },
+    "showPhysicsDebug": {
+      "RAPIER_MODE": true
+    }
+  },
+  "stations": {
+    "types": {
+      "EQ": {
+        "zHeight": 0,
+        "color": "#00ff00",
+        "description": "Equipment on floor"
+      },
+      "OHB": {
+        "zHeight": 3,
+        "color": "#ff9800",
+        "description": "Overhead Buffer"
+      },
+      "STK": {
+        "zHeight": 2.5,
+        "color": "#ff2211",
+        "description": "Stocker"
+      },
+      "DEFAULT": {
+        "zHeight": 3.8,
+        "color": "#888888",
+        "description": "Default station type"
+      }
+    },
+    "text": {
+      "zOffset": -0.2,
+      "color": "#FFD700",
+      "scale": 0.6
+    },
+    "box": {
+      "width": 0.3,
+      "depth": 0.3
+    }
+  },
+  "map": {
+    "markersZ": 3.8,
+    "scale": 0.6
+  }
+}

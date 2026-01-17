@@ -39,10 +39,10 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     });
   }, []);
 
-  const {
-    BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
-    VEHICLE_COLOR: vehicleColor
-  } = config;
+  const bodyLength = config.body?.length ?? 1.2;
+  const bodyWidth = config.body?.width ?? 0.6;
+  const bodyHeight = config.body?.height ?? 0.3;
+  const vehicleColor = 0x00ff00; // Green color
 
   // instanceData: vec4 (x, y, z, rotation_deg)
   const instanceDataRef = useRef<THREE.InstancedBufferAttribute | null>(null);

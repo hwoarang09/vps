@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
-import { getEdgeColorConfig } from "@/config/mapConfig";
+import { getEdgeColors as getEdgeColorConfig } from "@/config/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";

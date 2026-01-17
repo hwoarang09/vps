@@ -5,11 +5,11 @@ import { initializeRapierVehicles } from "../vehicleArrayMode/initializeVehicles
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useEdgeStore } from "@/store/map/edgeStore";
-import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed, getMaxDelta } from "@/config/movementConfig";
+import { getLinearMaxSpeed, getLinearAcceleration, getCurveMaxSpeed, getMaxDelta } from "@/config/simulationConfig";
 import { getNextEdgeInLoop, VehicleLoop } from "@/utils/vehicle/loopMaker";
 import { EdgeType } from "@/types";
 
-import { getMarkerConfig } from "@/config/mapConfig";
+import { getMarkerConfig } from "@/config/renderConfig";
 import { MovingStatus } from "@/common/vehicle/initialize/constants";
 
 interface VehicleRapierModeProps {

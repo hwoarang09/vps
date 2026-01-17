@@ -6,7 +6,8 @@ import { useNodeStore } from "@/store/map/nodeStore";
 import { useFabStore } from "@/store/map/fabStore";
 import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
 import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
-import { getMarkerConfig } from "@/config/mapConfig";
+import { getMarkerConfig } from "@/config/renderConfig";
+import { getNodeConfig } from "@/config/renderConfig";
 
 interface NodesRendererProps {
   nodeIds: string[];
@@ -180,9 +181,9 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
         fragmentShader: nodeFragmentShader,
         uniforms: {
           uTime: { value: 0 },
-          uColor: { value: new THREE.Color("#ff6b6b") },
+          uColor: { value: new THREE.Color(getNodeConfig().selectedColor) },
           uOpacity: { value: 1 },
-          uSize: { value: 0.1 },
+          uSize: { value: getNodeConfig().selectedSize },
           uIsPreview: { value: 0 },
         },
         transparent: true,

@@ -8,7 +8,7 @@ import {
     VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
     MovementData as ShmMovementData,
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { getMarkerConfig } from "@/config/mapConfig";
+import { getMarkerConfig } from "@/config/renderConfig";
 
 // Threshold for selection in meters
 const SELECTION_THRESHOLD_SQ = 20 * 20;
@@ -49,24 +49,18 @@ const VehicleSelector: React.FC = () => {
         let minDistSq = Infinity;
         let nearestVehicleId = -1;
 
-        console.log(`[VehicleSelector] Click at (${clickX.toFixed(2)}, ${clickY.toFixed(2)}), checking ${actualNumVehicles} vehicles`);
-        console.log(`[VehicleSelector] Mode: ${isShmMode ? 'SHM' : 'Array'}, dataSize=${dataSize}, xOffset=${xOffset}, yOffset=${yOffset}, data.length=${data.length}`);
-
         for (let i = 0; i < actualNumVehicles; i++) {
             const ptr = i * dataSize;
             const x = data[ptr + xOffset];
             const y = data[ptr + yOffset];
 
             if (x === undefined || y === undefined) {
-                console.warn(`  Vehicle #${i}: UNDEFINED data at ptr=${ptr}, x=${x}, y=${y}`);
                 continue;
             }
 
             const dx = x - clickX;
             const dy = y - clickY;
             const distSq = dx * dx + dy * dy;
-
-            console.log(`  Vehicle #${i}: pos=(${x.toFixed(2)}, ${y.toFixed(2)}), dist=${Math.sqrt(distSq).toFixed(2)}m`);
 
             if (distSq < minDistSq) {
                 minDistSq = distSq;
