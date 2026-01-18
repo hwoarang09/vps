@@ -12,7 +12,7 @@ import {
 import { calculateNextSpeed } from "@/common/vehicle/physics/speedCalculator";
 import { checkCurvePreBraking } from "./curveBraking";
 import { checkMergePreBraking } from "./mergeBraking";
-import type { MovementUpdateContext } from "./movementUpdate";
+import type { MovementUpdateContext, MovementConfig } from "./movementUpdate";
 
 // ============================================================================
 // Vehicle Physics 계산 결과 타입
@@ -32,12 +32,6 @@ export interface VehiclePhysicsResult {
   /** 센서 정지로 스킵해야 하는지 여부 */
   shouldSkip: boolean;
 }
-
-// Zero-GC Scratchpads
-const SCRATCH_ACCEL = {
-  accel: 0,
-  decel: 0,
-};
 
 // Zero-GC Scratchpad for physics result
 export const SCRATCH_PHYSICS: VehiclePhysicsResult = {
@@ -85,28 +79,16 @@ export function calculateVehiclePhysics(
 
   const currentEdge = edgeArray[currentEdgeIndex];
 
-  // 충돌 감지 영역 계산
+  // 1. 충돌 감지 영역 계산
   const hitZone = calculateHitZone(data, ptr, deceleration);
 
-  // 적용할 가속도/감속도 계산
-  calculateAppliedAccelAndDecel(
-    acceleration,
-    deceleration,
-    currentEdge,
-    hitZone,
-    config.curveAcceleration,
-    SCRATCH_ACCEL
-  );
-  const appliedAccel = SCRATCH_ACCEL.accel;
-  const appliedDecel = SCRATCH_ACCEL.decel;
-
-  // 센서 정지 처리 (hitZone === 2이면 즉시 정지)
-  if (checkAndProcessSensorStop(hitZone, data, ptr)) {
+  // 2. 긴급 정지 처리 (hitZone === 2이면 즉시 정지, early return)
+  if (processEmergencyStop(hitZone, data, ptr, vehicleIndex)) {
     out.shouldSkip = true;
     return out;
   }
 
-  // 곡선 사전 감속 체크 (가속 전에 먼저 확인)
+  // 3. 곡선 사전 감속 체크
   const curveBrakeResult = checkCurvePreBraking({
     vehId: vehicleIndex,
     currentEdge,
@@ -119,27 +101,33 @@ export function calculateVehiclePhysics(
     curveBrakeCheckTimers: ctx.curveBrakeCheckTimers,
   });
 
-  // 합류점 사전 감속 (곡선 감속이 없을 때만)
-  const mergeBrakeResult = curveBrakeResult.shouldBrake
-    ? { shouldBrake: false, deceleration: 0, distanceToMerge: Infinity }
-    : checkMergePreBraking({
-        vehId: vehicleIndex,
-        currentEdge,
-        currentRatio: edgeRatio,
-        currentVelocity: velocity,
-        edgeArray,
-        lockMgr: ctx.lockMgr,
-        transferMgr,
-        config,
-        data,
-        ptr,
-      });
+  // 4. 합류점 사전 감속 체크
+  const mergeBrakeResult = checkMergePreBraking({
+    vehId: vehicleIndex,
+    currentEdge,
+    currentRatio: edgeRatio,
+    currentVelocity: velocity,
+    edgeArray,
+    lockMgr: ctx.lockMgr,
+    transferMgr,
+    config,
+    data,
+    ptr,
+  });
 
-  // 최종 가감속 결정 (곡선 감속 > 합류점 감속 우선순위)
-  const finalAccel = (curveBrakeResult.shouldBrake || mergeBrakeResult.shouldBrake) ? 0 : appliedAccel;
-  const finalDecel = curveBrakeResult.shouldBrake
-    ? curveBrakeResult.deceleration
-    : (mergeBrakeResult.shouldBrake ? mergeBrakeResult.deceleration : appliedDecel);
+  // 5. 최종 가감속 결정 (세 가지 감속 요소 통합)
+  const decision = decideFinalAcceleration({
+    baseAcceleration: acceleration,
+    baseDeceleration: deceleration,
+    currentEdge,
+    hitZone,
+    curveBrakeResult,
+    mergeBrakeResult,
+    config,
+  });
+
+  const finalAccel = decision.accel;
+  const finalDecel = decision.decel;
 
   // 새 속도 계산
   const newVelocity = calculateNextSpeed(
@@ -150,6 +138,16 @@ export function calculateVehiclePhysics(
     clampedDelta,
     config
   );
+
+  // DEBUG: 곡선 진입 시 속도 0 문제 디버깅
+  const debugInfo = decision.debugInfo;
+  if (currentEdge.vos_rail_type !== EdgeType.LINEAR && newVelocity === 0 && velocity > 0) {
+    console.error(`[DEBUG] 곡선에서 속도 0! veh=${vehicleIndex}, edge=${currentEdge.edge_name}, ` +
+      `prevVel=${velocity.toFixed(2)}, newVel=${newVelocity.toFixed(2)}, ` +
+      `accel=${finalAccel}, decel=${finalDecel}, ` +
+      `sensorDecel=${debugInfo.sensorDecel}, curveDecel=${debugInfo.curveDecel}, mergeDecel=${debugInfo.mergeDecel}, ` +
+      `maxDecel=${debugInfo.maxDecel}, hitZone=${hitZone}`);
+  }
 
   // 목표 비율 및 새 Edge 비율 계산
   const targetRatio = clampTargetRatio(data[ptr + MovementData.TARGET_RATIO]);
@@ -185,50 +183,94 @@ function calculateHitZone(
   return hitZone;
 }
 
-function calculateAppliedAccelAndDecel(
-  acceleration: number,
-  deceleration: number,
-  currentEdge: Edge,
-  hitZone: number,
-  curveAcceleration: number,
-  target: typeof SCRATCH_ACCEL
-) {
-  let appliedAccel = acceleration;
-  let appliedDecel = 0;
-
-  // Override acceleration for curves
-  if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
-    appliedAccel = curveAcceleration;
-  }
-
-  if (hitZone >= 0) {
-    appliedAccel = 0;
-    appliedDecel = deceleration;
-  }
-
-  target.accel = appliedAccel;
-  target.decel = appliedDecel;
-}
-
-function checkAndProcessSensorStop(
+/**
+ * 긴급 정지 처리 (hitZone === 2)
+ * @returns true이면 즉시 정지 (이후 물리 계산 스킵 필요)
+ */
+function processEmergencyStop(
   hitZone: number,
   data: Float32Array,
-  ptr: number
+  ptr: number,
+  vehicleIndex: number
 ): boolean {
-  if (hitZone === 2) {
-    data[ptr + MovementData.VELOCITY] = 0;
-    data[ptr + MovementData.DECELERATION] = 0;
-
-    const currentReason = data[ptr + LogicData.STOP_REASON];
-    data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.SENSORED;
-    return true;
-  } else {
+  if (hitZone !== 2) {
+    // SENSORED 플래그 제거
     const currentReason = data[ptr + LogicData.STOP_REASON];
     if ((currentReason & StopReason.SENSORED) !== 0) {
       data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.SENSORED;
     }
     return false;
   }
+
+  // hitZone === 2: 긴급 정지
+  const prevVel = data[ptr + MovementData.VELOCITY];
+
+  // DEBUG: 센서 충돌로 정지
+  if (prevVel > 0) {
+    const edgeIdx = data[ptr + MovementData.CURRENT_EDGE];
+    console.warn(`[DEBUG] SENSOR 충돌로 정지: hitZone=2, veh=${vehicleIndex}, edgeIdx=${edgeIdx}, prevVel=${prevVel.toFixed(2)}`);
+  }
+
+  // 속도 0으로 설정
+  data[ptr + MovementData.VELOCITY] = 0;
+  data[ptr + MovementData.DECELERATION] = 0;
+
+  // SENSORED 플래그 설정
+  const currentReason = data[ptr + LogicData.STOP_REASON];
+  data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.SENSORED;
+
+  return true;
+}
+
+/**
+ * 세 가지 감속 요소의 결과를 받아서 최종 가감속 결정
+ *
+ * @returns { accel, decel, debugInfo }
+ *   - debugInfo: 디버그용 각 감속 요소 값
+ */
+function decideFinalAcceleration({
+  baseAcceleration,
+  baseDeceleration,
+  currentEdge,
+  hitZone,
+  curveBrakeResult,
+  mergeBrakeResult,
+  config,
+}: {
+  baseAcceleration: number;
+  baseDeceleration: number;
+  currentEdge: Edge;
+  hitZone: number;
+  curveBrakeResult: { shouldBrake: boolean; deceleration: number };
+  mergeBrakeResult: { shouldBrake: boolean; deceleration: number };
+  config: MovementConfig;
+}): {
+  accel: number;
+  decel: number;
+  debugInfo: { sensorDecel: number; curveDecel: number; mergeDecel: number; maxDecel: number };
+} {
+  // 1. 기본 가속도 결정 (곡선 여부에 따라)
+  const appliedAccel = currentEdge.vos_rail_type === EdgeType.LINEAR
+    ? baseAcceleration
+    : config.curveAcceleration;
+
+  // 2. 세 가지 감속 요소 계산
+  const sensorDecel = hitZone >= 0 ? Math.abs(baseDeceleration) : 0;
+  const curveDecel = curveBrakeResult.shouldBrake ? Math.abs(curveBrakeResult.deceleration) : 0;
+  const mergeDecel = mergeBrakeResult.shouldBrake ? Math.abs(mergeBrakeResult.deceleration) : 0;
+
+  // 3. 가장 큰 감속도 선택
+  const maxDecel = Math.max(sensorDecel, curveDecel, mergeDecel);
+
+  // 4. 최종 가감속 결정
+  const finalAccel = maxDecel > 0 ? 0 : appliedAccel;
+  const finalDecel = maxDecel > 0 ? -maxDecel : 0;
+
+  return {
+    accel: finalAccel,
+    decel: finalDecel,
+    debugInfo: { sensorDecel, curveDecel, mergeDecel, maxDecel }
+  };
 }
 
 function clampTargetRatio(ratio: number): number {

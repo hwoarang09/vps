@@ -76,6 +76,13 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
 
     const nextState = data[ptr + MovementData.NEXT_EDGE_STATE];
     const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE];
+    const trafficState = data[ptr + LogicData.TRAFFIC_STATE];
+
+    // WAITING 상태면 edge transition 불가 (lock 대기 중)
+    if (trafficState === TrafficState.WAITING) {
+      currentRatio = 1;
+      break;
+    }
 
     if (nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {
       currentRatio = 1;
@@ -89,6 +96,10 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     }
 
     store.moveVehicleToEdge(vehicleIndex, nextEdgeIndex, overflowDist / nextEdge.distance);
+
+    // DEBUG: Edge 전환 로그
+    const prevVel = data[ptr + MovementData.VELOCITY];
+    console.log(`[DEBUG] Edge 전환: veh=${vehicleIndex}, ${currentEdge.edge_name}(${currentEdge.vos_rail_type}) -> ${nextEdge.edge_name}(${nextEdge.vos_rail_type}), vel=${prevVel.toFixed(2)}m/s`);
 
     updateSensorPresetForEdge(vehicleDataArray, vehicleIndex, nextEdge);
 

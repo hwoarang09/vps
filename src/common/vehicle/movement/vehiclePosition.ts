@@ -135,6 +135,12 @@ export function updateVehiclePosition(
     // 차량이 대기 지점을 넘어간 경우: 대기 지점으로 되돌림
     finalRatio = SCRATCH_MERGE_POS.x;  // 새로운 ratio (대기 지점)
 
+    // DEBUG: Merge 대기로 속도 0
+    if (finalVelocity > 0) {
+      console.warn(`[DEBUG] MERGE 대기로 정지: veh=${vehicleIndex}, edge=${finalEdge.edge_name}, ` +
+        `ratio=${finalRatio.toFixed(3)}, vel=${finalVelocity.toFixed(2)}`);
+    }
+
     // 2차 위치 보간: 변경된 ratio에 맞는 좌표 재계산
     if (activeEdge) {
       interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS, config.vehicleZOffset);
@@ -221,6 +227,17 @@ function processMergeLogicInline(
     return false;
   }
 
+  // 이미 ACQUIRED 상태면 바로 통과 (곡선 merge edge에서 미리 lock 획득한 경우)
+  const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
+  if (currentTrafficState === TrafficState.ACQUIRED) {
+    // 혹시 모를 LOCKED 플래그 제거
+    const currentReason = data[ptr + LogicData.STOP_REASON];
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
+    return false;
+  }
+
   // Lock 요청 시점 계산
   // requestDistance가 -1이면 진입 즉시 요청 (무조건 shouldRequest = true)
   const requestDistance = lockMgr.getRequestDistance();
@@ -243,7 +260,6 @@ function processMergeLogicInline(
   }
 
   // 요청 시점 도달 - Lock 요청 (FREE일 때만, 중복 요청 방지)
-  const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
   if (currentTrafficState === TrafficState.FREE) {
     lockMgr.requestLock(currentEdge.to_node, currentEdge.edge_name, vehId);
   }
@@ -263,6 +279,16 @@ function processMergeLogicInline(
 
   // Lock 획득 실패 - 대기 상태
   data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
+
+  // 곡선 Edge에서는 대기 지점으로 되돌리지 않음 (곡선에서 급정지 방지)
+  // Lock은 필요하지만, 곡선 끝까지는 부드럽게 진행하고 Edge 전환만 막음
+  // if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
+  //   // WAITING 상태는 유지하되, 위치 되돌림은 하지 않음
+  //   if ((currentReason & StopReason.LOCKED) !== 0) {
+  //     data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+  //   }
+  //   return false;
+  // }
 
   const waitDist = lockMgr.getWaitDistance(currentEdge);
   const currentDist = currentRatio * currentEdge.distance;

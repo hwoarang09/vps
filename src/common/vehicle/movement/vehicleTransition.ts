@@ -231,6 +231,11 @@ function checkTargetReached(
     out.finalRatio = targetRatio;
     out.finalVelocity = 0;
     out.reached = true;
+
+    // DEBUG: targetRatio 도달로 속도 0
+    if (currentVelocity > 0 && targetRatio < 1) {
+      console.warn(`[DEBUG] TARGET_RATIO 도달로 정지: ratio=${rawNewRatio.toFixed(3)}, target=${targetRatio.toFixed(3)}, vel=${currentVelocity.toFixed(2)}`);
+    }
   } else {
     out.finalRatio = rawNewRatio;
     out.finalVelocity = currentVelocity;

@@ -702,7 +702,7 @@ export class TransferMgr {
       // merge node 체크
       if (isMergeNode(nextEdge.to_node)) {
         return {
-          distance: accumulatedDistance,
+          distance: accumulatedDistance + nextEdge.distance,  // merge edge의 끝(to_node)까지의 거리
           mergeEdge: nextEdge
         };
       }
@@ -734,7 +734,7 @@ export class TransferMgr {
 
       if (isMergeNode(edge.to_node)) {
         return {
-          distance: accumulatedDistance,
+          distance: accumulatedDistance + edge.distance,  // merge edge의 끝(to_node)까지의 거리
           mergeEdge: edge
         };
       }
