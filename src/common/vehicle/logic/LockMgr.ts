@@ -489,6 +489,7 @@ export class LockMgr {
 
   /**
    * 직선에서 합류할 때 Wait Distance 반환 (toNode 앞 거리)
+   * @deprecated 경로 탐색 시에는 getWaitDistanceFromMergingStr() 사용
    */
   getWaitDistanceForMergingStr(edge: Edge): number {
     if (edge.distance >= this.lockWaitDistanceFromMergingStr) {
@@ -502,6 +503,20 @@ export class LockMgr {
    * 곡선은 fromNode 기준이므로 그대로 반환
    */
   getWaitDistanceForMergingCurve(): number {
+    return this.lockWaitDistanceFromMergingCurve;
+  }
+
+  /**
+   * 직선 합류 시 Wait Distance raw 값 반환 (합류점에서 뒤로 떨어진 거리)
+   */
+  getWaitDistanceFromMergingStr(): number {
+    return this.lockWaitDistanceFromMergingStr;
+  }
+
+  /**
+   * 곡선 합류 시 Wait Distance raw 값 반환 (곡선 fn에서 떨어진 거리)
+   */
+  getWaitDistanceFromMergingCurve(): number {
     return this.lockWaitDistanceFromMergingCurve;
   }
 

@@ -70,7 +70,7 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
             acceleration: data[ptr + ShmMovementData.ACCELERATION],
             deceleration: data[ptr + ShmMovementData.DECELERATION],
             currentEdge: data[ptr + ShmMovementData.CURRENT_EDGE],
-            nextEdge: data[ptr + ShmMovementData.NEXT_EDGE],
+            nextEdge: data[ptr + ShmMovementData.NEXT_EDGE_0],
             edgeRatio: data[ptr + ShmMovementData.EDGE_RATIO],
         },
         sensor: {

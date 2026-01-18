@@ -112,6 +112,9 @@ export type TransferMode = typeof TransferMode[keyof typeof TransferMode];
 // Memory Layout - Auto-generated Offsets
 // ============================================================================
 
+/** Next Edge 배열 크기 (5개) */
+export const NEXT_EDGE_COUNT = 5;
+
 let _mPtr = 0;
 export const MovementData = {
   X: _mPtr++,
@@ -124,8 +127,13 @@ export const MovementData = {
   EDGE_RATIO: _mPtr++,
   MOVING_STATUS: _mPtr++,
   CURRENT_EDGE: _mPtr++,
-  NEXT_EDGE: _mPtr++,
-  NEXT_EDGE_STATE: _mPtr++,
+  // Next Edge 배열 (5개) - 경로 탐색용
+  NEXT_EDGE_0: _mPtr++,
+  NEXT_EDGE_1: _mPtr++,
+  NEXT_EDGE_2: _mPtr++,
+  NEXT_EDGE_3: _mPtr++,
+  NEXT_EDGE_4: _mPtr++,
+  NEXT_EDGE_STATE: _mPtr++,  // NEXT_EDGE_0의 준비 상태
   TARGET_RATIO: _mPtr++,
   OFFSET: _mPtr++,
 } as const;

@@ -75,7 +75,7 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     const overflowDist = (currentRatio - 1) * currentEdge.distance;
 
     const nextState = data[ptr + MovementData.NEXT_EDGE_STATE];
-    const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE];
+    const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE_0];
     const trafficState = data[ptr + LogicData.TRAFFIC_STATE];
 
     // WAITING 상태면 edge transition 불가 (lock 대기 중)
@@ -105,18 +105,18 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
       data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
     }
 
-    data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
-    data[ptr + MovementData.NEXT_EDGE] = -1;
-    
+    // Next Edge 배열을 한 칸씩 앞으로 당기기
+    shiftNextEdges(data, ptr);
+
     // Set TARGET_RATIO for the new edge
     if (nextTargetRatio !== undefined) {
       // If explicit next target ratio is provided (from TransferMgr reservation)
       data[ptr + MovementData.TARGET_RATIO] = nextTargetRatio;
     } else if (!preserveTargetRatio) {
       // Default behavior: Set to 1.0 (full traversal)
-      data[ptr + MovementData.TARGET_RATIO] = 1; 
+      data[ptr + MovementData.TARGET_RATIO] = 1;
     }
-    // If preserveTargetRatio is true AND nextTargetRatio is undefined, 
+    // If preserveTargetRatio is true AND nextTargetRatio is undefined,
     // we leave TARGET_RATIO as is (legacy behavior, though logically it might be 1.0 from previous frame)
 
     currentEdgeIdx = nextEdgeIndex;
@@ -156,4 +156,22 @@ function updateSensorPresetForEdge(
   }
 
   data[ptr + SensorData.PRESET_IDX] = presetIdx;
+}
+
+/**
+ * Next Edge 배열을 한 칸씩 앞으로 당기고, 마지막 칸은 -1로 설정
+ * NEXT_EDGE_0 사용 후 호출
+ */
+function shiftNextEdges(data: Float32Array, ptr: number): void {
+  // 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 4
+  data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
+  data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
+  data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
+  data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
+  data[ptr + MovementData.NEXT_EDGE_4] = -1;
+
+  // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
+  if (data[ptr + MovementData.NEXT_EDGE_0] === -1) {
+    data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
+  }
 }

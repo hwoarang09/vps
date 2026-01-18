@@ -175,10 +175,10 @@ export class VehicleDataArrayBase {
         },
 
         get nextEdge() {
-          return data[offset + MovementData.NEXT_EDGE];
+          return data[offset + MovementData.NEXT_EDGE_0];
         },
         set nextEdge(val: number) {
-          data[offset + MovementData.NEXT_EDGE] = val;
+          data[offset + MovementData.NEXT_EDGE_0] = val;
         },
 
         get nextEdgeState() {

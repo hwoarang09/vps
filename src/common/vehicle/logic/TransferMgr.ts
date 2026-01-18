@@ -8,6 +8,7 @@ import {
   VEHICLE_DATA_SIZE,
   TransferMode,
   MovingStatus,
+  NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
 
 /**
@@ -225,10 +226,79 @@ export class TransferMgr {
         // In MQTT_CONTROL mode, this effectively stops/waits if no command is present
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
       } else {
-        data[ptr + MovementData.NEXT_EDGE] = nextEdgeIndex;
-        data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+        // 5개의 next edge를 채우기
+        this.fillNextEdges(
+          data,
+          ptr,
+          nextEdgeIndex,
+          edgeArray,
+          vehicleLoopMap,
+          edgeNameToIndex,
+          mode,
+          vehId
+        );
       }
     }
+  }
+
+  /**
+   * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
+   */
+  private fillNextEdges(
+    data: Float32Array,
+    ptr: number,
+    firstNextEdgeIndex: number,
+    edgeArray: Edge[],
+    vehicleLoopMap: Map<number, VehicleLoop>,
+    edgeNameToIndex: Map<string, number>,
+    mode: TransferMode,
+    vehicleIndex: number
+  ): void {
+    const nextEdgeOffsets = [
+      MovementData.NEXT_EDGE_0,
+      MovementData.NEXT_EDGE_1,
+      MovementData.NEXT_EDGE_2,
+      MovementData.NEXT_EDGE_3,
+      MovementData.NEXT_EDGE_4,
+    ];
+
+    let currentEdgeIdx = firstNextEdgeIndex;
+
+    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+      if (i === 0) {
+        // 첫 번째는 이미 결정됨
+        data[ptr + nextEdgeOffsets[i]] = firstNextEdgeIndex;
+      } else {
+        // 이전 edge의 next edge 결정
+        const prevEdge = edgeArray[currentEdgeIdx];
+        if (!prevEdge) {
+          data[ptr + nextEdgeOffsets[i]] = -1;
+          continue;
+        }
+
+        const nextIdx = this.determineNextEdge(
+          prevEdge,
+          vehicleIndex,
+          vehicleLoopMap,
+          edgeNameToIndex,
+          mode
+        );
+
+        data[ptr + nextEdgeOffsets[i]] = nextIdx;
+
+        if (nextIdx === -1) {
+          // 더 이상 next edge 없음 - 나머지는 -1로 채움
+          for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
+            data[ptr + nextEdgeOffsets[j]] = -1;
+          }
+          break;
+        }
+
+        currentEdgeIdx = nextIdx;
+      }
+    }
+
+    data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
   }
 
   private determineNextEdge(

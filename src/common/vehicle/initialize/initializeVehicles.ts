@@ -96,8 +96,12 @@ export function initializeSingleVehicle(
   // Initialize Target Ratio (New)
   vehData[ptr + MovementData.TARGET_RATIO] = initialTargetRatio;
 
-  // Initialize NextEdge State
-  vehData[ptr + MovementData.NEXT_EDGE] = -1;
+  // Initialize NextEdge State (5개 모두 -1로 초기화)
+  vehData[ptr + MovementData.NEXT_EDGE_0] = -1;
+  vehData[ptr + MovementData.NEXT_EDGE_1] = -1;
+  vehData[ptr + MovementData.NEXT_EDGE_2] = -1;
+  vehData[ptr + MovementData.NEXT_EDGE_3] = -1;
+  vehData[ptr + MovementData.NEXT_EDGE_4] = -1;
   vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
 
   // Update sensor points
