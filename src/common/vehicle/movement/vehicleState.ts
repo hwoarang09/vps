@@ -7,7 +7,6 @@ import {
 import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import type { VehiclePositionResult } from "./vehiclePosition";
 import type { MovementUpdateContext } from "./movementUpdate";
-import { devLog } from "@/logger";
 
 // ============================================================================
 // Phase 4: commitVehicleState
@@ -35,24 +34,8 @@ export function commitVehicleState(
   finalEdgeIndex: number,
   position: VehiclePositionResult
 ): void {
-  const { sensorPointArray, edgeArray, config } = ctx;
+  const { sensorPointArray, config } = ctx;
   const { finalVelocity, finalRatio, finalX, finalY, finalZ, finalRotation } = position;
-
-  // [UnusualMove] Edge 전환 시 연결 여부 검증
-  const prevEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
-  if (prevEdgeIndex !== finalEdgeIndex && prevEdgeIndex >= 0 && finalEdgeIndex >= 0) {
-    const prevEdge = edgeArray[prevEdgeIndex];
-    const newEdge = edgeArray[finalEdgeIndex];
-    if (prevEdge && newEdge && prevEdge.to_node !== newEdge.from_node) {
-      const prevX = data[ptr + MovementData.X];
-      const prevY = data[ptr + MovementData.Y];
-      devLog.veh(vehicleIndex).error(
-        `[UnusualMove] 연결되지 않은 edge로 이동! ` +
-        `prevEdge=${prevEdge.edge_name}(to:${prevEdge.to_node}) → newEdge=${newEdge.edge_name}(from:${newEdge.from_node}), ` +
-        `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)}) → (${finalX.toFixed(2)},${finalY.toFixed(2)})`
-      );
-    }
-  }
 
   // Movement 데이터 기록
   data[ptr + MovementData.VELOCITY] = finalVelocity;

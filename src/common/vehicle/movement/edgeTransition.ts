@@ -3,6 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
+import { devLog } from "@/logger";
 import {
   VEHICLE_DATA_SIZE,
   MovementData,
@@ -98,6 +99,17 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     if (!nextEdge) {
       currentRatio = 1;
       break;
+    }
+
+    // [UnusualMove] Edge 전환 시 연결 여부 검증
+    if (currentEdge.to_node !== nextEdge.from_node) {
+      const prevX = data[ptr + MovementData.X];
+      const prevY = data[ptr + MovementData.Y];
+      devLog.veh(vehicleIndex).error(
+        `[UnusualMove] 연결되지 않은 edge로 이동! ` +
+        `prevEdge=${currentEdge.edge_name}(to:${currentEdge.to_node}) → nextEdge=${nextEdge.edge_name}(from:${nextEdge.from_node}), ` +
+        `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)})`
+      );
     }
 
     store.moveVehicleToEdge(vehicleIndex, nextEdgeIndex, overflowDist / nextEdge.distance);
