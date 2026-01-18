@@ -628,6 +628,96 @@ export class LockMgr {
     const grantedVehs = node.granted.length > 0 ? node.granted.map(g => g.veh).join(',') : 'FREE';
     devLog.debug(`[LockMgr] ${nodeName} - granted: [${grantedVehs}], requests: ${node.requests.map((r) => r.vehId).join(", ")}`);
   }
+
+  /**
+   * 특정 차량이 가지고 있는 모든 락 정보 반환
+   * @returns Array of { nodeName, edgeName, isGranted }
+   */
+  getLocksForVehicle(vehId: number): Array<{ nodeName: string; edgeName: string; isGranted: boolean }> {
+    const result: Array<{ nodeName: string; edgeName: string; isGranted: boolean }> = [];
+
+    for (const [nodeName, node] of Object.entries(this.lockTable)) {
+      // granted 확인
+      const grantedEntry = node.granted.find(g => g.veh === vehId);
+      if (grantedEntry) {
+        result.push({ nodeName, edgeName: grantedEntry.edge, isGranted: true });
+        continue;
+      }
+
+      // requests 확인
+      const requestEntry = node.requests.find(r => r.vehId === vehId);
+      if (requestEntry) {
+        result.push({ nodeName, edgeName: requestEntry.edgeName, isGranted: false });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 특정 노드에서 차량의 락을 취소
+   * requests 또는 granted에서 제거
+   * @returns true if cancelled, false if not found
+   */
+  cancelLock(nodeName: string, vehId: number): boolean {
+    const node = this.lockTable[nodeName];
+    if (!node) return false;
+
+    // granted에서 확인 및 제거
+    const grantIdx = node.granted.findIndex(g => g.veh === vehId);
+    if (grantIdx !== -1) {
+      const grantedEdge = node.granted[grantIdx].edge;
+      devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${grantedEdge} (was granted)`);
+
+      node.granted.splice(grantIdx, 1);
+
+      // edgeQueue에서도 제거 (granted는 큐 맨 앞이므로 dequeue)
+      node.edgeQueues[grantedEdge]?.dequeue();
+
+      // BATCH 전략인 경우 controller 상태 업데이트
+      if (this.strategyType === 'BATCH') {
+        const controller = this.batchControllers.get(nodeName);
+        if (controller && controller.state.currentBatchEdge === grantedEdge) {
+          // 취소된 차량은 release 없이 사라지므로 batchReleasedCount 증가
+          controller.state.batchReleasedCount++;
+          devLog.debug(`[cancelLock] BATCH: adjusted batchReleasedCount for cancelled vehicle`);
+        }
+      }
+
+      this.logNodeState(nodeName);
+      return true;
+    }
+
+    // requests에서 확인 및 제거
+    const reqIdx = node.requests.findIndex(r => r.vehId === vehId);
+    if (reqIdx !== -1) {
+      const requestEdge = node.requests[reqIdx].edgeName;
+      devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${requestEdge} (was pending)`);
+
+      node.requests.splice(reqIdx, 1);
+
+      // edgeQueue에서 해당 vehId 제거 (pending은 큐 중간에 있을 수 있음)
+      // RingBuffer는 중간 제거가 O(n)이지만, 경로 변경은 드물게 발생
+      const queue = node.edgeQueues[requestEdge];
+      if (queue) {
+        // 새 큐로 재구성 (해당 vehId 제외)
+        const newQueue = new RingBuffer<number>();
+        const size = queue.size;
+        for (let i = 0; i < size; i++) {
+          const item = queue.dequeue();
+          if (item !== undefined && item !== vehId) {
+            newQueue.enqueue(item);
+          }
+        }
+        node.edgeQueues[requestEdge] = newQueue;
+      }
+
+      this.logNodeState(nodeName);
+      return true;
+    }
+
+    return false;
+  }
 }
 
 // Singleton for vehicleArrayMode

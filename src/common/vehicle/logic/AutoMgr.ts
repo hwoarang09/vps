@@ -10,6 +10,7 @@ import { findShortestPath } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
 import { devLog } from "@/logger/DevLogger";
+import { LockMgr } from "./LockMgr";
 
 interface StationTarget {
   name: string;
@@ -60,7 +61,8 @@ export class AutoMgr {
     vehicleDataArray: IVehicleDataArray,
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
-    transferMgr: TransferMgr
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
   ) {
     if (mode !== TransferMode.AUTO_ROUTE) return;
     if (numVehicles === 0) return;
@@ -70,7 +72,6 @@ export class AutoMgr {
 
     // Process vehicles in round-robin fashion with limit
     const startIndex = this.nextVehicleIndex;
-    let processedCount = 0;
 
     for (let i = 0; i < numVehicles; i++) {
       // Check if we've hit the per-frame limit
@@ -84,10 +85,9 @@ export class AutoMgr {
         vehicleDataArray,
         edgeArray,
         edgeNameToIndex,
-        transferMgr
+        transferMgr,
+        lockMgr
       );
-
-      processedCount++;
 
       // Update next starting index for round-robin
       if (didAssign) {
@@ -107,7 +107,8 @@ export class AutoMgr {
     vehicleDataArray: IVehicleDataArray,
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
-    transferMgr: TransferMgr
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
   ): boolean {
     if (transferMgr.hasPendingCommands(vehId)) return false;
 
@@ -116,7 +117,7 @@ export class AutoMgr {
     const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
 
     // Assign random destination
-    return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr);
+    return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
   }
 
   /**
@@ -128,7 +129,8 @@ export class AutoMgr {
     vehicleDataArray: IVehicleDataArray,
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
-    transferMgr: TransferMgr
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
   ): boolean {
     if (this.stations.length === 0) {
       return false;
@@ -153,6 +155,12 @@ export class AutoMgr {
 
       if (pathIndices && pathIndices.length > 0) {
         devLog.veh(vehId).debug(`[pathBuff] DIJKSTRA from=${currentEdgeIdx} to=${candidate.edgeIndex} result=[${pathIndices.slice(0, 10).join(',')}${pathIndices.length > 10 ? '...' : ''}] len=${pathIndices.length}`);
+
+        // 경로 변경 전에 새 경로에 없는 락 취소
+        if (lockMgr) {
+          this.cancelObsoleteLocks(vehId, pathIndices, edgeArray, lockMgr);
+        }
+
         const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
 
         // Assign
@@ -206,5 +214,66 @@ export class AutoMgr {
     }
 
     return pathCommand;
+  }
+
+  /**
+   * 새 경로에 포함되지 않는 락을 찾아서 반환
+   * @param vehId 차량 ID
+   * @param newPathIndices 새 경로의 edge index 배열
+   * @param edgeArray 전체 edge 배열
+   * @param lockMgr LockMgr 인스턴스
+   * @returns 취소해야 할 노드 이름 배열
+   */
+  findLocksToCancel(
+    vehId: number,
+    newPathIndices: number[],
+    edgeArray: Edge[],
+    lockMgr: LockMgr
+  ): string[] {
+    // 1. 현재 차량이 가진 락 목록 조회
+    const currentLocks = lockMgr.getLocksForVehicle(vehId);
+    if (currentLocks.length === 0) {
+      return [];
+    }
+
+    // 2. 새 경로에 포함된 노드들 수집 (to_node 기준)
+    const newPathNodes = new Set<string>();
+    for (const edgeIdx of newPathIndices) {
+      const edge = edgeArray[edgeIdx];
+      if (edge) {
+        newPathNodes.add(edge.to_node);
+      }
+    }
+
+    // 3. 새 경로에 없는 락 찾기
+    const locksToCancel: string[] = [];
+    for (const lock of currentLocks) {
+      if (!newPathNodes.has(lock.nodeName)) {
+        locksToCancel.push(lock.nodeName);
+        devLog.veh(vehId).debug(`[findLocksToCancel] node=${lock.nodeName} not in new path, will cancel (wasGranted=${lock.isGranted})`);
+      }
+    }
+
+    return locksToCancel;
+  }
+
+  /**
+   * 경로 변경 시 불필요한 락 취소
+   */
+  cancelObsoleteLocks(
+    vehId: number,
+    newPathIndices: number[],
+    edgeArray: Edge[],
+    lockMgr: LockMgr
+  ): void {
+    const locksToCancel = this.findLocksToCancel(vehId, newPathIndices, edgeArray, lockMgr);
+
+    if (locksToCancel.length > 0) {
+      devLog.veh(vehId).debug(`[cancelObsoleteLocks] cancelling ${locksToCancel.length} locks: [${locksToCancel.join(', ')}]`);
+    }
+
+    for (const nodeName of locksToCancel) {
+      lockMgr.cancelLock(nodeName, vehId);
+    }
   }
 }

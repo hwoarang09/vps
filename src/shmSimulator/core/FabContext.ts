@@ -342,7 +342,18 @@ export class FabContext {
     };
     checkCollisions(collisionCtx);
 
-    // 2. Movement Update
+    // 2. Auto Routing Trigger (경로 설정을 Movement 전에 실행)
+    this.autoMgr.update(
+      this.store.transferMode,
+      this.actualNumVehicles,
+      this.vehicleDataArray,
+      this.edges,
+      this.edgeNameToIndex,
+      this.transferMgr,
+      this.lockMgr
+    );
+
+    // 3. Movement Update
     const tracker = this.edgeTransitTracker;
     const edges = this.edges;
 
@@ -376,16 +387,6 @@ export class FabContext {
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
     };
     updateMovement(movementCtx);
-
-    // 3. Auto Routing Trigger
-    this.autoMgr.update(
-      this.store.transferMode,
-      this.actualNumVehicles,
-      this.vehicleDataArray,
-      this.edges,
-      this.edgeNameToIndex,
-      this.transferMgr
-    );
 
     // 4. Write to Render Buffer (연속 레이아웃)
     this.writeToRenderRegion();
