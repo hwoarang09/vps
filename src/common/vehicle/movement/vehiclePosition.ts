@@ -419,6 +419,7 @@ function processMergeLogicInline(
       if (mergeTarget.type === 'CURVE') {
         const prevState = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
         console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevState} → WAITING (락 획득 실패)`);
+        console.log(`mergeTarget.distanceToMerge=${mergeTarget.distanceToMerge}, mergeTarget.waitDistance=${mergeTarget.waitDistance}`);
       }
       data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
 

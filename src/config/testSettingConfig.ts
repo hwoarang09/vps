@@ -104,7 +104,7 @@ let testSettingConfig: TestSettingConfig = {
       name: "Simple Connected",
       description: "Simple connected loop test",
       mapName: "simple_connected",
-      numVehicles: 10,
+      numVehicles: 2,
       transferMode: TransferMode.AUTO_ROUTE,
       camera: {
         position: [10, -10, 30],
@@ -160,7 +160,7 @@ let testSettingConfig: TestSettingConfig = {
       }
     }
   ],
-  DEFAULT_SETTING: "Y_SHORT"
+  DEFAULT_SETTING: "SIMPLE_CONNECTED"
 };
 
 // Load config immediately

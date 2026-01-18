@@ -38,7 +38,7 @@
       "name": "Simple Connected",
       "description": "Simple connected loop test",
       "mapName": "simple_connected",
-      "numVehicles": 10,
+      "numVehicles": 2,
       "camera": {
         "position": [10, -10, 30],
         "target": [10, 0, 0]
@@ -89,6 +89,6 @@
       }
     }
   ],
-  "DEFAULT_SETTING": "Y_SHORT"
+  "DEFAULT_SETTING": "SIMPLE_CONNECTED"
 }
 
