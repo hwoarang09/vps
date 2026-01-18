@@ -40,7 +40,7 @@
       "maxSpeed": 5.0,
       "acceleration": 2.0,
       "deceleration": -3.0,
-      "preBrakeDeceleration": -2.0
+      "preBrakeDeceleration": -3.0
     },
     "curve": {
       "maxSpeed": 1.0,

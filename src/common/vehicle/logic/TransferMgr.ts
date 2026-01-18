@@ -799,8 +799,10 @@ export class TransferMgr {
 
       // merge node 체크
       if (isMergeNode(nextEdge.to_node)) {
+        // 곡선 merge edge는 fn(시작점)까지, 직선 merge edge는 tn(끝점)까지의 거리
+        const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
         return {
-          distance: accumulatedDistance + nextEdge.distance,  // merge edge의 끝(to_node)까지의 거리
+          distance: isCurve ? accumulatedDistance : accumulatedDistance + nextEdge.distance,
           mergeEdge: nextEdge
         };
       }
@@ -831,8 +833,10 @@ export class TransferMgr {
       if (!edge) continue;
 
       if (isMergeNode(edge.to_node)) {
+        // 곡선 merge edge는 fn(시작점)까지, 직선 merge edge는 tn(끝점)까지의 거리
+        const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
         return {
-          distance: accumulatedDistance + edge.distance,  // merge edge의 끝(to_node)까지의 거리
+          distance: isCurve ? accumulatedDistance : accumulatedDistance + edge.distance,
           mergeEdge: edge
         };
       }

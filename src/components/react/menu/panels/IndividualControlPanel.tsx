@@ -15,10 +15,12 @@ import {
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { NEXT_EDGE_COUNT } from "@/common/vehicle/initialize/constants";
 import type { Edge as FullEdge } from "@/types/edge";
+import { EdgeType } from "@/types";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { MAX_PATH_LENGTH } from "@/common/vehicle/logic/TransferMgr";
+import { getLockWaitDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve } from "@/config/simulationConfig";
 
 // Helper to decode StopReason bitmask
 const getStopReasons = (reasonMask: number): string[] => {
@@ -97,30 +99,41 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
     };
 };
 
-// Helper to find nearest merge node in next edges
-interface MergeNodeInfo {
-    mergeNodeName: string;
-    mergeEdgeName: string;
-    distanceToMerge: number;
+// Helper to find nearest merge wait point in next edges
+interface MergeWaitInfo {
+    waitNodeName: string;      // 대기 대상 노드 (곡선: fn, 직선: tn)
+    mergeEdgeName: string;     // merge edge 이름
+    distanceToWait: number;    // wait 지점까지의 거리
     edgeHops: number;
+    isCurve: boolean;          // 곡선 여부
 }
 
-const findNearestMergeNode = (
+const findNearestMergeWait = (
     currentEdge: FullEdge,
     currentRatio: number,
     nextEdges: number[],
     edges: FullEdge[]
-): MergeNodeInfo | null => {
+): MergeWaitInfo | null => {
+    const waitDistanceStr = getLockWaitDistanceFromMergingStr();
+    const waitDistanceCurve = getLockWaitDistanceFromMergingCurve();
+
     // Check current edge first
     let accumulatedDistance = currentEdge.distance * (1 - currentRatio);
 
     // If current edge's to_node is merge, return it
     if (currentEdge.toNodeIsMerge) {
+        const isCurve = currentEdge.vos_rail_type !== EdgeType.LINEAR;
+        const waitNode = isCurve ? currentEdge.from_node : currentEdge.to_node;
+        // 현재 edge 안에 있으므로, 곡선이면 fn은 이미 지남
+        const distanceToWait = isCurve
+            ? Math.max(0, -waitDistanceCurve) // 이미 fn 지났으므로 음수가 될 수 있음
+            : Math.max(0, accumulatedDistance - waitDistanceStr);
         return {
-            mergeNodeName: currentEdge.to_node,
+            waitNodeName: waitNode,
             mergeEdgeName: currentEdge.edge_name,
-            distanceToMerge: accumulatedDistance,
+            distanceToWait,
             edgeHops: 0,
+            isCurve,
         };
     }
 
@@ -132,16 +145,25 @@ const findNearestMergeNode = (
         const nextEdge = edges[nextEdgeIdx];
         if (!nextEdge) break;
 
-        accumulatedDistance += nextEdge.distance;
-
         if (nextEdge.toNodeIsMerge) {
+            const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
+            // 곡선: fn(시작점)이 wait 대상, 직선: tn(끝점)이 wait 대상
+            const waitNode = isCurve ? nextEdge.from_node : nextEdge.to_node;
+            // 곡선: fn까지 거리 - waitDistanceCurve
+            // 직선: tn까지 거리 - waitDistanceStr
+            const distanceToWait = isCurve
+                ? accumulatedDistance - waitDistanceCurve
+                : accumulatedDistance + nextEdge.distance - waitDistanceStr;
             return {
-                mergeNodeName: nextEdge.to_node,
+                waitNodeName: waitNode,
                 mergeEdgeName: nextEdge.edge_name,
-                distanceToMerge: accumulatedDistance,
+                distanceToWait: Math.max(0, distanceToWait),
                 edgeHops: i + 1,
+                isCurve,
             };
         }
+
+        accumulatedDistance += nextEdge.distance;
     }
 
     return null;
@@ -313,8 +335,8 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     // Cast to FullEdge to access topology properties (toNodeIsMerge, etc.)
     const edges = useEdgeStore.getState().edges as FullEdge[];
     const currentEdge = edges[currentEdgeIdx];
-    const mergeNodeInfo = currentEdge && nextEdges.length > 0
-        ? findNearestMergeNode(currentEdge, currentEdgeRatio, nextEdges, edges)
+    const mergeWaitInfo = currentEdge && nextEdges.length > 0
+        ? findNearestMergeWait(currentEdge, currentEdgeRatio, nextEdges, edges)
         : null;
 
     // Get next edges info for display
@@ -479,24 +501,24 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                         </details>
                     )}
 
-                    {/* Merge Node Alert */}
-                    {isShmMode && mergeNodeInfo && (
+                    {/* Merge Wait Point Alert */}
+                    {isShmMode && mergeWaitInfo && (
                         <div className="mt-2 p-2 bg-orange-50 rounded border border-orange-200 text-xs">
                             <div className="flex justify-between font-bold text-orange-800 mb-1">
-                                <span>Merge Node Ahead</span>
-                                <span>{mergeNodeInfo.mergeNodeName}</span>
+                                <span>Merge Wait Point</span>
+                                <span>{mergeWaitInfo.waitNodeName} ({mergeWaitInfo.isCurve ? 'Curve' : 'Str'})</span>
                             </div>
                             <div className="flex justify-between text-orange-700">
-                                <span>Distance:</span>
-                                <span className="font-mono font-bold">{mergeNodeInfo.distanceToMerge.toFixed(2)} m</span>
+                                <span>Distance to Wait:</span>
+                                <span className="font-mono font-bold">{mergeWaitInfo.distanceToWait.toFixed(2)} m</span>
                             </div>
                             <div className="flex justify-between text-orange-600">
                                 <span>Via Edge:</span>
-                                <span className="font-mono">{mergeNodeInfo.mergeEdgeName}</span>
+                                <span className="font-mono">{mergeWaitInfo.mergeEdgeName}</span>
                             </div>
                             <div className="flex justify-between text-orange-600">
                                 <span>Hops:</span>
-                                <span className="font-mono">{mergeNodeInfo.edgeHops === 0 ? 'Current' : mergeNodeInfo.edgeHops}</span>
+                                <span className="font-mono">{mergeWaitInfo.edgeHops === 0 ? 'Current' : mergeWaitInfo.edgeHops}</span>
                             </div>
                         </div>
                     )}
