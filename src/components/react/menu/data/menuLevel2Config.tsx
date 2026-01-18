@@ -21,9 +21,7 @@ import {
   Download,
   Upload,
   Square,
-  Database,
-  Layers,
-  MemoryStick,
+  Lock,
 } from "lucide-react";
 import { ReactComponent as Curve180Icon } from "@/assets/icons/curve180.svg";
 import { ReactComponent as Curve90Icon } from "@/assets/icons/curve90.svg";
@@ -426,38 +424,12 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       ),
     },
   ],
-  Test: [
+  DevTools: [
     {
-      id: "test-rapier-array",
-      label: "Rapier",
+      id: "devtools-lock",
+      label: "Lock",
       iconFn: (isActive: boolean) => (
-        <Database
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "test-rapier-dict",
-      label: "Array Single",
-      iconFn: (isActive: boolean) => (
-        <Layers
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "test-shared-memory",
-      label: "Shared Memory",
-      iconFn: (isActive: boolean) => (
-        <MemoryStick
+        <Lock
           size={ICON_SIZE_LARGE}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
@@ -467,5 +439,4 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       ),
     },
   ],
-
 };

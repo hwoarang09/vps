@@ -3,6 +3,7 @@ import React from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
+import LockInfoPanel from "./panels/LockInfoPanel";
 
 
 const RightPanel: React.FC = () => {
@@ -120,6 +121,18 @@ const RightPanel: React.FC = () => {
       );
     }
 
+    // DevTools Lock Panel
+    if (activeSubMenu === "devtools-lock") {
+      return (
+        <div className="h-full flex flex-col">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+            Lock Info
+          </h3>
+          <LockInfoPanel />
+        </div>
+      );
+    }
+
 
 
     // 다른 메뉴들의 경우
@@ -185,6 +198,8 @@ const RightPanel: React.FC = () => {
       "map-menu-3": "Junction Parts",
       "map-menu-4": "Special Components",
       "map-menu-5": "Connection Tools",
+      // DevTools
+      "devtools-lock": "Lock Info",
     };
     return labels[menuId] || menuId;
   };

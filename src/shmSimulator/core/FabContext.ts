@@ -524,4 +524,35 @@ export class FabContext {
   getVehicleData(): Float32Array {
     return this.vehicleDataArray.getData();
   }
+
+  getLockTableData(): import("../types").LockTableData {
+    const table = this.lockMgr.getTable();
+    const nodes: Record<string, import("../types").LockNodeData> = {};
+
+    for (const [nodeName, node] of Object.entries(table)) {
+      const edgeQueueSizes: Record<string, number> = {};
+      for (const [edgeName, queue] of Object.entries(node.edgeQueues)) {
+        edgeQueueSizes[edgeName] = queue.size;
+      }
+
+      nodes[nodeName] = {
+        name: node.name,
+        requests: node.requests.map(r => ({
+          vehId: r.vehId,
+          edgeName: r.edgeName,
+          requestTime: r.requestTime,
+        })),
+        granted: node.granted.map(g => ({
+          edge: g.edge,
+          veh: g.veh,
+        })),
+        edgeQueueSizes,
+      };
+    }
+
+    return {
+      strategy: this.lockMgr.getGrantStrategy(),
+      nodes,
+    };
+  }
 }

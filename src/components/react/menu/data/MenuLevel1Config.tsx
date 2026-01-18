@@ -6,7 +6,7 @@ import {
   Folder,
   Table,
   Building,
-  TestTube,
+  Wrench,
 } from "lucide-react";
 import {
   MenuLevel1Item,
@@ -127,13 +127,13 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       ),
     },
   ],
-  // Group 6: Test
+  // Group 6: DevTools
   [
     {
-      id: "Test",
-      label: "Test",
+      id: "DevTools",
+      label: "DevTools",
       iconFn: (isActive) => (
-        <TestTube
+        <Wrench
           size={ICON_SIZE_MEDIUM}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,

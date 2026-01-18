@@ -37,15 +37,13 @@ export interface MenuState {
 
 export const useMenuStore = create<MenuState>((set, get) => ({
   // Initial state
-  activeMainMenu: "Test",
-  activeSubMenu: "test-shared-memory",
+  activeMainMenu: null,
+  activeSubMenu: null,
   activeThirdMenu: null,
   rightPanelOpen: false,
 
   // Remember last selected lv2 menu for each lv1 menu
-  lastSubMenuByMainMenu: {
-    Test: "test-shared-memory", // Initial value for Test menu
-  },
+  lastSubMenuByMainMenu: {},
 
   // Tooltip state
   hoveredMenuId: null,

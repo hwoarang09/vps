@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useMenuStore } from "@store/ui/menuStore";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
 import { useVehicleGeneralStore } from "@store/vehicle/vehicleGeneralStore";
@@ -32,7 +31,6 @@ import LogFileManager from "./LogFileManager";
  */
 
 const VehicleTest: React.FC = () => {
-  const { activeMainMenu, activeSubMenu } = useMenuStore();
   const { stopTest, isPaused, setPaused } = useVehicleTestStore();
   const edges = useEdgeStore((state) => state.edges);
   const { transferMode, setTransferMode } = useVehicleArrayStore();
@@ -40,7 +38,6 @@ const VehicleTest: React.FC = () => {
   const { dispose: disposeShmSimulator } = useShmSimulatorStore();
   const { loadCFGFiles } = useCFGStore();
   const { setCameraView } = useCameraStore();
-  const prevModeRef = useRef<string | null>(null);
 
   const [selectedSettingId, setSelectedSettingId] = useState<string>(getDefaultSetting());
   const testSettings = getTestSettings();
@@ -160,49 +157,8 @@ const VehicleTest: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
 
-  // Cleanup on mode change
-  useEffect(() => {
-    if (prevModeRef.current && prevModeRef.current !== activeSubMenu) {
-      // Mode changed - cleanup previous mode
-
-      // Dispose SHM simulator if switching away from shared-memory mode
-      if (prevModeRef.current === "test-shared-memory") {
-        disposeShmSimulator();
-      }
-
-      // Reset test state
-      if (isTestCreated) {
-        stopTest();
-        setIsTestCreated(false);
-        setTestKey((prev) => prev + 1);
-      }
-    }
-    prevModeRef.current = activeSubMenu;
-  }, [activeSubMenu, isTestCreated, stopTest, disposeShmSimulator]);
-
-  // Only render UI when Test menu is active
-  // But test keeps running in background even when menu is closed
-  // Move early return to AFTER effects
-  // if (activeMainMenu !== "Test") {
-  //   return null;
-  // ]
-
-  // Route to appropriate test based on submenu
-  let mode: VehicleSystemType | null = null;
-
-  switch (activeSubMenu) {
-    case "test-rapier-array":
-      mode = VehicleSystemType.RapierDict;
-      break;
-    case "test-rapier-dict":
-      mode = VehicleSystemType.ArraySingle;
-      break;
-    case "test-shared-memory":
-      mode = VehicleSystemType.SharedMemory;
-      break;
-    default:
-      return null;
-  }
+  // SHM 모드로 고정
+  const mode: VehicleSystemType = VehicleSystemType.SharedMemory;
 
   // Handle delete - remove all vehicles and stop test
   const handleDelete = () => {
@@ -399,12 +355,6 @@ const VehicleTest: React.FC = () => {
   };
 
 
-
-  // Only render UI when Test menu is active
-  // But test keeps running in background even when menu is closed
-  if (activeMainMenu !== "Test") {
-    return null;
-  }
 
   // Handle test setting change - load map, set camera, and create vehicles from vehicles.cfg
   const handleSettingChange = async (newSettingId: string) => {

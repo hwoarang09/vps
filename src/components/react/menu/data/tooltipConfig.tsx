@@ -16,7 +16,7 @@ export const tooltipsByLevel: {
     LayoutBuilder: "레이아웃 편집기",
     DataPanel: "데이터 패널",
     MQTT: "MQTT 연결 관리",
-    Test: "성능 테스트",
+    DevTools: "개발자 도구",
   },
   2: {
     // 서브메뉴 레벨
@@ -56,11 +56,9 @@ export const tooltipsByLevel: {
     "layout-menu-2": "Station 생성기",
     "layout-menu-3": "Equipment 생성기",
 
-    "test-rapier-array": "Rapier (Dict) 모드 테스트",
-    "test-rapier-dict": "Array Single 모드 테스트",
-    "test-shared-memory": "Shared Memory 모드 테스트",
-
     "mqtt-connection": "MQTT 브로커 연결 관리",
+
+    "devtools-lock": "노드별 Lock 상태 확인",
   },
   3: {
     // 서브서브메뉴 레벨 (필요한 경우에만)

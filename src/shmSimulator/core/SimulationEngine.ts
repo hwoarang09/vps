@@ -456,4 +456,17 @@ export class SimulationEngine {
   getSimulationTime(): number {
     return this.simulationTime;
   }
+
+  /**
+   * Get lock table data for a specific fab
+   * @param fabId - Unique identifier for the fab
+   * @returns Lock table data or null if fab not found
+   */
+  getLockTableData(fabId: string): import("../types").LockTableData | null {
+    const context = this.fabContexts.get(fabId);
+    if (!context) {
+      return null;
+    }
+    return context.getLockTableData();
+  }
 }

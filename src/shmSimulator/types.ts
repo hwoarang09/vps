@@ -287,7 +287,9 @@ export type WorkerMessage =
   | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
   | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string }
   // Logger 설정
-  | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number };
+  | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number }
+  // Lock 정보 요청
+  | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string };
 
 // Worker -> Main Thread Messages
 export type MainMessage =
@@ -321,7 +323,21 @@ export type MainMessage =
       fabVehicleCounts: Record<string, number>;
     }
   | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }
-  | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string };
+  | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string }
+  | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData };
+
+// Lock 테이블 데이터 (직렬화 가능한 형태)
+export interface LockNodeData {
+  name: string;
+  requests: { vehId: number; edgeName: string; requestTime: number }[];
+  granted: { edge: string; veh: number }[];
+  edgeQueueSizes: Record<string, number>;
+}
+
+export interface LockTableData {
+  strategy: GrantStrategy;
+  nodes: Record<string, LockNodeData>;
+}
 
 // ============================================================================
 // [4] TRANSFER MODE

@@ -122,6 +122,22 @@ function handleSetLoggerPort(port: MessagePort, workerId: number): void {
   engine.setLoggerPort(port, workerId);
 }
 
+function handleGetLockTable(fabId: string, requestId: string): void {
+  if (!engine) {
+    return;
+  }
+  const data = engine.getLockTableData(fabId);
+  if (data) {
+    const response: MainMessage = {
+      type: "LOCK_TABLE",
+      fabId,
+      requestId,
+      data,
+    };
+    globalThis.postMessage(response);
+  }
+}
+
 // Handle messages from main thread
 globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
@@ -162,6 +178,9 @@ globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
       break;
     case "SET_LOGGER_PORT":
       handleSetLoggerPort(message.port, message.workerId);
+      break;
+    case "GET_LOCK_TABLE":
+      handleGetLockTable(message.fabId, message.requestId);
       break;
     default:
   }

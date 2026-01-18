@@ -27,8 +27,7 @@ const MenuLevel1: React.FC = () => {
             const shortcutNumber =
               allMenuItems.findIndex((menuItem) => menuItem.id === item.id) + 1;
 
-            // Use 't' for Test menu, otherwise use number
-            const shortcutLabel = item.shortcutLabel || (item.id === 'Test' ? 't' : shortcutNumber.toString());
+            const shortcutLabel = item.shortcutLabel || shortcutNumber.toString();
 
             return (
               <MenuButton

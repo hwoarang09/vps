@@ -106,6 +106,9 @@ export class MultiWorkerController {
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
 
+  // Lock 테이블 요청 대기
+  private lockTableRequests: Map<string, (data: import("./types").LockTableData) => void> = new Map();
+
   onPerfStats(callback: (workerStats: WorkerPerfStats[]) => void): void {
     this.onPerfStatsCallback = callback;
   }
@@ -382,6 +385,15 @@ export class MultiWorkerController {
       case "ERROR":
         this.onErrorCallback?.(message.error);
         break;
+
+      case "LOCK_TABLE": {
+        const resolver = this.lockTableRequests.get(message.requestId);
+        if (resolver) {
+          resolver(message.data);
+          this.lockTableRequests.delete(message.requestId);
+        }
+        break;
+      }
     }
   }
 
@@ -706,5 +718,42 @@ export class MultiWorkerController {
     }
 
     return this.loggerController.deleteAllFiles();
+  }
+
+  // =========================================================================
+  // Lock Table Data
+  // =========================================================================
+
+  /**
+   * Get lock table data for a specific fab
+   * @param fabId - Unique identifier for the fab
+   * @param timeout - Timeout in ms (default: 1000)
+   * @returns Lock table data or null if not available
+   */
+  async getLockTableData(fabId: string, timeout = 1000): Promise<import("./types").LockTableData | null> {
+    const workerIndex = this.fabToWorkerMap.get(fabId);
+    if (workerIndex === undefined) {
+      return null;
+    }
+
+    const workerInfo = this.workers[workerIndex];
+    if (!workerInfo) return null;
+
+    const requestId = `lock_${fabId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.lockTableRequests.delete(requestId);
+        resolve(null);
+      }, timeout);
+
+      this.lockTableRequests.set(requestId, (data) => {
+        clearTimeout(timeoutId);
+        resolve(data);
+      });
+
+      const message: WorkerMessage = { type: "GET_LOCK_TABLE", fabId, requestId };
+      workerInfo.worker.postMessage(message);
+    });
   }
 }

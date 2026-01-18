@@ -77,6 +77,7 @@ interface ShmSimulatorState {
   downloadLogFile: (fileName: string) => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
   deleteLogFile: (fileName: string) => Promise<void>;
   deleteAllLogFiles: () => Promise<number>;
+  getLockTableData: (fabId: string) => Promise<import("@/shmSimulator/types").LockTableData | null>;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -367,6 +368,12 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (!controller) return 0;
     return controller.deleteAllLogFiles();
+  },
+
+  getLockTableData: async (fabId: string) => {
+    const { controller } = get();
+    if (!controller) return null;
+    return controller.getLockTableData(fabId);
   },
 }));
 
