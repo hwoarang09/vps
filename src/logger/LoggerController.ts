@@ -260,4 +260,29 @@ export class LoggerController {
       this.worker.postMessage({ type: "DELETE_FILE", fileName });
     });
   }
+
+  /**
+   * 모든 로그 파일 삭제
+   */
+  async deleteAllFiles(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "ALL_FILES_DELETED") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve(e.data.deletedCount);
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "DELETE_ALL_FILES" });
+    });
+  }
 }

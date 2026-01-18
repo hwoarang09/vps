@@ -255,6 +255,38 @@ async function deleteOPFSFile(fileName: string): Promise<void> {
   }
 }
 
+async function deleteAllOPFSFiles(): Promise<void> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const filesToDelete: string[] = [];
+    const currentFileName = `edge_transit_${sessionId}.bin`;
+
+    // @ts-expect-error - entries() is available in OPFS
+    for await (const [name, handle] of root.entries()) {
+      if (name.startsWith("edge_transit_") && name.endsWith(".bin")) {
+        // Skip current session file
+        if (name === currentFileName) {
+          continue;
+        }
+        if (handle.kind === "file") {
+          filesToDelete.push(name);
+        }
+      }
+    }
+
+    for (const fileName of filesToDelete) {
+      await root.removeEntry(fileName);
+    }
+
+    postMainMessage({ type: "ALL_FILES_DELETED", deletedCount: filesToDelete.length });
+  } catch (error) {
+    postMainMessage({
+      type: "ERROR",
+      error: `Failed to delete all files: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+}
+
 // ============================================================================
 // Message Handlers
 // ============================================================================
@@ -332,6 +364,14 @@ function handleMessage(msg: LoggerWorkerMessage): void {
     case "DELETE_FILE":
       if (mode === "OPFS") {
         deleteOPFSFile(msg.fileName);
+      } else {
+        postMainMessage({ type: "ERROR", error: "File deletion not supported in CLOUD mode" });
+      }
+      break;
+
+    case "DELETE_ALL_FILES":
+      if (mode === "OPFS") {
+        deleteAllOPFSFiles();
       } else {
         postMainMessage({ type: "ERROR", error: "File deletion not supported in CLOUD mode" });
       }

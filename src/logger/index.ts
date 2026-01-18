@@ -27,5 +27,6 @@ export {
   downloadLogFromOPFS,
   listLogFiles,
   deleteLogFile,
+  downloadLogFile,
   clearAllLogs,
 } from "./downloadLog";

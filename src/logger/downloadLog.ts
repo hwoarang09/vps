@@ -49,24 +49,30 @@ export async function downloadLogFromOPFS(sessionId: string): Promise<{
  * OPFS에 저장된 모든 로그 파일 목록 조회
  */
 export async function listLogFiles(): Promise<
-  Array<{ name: string; size: number; recordCount: number }>
+  Array<{ fileName: string; size: number; recordCount: number; createdAt: number }>
 > {
   try {
     const root = await navigator.storage.getDirectory();
-    const files: Array<{ name: string; size: number; recordCount: number }> =
+    const files: Array<{ fileName: string; size: number; recordCount: number; createdAt: number }> =
       [];
 
-    // @ts-expect-error - AsyncIterator 타입 이슈
     for await (const [name, handle] of root.entries()) {
       if (name.startsWith("edge_transit_") && name.endsWith(".bin")) {
         const file = await (handle as FileSystemFileHandle).getFile();
+        // Extract timestamp from filename
+        const match = /edge_transit_(\d+)/.exec(name);
+        const createdAt = match ? Number.parseInt(match[1], 10) : file.lastModified;
         files.push({
-          name,
+          fileName: name,
           size: file.size,
-          recordCount: file.size / 28,
+          recordCount: Math.floor(file.size / 28),
+          createdAt,
         });
       }
     }
+
+    // Sort by creation time (newest first)
+    files.sort((a, b) => b.createdAt - a.createdAt);
 
     return files;
   } catch (error) {
@@ -77,12 +83,11 @@ export async function listLogFiles(): Promise<
 }
 
 /**
- * OPFS에서 특정 로그 파일 삭제
+ * OPFS에서 특정 로그 파일 삭제 (파일명으로)
  */
-export async function deleteLogFile(sessionId: string): Promise<void> {
+export async function deleteLogFile(fileName: string): Promise<void> {
   try {
     const root = await navigator.storage.getDirectory();
-    const fileName = `edge_transit_${sessionId}.bin`;
     await root.removeEntry(fileName);
   } catch (error) {
     throw new Error(
@@ -92,16 +97,42 @@ export async function deleteLogFile(sessionId: string): Promise<void> {
 }
 
 /**
- * OPFS의 모든 로그 파일 삭제
+ * OPFS에서 특정 로그 파일 다운로드 (파일명으로)
  */
-export async function clearAllLogs(): Promise<number> {
+export async function downloadLogFile(fileName: string): Promise<{
+  buffer: ArrayBuffer;
+  fileName: string;
+  recordCount: number;
+}> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const fileHandle = await root.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const buffer = await file.arrayBuffer();
+    const recordCount = Math.floor(file.size / 28);
+
+    return { buffer, fileName, recordCount };
+  } catch (error) {
+    throw new Error(
+      `Failed to download log file: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * OPFS의 모든 로그 파일 삭제
+ * @param excludeFileName - 제외할 파일명 (현재 사용 중인 파일)
+ */
+export async function clearAllLogs(excludeFileName?: string): Promise<number> {
   try {
     const root = await navigator.storage.getDirectory();
     let count = 0;
 
-    // @ts-expect-error - AsyncIterator 타입 이슈
     for await (const [name] of root.entries()) {
       if (name.startsWith("edge_transit_") && name.endsWith(".bin")) {
+        if (excludeFileName && name === excludeFileName) {
+          continue;
+        }
         await root.removeEntry(name);
         count++;
       }

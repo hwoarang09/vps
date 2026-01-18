@@ -108,7 +108,8 @@ export type LoggerWorkerMessage =
   | { type: "DOWNLOAD" }
   | { type: "LIST_FILES" }
   | { type: "DOWNLOAD_FILE"; fileName: string }
-  | { type: "DELETE_FILE"; fileName: string };
+  | { type: "DELETE_FILE"; fileName: string }
+  | { type: "DELETE_ALL_FILES" };
 
 export type LoggerMainMessage =
   | { type: "READY" }
@@ -118,6 +119,7 @@ export type LoggerMainMessage =
   | { type: "DOWNLOADED"; buffer: ArrayBuffer; fileName: string; recordCount: number }
   | { type: "FILE_LIST"; files: LogFileInfo[] }
   | { type: "FILE_DELETED"; fileName: string }
+  | { type: "ALL_FILES_DELETED"; deletedCount: number }
   | { type: "ERROR"; error: string };
 
 // ============================================================================

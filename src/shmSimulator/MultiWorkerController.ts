@@ -696,4 +696,15 @@ export class MultiWorkerController {
 
     return this.loggerController.deleteFile(fileName);
   }
+
+  /**
+   * Delete all log files
+   */
+  async deleteAllLogFiles(): Promise<number> {
+    if (!this.loggerController) {
+      return 0;
+    }
+
+    return this.loggerController.deleteAllFiles();
+  }
 }

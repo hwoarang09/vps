@@ -76,6 +76,7 @@ interface ShmSimulatorState {
   listLogFiles: () => Promise<import("@/logger/protocol").LogFileInfo[] | null>;
   downloadLogFile: (fileName: string) => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
   deleteLogFile: (fileName: string) => Promise<void>;
+  deleteAllLogFiles: () => Promise<number>;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -360,6 +361,12 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (!controller) return;
     return controller.deleteLogFile(fileName);
+  },
+
+  deleteAllLogFiles: async () => {
+    const { controller } = get();
+    if (!controller) return 0;
+    return controller.deleteAllLogFiles();
   },
 }));
 
