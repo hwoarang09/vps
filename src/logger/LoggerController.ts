@@ -285,4 +285,58 @@ export class LoggerController {
       this.worker.postMessage({ type: "DELETE_ALL_FILES" });
     });
   }
+
+  /**
+   * 현재 세션에서 로그가 있는 vehId 목록 조회
+   */
+  async listVehIds(): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "VEH_ID_LIST") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve(e.data.vehIds);
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "LIST_VEH_IDS" });
+    });
+  }
+
+  /**
+   * 특정 vehId의 로그 파일 다운로드
+   */
+  async downloadByVeh(vehId: number): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number }> {
+    return new Promise((resolve, reject) => {
+      if (!this.worker) {
+        reject(new Error("Logger worker not initialized"));
+        return;
+      }
+
+      const onMessage = (e: MessageEvent<LoggerMainMessage>) => {
+        if (e.data.type === "DOWNLOADED") {
+          this.worker?.removeEventListener("message", onMessage);
+          resolve({
+            buffer: e.data.buffer,
+            fileName: e.data.fileName,
+            recordCount: e.data.recordCount,
+          });
+        } else if (e.data.type === "ERROR") {
+          this.worker?.removeEventListener("message", onMessage);
+          reject(new Error(e.data.error));
+        }
+      };
+
+      this.worker.addEventListener("message", onMessage);
+      this.worker.postMessage({ type: "DOWNLOAD_BY_VEH", vehId });
+    });
+  }
 }

@@ -445,6 +445,7 @@ export class SimulationEngine {
    * @param workerId Worker ID (0~255) for logging
    */
   setLoggerPort(port: MessagePort, workerId: number = 0): void {
+    console.log("[SimulationEngine] setLoggerPort, fabContexts count:", this.fabContexts.size);
     for (const context of this.fabContexts.values()) {
       context.setLoggerPort(port, workerId);
     }

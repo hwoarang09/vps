@@ -119,10 +119,12 @@ function handleSetRenderBuffer(
 }
 
 function handleSetLoggerPort(port: MessagePort, workerId: number): void {
+  console.log("[worker.entry] handleSetLoggerPort called, workerId:", workerId, "engine:", !!engine);
   if (!engine) {
     return;
   }
   engine.setLoggerPort(port, workerId);
+  console.log("[worker.entry] setLoggerPort done");
 }
 
 function handleGetLockTable(fabId: string, requestId: string): void {

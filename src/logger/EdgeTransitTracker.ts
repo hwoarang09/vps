@@ -54,14 +54,17 @@ export class EdgeTransitTracker {
     exitTime: number,
     edge: Edge
   ): void {
+    console.log("[EdgeTransitTracker] onEdgeExit called, vehId:", vehId, "fromEdgeIndex:", fromEdgeIndex);
     const entry = this.enterTimeMap.get(vehId);
 
     if (entry?.edgeIndex !== fromEdgeIndex) {
       // 진입 기록이 없거나 edge가 일치하지 않으면 무시
       // (초기화 시 또는 teleport 등의 경우)
+      console.log("[EdgeTransitTracker] skipped - entry mismatch, entry:", entry);
       return;
     }
 
+    console.log("[EdgeTransitTracker] logging transit for vehId:", vehId);
     // 로그 기록
     this.logBuffer.logEdgeTransit(
       exitTime,

@@ -1,7 +1,7 @@
 // common/vehicle/logic/AutoMgr.ts
-import { 
-  VEHICLE_DATA_SIZE, 
-  MovementData, 
+import {
+  VEHICLE_DATA_SIZE,
+  MovementData,
   TransferMode,
   LogicData
 } from "@/common/vehicle/initialize/constants";
@@ -9,6 +9,7 @@ import { TransferMgr, VehicleCommand, IVehicleDataArray } from "./TransferMgr";
 import { findShortestPath } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
+import { devLog } from "@/logger/DevLogger";
 
 interface StationTarget {
   name: string;
@@ -151,6 +152,7 @@ export class AutoMgr {
       const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
 
       if (pathIndices && pathIndices.length > 0) {
+        devLog.veh(vehId).debug(`[pathBuff] DIJKSTRA from=${currentEdgeIdx} to=${candidate.edgeIndex} result=[${pathIndices.slice(0, 10).join(',')}${pathIndices.length > 10 ? '...' : ''}] len=${pathIndices.length}`);
         const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
 
         // Assign

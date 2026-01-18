@@ -19,39 +19,38 @@ interface BufferEntry {
 }
 
 // 호출 위치 (파일명:라인) 추출
-function getCallSite(stackOffset: number = 3): string {
+// DevLogger.ts 내부가 아닌 실제 호출 위치를 찾음
+function getCallSite(): string {
   const err = new Error();
   const stack = err.stack;
   if (!stack) return "unknown";
 
   const lines = stack.split("\n");
-  // 0: Error
-  // 1: getCallSite
-  // 2: log/debug/info/...
-  // 3: 실제 호출 위치
-  const targetLine = lines[stackOffset];
-  if (!targetLine) return "unknown";
 
-  // 다양한 스택 포맷 처리
-  // Chrome/V8: "    at functionName (file:line:col)"
-  // Firefox: "functionName@file:line:col"
+  // DevLogger.ts가 아닌 첫 번째 외부 파일을 찾음
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
 
-  // webpack/vite 번들된 경우: "at Object.functionName (file.ts:123:45)"
-  // 또는 "at file.ts:123:45"
+    // DevLogger.ts 관련 라인은 스킵
+    if (line.includes("DevLogger.ts") || line.includes("DevLogger.js")) {
+      continue;
+    }
 
-  const match =
-    targetLine.match(/(?:at\s+)?(?:.*?\s+\()?([^()]+):(\d+):\d+\)?/) ||
-    targetLine.match(/@(.+):(\d+):\d+/);
+    // 파일:라인 정보 추출
+    const match =
+      line.match(/(?:at\s+)?(?:.*?\s+\()?([^()]+):(\d+):\d+\)?/) ||
+      line.match(/@(.+):(\d+):\d+/);
 
-  if (match) {
-    const filePath = match[1];
-    const line = match[2];
+    if (match) {
+      const filePath = match[1];
+      const lineNum = match[2];
 
-    // 파일 경로에서 파일명만 추출
-    let fileName = filePath.split("/").pop() || filePath;
-    // Vite HMR 타임스탬프 제거 (?t=1234567890)
-    fileName = fileName.replace(/\?.*$/, "");
-    return `${fileName}:${line}`;
+      // 파일 경로에서 파일명만 추출
+      let fileName = filePath.split("/").pop() || filePath;
+      // Vite HMR 타임스탬프 제거 (?t=1234567890)
+      fileName = fileName.replace(/\?.*$/, "");
+      return `${fileName}:${lineNum}`;
+    }
   }
 
   return "unknown";
@@ -101,9 +100,11 @@ class DevLoggerImpl {
   private initialized = false;
   private enabled = true;
 
-  // Worker 환경용 동기식 OPFS 핸들
-  private opfsHandle: FileSystemSyncAccessHandle | null = null;
-  private opfsWriteOffset = 0;
+  // Worker 환경용 동기식 OPFS 핸들 (veh별 분리)
+  private opfsGlobalHandle: FileSystemSyncAccessHandle | null = null;
+  private opfsGlobalOffset = 0;
+  private opfsVehHandles = new Map<number, { handle: FileSystemSyncAccessHandle; offset: number }>();
+  private opfsLogsDir: FileSystemDirectoryHandle | null = null;
   private isWorker = false;
   private workerId = "";
 
@@ -125,27 +126,56 @@ class DevLoggerImpl {
   }
 
   private async initWorkerOPFS(workerId?: string): Promise<void> {
-    this.workerId = workerId || `w_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    this.workerId = workerId || `sim_${Date.now()}`;
 
     try {
       const root = await navigator.storage.getDirectory();
-      const logsDir = await root.getDirectoryHandle("dev_logs", { create: true });
-      const fileName = `${this.workerId}_all.txt`;
-      const fileHandle = await logsDir.getFileHandle(fileName, { create: true });
-      this.opfsHandle = await fileHandle.createSyncAccessHandle();
-      this.opfsWriteOffset = this.opfsHandle.getSize();
+      this.opfsLogsDir = await root.getDirectoryHandle("dev_logs", { create: true });
+
+      // global 파일 생성
+      const globalFileName = `${this.workerId}_global.txt`;
+      const globalFileHandle = await this.opfsLogsDir.getFileHandle(globalFileName, { create: true });
+      this.opfsGlobalHandle = await globalFileHandle.createSyncAccessHandle();
+      this.opfsGlobalOffset = this.opfsGlobalHandle.getSize();
 
       // 세션 시작 헤더
-      const header = `\n${"=".repeat(60)}\n[WORKER ${this.workerId}] ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
+      const header = `\n${"=".repeat(60)}\n[GLOBAL] ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
       const headerBytes = encoder.encode(header);
-      this.opfsHandle.write(headerBytes, { at: this.opfsWriteOffset });
-      this.opfsWriteOffset += headerBytes.byteLength;
-      this.opfsHandle.flush();
+      this.opfsGlobalHandle.write(headerBytes, { at: this.opfsGlobalOffset });
+      this.opfsGlobalOffset += headerBytes.byteLength;
+      this.opfsGlobalHandle.flush();
 
       this.initialized = true;
     } catch {
       // OPFS 실패시 콘솔 폴백
       this.initialized = true;
+    }
+  }
+
+  private async ensureVehHandle(vehId: number): Promise<{ handle: FileSystemSyncAccessHandle; offset: number } | null> {
+    const existing = this.opfsVehHandles.get(vehId);
+    if (existing) return existing;
+
+    if (!this.opfsLogsDir) return null;
+
+    try {
+      const fileName = `${this.workerId}_veh${vehId}.txt`;
+      const fileHandle = await this.opfsLogsDir.getFileHandle(fileName, { create: true });
+      const handle = await fileHandle.createSyncAccessHandle();
+      let offset = handle.getSize();
+
+      // 세션 시작 헤더
+      const header = `\n${"=".repeat(60)}\n[VEH ${vehId}] ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
+      const headerBytes = encoder.encode(header);
+      handle.write(headerBytes, { at: offset });
+      offset += headerBytes.byteLength;
+      handle.flush();
+
+      const entry = { handle, offset };
+      this.opfsVehHandles.set(vehId, entry);
+      return entry;
+    } catch {
+      return null;
     }
   }
 
@@ -185,30 +215,44 @@ class DevLoggerImpl {
     });
   }
 
-  private log(level: LogLevel, vehId: number | null, message: string, stackOffset: number = 4): void {
+  private log(level: LogLevel, vehId: number | null, message: string): void {
     if (!this.enabled) return;
 
     const entry: LogEntry = {
       time: formatTime(new Date()),
       level,
       vehId,
-      location: getCallSite(stackOffset),
+      location: getCallSite(),
       message,
     };
 
     const text = formatEntry(entry);
 
     if (this.isWorker) {
-      // Worker 환경 - 직접 OPFS에 쓰기 (단일 파일)
-      if (this.opfsHandle) {
-        const bytes = encoder.encode(text);
-        this.opfsHandle.write(bytes, { at: this.opfsWriteOffset });
-        this.opfsWriteOffset += bytes.byteLength;
+      // Worker 환경 - veh별 파일 분리
+      const bytes = encoder.encode(text);
+
+      if (vehId === null) {
+        // global 로그
+        if (this.opfsGlobalHandle) {
+          this.opfsGlobalHandle.write(bytes, { at: this.opfsGlobalOffset });
+          this.opfsGlobalOffset += bytes.byteLength;
+        }
       } else {
-        // OPFS 없으면 콘솔 출력 (fallback)
-        const consoleMethod = level === "ERROR" ? console.error :
-                             level === "WARN" ? console.warn : console.log;
-        consoleMethod(text.trim());
+        // veh별 로그
+        const vehEntry = this.opfsVehHandles.get(vehId);
+        if (vehEntry) {
+          vehEntry.handle.write(bytes, { at: vehEntry.offset });
+          vehEntry.offset += bytes.byteLength;
+        } else {
+          // 핸들이 없으면 비동기로 생성
+          this.ensureVehHandle(vehId).then((entry) => {
+            if (entry) {
+              entry.handle.write(bytes, { at: entry.offset });
+              entry.offset += bytes.byteLength;
+            }
+          });
+        }
       }
     } else if (this.worker && this.initialized) {
       // 메인 스레드 - 버퍼에 쌓고 Worker로 전송
@@ -226,9 +270,10 @@ class DevLoggerImpl {
 
   flush(): void {
     if (this.isWorker) {
-      // Worker 환경 - 직접 flush
-      if (this.opfsHandle) {
-        this.opfsHandle.flush();
+      // Worker 환경 - 모든 핸들 flush
+      this.opfsGlobalHandle?.flush();
+      for (const entry of this.opfsVehHandles.values()) {
+        entry.handle.flush();
       }
     } else if (this.worker && this.buffer.length > 0) {
       // 메인 스레드 - Worker로 전송
@@ -241,36 +286,36 @@ class DevLoggerImpl {
 
   // 전역 로그
   debug(message: string): void {
-    this.log("DEBUG", null, message, 4);
+    this.log("DEBUG", null, message);
   }
 
   info(message: string): void {
-    this.log("INFO", null, message, 4);
+    this.log("INFO", null, message);
   }
 
   warn(message: string): void {
-    this.log("WARN", null, message, 4);
+    this.log("WARN", null, message);
   }
 
   error(message: string): void {
-    this.log("ERROR", null, message, 4);
+    this.log("ERROR", null, message);
   }
 
   // veh별 로그
   vehDebug(vehId: number, message: string): void {
-    this.log("DEBUG", vehId, message, 4);
+    this.log("DEBUG", vehId, message);
   }
 
   vehInfo(vehId: number, message: string): void {
-    this.log("INFO", vehId, message, 4);
+    this.log("INFO", vehId, message);
   }
 
   vehWarn(vehId: number, message: string): void {
-    this.log("WARN", vehId, message, 4);
+    this.log("WARN", vehId, message);
   }
 
   vehError(vehId: number, message: string): void {
-    this.log("ERROR", vehId, message, 4);
+    this.log("ERROR", vehId, message);
   }
 
   async download(): Promise<void> {
@@ -330,9 +375,16 @@ class DevLoggerImpl {
     }
     this.flush();
 
-    if (this.isWorker && this.opfsHandle) {
-      this.opfsHandle.close();
-      this.opfsHandle = null;
+    if (this.isWorker) {
+      // 모든 핸들 닫기
+      if (this.opfsGlobalHandle) {
+        this.opfsGlobalHandle.close();
+        this.opfsGlobalHandle = null;
+      }
+      for (const entry of this.opfsVehHandles.values()) {
+        entry.handle.close();
+      }
+      this.opfsVehHandles.clear();
     }
 
     if (this.worker) {

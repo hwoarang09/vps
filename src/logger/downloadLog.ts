@@ -121,16 +121,30 @@ export async function downloadLogFile(fileName: string): Promise<{
 
 /**
  * OPFS의 모든 로그 파일 삭제
- * @param excludeFileName - 제외할 파일명 (현재 사용 중인 파일)
+ * @param excludeSessionId - 제외할 세션 ID (현재 사용 중인 세션의 모든 파일 제외)
  */
-export async function clearAllLogs(excludeFileName?: string): Promise<number> {
+export async function clearAllLogs(excludeSessionId?: string): Promise<number> {
   try {
     const root = await navigator.storage.getDirectory();
     let count = 0;
 
+    // excludeSessionId에서 sessionId 추출 (파일명이 넘어올 수도 있음)
+    let sessionPrefix: string | undefined;
+    if (excludeSessionId) {
+      // 파일명 형태면 sessionId 추출
+      const match = /edge_transit_(\d+)/.exec(excludeSessionId);
+      if (match) {
+        sessionPrefix = `edge_transit_${match[1]}`;
+      } else {
+        // 순수 sessionId면 그대로 사용
+        sessionPrefix = `edge_transit_${excludeSessionId}`;
+      }
+    }
+
     for await (const [name] of root.entries()) {
       if (name.startsWith("edge_transit_") && name.endsWith(".bin")) {
-        if (excludeFileName && name === excludeFileName) {
+        // 현재 세션의 모든 파일 제외 (통합 + veh별)
+        if (sessionPrefix && name.startsWith(sessionPrefix)) {
           continue;
         }
         await root.removeEntry(name);

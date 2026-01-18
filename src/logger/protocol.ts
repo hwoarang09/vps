@@ -103,10 +103,13 @@ export type LoggerMode = "OPFS" | "CLOUD";
 export type LoggerWorkerMessage =
   | { type: "INIT"; mode: LoggerMode; sessionId?: string }
   | { type: "LOG"; buffer: ArrayBuffer }
+  | { type: "LOG_BY_VEH"; vehId: number; buffer: ArrayBuffer }
   | { type: "FLUSH" }
   | { type: "CLOSE" }
   | { type: "DOWNLOAD" }
+  | { type: "DOWNLOAD_BY_VEH"; vehId: number }
   | { type: "LIST_FILES" }
+  | { type: "LIST_VEH_IDS" }
   | { type: "DOWNLOAD_FILE"; fileName: string }
   | { type: "DELETE_FILE"; fileName: string }
   | { type: "DELETE_ALL_FILES" };
@@ -118,6 +121,7 @@ export type LoggerMainMessage =
   | { type: "CLOSED"; totalRecords: number }
   | { type: "DOWNLOADED"; buffer: ArrayBuffer; fileName: string; recordCount: number }
   | { type: "FILE_LIST"; files: LogFileInfo[] }
+  | { type: "VEH_ID_LIST"; vehIds: number[] }
   | { type: "FILE_DELETED"; fileName: string }
   | { type: "ALL_FILES_DELETED"; deletedCount: number }
   | { type: "ERROR"; error: string };

@@ -15,6 +15,18 @@ import type { VehicleTransitionResult } from "./vehicleTransition";
 import type { MovementUpdateContext } from "./movementUpdate";
 
 // ============================================================================
+// 로그 중복 방지를 위한 상태 추적
+// ============================================================================
+interface MergeLockLogState {
+  lastMergeNode: string;
+  lastRequestEdge: string;
+  lastIsGranted: boolean;
+  lastLogTime: number;
+}
+const mergeLockLogStates = new Map<number, MergeLockLogState>();
+const LOG_THROTTLE_MS = 2000; // 같은 상태일 때 2초마다만 로그
+
+// ============================================================================
 // 위치 계산 결과 타입
 // ============================================================================
 
@@ -397,26 +409,34 @@ function processMergeLogicInline(
     }
 
     // 요청 시점 도달 - Lock 요청 (중복 요청은 requestLock 내부에서 방지됨)
-    if (mergeTarget.type === 'CURVE') {
-      devLog.veh(vehId).debug(`[MERGE_LOCK] 곡선 합류 락 요청: currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
-    }
     lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
 
     // Lock 획득 여부 확인
     const isGranted = lockMgr.checkGrant(mergeTarget.mergeNode, vehId);
 
-    // e8 곡선 합류 락 획득 여부 디버그 로그
+    // 로그 중복 방지: 상태 변경 또는 일정 시간 경과 시에만 로그
     if (mergeTarget.type === 'CURVE') {
-      devLog.veh(vehId).debug(`[MERGE_LOCK] 곡선 합류 락 획득 여부: mergeNode=${mergeTarget.mergeNode}, isGranted=${isGranted}`);
+      const now = Date.now();
+      const prevLogState = mergeLockLogStates.get(vehId);
+      const stateChanged = !prevLogState ||
+        prevLogState.lastMergeNode !== mergeTarget.mergeNode ||
+        prevLogState.lastRequestEdge !== mergeTarget.requestEdge ||
+        prevLogState.lastIsGranted !== isGranted;
+      const timeElapsed = !prevLogState || (now - prevLogState.lastLogTime) >= LOG_THROTTLE_MS;
+
+      if (stateChanged || timeElapsed) {
+        devLog.veh(vehId).debug(`[MERGE_LOCK] 곡선 합류 락: currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, isGranted=${isGranted}, dist=${mergeTarget.distanceToMerge.toFixed(2)}`);
+        mergeLockLogStates.set(vehId, {
+          lastMergeNode: mergeTarget.mergeNode,
+          lastRequestEdge: mergeTarget.requestEdge,
+          lastIsGranted: isGranted,
+          lastLogTime: now,
+        });
+      }
     }
 
     if (!isGranted) {
       // Lock 획득 실패 - 이 target의 wait 지점에서 대기
-      // 디버그: trafficState 변경
-      if (mergeTarget.type === 'CURVE') {
-        const prevState = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
-        devLog.veh(vehId).debug(`[TRAFFIC_STATE] ${prevState} → WAITING (락 획득 실패), distanceToMerge=${mergeTarget.distanceToMerge}, waitDistance=${mergeTarget.waitDistance}`);
-      }
       data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
 
       const waitRatio = getWaitRatio(currentEdge, currentRatio, mergeTarget.distanceToMerge, mergeTarget.waitDistance);

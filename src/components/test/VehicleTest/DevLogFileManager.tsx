@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   listDevLogFiles,
   downloadDevLogFile,
-  downloadMergedDevLogs,
   deleteDevLogFile,
   clearAllDevLogs,
   type DevLogFileInfo,
@@ -84,17 +83,23 @@ const DevLogFileManager: React.FC = () => {
       return;
     }
 
-    try {
-      const result = await downloadMergedDevLogs(Array.from(selectedFiles));
-      const blob = new Blob([result.content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      alert(`다운로드 실패: ${error instanceof Error ? error.message : String(error)}`);
+    // 선택된 파일들을 개별적으로 다운로드
+    const selectedFileNames = Array.from(selectedFiles);
+    for (const fileName of selectedFileNames) {
+      try {
+        const result = await downloadDevLogFile(fileName);
+        const blob = new Blob([result.buffer], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = result.fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+        // 브라우저가 다운로드를 처리할 시간을 줌
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        alert(`다운로드 실패 (${fileName}): ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   };
 

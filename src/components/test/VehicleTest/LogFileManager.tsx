@@ -14,6 +14,60 @@ interface LogFileInfo {
   createdAt: number;
 }
 
+interface ParsedFileInfo extends LogFileInfo {
+  sessionId: string;
+  vehId: number | null; // null이면 통합 파일
+}
+
+/**
+ * 파일명에서 sessionId와 vehId 파싱
+ * edge_transit_{sessionId}.bin -> { sessionId, vehId: null }
+ * edge_transit_{sessionId}_veh{vehId}.bin -> { sessionId, vehId }
+ */
+function parseFileName(fileName: string): { sessionId: string; vehId: number | null } {
+  // veh별 파일: edge_transit_{sessionId}_veh{vehId}.bin
+  const vehMatch = /edge_transit_(\d+)_veh(\d+)\.bin/.exec(fileName);
+  if (vehMatch) {
+    return { sessionId: vehMatch[1], vehId: Number.parseInt(vehMatch[2], 10) };
+  }
+
+  // 통합 파일: edge_transit_{sessionId}.bin
+  const match = /edge_transit_(\d+)\.bin/.exec(fileName);
+  if (match) {
+    return { sessionId: match[1], vehId: null };
+  }
+
+  return { sessionId: "", vehId: null };
+}
+
+/**
+ * 파일들을 세션별로 그룹화
+ */
+function groupFilesBySession(files: LogFileInfo[]): Map<string, ParsedFileInfo[]> {
+  const groups = new Map<string, ParsedFileInfo[]>();
+
+  for (const file of files) {
+    const parsed = parseFileName(file.fileName);
+    const parsedFile: ParsedFileInfo = { ...file, ...parsed };
+
+    const existing = groups.get(parsed.sessionId) ?? [];
+    existing.push(parsedFile);
+    groups.set(parsed.sessionId, existing);
+  }
+
+  // 각 그룹 내에서 통합파일 먼저, 그 다음 vehId 순으로 정렬
+  for (const [sessionId, sessionFiles] of groups) {
+    sessionFiles.sort((a, b) => {
+      if (a.vehId === null) return -1;
+      if (b.vehId === null) return 1;
+      return a.vehId - b.vehId;
+    });
+    groups.set(sessionId, sessionFiles);
+  }
+
+  return groups;
+}
+
 /**
  * LogFileManager
  *
@@ -25,6 +79,7 @@ const LogFileManager: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [files, setFiles] = useState<LogFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   const loadFiles = useCallback(async () => {
     setIsLoading(true);
@@ -116,6 +171,18 @@ const LogFileManager: React.FC = () => {
     }
   };
 
+  const toggleSessionExpand = (sessionId: string) => {
+    setExpandedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -134,9 +201,14 @@ const LogFileManager: React.FC = () => {
   };
 
   // Check if file is current session (newest file when running)
-  const isCurrentSession = (file: LogFileInfo): boolean => {
-    return isRunning && files.length > 0 && file.fileName === files[0].fileName;
+  const isCurrentSession = (sessionId: string): boolean => {
+    if (!isRunning || files.length === 0) return false;
+    const newestParsed = parseFileName(files[0].fileName);
+    return newestParsed.sessionId === sessionId;
   };
+
+  const groupedFiles = groupFilesBySession(files);
+  const sessionIds = Array.from(groupedFiles.keys()).sort((a, b) => Number(b) - Number(a));
 
   return (
     <div style={{ position: "relative" }}>
@@ -169,9 +241,9 @@ const LogFileManager: React.FC = () => {
             background: "rgba(20, 20, 20, 0.98)",
             border: "2px solid #9b59b6",
             borderRadius: "8px",
-            minWidth: "400px",
-            maxWidth: "500px",
-            maxHeight: "400px",
+            minWidth: "450px",
+            maxWidth: "550px",
+            maxHeight: "500px",
             overflowY: "auto",
             zIndex: 2000,
             boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
@@ -236,75 +308,175 @@ const LogFileManager: React.FC = () => {
                 No log files found
               </div>
             ) : (
-              files.map((file) => (
-                <div
-                  key={file.fileName}
-                  style={{
-                    padding: "10px",
-                    margin: "5px",
-                    background: isCurrentSession(file)
-                      ? "rgba(46, 204, 113, 0.2)"
-                      : "rgba(50, 50, 50, 0.5)",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "5px",
-                    border: isCurrentSession(file) ? "1px solid #2ecc71" : "none",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ color: "#4ecdc4", fontWeight: "bold", marginBottom: "3px", display: "flex", alignItems: "center", gap: "5px" }}>
-                        {file.fileName}
-                        {isCurrentSession(file) && (
-                          <span style={{ color: "#2ecc71", fontSize: "9px", fontWeight: "normal" }}>(current)</span>
-                        )}
-                      </div>
-                      <div style={{ color: "#aaa", fontSize: "10px" }}>
-                        {formatTimestamp(file.createdAt)} • {formatFileSize(file.size)} • {file.recordCount.toLocaleString()} records
+              sessionIds.map((sessionId) => {
+                const sessionFiles = groupedFiles.get(sessionId) ?? [];
+                const vehFiles = sessionFiles.filter(f => f.vehId !== null);
+                const hasVehFiles = vehFiles.length > 0;
+                const isExpanded = expandedSessions.has(sessionId);
+                const isCurrent = isCurrentSession(sessionId);
+
+                // 세션의 총 레코드 수와 크기
+                const totalRecords = sessionFiles.reduce((sum, f) => sum + f.recordCount, 0);
+                const totalSize = sessionFiles.reduce((sum, f) => sum + f.size, 0);
+
+                return (
+                  <div
+                    key={sessionId}
+                    style={{
+                      margin: "5px",
+                      background: isCurrent
+                        ? "rgba(46, 204, 113, 0.15)"
+                        : "rgba(50, 50, 50, 0.5)",
+                      borderRadius: "6px",
+                      border: isCurrent ? "1px solid #2ecc71" : "1px solid #444",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* 세션 헤더 */}
+                    <div
+                      style={{
+                        padding: "10px",
+                        cursor: hasVehFiles ? "pointer" : "default",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        borderBottom: isExpanded && hasVehFiles ? "1px solid #444" : "none",
+                      }}
+                      onClick={() => hasVehFiles && toggleSessionExpand(sessionId)}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
+                          {hasVehFiles && (
+                            <span style={{ color: "#888", fontSize: "10px" }}>
+                              {isExpanded ? "▼" : "▶"}
+                            </span>
+                          )}
+                          <span style={{ color: "#4ecdc4", fontWeight: "bold", fontSize: "12px" }}>
+                            Session {sessionId}
+                          </span>
+                          {isCurrent && (
+                            <span style={{ color: "#2ecc71", fontSize: "9px", background: "rgba(46,204,113,0.3)", padding: "1px 5px", borderRadius: "3px" }}>
+                              LIVE
+                            </span>
+                          )}
+                          {hasVehFiles && (
+                            <span style={{ color: "#e67e22", fontSize: "9px", background: "rgba(230,126,34,0.3)", padding: "1px 5px", borderRadius: "3px" }}>
+                              {vehFiles.length} vehicles
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ color: "#aaa", fontSize: "10px" }}>
+                          {formatTimestamp(Number(sessionId))} • {formatFileSize(totalSize)} • {totalRecords.toLocaleString()} records
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: "flex", gap: "5px" }}>
-                    <button
-                      onClick={() => handleDownload(file)}
-                      style={{
-                        flex: 1,
-                        padding: "4px 8px",
-                        background: "#3498db",
-                        color: "white",
-                        border: "1px solid #2980b9",
-                        borderRadius: "3px",
-                        fontSize: "10px",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      📥 Download
-                    </button>
-                    <button
-                      onClick={() => handleDelete(file)}
-                      disabled={isCurrentSession(file)}
-                      style={{
-                        flex: 1,
-                        padding: "4px 8px",
-                        background: isCurrentSession(file) ? "#555" : "#e74c3c",
-                        color: "white",
-                        border: isCurrentSession(file) ? "1px solid #444" : "1px solid #c0392b",
-                        borderRadius: "3px",
-                        fontSize: "10px",
-                        cursor: isCurrentSession(file) ? "not-allowed" : "pointer",
-                        fontWeight: "bold",
-                      }}
-                      title={isCurrentSession(file) ? "Cannot delete current session" : "Delete file"}
-                    >
-                      🗑️ Delete
-                    </button>
+                    {/* veh별 파일 목록 (확장 시) */}
+                    {isExpanded && hasVehFiles && (
+                      <div style={{ padding: "5px 10px 10px 10px" }}>
+                        {sessionFiles.map((file) => (
+                          <div
+                            key={file.fileName}
+                            style={{
+                              padding: "8px",
+                              margin: "3px 0",
+                              background: "rgba(0, 0, 0, 0.3)",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ color: file.vehId !== null ? "#f39c12" : "#3498db", fontWeight: "bold", marginBottom: "2px" }}>
+                                  {file.vehId !== null ? `🚗 Vehicle ${file.vehId}` : "📦 Combined (all vehicles)"}
+                                </div>
+                                <div style={{ color: "#888", fontSize: "9px" }}>
+                                  {formatFileSize(file.size)} • {file.recordCount.toLocaleString()} records
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "4px" }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
+                                  style={{
+                                    padding: "3px 8px",
+                                    background: "#3498db",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "3px",
+                                    fontSize: "9px",
+                                    cursor: "pointer",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  📥
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDelete(file); }}
+                                  disabled={isCurrent}
+                                  style={{
+                                    padding: "3px 8px",
+                                    background: isCurrent ? "#555" : "#e74c3c",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "3px",
+                                    fontSize: "9px",
+                                    cursor: isCurrent ? "not-allowed" : "pointer",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* veh 파일 없을 때 (통합 파일만) */}
+                    {!hasVehFiles && (
+                      <div style={{ padding: "0 10px 10px 10px" }}>
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          <button
+                            onClick={() => handleDownload(sessionFiles[0])}
+                            style={{
+                              flex: 1,
+                              padding: "4px 8px",
+                              background: "#3498db",
+                              color: "white",
+                              border: "1px solid #2980b9",
+                              borderRadius: "3px",
+                              fontSize: "10px",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            📥 Download
+                          </button>
+                          <button
+                            onClick={() => handleDelete(sessionFiles[0])}
+                            disabled={isCurrent}
+                            style={{
+                              flex: 1,
+                              padding: "4px 8px",
+                              background: isCurrent ? "#555" : "#e74c3c",
+                              color: "white",
+                              border: isCurrent ? "1px solid #444" : "1px solid #c0392b",
+                              borderRadius: "3px",
+                              fontSize: "10px",
+                              cursor: isCurrent ? "not-allowed" : "pointer",
+                              fontWeight: "bold",
+                            }}
+                            title={isCurrent ? "Cannot delete current session" : "Delete file"}
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
