@@ -188,9 +188,10 @@ function shiftAndRefillNextEdges(
     const currentIdx = pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
     const totalLen = pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
 
-    // nextEdges[4]에 들어갈 edge는 path의 currentIdx + 5 위치
-    // (currentIdx = 현재 edge, +1 = NEXT_EDGE_0, ..., +5 = NEXT_EDGE_4)
-    const pathOffset = currentIdx + NEXT_EDGE_COUNT;
+    // nextEdges[4]에 들어갈 edge는 path의 currentIdx + 4 위치
+    // consumeNextEdgeReservationFromPathBuffer가 이미 currentIdx를 증가시켰으므로:
+    // currentIdx는 새로운 NEXT_EDGE_0 위치 → NEXT_EDGE_4는 currentIdx + 4
+    const pathOffset = currentIdx + NEXT_EDGE_COUNT - 1;
     if (pathOffset < totalLen) {
       const candidateEdgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
       if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {

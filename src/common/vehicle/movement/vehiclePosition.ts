@@ -395,15 +395,11 @@ function processMergeLogicInline(
       continue;
     }
 
-    // 요청 시점 도달 - Lock 요청
-    if (currentTrafficState === TrafficState.FREE) {
-      // e8 곡선 합류 락 요청 디버그 로그
-      if (mergeTarget.type === 'CURVE') {
-        console.log(`[DEBUG] 곡선 합류 락 요청: vehId=${vehId}, currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
-      }
-      // requestEdge를 사용해서 실제 merge node의 incoming edge로 락 요청
-      lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
+    // 요청 시점 도달 - Lock 요청 (중복 요청은 requestLock 내부에서 방지됨)
+    if (mergeTarget.type === 'CURVE') {
+      console.log(`[DEBUG] 곡선 합류 락 요청: vehId=${vehId}, currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
     }
+    lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
 
     // Lock 획득 여부 확인
     const isGranted = lockMgr.checkGrant(mergeTarget.mergeNode, vehId);
@@ -425,12 +421,14 @@ function processMergeLogicInline(
 
       const waitRatio = getWaitRatio(currentEdge, currentRatio, mergeTarget.distanceToMerge, mergeTarget.waitDistance);
 
-      if (currentRatio >= waitRatio) {
-        // 대기 지점을 넘어갔으면 되돌림
-        data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
-        target.x = waitRatio;
-        return true;
-      }
+      // TODO: 정상적인 프로세스에서는 mergeBraking이 감속시키므로 되돌림 불필요
+      // 문제: request 직후 같은 프레임에서 grant 체크 → 없음 → 바로 되돌림 발생
+      // if (currentRatio >= waitRatio) {
+      //   // 대기 지점을 넘어갔으면 되돌림
+      //   data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+      //   target.x = waitRatio;
+      //   return true;
+      // }
 
       // 대기 지점 이전이면 현재 위치 유지
       if ((currentReason & StopReason.LOCKED) !== 0) {
@@ -456,7 +454,8 @@ function processMergeLogicInline(
   if (hasCurveMerge && newState !== currentTrafficState) {
     const prevStr = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
     const newStr = newState === TrafficState.FREE ? 'FREE' : newState === TrafficState.ACQUIRED ? 'ACQUIRED' : 'WAITING';
-    console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevStr} → ${newStr} (락 획득 성공)`);
+    const targetNodes = mergeTargets.map(t => `${t.mergeNode}(${t.type},${t.requestEdge})`).join(', ');
+    console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevStr} → ${newStr}, targets=[${targetNodes}]`);
   }
 
   data[ptr + LogicData.TRAFFIC_STATE] = newState;

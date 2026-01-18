@@ -4,7 +4,7 @@
 import type { Edge } from "@/types/edge";
 import { getLockWaitDistanceFromMergingStr, getLockRequestDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve, getLockRequestDistanceFromMergingCurve, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
 
-const DEBUG = false;
+const DEBUG = true;
 
 /**
  * Lock 설정 인터페이스
@@ -482,7 +482,8 @@ export class LockMgr {
         if (DEBUG) console.log(`[LockMgr.step] Granted to vehs ${grantedVehIds.join(',')} at ${nodeName}`);
         if (DEBUG) this.logNodeState(nodeName);
       } else if (DEBUG && node.requests.length > 0) {
-        console.log(`[LockMgr.step] controller.step returned empty array for ${nodeName}`);
+        const reqEdges = node.requests.map(r => `${r.vehId}(${r.edgeName})`).join(', ');
+        console.log(`[LockMgr.step] controller.step returned empty for ${nodeName}, requests=[${reqEdges}], currentBatchEdge=${controller.state.currentBatchEdge}, passLimitReached=${controller.state.passLimitReached}, batchGrantedCount=${controller.state.batchGrantedCount}`);
       }
     }
   }
@@ -529,7 +530,7 @@ export class LockMgr {
     if (existing || alreadyGranted) return;
 
     // 큐에 추가
-    if (DEBUG) console.log(`[requestLock] veh ${vehId} requesting ${nodeName} via ${edgeName}`);
+    if (DEBUG) console.log(`[requestLock] vehId=${vehId} node=${nodeName} edge=${edgeName}`);
     node.requests.push({
       vehId,
       edgeName,
@@ -539,7 +540,9 @@ export class LockMgr {
     node.edgeQueues[edgeName]?.enqueue(vehId);
 
     // 디버그: 락 요청 상세
-    console.log(`[DEBUG] requestLock 상세: vehId=${vehId}, node=${nodeName}, edge=${edgeName}, hasQueue=${hasQueue}, strategy=${this.strategyType}, requestsLen=${node.requests.length}, grantedLen=${node.granted.length}`);
+    const requestVehs = node.requests.map(r => `${r.vehId}(${r.edgeName})`).join(', ');
+    const grantedVehs = node.granted.map(g => `${g.veh}(${g.edge})`).join(', ');
+    console.log(`[DEBUG] requestLock 상세: vehId=${vehId}, node=${nodeName}, edge=${edgeName}, hasQueue=${hasQueue}, strategy=${this.strategyType}, requests=[${requestVehs}], granted=[${grantedVehs}]`);
 
     if (DEBUG) this.logNodeState(nodeName);
 
@@ -567,7 +570,7 @@ export class LockMgr {
     }
 
     const grantedEdge = node.granted[grantIdx].edge;
-    if (DEBUG) console.log(`[releaseLock] veh ${vehId} releasing ${nodeName} (edge: ${grantedEdge})`);
+    if (DEBUG) console.log(`[releaseLock] vehId=${vehId} node=${nodeName} edge=${grantedEdge}`);
 
     // granted 배열에서 제거
     node.granted.splice(grantIdx, 1);

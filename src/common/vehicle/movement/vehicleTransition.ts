@@ -139,6 +139,7 @@ function checkAndTriggerTransfer(
 ) {
   const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
   if (ratio >= 0 && nextEdgeState === NextEdgeState.EMPTY) {
+    console.log(`[checkAndTriggerTransfer] vehId=${vehIdx} ratio=${ratio.toFixed(3)} state=EMPTY → PENDING, enqueue`);
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.PENDING;
     transferMgr.enqueueVehicleTransfer(vehIdx);
   }

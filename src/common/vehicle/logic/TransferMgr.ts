@@ -275,15 +275,19 @@ export class TransferMgr {
       const currentIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
       const totalLen = this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
 
+      const filledEdges: number[] = [];
       for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
         const pathOffset = currentIdx + i;
         if (pathOffset < totalLen) {
           const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
           data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 0 ? edgeIdx : -1;
+          filledEdges.push(edgeIdx);
         } else {
           data[ptr + nextEdgeOffsets[i]] = -1;
+          filledEdges.push(-1);
         }
       }
+      console.log(`[fillNextEdges] vehId=${vehicleIndex} currentIdx=${currentIdx} totalLen=${totalLen} filled=[${filledEdges.join(',')}]`);
 
       data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
       return;
@@ -521,6 +525,27 @@ export class TransferMgr {
       for (let i = 0; i < edgeIndices.length && i < MAX_PATH_LENGTH - PATH_EDGES_START; i++) {
         this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
       }
+      console.log(`[processPathCommand] vehId=${vehId} pathLen=${edgeIndices.length} edges=[${edgeIndices.join(',')}]`);
+
+      // path 설정 후 next edges도 바로 채움
+      const nextEdgeOffsets = [
+        MovementData.NEXT_EDGE_0,
+        MovementData.NEXT_EDGE_1,
+        MovementData.NEXT_EDGE_2,
+        MovementData.NEXT_EDGE_3,
+        MovementData.NEXT_EDGE_4,
+      ];
+      for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+        if (i < edgeIndices.length) {
+          data[ptr + nextEdgeOffsets[i]] = edgeIndices[i];
+        } else {
+          data[ptr + nextEdgeOffsets[i]] = -1;
+        }
+      }
+      data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+      console.log(`[processPathCommand] vehId=${vehId} nextEdges filled`);
+    } else {
+      console.log(`[processPathCommand] vehId=${vehId} NO pathBuffer!`);
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
