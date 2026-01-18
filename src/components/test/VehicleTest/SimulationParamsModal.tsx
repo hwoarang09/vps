@@ -482,20 +482,45 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
         </button>
       </div>
 
-      <Section title="Lock" color="#e74c3c" defaultOpen={true}>
+      <Section title="Lock - Straight Merge" color="#e74c3c" defaultOpen={true}>
         <ParamInput
-          label="Wait Distance"
-          value={override.lock?.waitDistance}
-          baseValue={baseConfig.lock.waitDistance}
-          onChange={(v) => updateOverride(["lock", "waitDistance"], v)}
+          label="Wait Distance (Str)"
+          value={override.lock?.waitDistanceFromMergingStr}
+          baseValue={baseConfig.lock.waitDistanceFromMergingStr}
+          onChange={(v) => updateOverride(["lock", "waitDistanceFromMergingStr"], v)}
           unit="m"
-          description="toNode 앞 대기 지점"
+          description="직선에서 합류 시 toNode 앞 대기 지점"
         />
-        <RequestModeInput
-          value={override.lock?.requestDistance}
-          baseValue={baseConfig.lock.requestDistance}
-          onChange={(v) => updateOverride(["lock", "requestDistance"], v)}
+        <ParamInput
+          label="Request Distance (Str)"
+          value={override.lock?.requestDistanceFromMergingStr}
+          baseValue={baseConfig.lock.requestDistanceFromMergingStr}
+          onChange={(v) => updateOverride(["lock", "requestDistanceFromMergingStr"], v)}
+          unit="m"
+          description="직선에서 합류 시 toNode 앞 요청 지점"
         />
+      </Section>
+
+      <Section title="Lock - Curve Merge" color="#e74c3c" defaultOpen={true}>
+        <ParamInput
+          label="Wait Distance (Curve)"
+          value={override.lock?.waitDistanceFromMergingCurve}
+          baseValue={baseConfig.lock.waitDistanceFromMergingCurve}
+          onChange={(v) => updateOverride(["lock", "waitDistanceFromMergingCurve"], v)}
+          unit="m"
+          description="곡선에서 합류 시 fromNode 앞 대기 지점"
+        />
+        <ParamInput
+          label="Request Distance (Curve)"
+          value={override.lock?.requestDistanceFromMergingCurve}
+          baseValue={baseConfig.lock.requestDistanceFromMergingCurve}
+          onChange={(v) => updateOverride(["lock", "requestDistanceFromMergingCurve"], v)}
+          unit="m"
+          description="곡선에서 합류 시 fromNode 앞 요청 지점"
+        />
+      </Section>
+
+      <Section title="Lock - Strategy" color="#e74c3c" defaultOpen={false}>
         <GrantStrategyInput
           value={override.lock?.grantStrategy}
           baseValue={baseConfig.lock.grantStrategy}
@@ -646,24 +671,34 @@ const SimulationParamsModal: React.FC = () => {
             Base Configuration (applies to all fabs)
           </h3>
 
-          <Section title="Lock" color="#e74c3c">
+          <Section title="Lock - Straight Merge" color="#e74c3c">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "12px" }}>
               <div>
-                <span style={{ color: "#888" }}>Wait Distance:</span>
-                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.waitDistance} m</span>
+                <span style={{ color: "#888" }}>Wait Distance (Str):</span>
+                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.waitDistanceFromMergingStr} m</span>
               </div>
               <div>
-                <span style={{ color: "#888" }}>Request Mode:</span>
-                <span style={{
-                  color: baseConfig.lock.requestDistance < 0 ? "#e74c3c" : "#27ae60",
-                  marginLeft: "8px",
-                  fontWeight: "bold"
-                }}>
-                  {baseConfig.lock.requestDistance < 0
-                    ? "Immediate"
-                    : `Distance (${baseConfig.lock.requestDistance} m)`}
-                </span>
+                <span style={{ color: "#888" }}>Request Distance (Str):</span>
+                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.requestDistanceFromMergingStr} m</span>
               </div>
+            </div>
+          </Section>
+
+          <Section title="Lock - Curve Merge" color="#e74c3c">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "12px" }}>
+              <div>
+                <span style={{ color: "#888" }}>Wait Distance (Curve):</span>
+                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.waitDistanceFromMergingCurve} m</span>
+              </div>
+              <div>
+                <span style={{ color: "#888" }}>Request Distance (Curve):</span>
+                <span style={{ color: "#fff", marginLeft: "8px" }}>{baseConfig.lock.requestDistanceFromMergingCurve} m</span>
+              </div>
+            </div>
+          </Section>
+
+          <Section title="Lock - Strategy" color="#e74c3c">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "12px" }}>
               <div>
                 <span style={{ color: "#888" }}>Grant Strategy:</span>
                 <span style={{

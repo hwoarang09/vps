@@ -13,10 +13,14 @@ interface SimulationConfigFile {
     curvePreBrakeCheckInterval?: number;
   };
   lock: {
-    /** 대기 지점 - toNode 앞 거리 (m) */
-    waitDistance: number;
-    /** 요청 시점 - toNode 앞 거리 (m). 직선이 이보다 짧으면 진입 즉시 요청 */
-    requestDistance: number;
+    /** 직선에서 합류할 때 대기 지점 - toNode 앞 거리 (m) */
+    waitDistanceFromMergingStr: number;
+    /** 직선에서 합류할 때 요청 시점 - toNode 앞 거리 (m) */
+    requestDistanceFromMergingStr: number;
+    /** 곡선에서 합류할 때 대기 지점 - fromNode 앞 거리 (m) */
+    waitDistanceFromMergingCurve: number;
+    /** 곡선에서 합류할 때 요청 시점 - fromNode 앞 거리 (m) */
+    requestDistanceFromMergingCurve: number;
     /** 승인 전략: FIFO 또는 BATCH */
     grantStrategy: GrantStrategy;
   };
@@ -81,8 +85,10 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         curvePreBrakeCheckInterval: 100,
       },
       lock: {
-        waitDistance: 1.89,
-        requestDistance: 5.1,
+        waitDistanceFromMergingStr: 1.89,
+        requestDistanceFromMergingStr: 5.1,
+        waitDistanceFromMergingCurve: 1.89,
+        requestDistanceFromMergingCurve: 5.1,
         grantStrategy: 'FIFO',
       },
       vehicle: {
@@ -139,8 +145,10 @@ let simulationConfig: SimulationConfigFile = {
     curvePreBrakeCheckInterval: 100,
   },
   lock: {
-    waitDistance: 1.89,
-    requestDistance: 5.1,
+    waitDistanceFromMergingStr: 1.89,
+    requestDistanceFromMergingStr: 5.1,
+    waitDistanceFromMergingCurve: 1.89,
+    requestDistanceFromMergingCurve: 5.1,
     grantStrategy: 'FIFO',
   },
   vehicle: {
@@ -219,8 +227,10 @@ export const getSimulationConfig = (): SimulationConfig => {
     brakeMinSpeed: simulationConfig.movement.brake.minSpeed,
 
     // Lock
-    lockWaitDistance: simulationConfig.lock.waitDistance,
-    lockRequestDistance: simulationConfig.lock.requestDistance,
+    lockWaitDistanceFromMergingStr: simulationConfig.lock.waitDistanceFromMergingStr,
+    lockRequestDistanceFromMergingStr: simulationConfig.lock.requestDistanceFromMergingStr,
+    lockWaitDistanceFromMergingCurve: simulationConfig.lock.waitDistanceFromMergingCurve,
+    lockRequestDistanceFromMergingCurve: simulationConfig.lock.requestDistanceFromMergingCurve,
     lockGrantStrategy: simulationConfig.lock.grantStrategy,
   };
 };
@@ -258,6 +268,8 @@ export const getApproachMinSpeed = () => simulationConfig.movement.approach.minS
 export const getBrakeMinSpeed = () => simulationConfig.movement.brake.minSpeed;
 
 // Individual getters - Lock
-export const getLockWaitDistance = () => simulationConfig.lock.waitDistance;
-export const getLockRequestDistance = () => simulationConfig.lock.requestDistance;
+export const getLockWaitDistanceFromMergingStr = () => simulationConfig.lock.waitDistanceFromMergingStr;
+export const getLockRequestDistanceFromMergingStr = () => simulationConfig.lock.requestDistanceFromMergingStr;
+export const getLockWaitDistanceFromMergingCurve = () => simulationConfig.lock.waitDistanceFromMergingCurve;
+export const getLockRequestDistanceFromMergingCurve = () => simulationConfig.lock.requestDistanceFromMergingCurve;
 export const getLockGrantStrategy = () => simulationConfig.lock.grantStrategy;

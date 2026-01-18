@@ -233,13 +233,25 @@ function processMergeLogicInline(
   }
 
   // Lock 요청 시점 계산
-  // requestDistance가 -1이면 진입 즉시 요청 (무조건 shouldRequest = true)
-  const requestDistance = lockMgr.getRequestDistance();
+  // 직선/곡선에 따라 다른 requestDistance 사용
   let shouldRequest = true;
-  if (requestDistance >= 0 && currentEdge.vos_rail_type === EdgeType.LINEAR && currentEdge.distance >= requestDistance) {
-    const distToNode = currentEdge.distance * (1 - currentRatio);
-    if (distToNode > requestDistance) {
-      shouldRequest = false;
+  if (currentEdge.vos_rail_type === EdgeType.LINEAR) {
+    // 직선: toNode 앞에서 요청
+    const requestDistance = lockMgr.getRequestDistanceFromMergingStr();
+    if (requestDistance >= 0 && currentEdge.distance >= requestDistance) {
+      const distToNode = currentEdge.distance * (1 - currentRatio);
+      if (distToNode > requestDistance) {
+        shouldRequest = false;
+      }
+    }
+  } else {
+    // 곡선: fromNode 앞에서 요청 (ratio 기준)
+    const requestDistance = lockMgr.getRequestDistanceFromMergingCurve();
+    if (requestDistance >= 0) {
+      const distFromStart = currentEdge.distance * currentRatio;
+      if (distFromStart < requestDistance) {
+        shouldRequest = false;
+      }
     }
   }
 
@@ -284,7 +296,15 @@ function processMergeLogicInline(
   //   return false;
   // }
 
-  const waitDist = lockMgr.getWaitDistance(currentEdge);
+  // 직선/곡선에 따라 다른 waitDistance 사용
+  let waitDist: number;
+  if (currentEdge.vos_rail_type === EdgeType.LINEAR) {
+    // 직선: toNode 앞에서 대기 (edge 끝에서 거리)
+    waitDist = lockMgr.getWaitDistanceForMergingStr(currentEdge);
+  } else {
+    // 곡선: fromNode 앞에서 대기 (edge 시작에서 거리)
+    waitDist = lockMgr.getWaitDistanceForMergingCurve();
+  }
   const currentDist = currentRatio * currentEdge.distance;
 
   // 핵심: 차량이 대기 지점을 넘어갔는지 체크

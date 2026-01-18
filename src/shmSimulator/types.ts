@@ -93,10 +93,14 @@ export interface SimulationConfig {
   crossEdgeSafeDistance: number;
 
   // Lock parameters
-  /** Lock 대기 거리 (edge 끝에서부터) */
-  lockWaitDistance: number;
-  /** Lock 요청 거리 (-1이면 진입 즉시 요청) */
-  lockRequestDistance: number;
+  /** 직선에서 합류할 때 Lock 대기 거리 (toNode 앞 거리) */
+  lockWaitDistanceFromMergingStr: number;
+  /** 직선에서 합류할 때 Lock 요청 거리 (toNode 앞 거리) */
+  lockRequestDistanceFromMergingStr: number;
+  /** 곡선에서 합류할 때 Lock 대기 거리 (fromNode 앞 거리) */
+  lockWaitDistanceFromMergingCurve: number;
+  /** 곡선에서 합류할 때 Lock 요청 거리 (fromNode 앞 거리) */
+  lockRequestDistanceFromMergingCurve: number;
   /** Lock 승인 전략 */
   lockGrantStrategy: GrantStrategy;
 
@@ -138,8 +142,10 @@ export function createDefaultConfig(): SimulationConfig {
     edgeMargin: 0.5,
     vehicleSpacing: 0.6,
     crossEdgeSafeDistance: 1,
-    lockWaitDistance: 1.89,
-    lockRequestDistance: 5.1,
+    lockWaitDistanceFromMergingStr: 1.89,
+    lockRequestDistanceFromMergingStr: 5.1,
+    lockWaitDistanceFromMergingCurve: 1.89,
+    lockRequestDistanceFromMergingCurve: 5.1,
     lockGrantStrategy: 'FIFO',
     targetFps: 60,
     maxDelta: 0.1,

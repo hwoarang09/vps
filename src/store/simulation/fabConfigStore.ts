@@ -1,8 +1,10 @@
 // Fab별 시뮬레이션 파라미터 오버라이드 스토어
 import { create } from "zustand";
 import {
-  getLockWaitDistance,
-  getLockRequestDistance,
+  getLockWaitDistanceFromMergingStr,
+  getLockRequestDistanceFromMergingStr,
+  getLockWaitDistanceFromMergingCurve,
+  getLockRequestDistanceFromMergingCurve,
   getLockGrantStrategy,
   getLinearMaxSpeed,
   getLinearAcceleration,
@@ -17,8 +19,10 @@ import {
  * Fab별로 오버라이드 가능한 Lock 설정
  */
 export interface LockConfigOverride {
-  waitDistance?: number;
-  requestDistance?: number; // -1이면 진입 즉시 요청
+  waitDistanceFromMergingStr?: number;
+  requestDistanceFromMergingStr?: number;
+  waitDistanceFromMergingCurve?: number;
+  requestDistanceFromMergingCurve?: number;
   grantStrategy?: GrantStrategy;
 }
 
@@ -53,8 +57,10 @@ export interface FabConfigOverride {
  */
 export interface BaseSimulationConfig {
   lock: {
-    waitDistance: number;
-    requestDistance: number;
+    waitDistanceFromMergingStr: number;
+    requestDistanceFromMergingStr: number;
+    waitDistanceFromMergingCurve: number;
+    requestDistanceFromMergingCurve: number;
     grantStrategy: GrantStrategy;
   };
   movement: {
@@ -90,7 +96,7 @@ interface FabConfigStore {
 
   // Getters
   getFabConfig: (fabIndex: number) => {
-    lock: { waitDistance: number; requestDistance: number; grantStrategy: GrantStrategy };
+    lock: { waitDistanceFromMergingStr: number; requestDistanceFromMergingStr: number; waitDistanceFromMergingCurve: number; requestDistanceFromMergingCurve: number; grantStrategy: GrantStrategy };
     movement: {
       linear: { maxSpeed: number; acceleration: number; deceleration: number; preBrakeDeceleration: number };
       curve: { maxSpeed: number; acceleration: number };
@@ -108,8 +114,10 @@ interface FabConfigStore {
 function loadBaseConfigFromSimulation(): BaseSimulationConfig {
   return {
     lock: {
-      waitDistance: getLockWaitDistance(),
-      requestDistance: getLockRequestDistance(),
+      waitDistanceFromMergingStr: getLockWaitDistanceFromMergingStr(),
+      requestDistanceFromMergingStr: getLockRequestDistanceFromMergingStr(),
+      waitDistanceFromMergingCurve: getLockWaitDistanceFromMergingCurve(),
+      requestDistanceFromMergingCurve: getLockRequestDistanceFromMergingCurve(),
       grantStrategy: getLockGrantStrategy(),
     },
     movement: {
@@ -181,8 +189,10 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
     return {
       lock: {
-        waitDistance: override.lock?.waitDistance ?? baseConfig.lock.waitDistance,
-        requestDistance: override.lock?.requestDistance ?? baseConfig.lock.requestDistance,
+        waitDistanceFromMergingStr: override.lock?.waitDistanceFromMergingStr ?? baseConfig.lock.waitDistanceFromMergingStr,
+        requestDistanceFromMergingStr: override.lock?.requestDistanceFromMergingStr ?? baseConfig.lock.requestDistanceFromMergingStr,
+        waitDistanceFromMergingCurve: override.lock?.waitDistanceFromMergingCurve ?? baseConfig.lock.waitDistanceFromMergingCurve,
+        requestDistanceFromMergingCurve: override.lock?.requestDistanceFromMergingCurve ?? baseConfig.lock.requestDistanceFromMergingCurve,
         grantStrategy: override.lock?.grantStrategy ?? baseConfig.lock.grantStrategy,
       },
       movement: {

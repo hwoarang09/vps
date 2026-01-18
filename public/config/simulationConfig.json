@@ -7,8 +7,10 @@
     "curvePreBrakeCheckInterval": -1
   },
   "lock": {
-    "waitDistance": 2.9,
-    "requestDistance": 5.1,
+    "waitDistanceFromMergingStr": 2.9,
+    "requestDistanceFromMergingStr": 5.1,
+    "waitDistanceFromMergingCurve": 0,
+    "requestDistanceFromMergingCurve": 1,
     "grantStrategy": "BATCH"
   },
   "vehicle": {

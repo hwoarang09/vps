@@ -111,8 +111,10 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           linearDeceleration: fabConfig.movement.linear.deceleration,
           curveMaxSpeed: fabConfig.movement.curve.maxSpeed,
           curveAcceleration: fabConfig.movement.curve.acceleration,
-          lockWaitDistance: fabConfig.lock.waitDistance,
-          lockRequestDistance: fabConfig.lock.requestDistance,
+          lockWaitDistanceFromMergingStr: fabConfig.lock.waitDistanceFromMergingStr,
+          lockRequestDistanceFromMergingStr: fabConfig.lock.requestDistanceFromMergingStr,
+          lockWaitDistanceFromMergingCurve: fabConfig.lock.waitDistanceFromMergingCurve,
+          lockRequestDistanceFromMergingCurve: fabConfig.lock.requestDistanceFromMergingCurve,
           lockGrantStrategy: fabConfig.lock.grantStrategy,
         } : undefined;
 

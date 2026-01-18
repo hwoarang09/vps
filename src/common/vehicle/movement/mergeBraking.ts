@@ -180,8 +180,8 @@ function calculateLinearMergeBraking({
     return noResult;
   }
 
-  // wait 지점까지의 거리
-  const waitDistance = lockMgr.getWaitDistance(mergeEdge);
+  // wait 지점까지의 거리 (직선 merge edge이므로 Str 함수 사용)
+  const waitDistance = lockMgr.getWaitDistanceForMergingStr(mergeEdge);
   const distanceToWait = distanceToMergeEnd - waitDistance;
 
   // 이미 wait 지점을 지났으면 감속하지 않음

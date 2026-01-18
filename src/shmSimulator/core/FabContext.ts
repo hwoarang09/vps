@@ -174,8 +174,10 @@ export class FabContext {
 
     // config에서 lock 설정 적용
     this.lockMgr.setLockConfig({
-      waitDistance: this.config.lockWaitDistance,
-      requestDistance: this.config.lockRequestDistance,
+      waitDistanceFromMergingStr: this.config.lockWaitDistanceFromMergingStr,
+      requestDistanceFromMergingStr: this.config.lockRequestDistanceFromMergingStr,
+      waitDistanceFromMergingCurve: this.config.lockWaitDistanceFromMergingCurve,
+      requestDistanceFromMergingCurve: this.config.lockRequestDistanceFromMergingCurve,
     });
 
     // config에서 lock 정책 적용

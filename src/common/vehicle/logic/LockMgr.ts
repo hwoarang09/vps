@@ -2,8 +2,7 @@
 // Shared LockMgr for vehicleArrayMode and shmSimulator
 
 import type { Edge } from "@/types/edge";
-import { EdgeType } from "@/types";
-import { getLockWaitDistance, getLockRequestDistance, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
+import { getLockWaitDistanceFromMergingStr, getLockRequestDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve, getLockRequestDistanceFromMergingCurve, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
 
 const DEBUG = false;
 
@@ -11,8 +10,10 @@ const DEBUG = false;
  * Lock 설정 인터페이스
  */
 export interface LockConfig {
-  waitDistance: number;
-  requestDistance: number; // -1이면 진입 즉시 요청
+  waitDistanceFromMergingStr: number;
+  requestDistanceFromMergingStr: number;
+  waitDistanceFromMergingCurve: number;
+  requestDistanceFromMergingCurve: number;
 }
 
 /**
@@ -302,15 +303,19 @@ export class LockMgr {
   private batchControllers: Map<string, BatchController> = new Map();
 
   // Fab별 설정 가능한 lock 파라미터
-  private lockWaitDistance: number;
-  private lockRequestDistance: number;
+  private lockWaitDistanceFromMergingStr: number;
+  private lockRequestDistanceFromMergingStr: number;
+  private lockWaitDistanceFromMergingCurve: number;
+  private lockRequestDistanceFromMergingCurve: number;
   private strategyType: GrantStrategy;
   private batchSize: number;
 
   constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴
-    this.lockWaitDistance = getLockWaitDistance();
-    this.lockRequestDistance = getLockRequestDistance();
+    this.lockWaitDistanceFromMergingStr = getLockWaitDistanceFromMergingStr();
+    this.lockRequestDistanceFromMergingStr = getLockRequestDistanceFromMergingStr();
+    this.lockWaitDistanceFromMergingCurve = getLockWaitDistanceFromMergingCurve();
+    this.lockRequestDistanceFromMergingCurve = getLockRequestDistanceFromMergingCurve();
     this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
     this.batchSize = 3; // 기본 batch size
     console.log(`[LockMgr] strategyType=${this.strategyType}`);
@@ -320,8 +325,10 @@ export class LockMgr {
    * Lock 설정 변경 (fab별 오버라이드 적용 시 사용)
    */
   setLockConfig(config: LockConfig) {
-    this.lockWaitDistance = config.waitDistance;
-    this.lockRequestDistance = config.requestDistance;
+    this.lockWaitDistanceFromMergingStr = config.waitDistanceFromMergingStr;
+    this.lockRequestDistanceFromMergingStr = config.requestDistanceFromMergingStr;
+    this.lockWaitDistanceFromMergingCurve = config.waitDistanceFromMergingCurve;
+    this.lockRequestDistanceFromMergingCurve = config.requestDistanceFromMergingCurve;
   }
 
   /**
@@ -352,8 +359,10 @@ export class LockMgr {
    */
   getLockConfig(): LockConfig {
     return {
-      waitDistance: this.lockWaitDistance,
-      requestDistance: this.lockRequestDistance,
+      waitDistanceFromMergingStr: this.lockWaitDistanceFromMergingStr,
+      requestDistanceFromMergingStr: this.lockRequestDistanceFromMergingStr,
+      waitDistanceFromMergingCurve: this.lockWaitDistanceFromMergingCurve,
+      requestDistanceFromMergingCurve: this.lockRequestDistanceFromMergingCurve,
     };
   }
 
@@ -372,10 +381,17 @@ export class LockMgr {
   }
 
   /**
-   * Request Distance 반환 (-1이면 진입 즉시 요청)
+   * 직선에서 합류할 때 Request Distance 반환
    */
-  getRequestDistance(): number {
-    return this.lockRequestDistance;
+  getRequestDistanceFromMergingStr(): number {
+    return this.lockRequestDistanceFromMergingStr;
+  }
+
+  /**
+   * 곡선에서 합류할 때 Request Distance 반환
+   */
+  getRequestDistanceFromMergingCurve(): number {
+    return this.lockRequestDistanceFromMergingCurve;
   }
 
   reset() {
@@ -471,16 +487,22 @@ export class LockMgr {
     }
   }
 
-  getWaitDistance(edge: Edge): number {
-    if (edge.vos_rail_type !== EdgeType.LINEAR) {
-      return 0;
+  /**
+   * 직선에서 합류할 때 Wait Distance 반환 (toNode 앞 거리)
+   */
+  getWaitDistanceForMergingStr(edge: Edge): number {
+    if (edge.distance >= this.lockWaitDistanceFromMergingStr) {
+      return edge.distance - this.lockWaitDistanceFromMergingStr;
     }
+    return 0;
+  }
 
-    if (edge.distance >= this.lockWaitDistance) {
-      return edge.distance - this.lockWaitDistance;
-    } else {
-      return 0;
-    }
+  /**
+   * 곡선에서 합류할 때 Wait Distance 반환 (fromNode 앞 거리)
+   * 곡선은 fromNode 기준이므로 그대로 반환
+   */
+  getWaitDistanceForMergingCurve(): number {
+    return this.lockWaitDistanceFromMergingCurve;
   }
 
   requestLock(nodeName: string, edgeName: string, vehId: number) {
