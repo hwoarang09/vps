@@ -97,10 +97,6 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
 
     store.moveVehicleToEdge(vehicleIndex, nextEdgeIndex, overflowDist / nextEdge.distance);
 
-    // DEBUG: Edge 전환 로그
-    const prevVel = data[ptr + MovementData.VELOCITY];
-    console.log(`[DEBUG] Edge 전환: veh=${vehicleIndex}, ${currentEdge.edge_name}(${currentEdge.vos_rail_type}) -> ${nextEdge.edge_name}(${nextEdge.vos_rail_type}), vel=${prevVel.toFixed(2)}m/s`);
-
     updateSensorPresetForEdge(vehicleDataArray, vehicleIndex, nextEdge);
 
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;

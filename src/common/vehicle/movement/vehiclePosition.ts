@@ -135,12 +135,6 @@ export function updateVehiclePosition(
     // 차량이 대기 지점을 넘어간 경우: 대기 지점으로 되돌림
     finalRatio = SCRATCH_MERGE_POS.x;  // 새로운 ratio (대기 지점)
 
-    // DEBUG: Merge 대기로 속도 0
-    if (finalVelocity > 0) {
-      console.warn(`[DEBUG] MERGE 대기로 정지: veh=${vehicleIndex}, edge=${finalEdge.edge_name}, ` +
-        `ratio=${finalRatio.toFixed(3)}, vel=${finalVelocity.toFixed(2)}`);
-    }
-
     // 2차 위치 보간: 변경된 ratio에 맞는 좌표 재계산
     if (activeEdge) {
       interpolatePositionTo(activeEdge, finalRatio, SCRATCH_POS, config.vehicleZOffset);

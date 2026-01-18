@@ -5,7 +5,7 @@ import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
 import { getLockWaitDistance, getLockRequestDistance, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
 
-const DEBUG = true;
+const DEBUG = false;
 
 /**
  * Lock 설정 인터페이스
