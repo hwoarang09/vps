@@ -62,7 +62,7 @@ export function useDigitMaterials({
       return new THREE.MeshBasicMaterial({
         map: tex,
         transparent: true,
-        depthTest: true,
+        depthTest: false,
         depthWrite: false,
       });
     });

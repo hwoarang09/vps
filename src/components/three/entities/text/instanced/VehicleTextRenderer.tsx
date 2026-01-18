@@ -13,6 +13,7 @@ import {
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
 import { VehicleSystemType } from "@/types/vehicle";
+import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
@@ -99,6 +100,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
       data={slotData}
       instRefs={instRefs}
       color={color}
+      renderOrder={RENDER_ORDER_TEXT}
     />
   );
 };
