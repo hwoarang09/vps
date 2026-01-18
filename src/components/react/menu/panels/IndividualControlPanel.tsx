@@ -13,6 +13,8 @@ import {
     SensorData as ShmSensorData,
     LogicData as ShmLogicData,
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { NEXT_EDGE_COUNT } from "@/common/vehicle/initialize/constants";
+import type { Edge as FullEdge } from "@/types/edge";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
@@ -63,6 +65,13 @@ interface VehicleMonitorProps {
 // Helper to read vehicle data from SHM buffer
 const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
     const ptr = vehicleIndex * SHM_VEHICLE_DATA_SIZE;
+
+    // Read next edges array (5 entries)
+    const nextEdges: number[] = [];
+    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+        nextEdges.push(data[ptr + ShmMovementData.NEXT_EDGE_0 + i]);
+    }
+
     return {
         movement: {
             movingStatus: data[ptr + ShmMovementData.MOVING_STATUS],
@@ -71,6 +80,7 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
             deceleration: data[ptr + ShmMovementData.DECELERATION],
             currentEdge: data[ptr + ShmMovementData.CURRENT_EDGE],
             nextEdge: data[ptr + ShmMovementData.NEXT_EDGE_0],
+            nextEdges,
             edgeRatio: data[ptr + ShmMovementData.EDGE_RATIO],
         },
         sensor: {
@@ -85,6 +95,56 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
             pathRemaining: data[ptr + ShmLogicData.PATH_REMAINING],
         },
     };
+};
+
+// Helper to find nearest merge node in next edges
+interface MergeNodeInfo {
+    mergeNodeName: string;
+    mergeEdgeName: string;
+    distanceToMerge: number;
+    edgeHops: number;
+}
+
+const findNearestMergeNode = (
+    currentEdge: FullEdge,
+    currentRatio: number,
+    nextEdges: number[],
+    edges: FullEdge[]
+): MergeNodeInfo | null => {
+    // Check current edge first
+    let accumulatedDistance = currentEdge.distance * (1 - currentRatio);
+
+    // If current edge's to_node is merge, return it
+    if (currentEdge.toNodeIsMerge) {
+        return {
+            mergeNodeName: currentEdge.to_node,
+            mergeEdgeName: currentEdge.edge_name,
+            distanceToMerge: accumulatedDistance,
+            edgeHops: 0,
+        };
+    }
+
+    // Search through next edges (up to 5)
+    for (let i = 0; i < nextEdges.length; i++) {
+        const nextEdgeIdx = nextEdges[i];
+        if (nextEdgeIdx < 0 || nextEdgeIdx >= edges.length) break;
+
+        const nextEdge = edges[nextEdgeIdx];
+        if (!nextEdge) break;
+
+        accumulatedDistance += nextEdge.distance;
+
+        if (nextEdge.toNodeIsMerge) {
+            return {
+                mergeNodeName: nextEdge.to_node,
+                mergeEdgeName: nextEdge.edge_name,
+                distanceToMerge: accumulatedDistance,
+                edgeHops: i + 1,
+            };
+        }
+    }
+
+    return null;
 };
 
 const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles, isShmMode }) => {
@@ -153,6 +213,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     let sensorPreset: number, hitZone: number, trafficState: number, stopReasonMask: number;
     let currentEdgeIdx: number, currentEdgeRatio: number, nextEdgeIdx: number, collisionTarget: number;
     let destinationEdgeIdx: number | undefined, pathRemaining: number | undefined;
+    let nextEdges: number[] = [];
 
     if (isShmMode) {
         const data = useShmSimulatorStore.getState().getVehicleFullData();
@@ -171,6 +232,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         currentEdgeIdx = vData.movement.currentEdge;
         currentEdgeRatio = vData.movement.edgeRatio;
         nextEdgeIdx = vData.movement.nextEdge;
+        nextEdges = vData.movement.nextEdges;
         collisionTarget = vData.sensor.collisionTarget;
         destinationEdgeIdx = vData.logic.destinationEdge;
         pathRemaining = vData.logic.pathRemaining;
@@ -188,6 +250,8 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         currentEdgeRatio = vData.movement.edgeRatio;
         nextEdgeIdx = vData.movement.nextEdge;
         collisionTarget = vData.sensor.collisionTarget;
+        // For non-SHM mode, we'd need to get next edges from vehicleDataArray if available
+        // For now, leave it empty - the feature is mainly for SHM mode
     }
     
     const vehicleInfo = vehicles.get(vehicleIndex);
@@ -244,6 +308,21 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         name: ["Approach", "Brake", "Stop"][z],
         pts: sensorPointArray.getPoints(vehicleIndex, z)
     }));
+
+    // Find nearest merge node (SHM mode only for now)
+    // Cast to FullEdge to access topology properties (toNodeIsMerge, etc.)
+    const edges = useEdgeStore.getState().edges as FullEdge[];
+    const currentEdge = edges[currentEdgeIdx];
+    const mergeNodeInfo = currentEdge && nextEdges.length > 0
+        ? findNearestMergeNode(currentEdge, currentEdgeRatio, nextEdges, edges)
+        : null;
+
+    // Get next edges info for display
+    const nextEdgesInfo = nextEdges.map((edgeIdx, i) => {
+        if (edgeIdx < 0) return null;
+        const edge = edges[edgeIdx];
+        return edge ? { index: i, edgeIdx, name: edge.edge_name, toNode: edge.to_node, isMerge: edge.toNodeIsMerge ?? false } : null;
+    }).filter(Boolean);
 
     return (
         <div className="space-y-6">
@@ -376,6 +455,51 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                             </details>
                         );
                     })()}
+
+                    {/* Next Edges & Merge Node Info (SHM mode) */}
+                    {isShmMode && nextEdgesInfo.length > 0 && (
+                        <details className="text-xs mt-2" open>
+                            <summary className="cursor-pointer text-cyan-700 font-medium hover:text-cyan-900">
+                                Next Edges ({nextEdgesInfo.length}/5)
+                            </summary>
+                            <div className="mt-1 pl-2 space-y-0.5 text-gray-600">
+                                {nextEdgesInfo.map((item) => (
+                                    item && (
+                                        <div key={item.index} className={`flex justify-between font-mono ${item.isMerge ? 'text-orange-600 font-bold' : ''}`}>
+                                            <span>{item.index + 1}.</span>
+                                            <span>{item.name}</span>
+                                            <span className="text-gray-400">
+                                                #{item.edgeIdx}
+                                                {item.isMerge && <span className="ml-1 text-orange-500">[M]</span>}
+                                            </span>
+                                        </div>
+                                    )
+                                ))}
+                            </div>
+                        </details>
+                    )}
+
+                    {/* Merge Node Alert */}
+                    {isShmMode && mergeNodeInfo && (
+                        <div className="mt-2 p-2 bg-orange-50 rounded border border-orange-200 text-xs">
+                            <div className="flex justify-between font-bold text-orange-800 mb-1">
+                                <span>Merge Node Ahead</span>
+                                <span>{mergeNodeInfo.mergeNodeName}</span>
+                            </div>
+                            <div className="flex justify-between text-orange-700">
+                                <span>Distance:</span>
+                                <span className="font-mono font-bold">{mergeNodeInfo.distanceToMerge.toFixed(2)} m</span>
+                            </div>
+                            <div className="flex justify-between text-orange-600">
+                                <span>Via Edge:</span>
+                                <span className="font-mono">{mergeNodeInfo.mergeEdgeName}</span>
+                            </div>
+                            <div className="flex justify-between text-orange-600">
+                                <span>Hops:</span>
+                                <span className="font-mono">{mergeNodeInfo.edgeHops === 0 ? 'Current' : mergeNodeInfo.edgeHops}</span>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="my-2 border-t border-gray-200"></div>
 

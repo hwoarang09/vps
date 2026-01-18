@@ -12,7 +12,9 @@ import {
   StopReason,
   SensorData,
   PresetIndex,
+  NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
+import { MAX_PATH_LENGTH, PATH_CURRENT_IDX, PATH_TOTAL_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
 
 // Interface for vehicle data array
 export interface IVehicleDataArray {
@@ -46,6 +48,8 @@ export interface EdgeTransitionParams {
   target: EdgeTransitionResult;
   preserveTargetRatio?: boolean;
   nextTargetRatio?: number;
+  /** Path buffer for refilling next edges after shift (optional) */
+  pathBufferFromAutoMgr?: Int32Array | null;
 }
 
 /**
@@ -62,7 +66,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     edgeArray,
     target,
     preserveTargetRatio = false,
-    nextTargetRatio
+    nextTargetRatio,
+    pathBufferFromAutoMgr
   } = params;
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
@@ -105,8 +110,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
       data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
     }
 
-    // Next Edge 배열을 한 칸씩 앞으로 당기기
-    shiftNextEdges(data, ptr);
+    // Next Edge 배열을 한 칸씩 앞으로 당기고 마지막 슬롯 채우기
+    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray);
 
     // Set TARGET_RATIO for the new edge
     if (nextTargetRatio !== undefined) {
@@ -159,16 +164,42 @@ function updateSensorPresetForEdge(
 }
 
 /**
- * Next Edge 배열을 한 칸씩 앞으로 당기고, 마지막 칸은 -1로 설정
+ * Next Edge 배열을 한 칸씩 앞으로 당기고, 마지막 칸을 path buffer에서 채움
  * NEXT_EDGE_0 사용 후 호출
  */
-function shiftNextEdges(data: Float32Array, ptr: number): void {
+function shiftAndRefillNextEdges(
+  data: Float32Array,
+  ptr: number,
+  vehicleIndex: number,
+  pathBufferFromAutoMgr: Int32Array | null | undefined,
+  edgeArray: Edge[]
+): void {
   // 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 4
   data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
   data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
   data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
   data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
-  data[ptr + MovementData.NEXT_EDGE_4] = -1;
+
+  // 마지막 슬롯을 path buffer에서 채우기 (없으면 -1 유지)
+  let newLastEdge = -1;
+
+  if (pathBufferFromAutoMgr) {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    const currentIdx = pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
+    const totalLen = pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
+
+    // nextEdges[4]에 들어갈 edge는 path의 currentIdx + 5 위치
+    // (currentIdx = 현재 edge, +1 = NEXT_EDGE_0, ..., +5 = NEXT_EDGE_4)
+    const pathOffset = currentIdx + NEXT_EDGE_COUNT;
+    if (pathOffset < totalLen) {
+      const candidateEdgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
+      if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {
+        newLastEdge = candidateEdgeIdx;
+      }
+    }
+  }
+
+  data[ptr + MovementData.NEXT_EDGE_4] = newLastEdge;
 
   // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
   if (data[ptr + MovementData.NEXT_EDGE_0] === -1) {

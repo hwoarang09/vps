@@ -133,7 +133,7 @@ export class FabContext {
         pathRegion.offset,
         pathRegion.size / Int32Array.BYTES_PER_ELEMENT
       );
-      this.transferMgr.setPathBuffer(pathBufferView);
+      this.transferMgr.setPathBufferFromAutoMgr(pathBufferView);
 
     } else {
       this.store.setSharedBuffer(params.sharedBuffer);
@@ -141,7 +141,7 @@ export class FabContext {
 
       // Path buffer 설정 (전체 버퍼)
       const pathBufferView = new Int32Array(params.pathBuffer);
-      this.transferMgr.setPathBuffer(pathBufferView);
+      this.transferMgr.setPathBufferFromAutoMgr(pathBufferView);
 
     }
 

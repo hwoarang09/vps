@@ -168,7 +168,7 @@ function processEdgeTransitionLogic(
     const preserveTargetRatio = ctx.store.transferMode === TransferMode.MQTT_CONTROL;
 
     // Check if there's a reserved target ratio for the next edge (fixes premature target application bug)
-    const nextTargetRatio = ctx.transferMgr.consumeNextEdgeReservation(vehicleIndex);
+    const nextTargetRatio = ctx.transferMgr.consumeNextEdgeReservationFromPathBuffer(vehicleIndex);
 
     handleEdgeTransition({
       vehicleDataArray: ctx.vehicleDataArray,
@@ -179,7 +179,8 @@ function processEdgeTransitionLogic(
       edgeArray: ctx.edgeArray,
       target: out,
       preserveTargetRatio: preserveTargetRatio,
-      nextTargetRatio: nextTargetRatio
+      nextTargetRatio: nextTargetRatio,
+      pathBufferFromAutoMgr: ctx.transferMgr.getPathBufferFromAutoMgr()
     });
 
     // Edge transit 콜백 호출 (로깅용)

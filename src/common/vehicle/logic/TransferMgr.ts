@@ -68,17 +68,24 @@ export class TransferMgr {
   private transferQueue: number[] = [];
   // Store reserved next edge for each vehicle: vehId -> ReservedEdge[]
   private readonly reservedNextEdges: Map<number, ReservedEdge[]> = new Map();
-  // Path buffer reference (SharedArrayBuffer - Int32Array)
+  // Path buffer from autoMgr (SharedArrayBuffer - Int32Array)
   // Layout: [currentIdx, totalLen, edge0, edge1, ..., edge97] per vehicle
-  private pathBuffer: Int32Array | null = null;
+  private pathBufferFromAutoMgr: Int32Array | null = null;
   // 곡선 감속 상태 (단순화)
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
 
   /**
    * Set path buffer reference (called from EngineStore or FabContext)
    */
-  setPathBuffer(pathBuffer: Int32Array): void {
-    this.pathBuffer = pathBuffer;
+  setPathBufferFromAutoMgr(pathBuffer: Int32Array): void {
+    this.pathBufferFromAutoMgr = pathBuffer;
+  }
+
+  /**
+   * Get path buffer reference (for edge transition refill)
+   */
+  getPathBufferFromAutoMgr(): Int32Array | null {
+    return this.pathBufferFromAutoMgr;
   }
 
   enqueueVehicleTransfer(vehicleIndex: number) {
@@ -97,10 +104,10 @@ export class TransferMgr {
     if (queue && queue.length > 0) return true;
 
     // Check path buffer
-    if (this.pathBuffer) {
+    if (this.pathBufferFromAutoMgr) {
       const ptr = vehId * MAX_PATH_LENGTH;
-      const currentIdx = this.pathBuffer[ptr + PATH_CURRENT_IDX];
-      const totalLen = this.pathBuffer[ptr + PATH_TOTAL_LEN];
+      const currentIdx = this.pathBufferFromAutoMgr[ptr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBufferFromAutoMgr[ptr + PATH_TOTAL_LEN];
       if (currentIdx < totalLen) return true;
     }
 
@@ -113,8 +120,8 @@ export class TransferMgr {
     this.curveBrakeStates.clear();
 
     // Clear path buffer
-    if (this.pathBuffer) {
-      this.pathBuffer.fill(0);
+    if (this.pathBufferFromAutoMgr) {
+      this.pathBufferFromAutoMgr.fill(0);
     }
   }
 
@@ -122,11 +129,11 @@ export class TransferMgr {
    * Clear path buffer for a specific vehicle
    */
   clearVehiclePath(vehId: number): void {
-    if (!this.pathBuffer) return;
+    if (!this.pathBufferFromAutoMgr) return;
 
     const pathPtr = vehId * MAX_PATH_LENGTH;
     for (let i = 0; i < MAX_PATH_LENGTH; i++) {
-      this.pathBuffer[pathPtr + i] = 0;
+      this.pathBufferFromAutoMgr[pathPtr + i] = 0;
     }
 
     // Also clear reservations
@@ -262,6 +269,27 @@ export class TransferMgr {
       MovementData.NEXT_EDGE_4,
     ];
 
+    // Path buffer가 있으면 직접 순차적으로 읽기
+    if (this.pathBufferFromAutoMgr && (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE)) {
+      const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+      const currentIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
+
+      for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+        const pathOffset = currentIdx + i;
+        if (pathOffset < totalLen) {
+          const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
+          data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 0 ? edgeIdx : -1;
+        } else {
+          data[ptr + nextEdgeOffsets[i]] = -1;
+        }
+      }
+
+      data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+      return;
+    }
+
+    // Path buffer가 없으면 기존 방식 사용
     let currentEdgeIdx = firstNextEdgeIndex;
 
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
@@ -365,15 +393,15 @@ export class TransferMgr {
    * This is called when the vehicle actually transitions to the next edge.
    * Also advances currentIdx in path buffer.
    */
-  consumeNextEdgeReservation(vehId: number): number | undefined {
+  consumeNextEdgeReservationFromPathBuffer(vehId: number): number | undefined {
     // Advance path buffer currentIdx (if path exists)
-    if (this.pathBuffer) {
+    if (this.pathBufferFromAutoMgr) {
       const pathPtr = vehId * MAX_PATH_LENGTH;
-      const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
-      const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
+      const currentIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
 
       if (currentIdx < totalLen) {
-        this.pathBuffer[pathPtr + PATH_CURRENT_IDX] = currentIdx + 1;
+        this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX] = currentIdx + 1;
       }
     }
 
@@ -485,13 +513,13 @@ export class TransferMgr {
     }
 
     // Write to path buffer
-    if (this.pathBuffer) {
+    if (this.pathBufferFromAutoMgr) {
       const pathPtr = vehId * MAX_PATH_LENGTH;
-      this.pathBuffer[pathPtr + PATH_CURRENT_IDX] = 0;
-      this.pathBuffer[pathPtr + PATH_TOTAL_LEN] = edgeIndices.length;
+      this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX] = 0;
+      this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN] = edgeIndices.length;
 
       for (let i = 0; i < edgeIndices.length && i < MAX_PATH_LENGTH - PATH_EDGES_START; i++) {
-        this.pathBuffer[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
+        this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
       }
     }
 
@@ -580,16 +608,16 @@ export class TransferMgr {
     edgeNameToIndex: Map<string, number>,
     currentEdgeName?: string
   ): number | null {
-    if (!this.pathBuffer) return null;
+    if (!this.pathBufferFromAutoMgr) return null;
 
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
-    const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
+    const currentIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
+    const totalLen = this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
 
     if (currentIdx >= totalLen) return null;
 
     // Get next edge index from path buffer
-    const nextEdgeIdx = this.pathBuffer[pathPtr + PATH_EDGES_START + currentIdx];
+    const nextEdgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + currentIdx];
 
     // Validate edge index
     if (nextEdgeIdx < 0) return null;
@@ -613,13 +641,13 @@ export class TransferMgr {
     const result: number[] = [];
 
     // Get from path buffer
-    if (this.pathBuffer) {
+    if (this.pathBufferFromAutoMgr) {
       const pathPtr = vehId * MAX_PATH_LENGTH;
-      const currentIdx = this.pathBuffer[pathPtr + PATH_CURRENT_IDX];
-      const totalLen = this.pathBuffer[pathPtr + PATH_TOTAL_LEN];
+      const currentIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
+      const totalLen = this.pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
 
       for (let i = currentIdx; i < totalLen; i++) {
-        const edgeIdx = this.pathBuffer[pathPtr + PATH_EDGES_START + i];
+        const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
         if (edgeIdx >= 0) {
           result.push(edgeIdx);
         }
@@ -857,6 +885,6 @@ export class TransferMgr {
       }
     }
 
-    // Path buffer는 consumeNextEdgeReservation에서 자동으로 currentIdx 증가
+    // Path buffer는 consumeNextEdgeReservationFromPathBuffer에서 자동으로 currentIdx 증가
   }
 }
