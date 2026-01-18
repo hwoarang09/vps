@@ -7,6 +7,7 @@ import {
   TrafficState,
 } from "@/common/vehicle/initialize/constants";
 import { interpolatePositionTo, type PositionResult } from "./positionInterpolator";
+import { devLog } from "@/logger/DevLogger";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
@@ -115,7 +116,7 @@ function findAllMergeTargets(
     if (nextEdge.vos_rail_type !== EdgeType.LINEAR && lockMgr.isMergeNode(nextEdge.to_node)) {
       // e8 곡선 합류 디버그 로그
       if (nextEdge.edge_name === 'e8') {
-        console.log(`[DEBUG] 곡선 합류 타겟 발견: currentEdge=${currentEdge.edge_name}, nextEdge=e8, mergeNode=${nextEdge.to_node}, distanceToMerge=${accumulatedDist.toFixed(2)}, requestDist=${lockMgr.getRequestDistanceFromMergingCurve()}`);
+        devLog.debug(`[MERGE_TARGET] 곡선 합류 타겟 발견: currentEdge=${currentEdge.edge_name}, nextEdge=e8, mergeNode=${nextEdge.to_node}, distanceToMerge=${accumulatedDist.toFixed(2)}, requestDist=${lockMgr.getRequestDistanceFromMergingCurve()}`);
       }
       targets.push({
         type: 'CURVE',
@@ -397,7 +398,7 @@ function processMergeLogicInline(
 
     // 요청 시점 도달 - Lock 요청 (중복 요청은 requestLock 내부에서 방지됨)
     if (mergeTarget.type === 'CURVE') {
-      console.log(`[DEBUG] 곡선 합류 락 요청: vehId=${vehId}, currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
+      devLog.veh(vehId).debug(`[MERGE_LOCK] 곡선 합류 락 요청: currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
     }
     lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
 
@@ -406,7 +407,7 @@ function processMergeLogicInline(
 
     // e8 곡선 합류 락 획득 여부 디버그 로그
     if (mergeTarget.type === 'CURVE') {
-      console.log(`[DEBUG] 곡선 합류 락 획득 여부: vehId=${vehId}, mergeNode=${mergeTarget.mergeNode}, isGranted=${isGranted}`);
+      devLog.veh(vehId).debug(`[MERGE_LOCK] 곡선 합류 락 획득 여부: mergeNode=${mergeTarget.mergeNode}, isGranted=${isGranted}`);
     }
 
     if (!isGranted) {
@@ -414,8 +415,7 @@ function processMergeLogicInline(
       // 디버그: trafficState 변경
       if (mergeTarget.type === 'CURVE') {
         const prevState = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
-        console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevState} → WAITING (락 획득 실패)`);
-        console.log(`mergeTarget.distanceToMerge=${mergeTarget.distanceToMerge}, mergeTarget.waitDistance=${mergeTarget.waitDistance}`);
+        devLog.veh(vehId).debug(`[TRAFFIC_STATE] ${prevState} → WAITING (락 획득 실패), distanceToMerge=${mergeTarget.distanceToMerge}, waitDistance=${mergeTarget.waitDistance}`);
       }
       data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
 
@@ -455,7 +455,7 @@ function processMergeLogicInline(
     const prevStr = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
     const newStr = newState === TrafficState.FREE ? 'FREE' : newState === TrafficState.ACQUIRED ? 'ACQUIRED' : 'WAITING';
     const targetNodes = mergeTargets.map(t => `${t.mergeNode}(${t.type},${t.requestEdge})`).join(', ');
-    console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevStr} → ${newStr}, targets=[${targetNodes}]`);
+    devLog.veh(vehId).debug(`[TRAFFIC_STATE] ${prevStr} → ${newStr}, targets=[${targetNodes}]`);
   }
 
   data[ptr + LogicData.TRAFFIC_STATE] = newState;

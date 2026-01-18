@@ -10,6 +10,7 @@ import {
   MovingStatus,
   NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
+import { devLog } from "@/logger/DevLogger";
 
 /**
  * Path buffer layout constants
@@ -287,7 +288,7 @@ export class TransferMgr {
           filledEdges.push(-1);
         }
       }
-      console.log(`[fillNextEdges] vehId=${vehicleIndex} currentIdx=${currentIdx} totalLen=${totalLen} filled=[${filledEdges.join(',')}]`);
+      devLog.veh(vehicleIndex).debug(`[fillNextEdges] currentIdx=${currentIdx} totalLen=${totalLen} filled=[${filledEdges.join(',')}]`);
 
       data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
       return;
@@ -525,7 +526,7 @@ export class TransferMgr {
       for (let i = 0; i < edgeIndices.length && i < MAX_PATH_LENGTH - PATH_EDGES_START; i++) {
         this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
       }
-      console.log(`[processPathCommand] vehId=${vehId} pathLen=${edgeIndices.length} edges=[${edgeIndices.join(',')}]`);
+      devLog.veh(vehId).debug(`[processPathCommand] pathLen=${edgeIndices.length} edges=[${edgeIndices.join(',')}]`);
 
       // path 설정 후 next edges도 바로 채움
       const nextEdgeOffsets = [
@@ -543,9 +544,9 @@ export class TransferMgr {
         }
       }
       data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
-      console.log(`[processPathCommand] vehId=${vehId} nextEdges filled`);
+      devLog.veh(vehId).debug(`[processPathCommand] nextEdges filled`);
     } else {
-      console.log(`[processPathCommand] vehId=${vehId} NO pathBuffer!`);
+      devLog.veh(vehId).warn(`[processPathCommand] NO pathBuffer!`);
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;

@@ -13,7 +13,7 @@ import { EngineStore } from "./EngineStore";
 import { initializeVehicles, InitializationResult } from "./initializeVehicles";
 import { checkCollisions, CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, MovementUpdateContext } from "@/common/vehicle/movement/movementUpdate";
-import { EdgeTransitTracker } from "@/logger";
+import { EdgeTransitTracker, devLog } from "@/logger";
 import {
   VEHICLE_RENDER_SIZE,
   SENSOR_ATTR_SIZE,
@@ -186,7 +186,7 @@ export class FabContext {
     });
 
     // Fab별 config 적용 로그
-    console.log(`[FabContext:${this.fabId}] Lock policy: grantStrategy=${this.config.lockGrantStrategy}`);
+    devLog.info(`[FabContext:${this.fabId}] Lock policy: grantStrategy=${this.config.lockGrantStrategy}`);
 
     const result: InitializationResult = initializeVehicles({
       edges: this.edges,

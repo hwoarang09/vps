@@ -21,6 +21,8 @@ import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
 import LogFileManager from "./LogFileManager";
+import DevLogFileManager from "./DevLogFileManager";
+import { DevLogger } from "@/logger";
 
 /**
  * VehicleTest
@@ -149,6 +151,11 @@ const VehicleTest: React.FC = () => {
     } catch (error) {
     }
   };
+
+  // Initialize DevLogger for main thread (enables veh-separated log files)
+  useEffect(() => {
+    DevLogger.init();
+  }, []);
 
   // Initial load effect
   useEffect(() => {
@@ -663,6 +670,7 @@ const VehicleTest: React.FC = () => {
             📥 Latest
           </button>
           <LogFileManager />
+          <DevLogFileManager />
         </div>
       </div>
 

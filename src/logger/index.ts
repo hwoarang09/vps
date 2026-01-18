@@ -30,3 +30,13 @@ export {
   downloadLogFile,
   clearAllLogs,
 } from "./downloadLog";
+export { DevLogger, devLog, type LogLevel } from "./DevLogger";
+export {
+  listDevLogFiles,
+  downloadDevLogFile,
+  downloadMergedDevLogs,
+  downloadAllDevLogs,
+  deleteDevLogFile,
+  clearAllDevLogs,
+  type DevLogFileInfo,
+} from "./devLogUtils";

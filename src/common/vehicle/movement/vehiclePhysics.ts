@@ -12,6 +12,7 @@ import {
 import { calculateNextSpeed } from "@/common/vehicle/physics/speedCalculator";
 import { checkCurvePreBraking } from "./curveBraking";
 import { checkMergePreBraking } from "./mergeBraking";
+import { devLog } from "@/logger/DevLogger";
 import type { MovementUpdateContext, MovementConfig } from "./movementUpdate";
 
 // ============================================================================
@@ -142,7 +143,7 @@ export function calculateVehiclePhysics(
   // DEBUG: 곡선 진입 시 속도 0 문제 디버깅
   const debugInfo = decision.debugInfo;
   if (currentEdge.vos_rail_type !== EdgeType.LINEAR && newVelocity === 0 && velocity > 0) {
-    console.error(`[DEBUG] 곡선에서 속도 0! veh=${vehicleIndex}, edge=${currentEdge.edge_name}, ` +
+    devLog.veh(vehicleIndex).error(`[CURVE_STOP] 곡선에서 속도 0! edge=${currentEdge.edge_name}, ` +
       `prevVel=${velocity.toFixed(2)}, newVel=${newVelocity.toFixed(2)}, ` +
       `accel=${finalAccel}, decel=${finalDecel}, ` +
       `sensorDecel=${debugInfo.sensorDecel}, curveDecel=${debugInfo.curveDecel}, mergeDecel=${debugInfo.mergeDecel}, ` +
@@ -208,7 +209,7 @@ function processEmergencyStop(
   // DEBUG: 센서 충돌로 정지
   if (prevVel > 0) {
     const edgeIdx = data[ptr + MovementData.CURRENT_EDGE];
-    console.warn(`[DEBUG] SENSOR 충돌로 정지: hitZone=2, veh=${vehicleIndex}, edgeIdx=${edgeIdx}, prevVel=${prevVel.toFixed(2)}`);
+    devLog.veh(vehicleIndex).warn(`[SENSOR_STOP] 센서 충돌로 정지: hitZone=2, edgeIdx=${edgeIdx}, prevVel=${prevVel.toFixed(2)}`);
   }
 
   // 속도 0으로 설정

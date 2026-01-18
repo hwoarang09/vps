@@ -2,12 +2,15 @@
 // Worker thread entry point
 
 import { SimulationEngine } from "./core/SimulationEngine";
+import { DevLogger } from "@/logger/DevLogger";
 import type { WorkerMessage, MainMessage, InitPayload, FabInitData, SimulationConfig, FabRenderAssignment } from "./types";
 
 let engine: SimulationEngine | null = null;
 
 function handleInit(payload: InitPayload): void {
   try {
+    // DevLogger 초기화 (Worker 환경)
+    DevLogger.init(`sim_${Date.now()}`);
 
     engine = new SimulationEngine();
     const fabVehicleCounts = engine.init(payload);

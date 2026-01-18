@@ -3,8 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import { getLockWaitDistanceFromMergingStr, getLockRequestDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve, getLockRequestDistanceFromMergingCurve, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
-
-const DEBUG = true;
+import { devLog } from "@/logger/DevLogger";
 
 /**
  * Lock 설정 인터페이스
@@ -105,7 +104,7 @@ export type BatchState = {
  * merge node별로 batch 상태를 관리하고 grant 결정을 담당
  */
 class BatchController {
-  private state: BatchState;
+  readonly state: BatchState;
 
   constructor(batchSize: number, passLimit = 5) {
     this.state = {
@@ -136,7 +135,7 @@ class BatchController {
   step(node: MergeLockNode): Grant[] {
     // passLimit 도달 시 새 grant 중단
     if (this.state.passLimitReached) {
-      if (DEBUG) console.log(`[BATCH] passLimit reached, waiting for all vehicles to pass`);
+      devLog.debug(`[BATCH] passLimit reached, waiting for all vehicles to pass`);
       return [];
     }
 
@@ -152,7 +151,7 @@ class BatchController {
       this.state.batchReleasedCount = 0;
       this.state.edgePassCount = 0; // passCount 초기화
       this.state.passLimitReached = false; // 플래그 초기화
-      if (DEBUG) console.log(`[BATCH] Starting new batch on edge: ${nextEdge}, batchSize: ${this.state.batchSize}, passLimit: ${this.state.passLimit}`);
+      devLog.debug(`[BATCH] Starting new batch on edge: ${nextEdge}, batchSize: ${this.state.batchSize}, passLimit: ${this.state.passLimit}`);
     }
 
     // 현재 batch edge에서 아직 grant 안 받은 request들 확인
@@ -160,8 +159,8 @@ class BatchController {
 
     // batchSize 도달 여부 확인
     if (this.state.batchGrantedCount >= this.state.batchSize) {
-      if (DEBUG && requestsFromEdge.length > 0) {
-        console.log(`[BatchController.step] Batch full (${this.state.batchGrantedCount}/${this.state.batchSize}), waiting for releases`);
+      if (requestsFromEdge.length > 0) {
+        devLog.debug(`[BatchController.step] Batch full (${this.state.batchGrantedCount}/${this.state.batchSize}), waiting for releases`);
       }
       return [];
     }
@@ -175,7 +174,7 @@ class BatchController {
       const req = requestsFromEdge[i];
       grants.push({ veh: req.vehId, edge: req.edgeName });
       this.state.batchGrantedCount++;
-      if (DEBUG) console.log(`[BATCH] Granted to veh ${req.vehId} from edge ${req.edgeName} (${this.state.batchGrantedCount}/${this.state.batchSize})`);
+      devLog.veh(req.vehId).debug(`[BATCH] Granted from edge ${req.edgeName} (${this.state.batchGrantedCount}/${this.state.batchSize})`);
     }
 
     return grants;
@@ -191,12 +190,12 @@ class BatchController {
 
     this.state.batchReleasedCount++;
     this.state.edgePassCount++; // 통과 차량 수 증가
-    if (DEBUG) console.log(`[BATCH] Released (${this.state.batchReleasedCount}/${this.state.batchGrantedCount}), edgePassCount: ${this.state.edgePassCount}/${this.state.passLimit}`);
+    devLog.debug(`[BATCH] Released (${this.state.batchReleasedCount}/${this.state.batchGrantedCount}), edgePassCount: ${this.state.edgePassCount}/${this.state.passLimit}`);
 
     // passLimit 도달 체크
     if (this.state.edgePassCount >= this.state.passLimit && !this.state.passLimitReached) {
       this.state.passLimitReached = true;
-      if (DEBUG) console.log(`[BATCH] passLimit reached (${this.state.edgePassCount}/${this.state.passLimit}), stopping new grants on edge: ${this.state.currentBatchEdge}`);
+      devLog.debug(`[BATCH] passLimit reached (${this.state.edgePassCount}/${this.state.passLimit}), stopping new grants on edge: ${this.state.currentBatchEdge}`);
     }
 
     // Batch 완료 체크
@@ -206,7 +205,7 @@ class BatchController {
 
       // passLimit 도달했고 모든 차량이 통과했으면 다음 edge로 전환
       if (this.state.passLimitReached) {
-        if (DEBUG) console.log(`[BATCH] All vehicles passed after passLimit, switching to next edge`);
+        devLog.debug(`[BATCH] All vehicles passed after passLimit, switching to next edge`);
         this.state.lastUsedEdge = this.state.currentBatchEdge;
         this.state.currentBatchEdge = null;
         this.state.batchGrantedCount = 0;
@@ -215,7 +214,7 @@ class BatchController {
         this.state.passLimitReached = false;
       } else if (!hasMoreVehicles) {
         // 현재 edge 큐가 비어있으면 즉시 다음 edge로 전환
-        if (DEBUG) console.log(`[BATCH] Current edge ${this.state.currentBatchEdge} queue empty, switching to next edge`);
+        devLog.debug(`[BATCH] Current edge ${this.state.currentBatchEdge} queue empty, switching to next edge`);
         this.state.lastUsedEdge = this.state.currentBatchEdge;
         this.state.currentBatchEdge = null;
         this.state.batchGrantedCount = 0;
@@ -224,7 +223,7 @@ class BatchController {
         this.state.passLimitReached = false;
       } else {
         // passLimit 미달이고 차량 있으면 같은 edge 유지 (다음 batch)
-        if (DEBUG) console.log(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}, continuing (${this.state.edgePassCount}/${this.state.passLimit})`);
+        devLog.debug(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}, continuing (${this.state.edgePassCount}/${this.state.passLimit})`);
         // currentBatchEdge는 유지 (null로 설정하지 않음)
         this.state.batchGrantedCount = 0;
         this.state.batchReleasedCount = 0;
@@ -318,7 +317,7 @@ export class LockMgr {
     this.lockRequestDistanceFromMergingCurve = getLockRequestDistanceFromMergingCurve();
     this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
     this.batchSize = 3; // 기본 batch size
-    console.log(`[LockMgr] strategyType=${this.strategyType}`);
+    devLog.info(`[LockMgr] strategyType=${this.strategyType}`);
   }
 
   /**
@@ -337,14 +336,14 @@ export class LockMgr {
   setLockPolicy(policy: LockPolicy) {
     const prev = this.strategyType;
     this.strategyType = policy.grantStrategy;
-    console.log(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
+    devLog.info(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
 
     // BATCH 전략으로 변경 시 기존 node들에 대해 controller 생성
     if (this.strategyType === 'BATCH' && prev !== 'BATCH') {
       for (const nodeName of Object.keys(this.lockTable)) {
         if (!this.batchControllers.has(nodeName)) {
           this.batchControllers.set(nodeName, new BatchController(this.batchSize));
-          if (DEBUG) console.log(`[LockMgr] Created BatchController for ${nodeName}`);
+          devLog.debug(`[LockMgr] Created BatchController for ${nodeName}`);
         }
       }
     }
@@ -466,11 +465,11 @@ export class LockMgr {
         // Controller가 없으면 즉시 생성 (lazy initialization)
         controller = new BatchController(this.batchSize);
         this.batchControllers.set(nodeName, controller);
-        if (DEBUG) console.log(`[LockMgr.step] Created BatchController for ${nodeName}`);
+        devLog.debug(`[LockMgr.step] Created BatchController for ${nodeName}`);
       }
 
-      if (DEBUG && node.requests.length > 0) {
-        console.log(`[LockMgr.step] Calling controller.step for ${nodeName}, requests: ${node.requests.map(r => r.vehId).join(',')}`);
+      if (node.requests.length > 0) {
+        devLog.debug(`[LockMgr.step] Calling controller.step for ${nodeName}, requests: ${node.requests.map(r => r.vehId).join(',')}`);
       }
 
       const newGrants = controller.step(node);
@@ -479,11 +478,11 @@ export class LockMgr {
         node.granted.push(...newGrants);
         const grantedVehIds = newGrants.map(g => g.veh);
         node.requests = node.requests.filter((r) => !grantedVehIds.includes(r.vehId));
-        if (DEBUG) console.log(`[LockMgr.step] Granted to vehs ${grantedVehIds.join(',')} at ${nodeName}`);
-        if (DEBUG) this.logNodeState(nodeName);
-      } else if (DEBUG && node.requests.length > 0) {
+        devLog.debug(`[LockMgr.step] Granted to vehs ${grantedVehIds.join(',')} at ${nodeName}`);
+        this.logNodeState(nodeName);
+      } else if (node.requests.length > 0) {
         const reqEdges = node.requests.map(r => `${r.vehId}(${r.edgeName})`).join(', ');
-        console.log(`[LockMgr.step] controller.step returned empty for ${nodeName}, requests=[${reqEdges}], currentBatchEdge=${controller.state.currentBatchEdge}, passLimitReached=${controller.state.passLimitReached}, batchGrantedCount=${controller.state.batchGrantedCount}`);
+        devLog.debug(`[LockMgr.step] controller.step returned empty for ${nodeName}, requests=[${reqEdges}], currentBatchEdge=${controller.state.currentBatchEdge}, passLimitReached=${controller.state.passLimitReached}, batchGrantedCount=${controller.state.batchGrantedCount}`);
       }
     }
   }
@@ -530,7 +529,7 @@ export class LockMgr {
     if (existing || alreadyGranted) return;
 
     // 큐에 추가
-    if (DEBUG) console.log(`[requestLock] vehId=${vehId} node=${nodeName} edge=${edgeName}`);
+    devLog.veh(vehId).debug(`[requestLock] node=${nodeName} edge=${edgeName}`);
     node.requests.push({
       vehId,
       edgeName,
@@ -542,9 +541,9 @@ export class LockMgr {
     // 디버그: 락 요청 상세
     const requestVehs = node.requests.map(r => `${r.vehId}(${r.edgeName})`).join(', ');
     const grantedVehs = node.granted.map(g => `${g.veh}(${g.edge})`).join(', ');
-    console.log(`[DEBUG] requestLock 상세: vehId=${vehId}, node=${nodeName}, edge=${edgeName}, hasQueue=${hasQueue}, strategy=${this.strategyType}, requests=[${requestVehs}], granted=[${grantedVehs}]`);
+    devLog.veh(vehId).debug(`[requestLock] 상세: node=${nodeName}, edge=${edgeName}, hasQueue=${hasQueue}, strategy=${this.strategyType}, requests=[${requestVehs}], granted=[${grantedVehs}]`);
 
-    if (DEBUG) this.logNodeState(nodeName);
+    this.logNodeState(nodeName);
 
     // 전략별 처리
     if (this.strategyType === 'FIFO') {
@@ -552,7 +551,7 @@ export class LockMgr {
     } else if (this.strategyType === 'BATCH') {
       const controller = this.batchControllers.get(nodeName);
       if (controller) {
-        if (DEBUG) console.log(`[requestLock] Calling controller.onRequest()`);
+        devLog.debug(`[requestLock] Calling controller.onRequest()`);
         controller.onRequest();
       }
     }
@@ -565,12 +564,12 @@ export class LockMgr {
 
     const grantIdx = node.granted.findIndex(g => g.veh === vehId);
     if (grantIdx === -1) {
-      if (DEBUG) console.log(`[releaseLock] veh ${vehId} tried to release ${nodeName} but not in granted list`);
+      devLog.veh(vehId).debug(`[releaseLock] tried to release ${nodeName} but not in granted list`);
       return;
     }
 
     const grantedEdge = node.granted[grantIdx].edge;
-    if (DEBUG) console.log(`[releaseLock] vehId=${vehId} node=${nodeName} edge=${grantedEdge}`);
+    devLog.veh(vehId).debug(`[releaseLock] node=${nodeName} edge=${grantedEdge}`);
 
     // granted 배열에서 제거
     node.granted.splice(grantIdx, 1);
@@ -580,7 +579,7 @@ export class LockMgr {
     // grant 받은 veh는 해당 edge queue의 맨 앞에 있으므로 dequeue로 O(1) 제거
     node.edgeQueues[grantedEdge]?.dequeue();
 
-    if (DEBUG) this.logNodeState(nodeName);
+    this.logNodeState(nodeName);
 
     // 전략별 처리
     if (this.strategyType === 'FIFO') {
@@ -588,29 +587,29 @@ export class LockMgr {
     } else if (this.strategyType === 'BATCH') {
       const controller = this.batchControllers.get(nodeName);
       if (controller) {
-        if (DEBUG) console.log(`[releaseLock] Calling controller.onRelease()`);
+        devLog.debug(`[releaseLock] Calling controller.onRelease()`);
         controller.onRelease(node);
       } else {
-        if (DEBUG) console.log(`[releaseLock] No controller for ${nodeName}`);
+        devLog.debug(`[releaseLock] No controller for ${nodeName}`);
       }
     }
     // BATCH의 다음 grant는 step()에서 처리
   }
 
   private handleFIFO_Request(node: MergeLockNode) {
-    console.log(`[DEBUG] handleFIFO_Request: node=${node.name}, grantedLen=${node.granted.length}, requestsLen=${node.requests.length}`);
+    devLog.debug(`[handleFIFO_Request] node=${node.name}, grantedLen=${node.granted.length}, requestsLen=${node.requests.length}`);
     if (node.granted.length > 0) {
-      console.log(`[DEBUG] handleFIFO_Request 스킵: 이미 granted 있음`);
+      devLog.debug(`[handleFIFO_Request] 스킵: 이미 granted 있음`);
       return;
     }
 
     const decision = getNextFromQueue(node);
-    console.log(`[DEBUG] handleFIFO_Request decision:`, decision);
+    devLog.debug(`[handleFIFO_Request] decision: veh=${decision?.veh}, edge=${decision?.edge}`);
     if (decision) {
       node.granted = [decision]; // 배열로 래핑
       node.requests.shift(); // 첫 번째 제거
-      console.log(`[DEBUG] handleFIFO_Request GRANT 완료: veh=${decision.veh}, edge=${decision.edge}`);
-      if (DEBUG) this.logNodeState(node.name);
+      devLog.veh(decision.veh).debug(`[handleFIFO_Request] GRANT 완료: edge=${decision.edge}`);
+      this.logNodeState(node.name);
     }
   }
 
@@ -619,16 +618,15 @@ export class LockMgr {
     if (decision) {
       node.granted = [decision]; // 배열로 래핑
       node.requests.shift(); // 첫 번째 제거
-      if (DEBUG) this.logNodeState(node.name);
+      this.logNodeState(node.name);
     }
   }
 
   logNodeState(nodeName: string) {
-    if (!DEBUG) return;
     const node = this.lockTable[nodeName];
     if (!node) return;
     const grantedVehs = node.granted.length > 0 ? node.granted.map(g => g.veh).join(',') : 'FREE';
-    console.log(`[LockMgr] ${nodeName} - granted: [${grantedVehs}], requests: ${node.requests.map((r) => r.vehId).join(", ")}`);
+    devLog.debug(`[LockMgr] ${nodeName} - granted: [${grantedVehs}], requests: ${node.requests.map((r) => r.vehId).join(", ")}`);
   }
 }
 
