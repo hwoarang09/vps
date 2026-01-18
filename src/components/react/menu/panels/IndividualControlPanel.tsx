@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, Play, Pause, Settings, Octagon } from "lucide-react";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
-import { useMenuStore } from "@/store/ui/menuStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
@@ -618,10 +617,9 @@ const IndividualControlPanel: React.FC = () => {
     const [foundVehicleIndex, setFoundVehicleIndex] = useState<number | null>(null);
     const vehicles = useVehicleGeneralStore((state) => state.vehicles);
     const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
-    const activeSubMenu = useMenuStore((state) => state.activeSubMenu);
-
-    // Detect SHM mode based on active submenu
-    const isShmMode = activeSubMenu === "test-shared-memory";
+    // Detect SHM mode based on controller availability
+    const shmController = useShmSimulatorStore((state) => state.controller);
+    const isShmMode = shmController !== null;
 
     // Keep a ref to vehicles to access latest state in debounce without triggering re-runs
     const vehiclesRef = useRef(vehicles);
