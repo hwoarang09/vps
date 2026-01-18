@@ -99,7 +99,7 @@ export class AutoMgr {
   /**
    * Checks a specific vehicle and assigns a route if:
    * 1. It has no pending commands (idle or finished path).
-   * 2. It is stopped or moving on the last edge.
+   * 2. It has arrived at the destination edge.
    * @returns true if a route was assigned, false otherwise
    */
   private checkAndAssignRoute(
@@ -115,6 +115,13 @@ export class AutoMgr {
     const data = vehicleDataArray.getData();
     const ptr = vehId * VEHICLE_DATA_SIZE;
     const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+
+    // 목적지가 설정되어 있으면 도착 여부 확인
+    const destInfo = this.vehicleDestinations.get(vehId);
+    if (destInfo && currentEdgeIdx !== destInfo.edgeIndex) {
+      // 아직 목적지 edge에 도착하지 않음 - 새 경로 할당 안 함
+      return false;
+    }
 
     // Assign random destination
     return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);

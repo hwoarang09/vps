@@ -7,6 +7,11 @@ import {
 import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import type { VehiclePositionResult } from "./vehiclePosition";
 import type { MovementUpdateContext } from "./movementUpdate";
+import { devLog } from "@/logger/DevLogger";
+
+// 차량별 마지막 위치 로그 정보
+const vehicleLastPositionLog = new Map<number, { simTime: number; edgeIndex: number }>();
+const POSITION_LOG_INTERVAL_MS = 500; // 0.5초
 
 // ============================================================================
 // Phase 4: commitVehicleState
@@ -34,8 +39,11 @@ export function commitVehicleState(
   finalEdgeIndex: number,
   position: VehiclePositionResult
 ): void {
-  const { sensorPointArray, config } = ctx;
+  const { sensorPointArray, config, simulationTime, edgeArray } = ctx;
   const { finalVelocity, finalRatio, finalX, finalY, finalZ, finalRotation } = position;
+
+  // 이전 edge 인덱스 (상태 기록 전에 확인)
+  const prevEdgeIndex = data[ptr + MovementData.CURRENT_EDGE];
 
   // Movement 데이터 기록
   data[ptr + MovementData.VELOCITY] = finalVelocity;
@@ -51,4 +59,42 @@ export function commitVehicleState(
   // 센서 포인트 업데이트
   const presetIdx = Math.trunc(data[ptr + SensorData.PRESET_IDX]);
   updateSensorPoints(sensorPointArray, vehicleIndex, finalX, finalY, finalRotation, presetIdx, config);
+
+  // 위치 로그: edge 변경 또는 0.5초 경과 시
+  logPositionIfNeeded(
+    vehicleIndex,
+    finalEdgeIndex,
+    prevEdgeIndex,
+    finalRatio,
+    finalX,
+    finalY,
+    finalVelocity,
+    simulationTime ?? 0,
+    edgeArray
+  );
+}
+
+function logPositionIfNeeded(
+  vehId: number,
+  edgeIndex: number,
+  prevEdgeIndex: number,
+  ratio: number,
+  x: number,
+  y: number,
+  velocity: number,
+  simTime: number,
+  edgeArray: { edge_name: string }[]
+): void {
+  const lastLog = vehicleLastPositionLog.get(vehId);
+  const edgeChanged = edgeIndex !== prevEdgeIndex;
+  const intervalPassed = !lastLog || (simTime - lastLog.simTime >= POSITION_LOG_INTERVAL_MS);
+
+  if (edgeChanged || intervalPassed) {
+    const edgeName = edgeArray[edgeIndex]?.edge_name ?? `idx:${edgeIndex}`;
+    const reason = edgeChanged ? "edge_change" : "interval";
+    devLog.veh(vehId).debug(
+      `[POS] ${reason} edge=${edgeName} ratio=${ratio.toFixed(3)} pos=(${x.toFixed(2)},${y.toFixed(2)}) vel=${velocity.toFixed(2)}`
+    );
+    vehicleLastPositionLog.set(vehId, { simTime, edgeIndex });
+  }
 }
