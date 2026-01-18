@@ -33,6 +33,12 @@ export interface RenderConfig {
     showPhysicsDebug: {
       RAPIER_MODE: boolean;
     };
+    text: {
+      visible: boolean;
+      zOffset: number;
+      color: string;
+      scale: number;
+    };
   };
   stations: {
     types: {
@@ -100,6 +106,12 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         },
         showPhysicsDebug: {
           RAPIER_MODE: true,
+        },
+        text: {
+          visible: true,
+          zOffset: 1.0,
+          color: "#ffffff",
+          scale: 0.9,
         },
       },
       stations: {
@@ -176,6 +188,12 @@ let renderConfig: RenderConfig = {
     },
     showPhysicsDebug: {
       RAPIER_MODE: true,
+    },
+    text: {
+      visible: true,
+      zOffset: 1.0,
+      color: "#ffffff",
+      scale: 0.9,
     },
   },
   stations: {

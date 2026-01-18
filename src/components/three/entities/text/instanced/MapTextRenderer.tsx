@@ -17,13 +17,13 @@ interface Props {
 }
 
 const MapTextRenderer: React.FC<Props> = (props) => {
-  const config = getRendererConfig();
+  const mapConfig = getRendererConfig();
   const stationTextConfig = getStationTextConfig();
   const {
     mode,
-    scale = config.SCALE,
-    nodeColor = config.NODE_COLOR,
-    edgeColor = config.EDGE_COLOR,
+    scale = mapConfig.scale,
+    nodeColor = "#00ff00",
+    edgeColor = "#0066ff",
     stationColor = stationTextConfig.COLOR,
   } = props;
   const {
@@ -56,8 +56,11 @@ const MapTextRenderer: React.FC<Props> = (props) => {
   // 활성 fab의 텍스트 그룹
   const activeFabData = useFabMode ? textsByFab[activeFabIndex] : null;
 
+  // SharedMemory와 ArraySingle 모두 array 데이터 사용
+  const useArrayData = mode === VehicleSystemType.ArraySingle || mode === VehicleSystemType.SharedMemory;
+
   const nodeGroups = useMemo((): TextGroup[] => {
-    // Fab 모드
+    // Fab 모드 우선
     if (useFabMode && activeFabData) {
       return activeFabData.nodeTexts.map(item => ({
         x: item.position.x,
@@ -67,8 +70,8 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       }));
     }
 
-    // 기존 모드
-    if (mode === VehicleSystemType.ArraySingle) {
+    // Array 모드 (ArraySingle, SharedMemory)
+    if (useArrayData) {
       return nodeTextsArray.map(item => ({
         x: item.position.x,
         y: item.position.y,
@@ -76,16 +79,17 @@ const MapTextRenderer: React.FC<Props> = (props) => {
         digits: textToDigits(item.name),
       }));
     }
+    // Dict 모드 (Rapier)
     return Object.entries(nodeTexts).map(([name, pos]) => ({
       x: pos.x,
       y: pos.y,
       z: pos.z,
       digits: textToDigits(name),
     }));
-  }, [mode, nodeTexts, nodeTextsArray, updateTrigger, useFabMode, activeFabData]);
+  }, [useArrayData, nodeTexts, nodeTextsArray, updateTrigger, useFabMode, activeFabData]);
 
   const edgeGroups = useMemo((): TextGroup[] => {
-    // Fab 모드
+    // Fab 모드 우선
     if (useFabMode && activeFabData) {
       return activeFabData.edgeTexts.map(item => ({
         x: item.position.x,
@@ -95,8 +99,8 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       }));
     }
 
-    // 기존 모드
-    if (mode === VehicleSystemType.ArraySingle) {
+    // Array 모드 (ArraySingle, SharedMemory)
+    if (useArrayData) {
       return edgeTextsArray.map(item => ({
         x: item.position.x,
         y: item.position.y,
@@ -104,16 +108,17 @@ const MapTextRenderer: React.FC<Props> = (props) => {
         digits: textToDigits(item.name),
       }));
     }
+    // Dict 모드 (Rapier)
     return Object.entries(edgeTexts).map(([name, pos]) => ({
       x: pos.x,
       y: pos.y,
       z: pos.z,
       digits: textToDigits(name),
     }));
-  }, [mode, edgeTexts, edgeTextsArray, updateTrigger, useFabMode, activeFabData]);
+  }, [useArrayData, edgeTexts, edgeTextsArray, updateTrigger, useFabMode, activeFabData]);
 
   const stationGroups = useMemo((): TextGroup[] => {
-    // Fab 모드
+    // Fab 모드 우선
     if (useFabMode && activeFabData) {
       return activeFabData.stationTexts.map(item => ({
         x: item.position.x,
@@ -123,8 +128,8 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       }));
     }
 
-    // 기존 모드
-    if (mode === VehicleSystemType.ArraySingle) {
+    // Array 모드 (ArraySingle, SharedMemory)
+    if (useArrayData) {
       return stationTextsArray.map(item => ({
         x: item.position.x,
         y: item.position.y,
@@ -132,13 +137,14 @@ const MapTextRenderer: React.FC<Props> = (props) => {
         digits: textToDigits(item.name),
       }));
     }
+    // Dict 모드 (Rapier)
     return Object.entries(stationTexts).map(([name, pos]) => ({
       x: pos.x,
       y: pos.y,
       z: pos.z,
       digits: textToDigits(name),
     }));
-  }, [mode, stationTexts, stationTextsArray, updateTrigger, useFabMode, activeFabData]);
+  }, [useArrayData, stationTexts, stationTextsArray, updateTrigger, useFabMode, activeFabData]);
 
   return (
     <group name="map-text">

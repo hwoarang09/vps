@@ -30,6 +30,12 @@
     },
     "showPhysicsDebug": {
       "RAPIER_MODE": true
+    },
+    "text": {
+      "visible": true,
+      "zOffset": 1.0,
+      "color": "#ffffff",
+      "scale": 0.5
     }
   },
   "stations": {
@@ -58,7 +64,7 @@
     "text": {
       "zOffset": -0.2,
       "color": "#FFD700",
-      "scale": 0.8
+      "scale": 0.5
     },
     "box": {
       "width": 0.3,
@@ -67,6 +73,6 @@
   },
   "map": {
     "markersZ": 3.8,
-    "scale": 0.6
+    "scale": 0.3
   }
 }

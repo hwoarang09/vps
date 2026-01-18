@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { CHAR_COUNT } from "./useDigitMaterials";
 import {
   applyHighAltitudeCulling,
@@ -16,6 +17,22 @@ import { VehicleSystemType } from "@/types/vehicle";
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
 const LABEL_LENGTH = 8; // VEH00001
+
+// SharedMemory 모드 레이아웃: [x, y, z, rotation]
+const SHM_LAYOUT = {
+  VEHICLE_DATA_SIZE: VEHICLE_RENDER_SIZE,
+  MovementData_X: 0,
+  MovementData_Y: 1,
+  MovementData_Z: 2,
+};
+
+// Array 모드 레이아웃
+const ARRAY_LAYOUT = {
+  VEHICLE_DATA_SIZE,
+  MovementData_X: MovementData.X,
+  MovementData_Y: MovementData.Y,
+  MovementData_Z: MovementData.Z,
+};
 
 interface Props {
   numVehicles: number;
@@ -73,12 +90,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
         zOffset,
         lodDistSq: LOD_DIST_SQ,
       },
-      {
-        VEHICLE_DATA_SIZE,
-        MovementData_X: MovementData.X,
-        MovementData_Y: MovementData.Y,
-        MovementData_Z: MovementData.Z,
-      }
+      isSharedMemory ? SHM_LAYOUT : ARRAY_LAYOUT
     );
   });
 

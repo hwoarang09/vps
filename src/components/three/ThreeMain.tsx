@@ -59,8 +59,8 @@ const ThreeScene: React.FC = () => {
         {/* Map rendering - displays the actual 3D objects */}
         <MapRenderer />
 
-        {/* Text rendering - displays node and edge labels */}
-        <TextRenderer scale={0.2} nodeColor="#00e5ff" edgeColor="#ff9800" />
+        {/* Text rendering - displays node and edge labels (scale from renderConfig.json) */}
+        <TextRenderer />
 
         {/* Vehicle System - Conditionally rendered when test is active */}
         <VehicleSystemRenderer />
