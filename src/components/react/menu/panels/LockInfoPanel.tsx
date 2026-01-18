@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, RefreshCw, Radio } from "lucide-react";
+import { Search, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { getLockMgr, type MergeLockNode } from "@/common/vehicle/logic/LockMgr";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
@@ -9,10 +9,13 @@ type SimMode = "array" | "shm" | "none";
 
 const LockInfoPanel: React.FC = () => {
   const [nodeName, setNodeName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [allNodes, setAllNodes] = useState<string[]>([]);
   const [selectedFab, setSelectedFab] = useState<string>("");
   const [strategy, setStrategy] = useState<string>("");
   const [isLive, setIsLive] = useState(false);
+  const [isNodeListOpen, setIsNodeListOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Array 모드용
   const [arrayNodeInfo, setArrayNodeInfo] = useState<MergeLockNode | null>(null);
@@ -117,12 +120,6 @@ const LockInfoPanel: React.FC = () => {
     };
   }, [nodeName, mode, selectedFab, getLockTableData]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      refreshNodeList();
-    }
-  };
-
   // 노드 정보 렌더링 (array/shm 공통화)
   const renderNodeInfo = () => {
     const nodeInfo = mode === "array" ? arrayNodeInfo : shmNodeInfo;
@@ -221,43 +218,20 @@ const LockInfoPanel: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* 모드 표시 및 실시간 갱신 상태 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">
-            {mode.toUpperCase()} Mode
-          </span>
-          {isLive && (
-            <span className="flex items-center text-xs text-green-600">
-              <Radio size={12} className="mr-1 animate-pulse" />
-              Live
-            </span>
-          )}
-        </div>
-        <button
-          onClick={refreshNodeList}
-          className="p-1 text-gray-500 hover:text-gray-700"
-          title="Refresh node list"
-        >
-          <RefreshCw size={14} />
-        </button>
-      </div>
-
-      {/* Fab 선택 (SHM 모드) */}
-      {mode === "shm" && fabList.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Select Fab
-          </label>
+      {/* Fab + Node 선택 (가로 배치) */}
+      <div className="flex gap-2">
+        {/* Fab 선택 (SHM 모드) */}
+        {mode === "shm" && fabList.length > 0 && (
           <select
             value={selectedFab}
             onChange={(e) => {
               setSelectedFab(e.target.value);
               setNodeName("");
+              setSearchQuery("");
               setArrayNodeInfo(null);
               setShmNodeInfo(null);
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-24 px-2 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
             {fabList.map((fab) => (
               <option key={fab} value={fab}>
@@ -265,31 +239,75 @@ const LockInfoPanel: React.FC = () => {
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
 
-      {/* 노드 검색 */}
-      <div className="flex items-center space-x-2">
-        <input
-          type="text"
-          value={nodeName}
-          onChange={(e) => setNodeName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Node name..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          list="node-suggestions"
-        />
-        <datalist id="node-suggestions">
-          {allNodes.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
-        <button
-          onClick={refreshNodeList}
-          className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          <Search size={16} />
-        </button>
+        {/* 노드 선택 (검색 가능한 드롭다운) */}
+        <div className="relative w-36">
+          <div
+            className="flex items-center border border-gray-300 rounded focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500"
+          >
+            <Search size={12} className="ml-1.5 text-gray-400 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsNodeListOpen(true);
+              }}
+              onFocus={() => setIsNodeListOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setIsNodeListOpen(false);
+                  inputRef.current?.blur();
+                }
+              }}
+              placeholder={nodeName || "Node..."}
+              className="flex-1 min-w-0 px-1 py-1.5 text-sm focus:outline-none bg-transparent"
+            />
+            <button
+              onClick={() => setIsNodeListOpen(!isNodeListOpen)}
+              className="px-1 py-1.5 text-gray-500 hover:text-gray-700 shrink-0"
+            >
+              <ChevronDown size={12} className={`transition-transform ${isNodeListOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+          {isNodeListOpen && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg">
+              <div className="p-1 text-xs text-gray-500 border-b">
+                {allNodes.length} nodes
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {allNodes
+                  .filter((name) =>
+                    name.toLowerCase().includes(searchQuery.toLowerCase())
+                  )
+                  .map((name) => (
+                    <button
+                      key={name}
+                      onClick={() => {
+                        setNodeName(name);
+                        setSearchQuery("");
+                        setIsNodeListOpen(false);
+                      }}
+                      className={`w-full text-left text-sm px-3 py-2 hover:bg-gray-100 ${
+                        name === nodeName ? "bg-blue-100 text-blue-700" : ""
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                {allNodes.filter((name) =>
+                  name.toLowerCase().includes(searchQuery.toLowerCase())
+                ).length === 0 && (
+                  <div className="px-3 py-2 text-sm text-gray-500">
+                    No matching nodes
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 노드 정보 */}
@@ -300,26 +318,6 @@ const LockInfoPanel: React.FC = () => {
       )}
 
       {renderNodeInfo()}
-
-      {/* 전체 노드 목록 */}
-      <div className="border-t pt-3">
-        <h4 className="font-medium mb-2 text-gray-700">
-          All Merge Nodes ({allNodes.length})
-        </h4>
-        <div className="max-h-40 overflow-y-auto space-y-1">
-          {allNodes.map((name) => (
-            <button
-              key={name}
-              onClick={() => setNodeName(name)}
-              className={`w-full text-left text-sm px-2 py-1 rounded hover:bg-gray-100 ${
-                name === nodeName ? "bg-blue-100 text-blue-700" : ""
-              }`}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

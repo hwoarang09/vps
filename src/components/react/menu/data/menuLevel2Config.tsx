@@ -412,6 +412,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
     {
       id: "devtools-lock",
       label: "Lock",
+      shortcutLabel: "l",
       iconFn: (isActive: boolean) => (
         <Lock
           size={ICON_SIZE_LARGE}

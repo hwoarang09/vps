@@ -132,6 +132,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "DevTools",
       label: "DevTools",
+      shortcutLabel: "d",
       iconFn: (isActive) => (
         <Wrench
           size={ICON_SIZE_MEDIUM}

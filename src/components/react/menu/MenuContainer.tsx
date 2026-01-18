@@ -34,7 +34,7 @@ const MenuContainer: React.FC = () => {
         <div
           style={{
             position: "fixed",
-            top: 80,
+            top: 110,
             left: 0,
             bottom: 140,
             width: 320,
@@ -82,7 +82,7 @@ const MenuContainer: React.FC = () => {
         <div
           style={{
             position: "fixed",
-            top: 80,
+            top: 110,
             right: 0,
             bottom: 140, // Extra space for bottom menu
             width: 320,

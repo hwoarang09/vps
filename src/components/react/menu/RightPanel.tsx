@@ -1,11 +1,26 @@
 // components/react/menu/RightPanel.tsx
 import React from "react";
+import { Radio } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
 
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
+
+  // Mode detection for Lock Info panel
+  const shmIsInitialized = useShmSimulatorStore((s) => s.isInitialized);
+  const shmController = useShmSimulatorStore((s) => s.controller);
+  const arrayNumVehicles = useVehicleArrayStore((s) => s.actualNumVehicles);
+
+  const getSimMode = () => {
+    if (shmIsInitialized && shmController) return "SHM";
+    if (arrayNumVehicles > 0) return "ARRAY";
+    return null;
+  };
+  const simMode = getSimMode();
 
   const handleClose = () => {
     setRightPanelOpen(false);
@@ -106,14 +121,7 @@ const RightPanel: React.FC = () => {
 
     // DevTools Lock Panel
     if (activeSubMenu === "devtools-lock") {
-      return (
-        <div className="h-full flex flex-col">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            Lock Info
-          </h3>
-          <LockInfoPanel />
-        </div>
-      );
+      return <LockInfoPanel />;
     }
 
 
@@ -186,11 +194,31 @@ const RightPanel: React.FC = () => {
     return labels[menuId] || menuId;
   };
 
+  // Get panel title based on active menu
+  const getPanelTitle = () => {
+    if (activeSubMenu === "devtools-lock") return "Lock Info";
+    if (activeSubMenu) return getMenuLabel(activeSubMenu);
+    return "Detail Panel";
+  };
+
   return (
     <div className="bg-white border-l border-gray-300 h-full flex flex-col shadow-lg">
       {/* 헤더 */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800">Detail Panel</h2>
+        <div className="flex items-center space-x-3">
+          <h2 className="text-lg font-semibold text-gray-800">{getPanelTitle()}</h2>
+          {activeSubMenu === "devtools-lock" && simMode && (
+            <div className="flex items-center space-x-2">
+              <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">
+                {simMode}
+              </span>
+              <span className="flex items-center text-xs text-green-600">
+                <Radio size={12} className="mr-1 animate-pulse" />
+                Live
+              </span>
+            </div>
+          )}
+        </div>
         <button
           onClick={handleClose}
           className="text-gray-500 hover:text-gray-700 text-xl"
@@ -201,18 +229,6 @@ const RightPanel: React.FC = () => {
 
       {/* 내용 */}
       <div className="flex-1 p-4 overflow-y-auto">{renderContent()}</div>
-
-      {/* 푸터 */}
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="flex space-x-2">
-          <button className="flex-1 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">
-            Apply
-          </button>
-          <button className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded hover:bg-gray-400">
-            Cancel
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

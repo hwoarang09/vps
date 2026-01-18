@@ -19,6 +19,9 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
   Vehicle: {
     i: "vehicle-menu-individual",
   },
+  DevTools: {
+    l: "devtools-lock",
+  },
 };
 
 const KeyboardShortcutHandler = () => {
