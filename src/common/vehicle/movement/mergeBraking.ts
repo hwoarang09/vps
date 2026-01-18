@@ -90,6 +90,7 @@ export function checkMergePreBraking({
       currentVelocity,
       config,
       trafficState,
+      vehId,
     });
   }
 
@@ -114,12 +115,14 @@ function calculateCurveMergeBraking({
   currentVelocity,
   config,
   trafficState,
+  vehId,
 }: {
   currentEdge: Edge;
   currentRatio: number;
   currentVelocity: number;
   config: MovementConfig;
   trafficState: number;
+  vehId?: number;
 }): MergeBrakeCheckResult {
   const noResult: MergeBrakeCheckResult = {
     shouldBrake: false,
@@ -129,6 +132,11 @@ function calculateCurveMergeBraking({
 
   // WAITING 상태가 아니면 감속 불필요
   if (trafficState !== TrafficState.WAITING) {
+    // 디버그: 곡선 합류 감속 스킵 (WAITING 아님)
+    if (currentEdge.edge_name === 'e6') {
+      const stateStr = trafficState === TrafficState.FREE ? 'FREE' : trafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : `UNKNOWN(${trafficState})`;
+      console.log(`[DEBUG] 곡선 합류 감속 스킵: vehId=${vehId}, edge=e6, trafficState=${stateStr}, velocity=${currentVelocity.toFixed(2)}`);
+    }
     return noResult;
   }
 
@@ -138,6 +146,11 @@ function calculateCurveMergeBraking({
   // 감속 필요 거리 계산
   const deceleration = config.linearPreBrakeDeceleration ?? -2.0;
   const brakeDistance = calculateBrakeDistance(currentVelocity, 0, deceleration);
+
+  // 디버그: 곡선 합류 감속 판단 (WAITING 상태)
+  if (currentEdge.edge_name === 'e6') {
+    console.log(`[DEBUG] 곡선 합류 감속 판단(WAITING): vehId=${vehId}, edge=e6, velocity=${currentVelocity.toFixed(2)}, distToEnd=${distanceToCurrentEdgeEnd.toFixed(2)}, brakeDist=${brakeDistance.toFixed(2)}, shouldBrake=${distanceToCurrentEdgeEnd <= brakeDistance}`);
+  }
 
   if (distanceToCurrentEdgeEnd <= brakeDistance) {
     return {

@@ -58,6 +58,7 @@ type MergeType = 'STRAIGHT' | 'CURVE';
 interface MergeTarget {
   type: MergeType;
   mergeNode: string;
+  requestEdge: string;      // lock 요청 시 사용할 edge 이름 (merge node의 incoming edge)
   distanceToMerge: number;  // 현재 위치에서 합류점까지의 누적 거리
   requestDistance: number;  // lock 요청 거리 (설정값)
   waitDistance: number;     // 대기 거리 (설정값)
@@ -95,6 +96,7 @@ function findAllMergeTargets(
     targets.push({
       type: 'STRAIGHT',
       mergeNode: currentEdge.to_node,
+      requestEdge: currentEdge.edge_name,  // 현재 edge가 merge node로 직접 들어감
       distanceToMerge: accumulatedDist,
       requestDistance: lockMgr.getRequestDistanceFromMergingStr(),
       waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
@@ -111,9 +113,14 @@ function findAllMergeTargets(
 
     // 곡선이고 tn이 합류점이면 → 곡선 합류
     if (nextEdge.vos_rail_type !== EdgeType.LINEAR && lockMgr.isMergeNode(nextEdge.to_node)) {
+      // e8 곡선 합류 디버그 로그
+      if (nextEdge.edge_name === 'e8') {
+        console.log(`[DEBUG] 곡선 합류 타겟 발견: currentEdge=${currentEdge.edge_name}, nextEdge=e8, mergeNode=${nextEdge.to_node}, distanceToMerge=${accumulatedDist.toFixed(2)}, requestDist=${lockMgr.getRequestDistanceFromMergingCurve()}`);
+      }
       targets.push({
         type: 'CURVE',
         mergeNode: nextEdge.to_node,
+        requestEdge: nextEdge.edge_name,  // 곡선 edge가 merge node로 들어감
         distanceToMerge: accumulatedDist, // 곡선의 fn까지 거리 (현재 edge 끝까지 거리)
         requestDistance: lockMgr.getRequestDistanceFromMergingCurve(),
         waitDistance: lockMgr.getWaitDistanceFromMergingCurve(),
@@ -124,6 +131,7 @@ function findAllMergeTargets(
       targets.push({
         type: 'STRAIGHT',
         mergeNode: nextEdge.to_node,
+        requestEdge: nextEdge.edge_name,  // 직선 edge가 merge node로 들어감
         distanceToMerge: accumulatedDist + nextEdge.distance, // edge 끝까지 거리
         requestDistance: lockMgr.getRequestDistanceFromMergingStr(),
         waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
@@ -389,14 +397,29 @@ function processMergeLogicInline(
 
     // 요청 시점 도달 - Lock 요청
     if (currentTrafficState === TrafficState.FREE) {
-      lockMgr.requestLock(mergeTarget.mergeNode, currentEdge.edge_name, vehId);
+      // e8 곡선 합류 락 요청 디버그 로그
+      if (mergeTarget.type === 'CURVE') {
+        console.log(`[DEBUG] 곡선 합류 락 요청: vehId=${vehId}, currentEdge=${currentEdge.edge_name}, requestEdge=${mergeTarget.requestEdge}, mergeNode=${mergeTarget.mergeNode}, distanceToMerge=${mergeTarget.distanceToMerge.toFixed(2)}`);
+      }
+      // requestEdge를 사용해서 실제 merge node의 incoming edge로 락 요청
+      lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
     }
 
     // Lock 획득 여부 확인
     const isGranted = lockMgr.checkGrant(mergeTarget.mergeNode, vehId);
 
+    // e8 곡선 합류 락 획득 여부 디버그 로그
+    if (mergeTarget.type === 'CURVE') {
+      console.log(`[DEBUG] 곡선 합류 락 획득 여부: vehId=${vehId}, mergeNode=${mergeTarget.mergeNode}, isGranted=${isGranted}`);
+    }
+
     if (!isGranted) {
       // Lock 획득 실패 - 이 target의 wait 지점에서 대기
+      // 디버그: trafficState 변경
+      if (mergeTarget.type === 'CURVE') {
+        const prevState = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
+        console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevState} → WAITING (락 획득 실패)`);
+      }
       data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
 
       const waitRatio = getWaitRatio(currentEdge, currentRatio, mergeTarget.distanceToMerge, mergeTarget.waitDistance);
@@ -425,7 +448,17 @@ function processMergeLogicInline(
 
   // 하나라도 request 지점에 도달했고 lock 받았으면 ACQUIRED, 아니면 FREE 유지
   const anyRequested = mergeTargets.some(t => shouldRequestLockNow(t.distanceToMerge, t.requestDistance));
-  data[ptr + LogicData.TRAFFIC_STATE] = anyRequested ? TrafficState.ACQUIRED : TrafficState.FREE;
+  const newState = anyRequested ? TrafficState.ACQUIRED : TrafficState.FREE;
+
+  // 디버그: 곡선 합류 시 trafficState 변경
+  const hasCurveMerge = mergeTargets.some(t => t.type === 'CURVE');
+  if (hasCurveMerge && newState !== currentTrafficState) {
+    const prevStr = currentTrafficState === TrafficState.FREE ? 'FREE' : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : currentTrafficState === TrafficState.WAITING ? 'WAITING' : `UNKNOWN(${currentTrafficState})`;
+    const newStr = newState === TrafficState.FREE ? 'FREE' : newState === TrafficState.ACQUIRED ? 'ACQUIRED' : 'WAITING';
+    console.log(`[DEBUG] trafficState 변경: vehId=${vehId}, ${prevStr} → ${newStr} (락 획득 성공)`);
+  }
+
+  data[ptr + LogicData.TRAFFIC_STATE] = newState;
 
   return false;
 }

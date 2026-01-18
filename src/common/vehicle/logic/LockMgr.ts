@@ -535,7 +535,12 @@ export class LockMgr {
       edgeName,
       requestTime: Date.now(),
     });
+    const hasQueue = !!node.edgeQueues[edgeName];
     node.edgeQueues[edgeName]?.enqueue(vehId);
+
+    // 디버그: 락 요청 상세
+    console.log(`[DEBUG] requestLock 상세: vehId=${vehId}, node=${nodeName}, edge=${edgeName}, hasQueue=${hasQueue}, strategy=${this.strategyType}, requestsLen=${node.requests.length}, grantedLen=${node.granted.length}`);
+
     if (DEBUG) this.logNodeState(nodeName);
 
     // 전략별 처리
@@ -590,12 +595,18 @@ export class LockMgr {
   }
 
   private handleFIFO_Request(node: MergeLockNode) {
-    if (node.granted.length > 0) return;
+    console.log(`[DEBUG] handleFIFO_Request: node=${node.name}, grantedLen=${node.granted.length}, requestsLen=${node.requests.length}`);
+    if (node.granted.length > 0) {
+      console.log(`[DEBUG] handleFIFO_Request 스킵: 이미 granted 있음`);
+      return;
+    }
 
     const decision = getNextFromQueue(node);
+    console.log(`[DEBUG] handleFIFO_Request decision:`, decision);
     if (decision) {
       node.granted = [decision]; // 배열로 래핑
       node.requests.shift(); // 첫 번째 제거
+      console.log(`[DEBUG] handleFIFO_Request GRANT 완료: veh=${decision.veh}, edge=${decision.edge}`);
       if (DEBUG) this.logNodeState(node.name);
     }
   }
