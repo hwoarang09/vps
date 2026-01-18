@@ -1,19 +1,14 @@
 // components/react/menu/RightPanel.tsx
 import React from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
-import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
-import IndividualControlPanel from "./panels/IndividualControlPanel";
 import LockInfoPanel from "./panels/LockInfoPanel";
 
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
-  const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
 
   const handleClose = () => {
     setRightPanelOpen(false);
-    // Clear vehicle selection when closing panel
-    useVehicleControlStore.getState().closePanel();
   };
 
   const renderContent = () => {
@@ -109,18 +104,6 @@ const RightPanel: React.FC = () => {
       );
     }
 
-    // Vehicle Individual Control (either from menu or from Ctrl+Click selection)
-    if (activeSubMenu === "vehicle-menu-individual" || selectedVehicleId !== null) {
-      return (
-        <div className="h-full flex flex-col">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            Individual Control
-          </h3>
-          <IndividualControlPanel />
-        </div>
-      );
-    }
-
     // DevTools Lock Panel
     if (activeSubMenu === "devtools-lock") {
       return (
@@ -184,7 +167,6 @@ const RightPanel: React.FC = () => {
       "stats-menu-5": "Performance Analysis",
       // Vehicle
       "vehicle-menu-overall": "Overall Status",
-      "vehicle-menu-individual": "Individual Control",
       "vehicle-menu-history": "Vehicle History",
       // Operation
       "operation-menu-1": "Route Management",

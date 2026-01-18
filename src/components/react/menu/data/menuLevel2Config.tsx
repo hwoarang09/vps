@@ -5,7 +5,6 @@ import {
   BarChart3,
   CalendarDays,
   Zap,
-  Car,
   FileText,
   Map,
   Timer,
@@ -158,21 +157,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
             strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "vehicle-menu-individual",
-      label: "Individual",
-      shortcutLabel: "i",
-      iconFn: (isActive: boolean) => (
-        <Car
-          size={36}
-          style={{
-            fill: isActive ? ACTIVE_FILL_COLOR : INACTIVE_FILL_COLOR,
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 1.5,
           }}
         />
       ),
