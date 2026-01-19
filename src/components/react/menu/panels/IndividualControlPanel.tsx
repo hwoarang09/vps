@@ -18,7 +18,7 @@ import { EdgeType } from "@/types";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
-import { MAX_PATH_LENGTH } from "@/common/vehicle/logic/TransferMgr";
+import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
 import { getLockWaitDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve } from "@/config/simulationConfig";
 
 // Helper to decode StopReason bitmask
@@ -434,14 +434,13 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                         if (!pathData) return null;
 
                         const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-                        const currentIdx = pathData[pathPtr + 0];
-                        const totalLen = pathData[pathPtr + 1];
+                        const len = pathData[pathPtr + PATH_LEN];
 
-                        if (totalLen === 0 || currentIdx >= totalLen) return null;
+                        if (len === 0) return null;
 
                         const remainingPath: { edgeIdx: number; edgeName: string }[] = [];
-                        for (let i = currentIdx; i < totalLen && i < currentIdx + 10; i++) {
-                            const edgeIdx = pathData[pathPtr + 2 + i];
+                        for (let i = 0; i < len && i < 10; i++) {
+                            const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
                             if (edgeIdx >= 0) {
                                 const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
                                 remainingPath.push({
@@ -456,7 +455,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                         return (
                             <details className="text-xs mt-2">
                                 <summary className="cursor-pointer text-purple-700 font-medium hover:text-purple-900">
-                                    Path ({remainingPath.length}{totalLen - currentIdx > 10 ? `+${totalLen - currentIdx - 10}` : ''} edges)
+                                    Path ({remainingPath.length}{len > 10 ? `+${len - 10}` : ''} edges)
                                 </summary>
                                 <div className="mt-1 pl-2 space-y-0.5 max-h-32 overflow-y-auto text-gray-600">
                                     {remainingPath.map((item, idx) => (
@@ -466,8 +465,8 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
                                             <span className="text-gray-400">#{item.edgeIdx}</span>
                                         </div>
                                     ))}
-                                    {totalLen - currentIdx > 10 && (
-                                        <div className="text-gray-400 text-center">... +{totalLen - currentIdx - 10} more</div>
+                                    {len > 10 && (
+                                        <div className="text-gray-400 text-center">... +{len - 10} more</div>
                                     )}
                                 </div>
                             </details>

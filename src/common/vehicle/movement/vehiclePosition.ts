@@ -364,13 +364,49 @@ function processMergeLogicInline(
   ptr: number,
   target: PositionResult
 ): boolean {
-  // 곡선 위에서는 lock 계산 안 함 (이미 이전 직선에서 lock을 획득한 상태)
+  // 곡선 위에서는 기본적으로 lock 계산 안 함 (이미 이전 직선에서 lock을 획득한 상태)
+  // 단, 곡선→곡선→합류 케이스는 별도 처리
   if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
-    // ACQUIRED 상태면 그대로 유지
     const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
+
+    // ACQUIRED 상태면 그대로 유지
     if (currentTrafficState === TrafficState.ACQUIRED) {
       return false;
     }
+
+    // 곡선→곡선→합류 케이스 처리
+    // 현재 곡선의 다음이 곡선이고, 그 곡선의 tn이 합류노드인 경우
+    const nextEdgeIdx = data[ptr + MovementData.NEXT_EDGE_0];
+    if (nextEdgeIdx >= 0) {
+      const nextEdge = edgeArray[nextEdgeIdx];
+      if (nextEdge &&
+          nextEdge.vos_rail_type !== EdgeType.LINEAR &&  // 다음도 곡선
+          lockMgr.isMergeNode(nextEdge.to_node)) {       // 그 곡선의 tn이 합류노드
+
+        // 현재 곡선의 남은 거리로 lock 요청 시점 판단
+        const remainingDist = currentEdge.distance * (1 - currentRatio);
+        const requestDist = lockMgr.getRequestDistanceFromMergingCurve();
+
+        if (remainingDist <= requestDist) {
+          // lock 요청 (현재 곡선 끝 = 다음 곡선 시작에서)
+          lockMgr.requestLock(nextEdge.to_node, nextEdge.edge_name, vehId);
+          const isGranted = lockMgr.checkGrant(nextEdge.to_node, vehId);
+
+          devLog.veh(vehId).debug(
+            `[CURVE_CURVE_MERGE] currentEdge=${currentEdge.edge_name}, nextEdge=${nextEdge.edge_name}, ` +
+            `mergeNode=${nextEdge.to_node}, remainingDist=${remainingDist.toFixed(2)}, isGranted=${isGranted}`
+          );
+
+          if (!isGranted) {
+            data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
+            // mergeBraking에서 감속 처리됨
+            return false;
+          }
+          data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.ACQUIRED;
+        }
+      }
+    }
+
     // 곡선에서 WAITING이면 edge 끝까지 진행은 허용 (급정지 방지)
     return false;
   }

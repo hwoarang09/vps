@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   listDevLogFiles,
   downloadDevLogFile,
-  deleteDevLogFile,
+  deleteDevLogFiles,
   clearAllDevLogs,
   type DevLogFileInfo,
 } from "@/logger";
@@ -113,15 +113,19 @@ const DevLogFileManager: React.FC = () => {
       return;
     }
 
-    try {
-      for (const fileName of selectedFiles) {
-        await deleteDevLogFile(fileName);
-      }
-      setSelectedFiles(new Set());
-      await loadFiles();
-    } catch (error) {
-      alert(`삭제 실패: ${error instanceof Error ? error.message : String(error)}`);
+    const result = await deleteDevLogFiles(Array.from(selectedFiles));
+
+    if (result.failed.length > 0) {
+      alert(`${result.deleted.length}개 삭제됨, ${result.failed.length}개 실패 (Worker가 사용중인 파일)`);
     }
+
+    // 삭제된 파일만 선택 해제
+    const newSelected = new Set(selectedFiles);
+    for (const fileName of result.deleted) {
+      newSelected.delete(fileName);
+    }
+    setSelectedFiles(newSelected);
+    await loadFiles();
   };
 
   const handleDeleteAll = async () => {
@@ -134,14 +138,16 @@ const DevLogFileManager: React.FC = () => {
       return;
     }
 
-    try {
-      const count = await clearAllDevLogs();
-      alert(`${count}개 파일 삭제됨`);
-      setSelectedFiles(new Set());
-      await loadFiles();
-    } catch (error) {
-      alert(`삭제 실패: ${error instanceof Error ? error.message : String(error)}`);
+    const result = await clearAllDevLogs();
+
+    if (result.failed.length > 0) {
+      alert(`${result.deleted.length}개 삭제됨, ${result.failed.length}개 실패 (Worker가 사용중인 파일)`);
+    } else {
+      alert(`${result.deleted.length}개 파일 삭제됨`);
     }
+
+    setSelectedFiles(new Set());
+    await loadFiles();
   };
 
   const formatFileSize = (bytes: number): string => {

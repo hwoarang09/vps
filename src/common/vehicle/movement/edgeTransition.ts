@@ -15,7 +15,7 @@ import {
   PresetIndex,
   NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
-import { MAX_PATH_LENGTH, PATH_CURRENT_IDX, PATH_TOTAL_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
+import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
 
 // Interface for vehicle data array
 export interface IVehicleDataArray {
@@ -77,12 +77,38 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
   const data = vehicleDataArray.getData();
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
 
+  // 진입 시점 상태 로그
+  const initialNextEdges = [
+    data[ptr + MovementData.NEXT_EDGE_0],
+    data[ptr + MovementData.NEXT_EDGE_1],
+    data[ptr + MovementData.NEXT_EDGE_2],
+    data[ptr + MovementData.NEXT_EDGE_3],
+    data[ptr + MovementData.NEXT_EDGE_4],
+  ];
+  let pathLen = -1;
+  if (pathBufferFromAutoMgr) {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    pathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
+  }
+  devLog.veh(vehicleIndex).debug(
+    `[next_edge_memory] ENTER handleEdgeTransition edge=${currentEdge?.edge_name} ratio=${currentRatio.toFixed(3)} ` +
+    `nextEdges=[${initialNextEdges.join(',')}] pathBuf: len=${pathLen}`
+  );
+
+  let loopCount = 0;
   while (currentEdge && currentRatio >= 1) {
+    loopCount++;
     const overflowDist = (currentRatio - 1) * currentEdge.distance;
 
     const nextState = data[ptr + MovementData.NEXT_EDGE_STATE];
     const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE_0];
     const trafficState = data[ptr + LogicData.TRAFFIC_STATE];
+
+    // 루프 진입 로그
+    devLog.veh(vehicleIndex).debug(
+      `[next_edge_memory] LOOP#${loopCount} currentEdge=${currentEdge.edge_name} ratio=${currentRatio.toFixed(3)} ` +
+      `nextEdgeIdx=${nextEdgeIndex} nextState=${nextState}`
+    );
 
     // WAITING 상태면 edge transition 불가 (lock 대기 중)
     if (trafficState === TrafficState.WAITING) {
@@ -176,8 +202,8 @@ function updateSensorPresetForEdge(
 }
 
 /**
- * Next Edge 배열을 한 칸씩 앞으로 당기고, 마지막 칸을 path buffer에서 채움
- * NEXT_EDGE_0 사용 후 호출
+ * pathBuffer와 nextEdges를 동시에 shift하고, NEXT_EDGE_4를 pathBuffer에서 채움
+ * Edge transition 성공 시에만 호출 (NEXT_EDGE_0 사용 후)
  */
 function shiftAndRefillNextEdges(
   data: Float32Array,
@@ -186,33 +212,81 @@ function shiftAndRefillNextEdges(
   pathBufferFromAutoMgr: Int32Array | null | undefined,
   edgeArray: Edge[]
 ): void {
-  // 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 4
+  // 이전 상태 기록
+  const beforeNextEdges = [
+    data[ptr + MovementData.NEXT_EDGE_0],
+    data[ptr + MovementData.NEXT_EDGE_1],
+    data[ptr + MovementData.NEXT_EDGE_2],
+    data[ptr + MovementData.NEXT_EDGE_3],
+    data[ptr + MovementData.NEXT_EDGE_4],
+  ];
+
+  let beforePathLen = -1;
+  let afterPathLen = -1;
+  let beforePathEdges: number[] = [];
+  let afterPathEdges: number[] = [];
+
+  // 1. pathBuffer shift (맨 앞 edge 제거)
+  if (pathBufferFromAutoMgr) {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    beforePathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
+
+    if (beforePathLen > 0) {
+      // shift 전 상태 기록
+      for (let i = 0; i < Math.min(beforePathLen, 10); i++) {
+        beforePathEdges.push(pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]);
+      }
+
+      // 실제 shift: 모든 edge를 한 칸 앞으로
+      for (let i = 0; i < beforePathLen - 1; i++) {
+        pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] =
+          pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i + 1];
+      }
+      // 길이 감소
+      pathBufferFromAutoMgr[pathPtr + PATH_LEN] = beforePathLen - 1;
+      afterPathLen = beforePathLen - 1;
+
+      // shift 후 상태 기록
+      for (let i = 0; i < Math.min(afterPathLen, 10); i++) {
+        afterPathEdges.push(pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]);
+      }
+    } else {
+      afterPathLen = 0;
+    }
+  }
+
+  // 2. nextEdges shift: 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 4
   data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
   data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
   data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
   data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
 
-  // 마지막 슬롯을 path buffer에서 채우기 (없으면 -1 유지)
+  // 3. NEXT_EDGE_4를 pathBuffer[4]에서 채우기 (shift 후 기준)
   let newLastEdge = -1;
-
-  if (pathBufferFromAutoMgr) {
+  if (pathBufferFromAutoMgr && afterPathLen > 0) {
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    const currentIdx = pathBufferFromAutoMgr[pathPtr + PATH_CURRENT_IDX];
-    const totalLen = pathBufferFromAutoMgr[pathPtr + PATH_TOTAL_LEN];
-
-    // nextEdges[4]에 들어갈 edge는 path의 currentIdx + 4 위치
-    // consumeNextEdgeReservationFromPathBuffer가 이미 currentIdx를 증가시켰으므로:
-    // currentIdx는 새로운 NEXT_EDGE_0 위치 → NEXT_EDGE_4는 currentIdx + 4
-    const pathOffset = currentIdx + NEXT_EDGE_COUNT - 1;
-    if (pathOffset < totalLen) {
+    const pathOffset = NEXT_EDGE_COUNT - 1; // = 4
+    if (pathOffset < afterPathLen) {
       const candidateEdgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
       if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {
         newLastEdge = candidateEdgeIdx;
       }
     }
   }
-
   data[ptr + MovementData.NEXT_EDGE_4] = newLastEdge;
+
+  // 로그: shift 결과
+  const afterNextEdges = [
+    data[ptr + MovementData.NEXT_EDGE_0],
+    data[ptr + MovementData.NEXT_EDGE_1],
+    data[ptr + MovementData.NEXT_EDGE_2],
+    data[ptr + MovementData.NEXT_EDGE_3],
+    data[ptr + MovementData.NEXT_EDGE_4],
+  ];
+  devLog.veh(vehicleIndex).debug(
+    `[SHIFT] pathBuf: [${beforePathEdges.join(',')}](len=${beforePathLen}) → [${afterPathEdges.join(',')}](len=${afterPathLen}) | ` +
+    `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
+  );
 
   // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
   if (data[ptr + MovementData.NEXT_EDGE_0] === -1) {

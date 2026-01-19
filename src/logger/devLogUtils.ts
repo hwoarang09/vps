@@ -7,6 +7,11 @@ export interface DevLogFileInfo {
   createdAt: number;
 }
 
+export interface DeleteResult {
+  deleted: string[];
+  failed: string[];
+}
+
 /**
  * OPFS dev_logs 디렉토리의 모든 로그 파일 목록 조회
  */
@@ -101,20 +106,48 @@ export async function downloadAllDevLogs(): Promise<{ content: string; fileName:
 
 /**
  * 특정 DevLog 파일 삭제
+ * @returns true if deleted, false if locked/failed
  */
-export async function deleteDevLogFile(fileName: string): Promise<void> {
-  const root = await navigator.storage.getDirectory();
-  const logsDir = await root.getDirectoryHandle("dev_logs", { create: false });
-  await logsDir.removeEntry(fileName);
+export async function deleteDevLogFile(fileName: string): Promise<boolean> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const logsDir = await root.getDirectoryHandle("dev_logs", { create: false });
+    await logsDir.removeEntry(fileName);
+    return true;
+  } catch {
+    // 파일이 잠겨있거나 삭제 실패
+    return false;
+  }
 }
 
 /**
- * 모든 DevLog 파일 삭제
+ * 여러 DevLog 파일 삭제 (삭제 가능한 것만)
  */
-export async function clearAllDevLogs(): Promise<number> {
-  const root = await navigator.storage.getDirectory();
+export async function deleteDevLogFiles(fileNames: string[]): Promise<DeleteResult> {
+  const deleted: string[] = [];
+  const failed: string[] = [];
+
+  for (const fileName of fileNames) {
+    const success = await deleteDevLogFile(fileName);
+    if (success) {
+      deleted.push(fileName);
+    } else {
+      failed.push(fileName);
+    }
+  }
+
+  return { deleted, failed };
+}
+
+/**
+ * 모든 DevLog 파일 삭제 (삭제 가능한 것만)
+ */
+export async function clearAllDevLogs(): Promise<DeleteResult> {
+  const deleted: string[] = [];
+  const failed: string[] = [];
 
   try {
+    const root = await navigator.storage.getDirectory();
     const logsDir = await root.getDirectoryHandle("dev_logs", { create: false });
 
     const files: string[] = [];
@@ -125,11 +158,17 @@ export async function clearAllDevLogs(): Promise<number> {
     }
 
     for (const name of files) {
-      await logsDir.removeEntry(name);
+      try {
+        await logsDir.removeEntry(name);
+        deleted.push(name);
+      } catch {
+        // 파일이 잠겨있음 (Worker가 사용중)
+        failed.push(name);
+      }
     }
-
-    return files.length;
   } catch {
-    return 0;
+    // 디렉토리가 없음
   }
+
+  return { deleted, failed };
 }

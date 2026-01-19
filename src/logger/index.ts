@@ -37,6 +37,8 @@ export {
   downloadMergedDevLogs,
   downloadAllDevLogs,
   deleteDevLogFile,
+  deleteDevLogFiles,
   clearAllDevLogs,
   type DevLogFileInfo,
+  type DeleteResult,
 } from "./devLogUtils";
