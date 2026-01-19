@@ -91,7 +91,7 @@ const NEXT_EDGE_OFFSETS = [
  * - 현재 위치에서 합류점까지의 누적 거리 계산
  * - 직선/곡선 합류 타입 결정
  */
-function findAllMergeTargets(
+export function findAllMergeTargets(
   lockMgr: LockMgr,
   edgeArray: Edge[],
   currentEdge: Edge,
@@ -161,7 +161,7 @@ function findAllMergeTargets(
  * Lock 요청 시점 판단
  * - 합류점까지의 누적 거리가 requestDistance 이하일 때 요청
  */
-function shouldRequestLockNow(
+export function shouldRequestLockNow(
   distanceToMerge: number,
   requestDistance: number
 ): boolean {
