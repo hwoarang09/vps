@@ -12,7 +12,6 @@ import {
   getLinearPreBrakeDeceleration,
   getCurveMaxSpeed,
   getCurveAcceleration,
-  type GrantStrategy,
 } from "@/config/simulationConfig";
 
 /**
@@ -26,7 +25,8 @@ export interface LockConfigOverride {
   grantStrategy?: GrantStrategy;
 }
 
-export { type GrantStrategy };
+// Rule C.1: Use export...from syntax for re-exports
+export type { GrantStrategy } from "@/config/simulationConfig";
 
 /**
  * Fab별로 오버라이드 가능한 Movement 설정

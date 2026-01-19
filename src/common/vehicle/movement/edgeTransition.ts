@@ -123,7 +123,7 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     // lockMgr가 있으면: 현재 edge의 to_node에 대한 lock만 체크 (다른 merge node의 WAITING과 무관)
     // lockMgr가 없으면: 기존 WAITING 전역 체크 (하위 호환)
     if (lockMgr) {
-      // 현재 edge의 to_node가 merge node이고 lock이 없으면 block
+      // 1. 현재 edge의 to_node가 merge node이고 lock이 없으면 block
       if (lockMgr.isMergeNode(currentEdge.to_node)) {
         const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehicleIndex);
         if (!isGranted) {
@@ -134,6 +134,28 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
           break;
         }
       }
+
+      // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
+      // (곡선 위에서는 감속 불가능하므로, 곡선 진입 전에 대기해야 함)
+      // - 직선→곡선→합류: 직선 끝에서 대기
+      // - 곡선→곡선→합류: 첫 곡선 끝에서 대기
+      if (nextEdgeIndex >= 0 && nextEdgeIndex < edgeArray.length) {
+        const nextEdgeForCheck = edgeArray[nextEdgeIndex];
+        if (nextEdgeForCheck &&
+            nextEdgeForCheck.vos_rail_type !== EdgeType.LINEAR &&
+            lockMgr.isMergeNode(nextEdgeForCheck.to_node)) {
+          const isGranted = lockMgr.checkGrant(nextEdgeForCheck.to_node, vehicleIndex);
+          if (!isGranted) {
+            const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
+            devLog.veh(vehicleIndex).debug(
+              `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdgeForCheck.edge_name}, mergeNode=${nextEdgeForCheck.to_node}`
+            );
+            currentRatio = 1;
+            break;
+          }
+        }
+      }
+      // Note: 직선→직선→합류 케이스는 processMergeLogicInline의 되돌림 로직에서 처리
     } else {
       // 하위 호환: lockMgr 없으면 기존 WAITING 전역 체크
       if (trafficState === TrafficState.WAITING) {

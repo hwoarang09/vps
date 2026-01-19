@@ -22,7 +22,8 @@ export interface LockPolicy {
   grantStrategy: GrantStrategy;
 }
 
-export { type GrantStrategy };
+// Rule C.1: Use export...from syntax for re-exports
+export type { GrantStrategy } from "@/config/simulationConfig";
 
 // Ring buffer for O(1) enqueue/dequeue
 export class RingBuffer<T> {
@@ -212,7 +213,15 @@ class BatchController {
         this.state.batchReleasedCount = 0;
         this.state.edgePassCount = 0;
         this.state.passLimitReached = false;
-      } else if (!hasMoreVehicles) {
+      } else if (hasMoreVehicles) {
+        // Rule B.1: Use positive condition instead of negated condition
+        // passLimit 미달이고 차량 있으면 같은 edge 유지 (다음 batch)
+        devLog.debug(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}, continuing (${this.state.edgePassCount}/${this.state.passLimit})`);
+        // currentBatchEdge는 유지 (null로 설정하지 않음)
+        this.state.batchGrantedCount = 0;
+        this.state.batchReleasedCount = 0;
+        // edgePassCount는 유지 (누적)
+      } else {
         // 현재 edge 큐가 비어있으면 즉시 다음 edge로 전환
         devLog.debug(`[BATCH] Current edge ${this.state.currentBatchEdge} queue empty, switching to next edge`);
         this.state.lastUsedEdge = this.state.currentBatchEdge;
@@ -221,13 +230,6 @@ class BatchController {
         this.state.batchReleasedCount = 0;
         this.state.edgePassCount = 0;
         this.state.passLimitReached = false;
-      } else {
-        // passLimit 미달이고 차량 있으면 같은 edge 유지 (다음 batch)
-        devLog.debug(`[BATCH] Batch completed on edge: ${this.state.currentBatchEdge}, continuing (${this.state.edgePassCount}/${this.state.passLimit})`);
-        // currentBatchEdge는 유지 (null로 설정하지 않음)
-        this.state.batchGrantedCount = 0;
-        this.state.batchReleasedCount = 0;
-        // edgePassCount는 유지 (누적)
       }
     }
   }
@@ -299,7 +301,8 @@ export type LockTable = Record<string, MergeLockNode>;
 
 export class LockMgr {
   private lockTable: LockTable = {};
-  private batchControllers: Map<string, BatchController> = new Map();
+  // Rule D.1: Add readonly modifier - never reassigned after constructor
+  private readonly batchControllers: Map<string, BatchController> = new Map();
 
   // Fab별 설정 가능한 lock 파라미터
   private lockWaitDistanceFromMergingStr: number;
@@ -307,7 +310,8 @@ export class LockMgr {
   private lockWaitDistanceFromMergingCurve: number;
   private lockRequestDistanceFromMergingCurve: number;
   private strategyType: GrantStrategy;
-  private batchSize: number;
+  // Rule D.1: Add readonly modifier - only assigned in constructor
+  private readonly batchSize: number;
 
   constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴

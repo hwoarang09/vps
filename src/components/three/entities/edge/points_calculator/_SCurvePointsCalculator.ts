@@ -20,7 +20,8 @@ export class SCurvePointsCalculator {
     nodes: Node[],
     totalSegments: number = DEFAULT_SEGMENTS
   ): THREE.Vector3[] {
-    const { waypoints,   radius,edge_name, vos_rail_type } = edgeRowData;
+    // Rule A.1: Remove useless assignments - edge_name and vos_rail_type not used
+    const { waypoints, radius } = edgeRowData;
     const rotation = 43;
     const nodeNames = waypoints as string[];
     const n1 = nodes.find((n) => n.node_name === nodeNames[0]);

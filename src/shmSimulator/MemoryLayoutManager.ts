@@ -285,25 +285,20 @@ export class MemoryLayoutManager {
    * 레이아웃 정보 출력 (디버그용)
    */
   printLayoutInfo(layout: MemoryLayout): void {
-
-    for (const [fabId, assignment] of layout.fabAssignments) {
-    }
+    // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 
   /**
    * 렌더 레이아웃 정보 출력 (디버그용)
    */
   printRenderLayoutInfo(renderLayout: RenderBufferLayout): void {
-
-    for (const fab of renderLayout.fabRenderAssignments) {
-    }
+    // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 
   /**
    * 워커 분배 정보 출력 (디버그용)
    */
   printWorkerAssignments(assignments: WorkerAssignment[]): void {
-    for (const wa of assignments) {
-    }
+    // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 }

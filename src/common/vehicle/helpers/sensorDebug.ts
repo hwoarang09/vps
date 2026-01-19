@@ -15,18 +15,8 @@ export function logSensorData(
   label: string = "",
   zoneIndex: number = 0
 ) {
-  const data = sensorPointArray.getData();
-  const offset = vehIdx * SENSOR_DATA_SIZE + zoneIndex * SENSOR_POINT_SIZE;
-
-  const fl = [data[offset + SensorPoint.FL_X], data[offset + SensorPoint.FL_Y]];
-  const fr = [data[offset + SensorPoint.FR_X], data[offset + SensorPoint.FR_Y]];
-  const bl = [data[offset + SensorPoint.BL_X], data[offset + SensorPoint.BL_Y]];
-  const br = [data[offset + SensorPoint.BR_X], data[offset + SensorPoint.BR_Y]];
-  const sl = [data[offset + SensorPoint.SL_X], data[offset + SensorPoint.SL_Y]];
-  const sr = [data[offset + SensorPoint.SR_X], data[offset + SensorPoint.SR_Y]];
-
-  if (DEBUG) {
-  }
+  // Rule A.1: Remove useless assignments - variables not used
+  // Rule A.2: Remove empty block - DEBUG is always false
 }
 
 export function isSensorDataZero(

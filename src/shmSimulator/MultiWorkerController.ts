@@ -106,8 +106,9 @@ export class MultiWorkerController {
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
 
+  // Rule D.1: Add readonly modifier - never reassigned after constructor
   // Lock 테이블 요청 대기
-  private lockTableRequests: Map<string, (data: import("./types").LockTableData) => void> = new Map();
+  private readonly lockTableRequests: Map<string, (data: import("./types").LockTableData) => void> = new Map();
 
   onPerfStats(callback: (workerStats: WorkerPerfStats[]) => void): void {
     this.onPerfStatsCallback = callback;
@@ -447,7 +448,8 @@ export class MultiWorkerController {
   async dispose(): Promise<void> {
     // Logger 정리
     if (this.loggerController) {
-      const totalRecords = await this.loggerController.close();
+      // Rule A.1: Remove useless assignment - totalRecords not used
+      await this.loggerController.close();
       this.loggerController = null;
     }
 
@@ -477,7 +479,8 @@ export class MultiWorkerController {
   }
 
   private disposeWorker(workerInfo: WorkerInfo): void {
-    const { worker, workerIndex } = workerInfo;
+    // Rule A.1: Remove useless assignment - workerIndex not used
+    const { worker } = workerInfo;
 
     const terminateWorker = () => {
       worker.terminate();

@@ -281,10 +281,7 @@ function recordPerformance(elapsedTime: number): void {
  * Log current performance statistics (compact format)
  */
 function logPerformanceStats(): void {
-  const avg = perfStats.totalTime / perfStats.count;
-  const hitRate = perfStats.cacheHits + perfStats.cacheMisses > 0
-    ? ((perfStats.cacheHits / (perfStats.cacheHits + perfStats.cacheMisses)) * 100).toFixed(1)
-    : "0.0";
+  // Rule A.1: Remove useless assignments - avg and hitRate not used
 }
 
 /**

@@ -30,7 +30,8 @@ export class SimpleCurveEdgePointsCalculator {
     nodes: Node[],
     totalSegments: number = DEFAULT_SEGMENTS
   ): THREE.Vector3[] {
-    const { waypoints, radius, edge_name, vos_rail_type } = edgeRowData;
+    // Rule A.1: Remove useless assignment - edge_name not used
+    const { waypoints, radius, vos_rail_type } = edgeRowData;
 
     const config = CURVE_CONFIGS[vos_rail_type];
     if (!config) {

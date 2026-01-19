@@ -17,7 +17,7 @@ export class EdgePointsCalculator {
    */
   static calculateRenderingPoints(edgeRowData: any): THREE.Vector3[] {
     const vosRailType = edgeRowData.vos_rail_type;
-    const edgeName = edgeRowData.edge_name;
+    // Rule A.1: Remove useless assignment - edgeName not used
 
     // nodeStore에서 전체 nodes 가져오기
     const nodes = useNodeStore.getState().nodes;

@@ -536,16 +536,37 @@ function processMergeLogicInline(
       // Lock 획득 실패 - 이 target의 wait 지점에서 대기
       data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
 
-      const waitRatio = getWaitRatio(currentEdge, currentRatio, mergeTarget.distanceToMerge, mergeTarget.waitDistance);
+      // 대기 지점 계산: distanceToWait <= 0 이면 이미 대기 지점을 지남
+      const distanceToWait = mergeTarget.distanceToMerge - mergeTarget.waitDistance;
 
-      // TODO: 정상적인 프로세스에서는 mergeBraking이 감속시키므로 되돌림 불필요
-      // 문제: request 직후 같은 프레임에서 grant 체크 → 없음 → 바로 되돌림 발생
-      // if (currentRatio >= waitRatio) {
-      //   // 대기 지점을 넘어갔으면 되돌림
-      //   data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
-      //   target.x = waitRatio;
-      //   return true;
-      // }
+      if (distanceToWait <= 0) {
+        // 대기 지점을 넘어갔으면 되돌림
+        // waitRatio = currentRatio + (distanceToWait / currentEdge.distance)
+        // distanceToWait가 음수이므로 waitRatio < currentRatio
+        const waitRatio = currentRatio + distanceToWait / currentEdge.distance;
+
+        if (waitRatio < 0) {
+          // 대기 지점이 현재 edge 밖 (이전 edge)에 있음 - 여기까지 오면 안 됨
+          devLog.veh(vehId).error(
+            `[MERGE_WAIT] BUG: 대기지점이 현재 edge 이전에 있음! mergeNode=${mergeTarget.mergeNode}, ` +
+            `currentEdge=${currentEdge.edge_name}, waitRatio=${waitRatio.toFixed(3)}`
+          );
+          // edge 시작점에서 대기 (fallback)
+          data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+          target.x = 0;
+          return true;
+        }
+
+        devLog.veh(vehId).debug(
+          `[MERGE_WAIT] 대기지점 되돌림: mergeNode=${mergeTarget.mergeNode}, ` +
+          `currentRatio=${currentRatio.toFixed(3)} → waitRatio=${waitRatio.toFixed(3)}, ` +
+          `distToWait=${distanceToWait.toFixed(2)}`
+        );
+
+        data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+        target.x = waitRatio;
+        return true;
+      }
 
       // 대기 지점 이전이면 현재 위치 유지
       if ((currentReason & StopReason.LOCKED) !== 0) {

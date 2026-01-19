@@ -35,6 +35,7 @@ import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
  * Log safety configuration on mount
  */
 function logSafetyConfig(bodyLength: number, sensorLength: number, vehicleSpacing: number, sameEdgeSafeDistance: number, resumeDistance: number) {
+  // Rule A.2: Empty function - no implementation
 }
 
 interface VehicleArrayModeProps {

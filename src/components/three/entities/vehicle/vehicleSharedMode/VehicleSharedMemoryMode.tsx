@@ -118,8 +118,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           lockGrantStrategy: fabConfig.lock.grantStrategy,
         } : undefined;
 
-        if (configOverride) {
-        }
+        // Rule A.2: Remove empty block
 
         return {
           fabId: fabData.fabId,

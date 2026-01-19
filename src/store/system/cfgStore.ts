@@ -39,8 +39,7 @@ const parseCSV = <T>(content: string): T[] => {
     transform: (value) => value.trim(),
   });
 
-  if (result.errors.length > 0) {
-  }
+  // Rule A.2: Remove empty block
 
   return result.data;
 };
@@ -469,7 +468,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       const edgesContent = await loadCFGFile(mapFolder, "edges.cfg");
       const edges = parseEdgesCFG(edgesContent, nodes);
 
-      const edgesWithPoints = edges.filter((e) => e.renderingPoints && e.renderingPoints.length > 0);
+      // Rule A.1: Remove useless assignment - edgesWithPoints not used
 
       // 4. Load and parse vehicles.cfg (optional)
       let vehicleConfigs: VehicleConfig[] = [];

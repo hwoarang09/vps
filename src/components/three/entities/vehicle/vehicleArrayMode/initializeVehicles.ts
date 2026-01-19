@@ -150,7 +150,8 @@ export interface RapierInitializationParams {
  * Initialize vehicles for Rapier Mode (handles batching and asynchronous updates)
  */
 export function initializeRapierVehicles(params: RapierInitializationParams) {
-  const { numVehicles, mode, edges, setInitialized, onPlacementComplete } = params;
+  // Rule A.1: Remove useless assignment - mode not used
+  const { numVehicles, edges, setInitialized, onPlacementComplete } = params;
 
 
   const store = useVehicleRapierStore.getState();
@@ -174,9 +175,7 @@ export function initializeRapierVehicles(params: RapierInitializationParams) {
 
   const processBatch = (startIndex: number) => {
     const endIndex = Math.min(startIndex + BATCH_SIZE, totalPlacements);
-    const batchNumber = Math.floor(startIndex / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(totalPlacements / BATCH_SIZE);
-
+    // Rule A.1: Remove useless assignments - batchNumber and totalBatches not used
 
     const vehicleBatch = createVehicleBatch(startIndex, endIndex, result.placements, nameToIndex);
     store.batchAddVehicles(vehicleBatch);
