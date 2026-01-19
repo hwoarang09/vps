@@ -184,7 +184,7 @@ class BatchController {
   /**
    * release 이벤트 처리
    * released count와 passCount 증가
-   * passLimit 도달 시 새 grant 중단하고, 모든 차량 통과 후 다음 edge로 전환
+   * passLimit 도달 시 새 grant 중단하고, 다른 edge에 대기 차량이 있을 때만 전환
    */
   onRelease(node: MergeLockNode): void {
     if (!this.state.currentBatchEdge) return;
@@ -193,10 +193,20 @@ class BatchController {
     this.state.edgePassCount++; // 통과 차량 수 증가
     devLog.debug(`[BATCH] Released (${this.state.batchReleasedCount}/${this.state.batchGrantedCount}), edgePassCount: ${this.state.edgePassCount}/${this.state.passLimit}`);
 
-    // passLimit 도달 체크
+    // passLimit 도달 체크 - 다른 edge에 대기 차량이 있을 때만 의미있음
     if (this.state.edgePassCount >= this.state.passLimit && !this.state.passLimitReached) {
-      this.state.passLimitReached = true;
-      devLog.debug(`[BATCH] passLimit reached (${this.state.edgePassCount}/${this.state.passLimit}), stopping new grants on edge: ${this.state.currentBatchEdge}`);
+      // 다른 edge에 대기 차량이 있는지 확인
+      const hasWaitingOnOtherEdge = this.hasWaitingVehiclesOnOtherEdges(node, this.state.currentBatchEdge);
+
+      if (hasWaitingOnOtherEdge) {
+        this.state.passLimitReached = true;
+        devLog.debug(`[BATCH] passLimit reached (${this.state.edgePassCount}/${this.state.passLimit}), other edges have waiting vehicles, stopping new grants on edge: ${this.state.currentBatchEdge}`);
+      } else {
+        // 다른 edge에 대기 차량 없으면 passLimit 리셋하고 계속 진행
+        devLog.debug(`[BATCH] passLimit reached but no waiting vehicles on other edges, resetting passCount and continuing on ${this.state.currentBatchEdge}`);
+        this.state.edgePassCount = 0;
+        // passLimitReached는 false 유지
+      }
     }
 
     // Batch 완료 체크
@@ -232,6 +242,21 @@ class BatchController {
         this.state.passLimitReached = false;
       }
     }
+  }
+
+  /**
+   * 다른 edge에 대기 차량이 있는지 확인
+   * @param node - merge node
+   * @param currentEdge - 현재 batch edge (제외할 edge)
+   * @returns 다른 edge에 대기 차량이 있으면 true
+   */
+  private hasWaitingVehiclesOnOtherEdges(node: MergeLockNode, currentEdge: string): boolean {
+    for (const [edgeName, queue] of Object.entries(node.edgeQueues)) {
+      if (edgeName !== currentEdge && queue.size > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -312,6 +337,7 @@ export class LockMgr {
   private strategyType: GrantStrategy;
   // Rule D.1: Add readonly modifier - only assigned in constructor
   private readonly batchSize: number;
+  private readonly passLimit: number;
 
   constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴
@@ -320,7 +346,8 @@ export class LockMgr {
     this.lockWaitDistanceFromMergingCurve = getLockWaitDistanceFromMergingCurve();
     this.lockRequestDistanceFromMergingCurve = getLockRequestDistanceFromMergingCurve();
     this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
-    this.batchSize = 3; // 기본 batch size
+    this.batchSize = 5; // 동시에 grant 가능한 최대 대수
+    this.passLimit = 3; // 전환 체크 기준 (이만큼 통과하면 다른 edge 체크)
     devLog.info(`[LockMgr] strategyType=${this.strategyType}`);
   }
 
@@ -346,7 +373,7 @@ export class LockMgr {
     if (this.strategyType === 'BATCH' && prev !== 'BATCH') {
       for (const nodeName of Object.keys(this.lockTable)) {
         if (!this.batchControllers.has(nodeName)) {
-          this.batchControllers.set(nodeName, new BatchController(this.batchSize));
+          this.batchControllers.set(nodeName, new BatchController(this.batchSize, this.passLimit));
           devLog.debug(`[LockMgr] Created BatchController for ${nodeName}`);
         }
       }
@@ -437,7 +464,7 @@ export class LockMgr {
 
       // BATCH 전략인 경우 BatchController 생성
       if (this.strategyType === 'BATCH') {
-        this.batchControllers.set(mergeName, new BatchController(this.batchSize));
+        this.batchControllers.set(mergeName, new BatchController(this.batchSize, this.passLimit));
       }
     }
   }
@@ -467,7 +494,7 @@ export class LockMgr {
       let controller = this.batchControllers.get(nodeName);
       if (!controller) {
         // Controller가 없으면 즉시 생성 (lazy initialization)
-        controller = new BatchController(this.batchSize);
+        controller = new BatchController(this.batchSize, this.passLimit);
         this.batchControllers.set(nodeName, controller);
         devLog.debug(`[LockMgr.step] Created BatchController for ${nodeName}`);
       }
