@@ -27,6 +27,12 @@ export interface IEdgeTransitionStore {
   moveVehicleToEdge(vehicleIndex: number, nextEdgeIndex: number, ratio: number): void;
 }
 
+// Interface for lock manager (only needed methods for edge transition)
+export interface IEdgeTransitionLockMgr {
+  isMergeNode(nodeName: string): boolean;
+  checkGrant(nodeName: string, vehId: number): boolean;
+}
+
 export interface EdgeTransitionResult {
   finalEdgeIndex: number;
   finalRatio: number;
@@ -51,6 +57,8 @@ export interface EdgeTransitionParams {
   nextTargetRatio?: number;
   /** Path buffer for refilling next edges after shift (optional) */
   pathBufferFromAutoMgr?: Int32Array | null;
+  /** Lock manager for checking per-node lock status (optional for backward compat) */
+  lockMgr?: IEdgeTransitionLockMgr;
 }
 
 /**
@@ -68,7 +76,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     target,
     preserveTargetRatio = false,
     nextTargetRatio,
-    pathBufferFromAutoMgr
+    pathBufferFromAutoMgr,
+    lockMgr
   } = params;
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
@@ -110,10 +119,27 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
       `nextEdgeIdx=${nextEdgeIndex} nextState=${nextState}`
     );
 
-    // WAITING 상태면 edge transition 불가 (lock 대기 중)
-    if (trafficState === TrafficState.WAITING) {
-      currentRatio = 1;
-      break;
+    // Edge transition 가능 여부 체크
+    // lockMgr가 있으면: 현재 edge의 to_node에 대한 lock만 체크 (다른 merge node의 WAITING과 무관)
+    // lockMgr가 없으면: 기존 WAITING 전역 체크 (하위 호환)
+    if (lockMgr) {
+      // 현재 edge의 to_node가 merge node이고 lock이 없으면 block
+      if (lockMgr.isMergeNode(currentEdge.to_node)) {
+        const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehicleIndex);
+        if (!isGranted) {
+          devLog.veh(vehicleIndex).debug(
+            `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted (other merges may have lock)`
+          );
+          currentRatio = 1;
+          break;
+        }
+      }
+    } else {
+      // 하위 호환: lockMgr 없으면 기존 WAITING 전역 체크
+      if (trafficState === TrafficState.WAITING) {
+        currentRatio = 1;
+        break;
+      }
     }
 
     if (nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {

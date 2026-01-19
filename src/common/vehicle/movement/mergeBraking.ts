@@ -6,8 +6,7 @@ import { calculateBrakeDistance } from "@/common/vehicle/physics/speedCalculator
 import { devLog } from "@/logger/DevLogger";
 import type { MovementConfig } from "./movementUpdate";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
-import type { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
-import { TrafficState, LogicData } from "@/common/vehicle/initialize/constants";
+import { findFirstBlockingMerge } from "./vehiclePosition";
 
 export interface MergeBrakeCheckResult {
   shouldBrake: boolean;
@@ -19,13 +18,18 @@ export interface MergeBrakeCheckResult {
  * 합류점 사전 감속 체크 (LINEAR edge만 적용)
  *
  * ## 역할
- * - 앞에 있는 merge point를 감지하고 감속 필요 여부만 계산
+ * - "lock을 못 받은 첫 번째 merge"를 찾아서 감속 필요 여부 계산
  * - lock 요청/획득은 vehiclePosition.ts에서 처리
  *
- * ## 핵심 로직
- * 1. 다가오는 merge point 감지 (findDistanceToNextMerge)
- * 2. ACQUIRED 상태면 감속 불필요
- * 3. WAITING 상태면 감속 계산
+ * ## 핵심 로직 (변경됨)
+ * 1. findFirstBlockingMerge로 "lock을 못 받은 첫 번째 merge" 찾기
+ * 2. blocking merge가 없으면 감속 불필요 (모든 merge에 lock 있음)
+ * 3. blocking merge가 있으면 해당 wait 지점까지 거리 기반 감속
+ *
+ * ## 왜 TRAFFIC_STATE를 안 쓰나?
+ * - TRAFFIC_STATE는 단일 값이라서 여러 merge를 구분 못함
+ * - N_20은 lock 획득, N_27은 WAITING일 때, 기존 로직은 전부 감속
+ * - 새 로직: N_20 통과 후 N_27 앞에서만 감속
  */
 export function checkMergePreBraking({
   vehId,
@@ -34,7 +38,6 @@ export function checkMergePreBraking({
   currentVelocity,
   edgeArray,
   lockMgr,
-  transferMgr,
   config,
   data,
   ptr,
@@ -45,7 +48,6 @@ export function checkMergePreBraking({
   currentVelocity: number;
   edgeArray: Edge[];
   lockMgr: LockMgr;
-  transferMgr: TransferMgr;
   config: MovementConfig;
   data: Float32Array;
   ptr: number;
@@ -61,144 +63,25 @@ export function checkMergePreBraking({
     return noResult;
   }
 
-  // ACQUIRED 상태(lock 이미 획득)면 감속 불필요
-  const trafficState = data[ptr + LogicData.TRAFFIC_STATE];
-  if (trafficState === TrafficState.ACQUIRED) {
-    return noResult;
-  }
-
-  // 앞으로 다가올 merge point 찾기
-  const mergeInfo = transferMgr.findDistanceToNextMerge(
-    vehId,
+  // "lock을 못 받은 첫 번째 merge" 찾기
+  const blockingMerge = findFirstBlockingMerge(
+    lockMgr,
+    edgeArray,
     currentEdge,
     currentRatio,
-    edgeArray,
-    (nodeName) => lockMgr.isMergeNode(nodeName)
+    vehId,
+    data,
+    ptr
   );
 
-  if (!mergeInfo) {
+  if (!blockingMerge) {
+    // 모든 merge에 lock 획득 성공 (또는 아직 request 지점에 도달 안 함)
     return noResult;
   }
 
-  const mergeEdge = mergeInfo.mergeEdge;
-  const isMergeEdgeCurve = mergeEdge.vos_rail_type !== EdgeType.LINEAR;
+  const { mergeTarget, distanceToWait } = blockingMerge;
 
-  // 곡선 merge edge: 현재 직선 끝에서 정지하도록 감속
-  if (isMergeEdgeCurve) {
-    return calculateCurveMergeBraking({
-      currentEdge,
-      currentRatio,
-      currentVelocity,
-      config,
-      trafficState,
-      vehId,
-    });
-  }
-
-  // 직선 merge edge: waitDistance 지점에서 정지하도록 감속
-  return calculateLinearMergeBraking({
-    currentVelocity,
-    mergeEdge,
-    distanceToMergeEnd: mergeInfo.distance,
-    lockMgr,
-    config,
-    trafficState,
-  });
-}
-
-/**
- * 곡선 merge edge에 대한 감속 계산
- * WAITING 상태일 때만 현재 직선 끝에서 정지하도록 감속
- */
-function calculateCurveMergeBraking({
-  currentEdge,
-  currentRatio,
-  currentVelocity,
-  config,
-  trafficState,
-  vehId,
-}: {
-  currentEdge: Edge;
-  currentRatio: number;
-  currentVelocity: number;
-  config: MovementConfig;
-  trafficState: number;
-  vehId?: number;
-}): MergeBrakeCheckResult {
-  const noResult: MergeBrakeCheckResult = {
-    shouldBrake: false,
-    deceleration: 0,
-    distanceToMerge: Infinity,
-  };
-
-  // WAITING 상태가 아니면 감속 불필요
-  if (trafficState !== TrafficState.WAITING) {
-    // 디버그: 곡선 합류 감속 스킵 (WAITING 아님)
-    if (currentEdge.edge_name === 'e6' && vehId !== undefined) {
-      const stateStr = trafficState === TrafficState.FREE ? 'FREE' : trafficState === TrafficState.ACQUIRED ? 'ACQUIRED' : `UNKNOWN(${trafficState})`;
-      devLog.veh(vehId).debug(`[MERGE_BRAKE] 곡선 합류 감속 스킵: edge=e6, trafficState=${stateStr}, velocity=${currentVelocity.toFixed(2)}`);
-    }
-    return noResult;
-  }
-
-  // 현재 직선의 남은 거리
-  const distanceToCurrentEdgeEnd = currentEdge.distance * (1 - currentRatio);
-
-  // 감속 필요 거리 계산
-  const deceleration = config.linearPreBrakeDeceleration ?? -2.0;
-  const brakeDistance = calculateBrakeDistance(currentVelocity, 0, deceleration);
-
-  // 디버그: 곡선 합류 감속 판단 (WAITING 상태)
-  if (currentEdge.edge_name === 'e6' && vehId !== undefined) {
-    devLog.veh(vehId).debug(`[MERGE_BRAKE] 곡선 합류 감속 판단(WAITING): edge=e6, velocity=${currentVelocity.toFixed(2)}, distToEnd=${distanceToCurrentEdgeEnd.toFixed(2)}, brakeDist=${brakeDistance.toFixed(2)}, shouldBrake=${distanceToCurrentEdgeEnd <= brakeDistance}`);
-  }
-
-  if (distanceToCurrentEdgeEnd <= brakeDistance) {
-    return {
-      shouldBrake: true,
-      deceleration,
-      distanceToMerge: distanceToCurrentEdgeEnd,
-    };
-  }
-
-  return noResult;
-}
-
-/**
- * 직선 merge edge에 대한 감속 계산
- * WAITING 상태일 때만 waitDistance 지점에서 정지하도록 감속
- */
-function calculateLinearMergeBraking({
-  currentVelocity,
-  mergeEdge,
-  distanceToMergeEnd,
-  lockMgr,
-  config,
-  trafficState,
-}: {
-  currentVelocity: number;
-  mergeEdge: Edge;
-  distanceToMergeEnd: number;
-  lockMgr: LockMgr;
-  config: MovementConfig;
-  trafficState: number;
-}): MergeBrakeCheckResult {
-  const noResult: MergeBrakeCheckResult = {
-    shouldBrake: false,
-    deceleration: 0,
-    distanceToMerge: Infinity,
-  };
-
-  // WAITING 상태가 아니면 감속 불필요
-  if (trafficState !== TrafficState.WAITING) {
-    return noResult;
-  }
-
-  // wait 지점까지의 거리 (직선 merge edge이므로 Str 함수 사용)
-  const waitDistance = lockMgr.getWaitDistanceForMergingStr(mergeEdge);
-  const distanceToWait = distanceToMergeEnd - waitDistance;
-
-  // 이미 wait 지점을 지났으면 감속하지 않음
+  // 이미 wait 지점을 지났으면 감속하지 않음 (edge 끝에서 정지됨)
   if (distanceToWait <= 0) {
     return noResult;
   }
@@ -206,6 +89,10 @@ function calculateLinearMergeBraking({
   // 감속 필요 거리 계산
   const deceleration = config.linearPreBrakeDeceleration ?? -2.0;
   const brakeDistance = calculateBrakeDistance(currentVelocity, 0, deceleration);
+
+  devLog.veh(vehId).debug(
+    `[MERGE_BRAKE] blocking=${mergeTarget.mergeNode}(${mergeTarget.type}) distToWait=${distanceToWait.toFixed(2)} brakeDist=${brakeDistance.toFixed(2)}`
+  );
 
   if (distanceToWait <= brakeDistance) {
     return {

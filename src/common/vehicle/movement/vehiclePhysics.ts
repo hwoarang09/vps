@@ -102,7 +102,7 @@ export function calculateVehiclePhysics(
     curveBrakeCheckTimers: ctx.curveBrakeCheckTimers,
   });
 
-  // 4. 합류점 사전 감속 체크
+  // 4. 합류점 사전 감속 체크 (첫 번째 blocking merge 기준)
   const mergeBrakeResult = checkMergePreBraking({
     vehId: vehicleIndex,
     currentEdge,
@@ -110,7 +110,6 @@ export function calculateVehiclePhysics(
     currentVelocity: velocity,
     edgeArray,
     lockMgr: ctx.lockMgr,
-    transferMgr,
     config,
     data,
     ptr,

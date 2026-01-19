@@ -65,10 +65,10 @@ const SCRATCH_MERGE_POS: PositionResult = {
 // ============================================================================
 
 /** 합류 타입 */
-type MergeType = 'STRAIGHT' | 'CURVE';
+export type MergeType = 'STRAIGHT' | 'CURVE';
 
 /** 합류 타겟 정보 */
-interface MergeTarget {
+export interface MergeTarget {
   type: MergeType;
   mergeNode: string;
   requestEdge: string;      // lock 요청 시 사용할 edge 이름 (merge node의 incoming edge)
@@ -201,6 +201,67 @@ function getWaitRatio(
   // 대기 지점이 현재 edge 밖에 있음 (다음 edge에 있음)
   // 현재 edge에서는 대기할 필요 없음 → ratio 1 반환 (edge 끝까지 갈 수 있음)
   return 1;
+}
+
+/** Blocking merge 결과 (lock 못 받은 첫 번째 merge) */
+export interface BlockingMergeResult {
+  mergeTarget: MergeTarget;
+  distanceToWait: number;  // 대기 지점까지의 거리
+}
+
+/**
+ * 경로상의 모든 merge 중 lock을 못 받은 첫 번째 merge를 찾습니다.
+ * - 가까운 merge부터 순서대로 체크
+ * - lock 획득 성공한 merge는 건너뜀
+ * - lock 미획득 merge를 찾으면 해당 merge 반환
+ *
+ * @returns 첫 번째 blocking merge 정보, 없으면 null
+ */
+export function findFirstBlockingMerge(
+  lockMgr: LockMgr,
+  edgeArray: Edge[],
+  currentEdge: Edge,
+  currentRatio: number,
+  vehId: number,
+  data: Float32Array,
+  ptr: number
+): BlockingMergeResult | null {
+  // 곡선에서는 이미 lock 처리가 끝난 상태로 간주
+  if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
+    return null;
+  }
+
+  const mergeTargets = findAllMergeTargets(
+    lockMgr,
+    edgeArray,
+    currentEdge,
+    currentRatio,
+    data,
+    ptr
+  );
+
+  for (const target of mergeTargets) {
+    // 아직 request 지점에 도달 안 했으면 skip (아직 lock 요청 전)
+    if (!shouldRequestLockNow(target.distanceToMerge, target.requestDistance)) {
+      continue;
+    }
+
+    // Lock 획득 여부 확인 (request는 vehiclePosition의 processMergeLogicInline에서 처리됨)
+    const isGranted = lockMgr.checkGrant(target.mergeNode, vehId);
+
+    if (!isGranted) {
+      // 이 merge가 첫 번째 blocking merge
+      const distanceToWait = target.distanceToMerge - target.waitDistance;
+      return {
+        mergeTarget: target,
+        distanceToWait: Math.max(0, distanceToWait)
+      };
+    }
+    // lock 획득 성공 → 다음 merge 체크
+  }
+
+  // 모든 merge에서 lock 획득 성공 (또는 아직 request 지점에 도달 안 함)
+  return null;
 }
 
 export const SCRATCH_VEHICLE_POSITION: VehiclePositionResult = {
