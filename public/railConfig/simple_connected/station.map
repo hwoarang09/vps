@@ -1,9 +1,9 @@
 # MapTool Version: 5.0.4
 # Simple Connected Stations
 station_name,editor_x,editor_y,barcode_x,barcode_y,barcode_z,barcode_r,bay_name,station_type,port_id,port_type_code,direction_code,link_sc_id,buffer_size,mode_type,floor,zone_id,rail_index,sc_id,e84,teached,look_down,nearest_edge,nearest_edge_distance,eq_id
-ST001,10,0,0,0,0,0,BAY01,OHB,P001,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0001,0.5,NoName
-ST002,10,1,0,0,0,0,BAY02,OHB,P002,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0003,0.5,NoName
-ST003,10,6,0,0,0,0,BAY03,OHB,P003,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0101,0.5,NoName
-ST004,10,7,0,0,0,0,BAY04,OHB,P004,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0103,0.5,NoName
-ST005,10,12,0,0,0,0,BAY05,OHB,P005,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0201,0.5,NoName
-ST006,10,13,0,0,0,0,BAY06,OHB,P006,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E0203,0.5,NoName
+ST001,10,0,0,0,0,0,BAY01,OHB,P001,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_00,0.5,NoName
+ST002,10,1,0,0,0,0,BAY02,OHB,P002,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_02,0.5,NoName
+ST003,10,6,0,0,0,0,BAY03,OHB,P003,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_09,0.5,NoName
+ST004,10,7,0,0,0,0,BAY04,OHB,P004,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_11,0.5,NoName
+ST005,10,12,0,0,0,0,BAY05,OHB,P005,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_18,0.5,NoName
+ST006,10,13,0,0,0,0,BAY06,OHB,P006,3,3,OCS01,1,1,1,Default,0,OHBC01,N,1,Y,E_20,0.5,NoName
