@@ -12,6 +12,12 @@ interface SimulationConfigFile {
     collisionCheckInterval?: number;
     curvePreBrakeCheckInterval?: number;
   };
+  log: {
+    /** DevLogger 활성화 여부 (개발용 텍스트 로그) */
+    devLogEnabled: boolean;
+    /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
+    edgeTransitLogEnabled: boolean;
+  };
   lock: {
     /** 직선에서 합류할 때 대기 지점 - toNode 앞 거리 (m) */
     waitDistanceFromMergingStr: number;
@@ -84,6 +90,10 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         collisionCheckInterval: 33,
         curvePreBrakeCheckInterval: 100,
       },
+      log: {
+        devLogEnabled: true,
+        edgeTransitLogEnabled: true,
+      },
       lock: {
         waitDistanceFromMergingStr: 1.89,
         requestDistanceFromMergingStr: 5.1,
@@ -143,6 +153,10 @@ let simulationConfig: SimulationConfigFile = {
     maxDelta: 0.1,
     collisionCheckInterval: 33,
     curvePreBrakeCheckInterval: 100,
+  },
+  log: {
+    devLogEnabled: true,
+    edgeTransitLogEnabled: true,
   },
   lock: {
     waitDistanceFromMergingStr: 1.89,
@@ -207,6 +221,10 @@ export const getSimulationConfig = (): SimulationConfig => {
     maxDelta: simulationConfig.simulation.maxDelta,
     collisionCheckInterval: simulationConfig.simulation.collisionCheckInterval,
     curvePreBrakeCheckInterval: simulationConfig.simulation.curvePreBrakeCheckInterval,
+
+    // Log
+    devLogEnabled: simulationConfig.log.devLogEnabled,
+    edgeTransitLogEnabled: simulationConfig.log.edgeTransitLogEnabled,
 
     // Vehicle
     bodyLength: simulationConfig.vehicle.body.length,
@@ -273,3 +291,7 @@ export const getLockRequestDistanceFromMergingStr = () => simulationConfig.lock.
 export const getLockWaitDistanceFromMergingCurve = () => simulationConfig.lock.waitDistanceFromMergingCurve;
 export const getLockRequestDistanceFromMergingCurve = () => simulationConfig.lock.requestDistanceFromMergingCurve;
 export const getLockGrantStrategy = () => simulationConfig.lock.grantStrategy;
+
+// Individual getters - Log
+export const getDevLogEnabled = () => simulationConfig.log.devLogEnabled;
+export const getEdgeTransitLogEnabled = () => simulationConfig.log.edgeTransitLogEnabled;

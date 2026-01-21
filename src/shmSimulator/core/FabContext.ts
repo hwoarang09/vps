@@ -306,7 +306,10 @@ export class FabContext {
    * 이후 edge transit 로그가 자동으로 전송됨
    */
   setLoggerPort(port: MessagePort, workerId: number = 0): void {
-    console.log("[FabContext] setLoggerPort called, fabId:", this.fabId);
+    // config에서 edgeTransitLogEnabled가 false면 로거 생성 안 함
+    if (this.config.edgeTransitLogEnabled === false) {
+      return;
+    }
     // fabId에서 숫자 추출 시도 (예: "fab_0" -> 0)
     let fabIdNum = 0;
     const match = /\d+/.exec(this.fabId);
@@ -319,7 +322,6 @@ export class FabContext {
       fabId: fabIdNum,
     });
     this.edgeTransitTracker.setLoggerPort(port);
-    console.log("[FabContext] EdgeTransitTracker created and port set");
 
     // 초기 진입 시간 기록 (모든 차량이 현재 edge에 이미 있음)
     // 초기화 시점의 시뮬레이션 시간은 0

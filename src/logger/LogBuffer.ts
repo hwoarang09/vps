@@ -52,7 +52,6 @@ export class LogBuffer {
     this.splitByVeh = config.splitByVeh ?? true;
     this.buffer = new ArrayBuffer(LOG_BUFFER_SIZE);
     this.view = new DataView(this.buffer);
-    console.log("[LogBuffer] created, splitByVeh:", this.splitByVeh);
   }
 
   /**
@@ -99,7 +98,6 @@ export class LogBuffer {
     edgeLength: number,
     edgeType: string
   ): void {
-    console.log("[LogBuffer] logEdgeTransit called, vehId:", vehId, "splitByVeh:", this.splitByVeh);
     const edgeTypeCode = EDGE_TYPE_MAP[edgeType] ?? 0;
 
     if (this.splitByVeh) {
@@ -147,15 +145,12 @@ export class LogBuffer {
   private flushVehBuffer(vehId: number, vehBuffer: VehBuffer): void {
     if (vehBuffer.recordCount === 0) return;
     if (!this.loggerPort) {
-      console.log("[LogBuffer] flushVehBuffer: no loggerPort!");
       vehBuffer.recordCount = 0;
       return;
     }
 
     const usedBytes = vehBuffer.recordCount * LOG_RECORD_SIZE;
     const transferBuffer = vehBuffer.buffer.slice(0, usedBytes);
-
-    console.log("[LogBuffer] sending LOG_BY_VEH, vehId:", vehId, "records:", vehBuffer.recordCount);
 
     // vehId 정보와 함께 전송
     this.loggerPort.postMessage(

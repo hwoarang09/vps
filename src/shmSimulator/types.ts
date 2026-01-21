@@ -113,6 +113,12 @@ export interface SimulationConfig {
   collisionCheckInterval?: number;
   /** 곡선 사전 감속 체크 주기 (ms) - 차량별로 이 주기마다 곡선 사전 감속 검사 수행 */
   curvePreBrakeCheckInterval?: number;
+
+  // Log settings
+  /** DevLogger 활성화 여부 (개발용 텍스트 로그) */
+  devLogEnabled?: boolean;
+  /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
+  edgeTransitLogEnabled?: boolean;
 }
 
 export interface VehicleInitConfig {

@@ -5,6 +5,7 @@ import type { InitPayload, SimulationConfig, FabInitData, SharedMapData, SharedM
 import { createDefaultConfig } from "../types";
 import { getDijkstraPerformanceStats } from "@/common/vehicle/logic/Dijkstra";
 import { RollingPerformanceStats } from "@/common/performance/RollingPerformanceStats";
+import { DevLogger } from "@/logger";
 import type { Node } from "@/types";
 
 export class SimulationEngine {
@@ -59,6 +60,11 @@ export class SimulationEngine {
 
     // Update config from payload
     this.config = payload.config;
+
+    // DevLogger 활성화 설정
+    if (this.config.devLogEnabled !== undefined) {
+      DevLogger.setEnabled(this.config.devLogEnabled);
+    }
 
     const fabVehicleCounts: Record<string, number> = {};
 
@@ -444,7 +450,6 @@ export class SimulationEngine {
    * @param workerId Worker ID (0~255) for logging
    */
   setLoggerPort(port: MessagePort, workerId: number = 0): void {
-    console.log("[SimulationEngine] setLoggerPort, fabContexts count:", this.fabContexts.size);
     for (const context of this.fabContexts.values()) {
       context.setLoggerPort(port, workerId);
     }
