@@ -16,13 +16,13 @@
   "vehicle": {
     "body": {
       "length": 0.8,
-      "width": 0.4,
-      "height": 0.3,
+      "width": 0.37,
+      "height": 0.6,
       "zOffset": 3.8
     },
     "sensor": {
       "length": 0.8,
-      "width": 0.4,
+      "width": 0.37,
       "height": 0.2
     },
     "spacing": {
