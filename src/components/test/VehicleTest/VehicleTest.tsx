@@ -213,8 +213,6 @@ const VehicleTest: React.FC = () => {
     }
     disposeShmSimulator();
 
-    const totalFabs = fabCountX * fabCountY;
-
     // 원본 데이터 저장 (멀티 워커용)
     useFabStore.getState().setOriginalMapData({
       nodes: [...nodes],
@@ -238,8 +236,8 @@ const VehicleTest: React.FC = () => {
     useEdgeStore.getState().setEdges(edges);
     useStationStore.getState().setStations(stations);
 
-    // Update text store with original data (fab별 분리는 위치 기반으로 수행)
-    updateTextsForFab(nodes, edges, stations, fabCountX, fabCountY);
+    // Update text store with fab 0 data only
+    updateTextsForFab(nodes, edges, stations);
 
     // Re-initialize LockMgr with original edges
     // 메인 스레드 LockMgr는 원본 기준, Worker는 각자 fab별 LockMgr 사용
@@ -249,50 +247,39 @@ const VehicleTest: React.FC = () => {
     setIsFabApplied(true);
   };
 
-  // Update text store with fab-separated data
+  // Update text store with fab 0 data only (다른 fab은 position offset으로 처리)
   const updateTextsForFab = (
     nodes: ReturnType<typeof useNodeStore.getState>["nodes"],
     edges: ReturnType<typeof useEdgeStore.getState>["edges"],
     stations: ReturnType<typeof useStationStore.getState>["stations"],
-    gridX: number,
-    gridY: number,
   ) => {
     const textStore = useTextStore.getState();
     const fabInfos = useFabStore.getState().fabs;
     textStore.clearAllTexts();
 
-    const totalFabs = gridX * gridY;
     const stationTextConfig = getStationTextConfig();
 
-    // 각 텍스트가 어느 fab에 속하는지 판별하는 함수
-    const getFabIndex = (x: number, y: number): number => {
-      for (let i = 0; i < fabInfos.length; i++) {
-        const fab = fabInfos[i];
-        if (x >= fab.xMin && x <= fab.xMax && y >= fab.yMin && y <= fab.yMax) {
-          return i;
-        }
-      }
-      return 0; // fallback
+    // fab 0 bounds (fab 0 내의 데이터만 저장)
+    const fab0 = fabInfos[0];
+    const isInFab0 = (x: number, y: number): boolean => {
+      if (!fab0) return true; // single fab이면 전부 포함
+      return x >= fab0.xMin && x <= fab0.xMax && y >= fab0.yMin && y <= fab0.yMax;
     };
 
-    // Fab별 텍스트 배열 초기화
-    const textsByFab: import("@/store/map/textStore").FabTextData[] = [];
-    for (let i = 0; i < totalFabs; i++) {
-      textsByFab.push({ nodeTexts: [], edgeTexts: [], stationTexts: [] });
-    }
-
-    // Node texts - fab별 분리
+    // Node texts - fab 0만
+    const nodeTexts: import("@/store/map/textStore").TextItem[] = [];
     const nodeMap = new Map(nodes.map(n => [n.node_name, n]));
     for (const node of nodes) {
       if (node.node_name.startsWith("TMP_")) continue;
-      const fabIdx = getFabIndex(node.editor_x, node.editor_y);
-      textsByFab[fabIdx].nodeTexts.push({
+      if (!isInFab0(node.editor_x, node.editor_y)) continue;
+      nodeTexts.push({
         name: node.node_name,
         position: { x: node.editor_x, y: node.editor_y, z: node.editor_z },
       });
     }
 
-    // Edge texts - fab별 분리
+    // Edge texts - fab 0만
+    const edgeTexts: import("@/store/map/textStore").TextItem[] = [];
     for (const edge of edges) {
       if (edge.edge_name.startsWith("TMP_")) continue;
       const fromNode = nodeMap.get(edge.from_node);
@@ -302,18 +289,19 @@ const VehicleTest: React.FC = () => {
       const midX = (fromNode.editor_x + toNode.editor_x) / 2;
       const midY = (fromNode.editor_y + toNode.editor_y) / 2;
       const midZ = (fromNode.editor_z + toNode.editor_z) / 2;
-      const fabIdx = getFabIndex(midX, midY);
+      if (!isInFab0(midX, midY)) continue;
 
-      textsByFab[fabIdx].edgeTexts.push({
+      edgeTexts.push({
         name: edge.edge_name,
         position: { x: midX, y: midY, z: midZ },
       });
     }
 
-    // Station texts - fab별 분리
+    // Station texts - fab 0만
+    const stationTexts: import("@/store/map/textStore").TextItem[] = [];
     for (const station of stations) {
-      const fabIdx = getFabIndex(station.position.x, station.position.y);
-      textsByFab[fabIdx].stationTexts.push({
+      if (!isInFab0(station.position.x, station.position.y)) continue;
+      stationTexts.push({
         name: station.station_name,
         position: {
           x: station.position.x,
@@ -324,19 +312,10 @@ const VehicleTest: React.FC = () => {
     }
 
     // Store에 저장
-    textStore.setTextsByFab(textsByFab);
-
-    // 기존 array도 업데이트 (호환성)
-    const allNodes = textsByFab.flatMap(f => f.nodeTexts);
-    const allEdges = textsByFab.flatMap(f => f.edgeTexts);
-    const allStations = textsByFab.flatMap(f => f.stationTexts);
-    textStore.setNodeTextsArray(allNodes);
-    textStore.setEdgeTextsArray(allEdges);
-    textStore.setStationTextsArray(allStations);
-
+    textStore.setNodeTextsArray(nodeTexts);
+    textStore.setEdgeTextsArray(edgeTexts);
+    textStore.setStationTextsArray(stationTexts);
     textStore.forceUpdate();
-
-    // 로그
   };
 
   // Handle FAB Clear - reload map to reset to original state (no auto vehicle creation)

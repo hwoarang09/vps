@@ -30,6 +30,7 @@ interface Props {
   readonly zOffset?: number;
   readonly lodDistance?: number;
   readonly camHeightCutoff?: number;
+  readonly fabOffsetRef?: React.MutableRefObject<{ x: number; y: number }>;
 }
 
 export default function InstancedText({
@@ -41,6 +42,7 @@ export default function InstancedText({
   zOffset = 0.5,
   lodDistance = 10,
   camHeightCutoff = 60,
+  fabOffsetRef,
 }: Props) {
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
   const prevGroupsLengthRef = React.useRef(0);
@@ -80,14 +82,20 @@ export default function InstancedText({
 
     const { x: cx, y: cy, z: cz } = camera.position;
 
+    // fab offset 적용 (카메라 위치를 fab 0 기준 좌표로 변환)
+    const fabOffsetX = fabOffsetRef?.current.x ?? 0;
+    const fabOffsetY = fabOffsetRef?.current.y ?? 0;
+    const localCx = cx - fabOffsetX;
+    const localCy = cy - fabOffsetY;
+
     // Early exit 1: Camera too high
     if (applyHighAltitudeCulling(cz, camHeightCutoff, D, instRefs.current)) {
       return;
     }
 
-    // Grid-based LOD: 수십만개 전체 순회 → 근처 셀만 체크
+    // Grid-based LOD: 수십만개 전체 순회 → 근처 셀만 체크 (fab 0 기준 좌표 사용)
     const visibleGroups = visibleGroupsRef.current;
-    getVisibleGroupsFromGrid(spatialGrid, cx, cy, lodDistance, visibleGroups);
+    getVisibleGroupsFromGrid(spatialGrid, localCx, localCy, lodDistance, visibleGroups);
 
     // Find newly culled groups
     const prevVisible = prevVisibleSetRef.current;
@@ -126,6 +134,8 @@ export default function InstancedText({
         zOffset,
         quaternion,
         right,
+        fabOffsetX,
+        fabOffsetY,
       }
     );
 

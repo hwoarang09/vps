@@ -202,20 +202,22 @@ export function renderVisibleGroups(
     zOffset: number;
     quaternion: THREE.Quaternion;
     right: THREE.Vector3;
+    fabOffsetX?: number;
+    fabOffsetY?: number;
   }
 ): void {
   const { groupStart, slotDigit, slotIndex, slotPosition } = slotData;
   if (!groupStart) return;
 
-  const { scale, charSpacing, zOffset, quaternion, right } = params;
+  const { scale, charSpacing, zOffset, quaternion, right, fabOffsetX = 0, fabOffsetY = 0 } = params;
 
   // Zero-GC: Reuse scratchpads
   _tempScale.set(scale, scale, 1);
 
   for (const groupIdx of visibleGroups) {
     const group = groups[groupIdx];
-    const gx = group.x;
-    const gy = group.y;
+    const gx = group.x + fabOffsetX;
+    const gy = group.y + fabOffsetY;
     const gz = group.z + zOffset;
 
     const start = groupStart[groupIdx];
