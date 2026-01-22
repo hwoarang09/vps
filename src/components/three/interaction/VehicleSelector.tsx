@@ -1,36 +1,74 @@
 import React from "react";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
-import {
-    VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
-    MovementData as ShmMovementData,
-} from "@/common/vehicle/memory/VehicleDataArrayBase";
+import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
+import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { getMarkerConfig } from "@/config/renderConfig";
 
 // Threshold for selection in meters
 const SELECTION_THRESHOLD_SQ = 20 * 20;
 
 const VehicleSelector: React.FC = () => {
-    // We don't strictly need useThree if we just use the mesh onClick event,
-    // which provides the intersection point directly.
+    /**
+     * Convert render buffer index to worker buffer index
+     *
+     * Render buffer: fab별 actualVehicles 연속 (예: fab0 1000대 + fab1 1000대)
+     * Worker buffer: fab별 maxVehicles 연속 (예: fab0 5000칸 + fab1 5000칸)
+     */
+    const convertRenderToWorkerIndex = (renderIndex: number): number => {
+        const controller = useShmSimulatorStore.getState().controller;
+        if (!controller) return renderIndex;
+
+        const renderLayout = controller.getRenderLayout();
+        const workerLayout = controller.getWorkerLayout();
+        if (!renderLayout || !workerLayout) return renderIndex;
+
+        const { fabRenderAssignments } = renderLayout;
+        const { fabAssignments } = workerLayout;
+
+        // 1. renderIndex가 어떤 fab에 속하는지 찾기
+        let targetFabId: string | null = null;
+        let localIndex = 0;
+
+        for (let i = 0; i < fabRenderAssignments.length; i++) {
+            const assignment = fabRenderAssignments[i];
+            const startIndex = assignment.vehicleRenderOffset / (VEHICLE_RENDER_SIZE * Float32Array.BYTES_PER_ELEMENT);
+            const endIndex = startIndex + assignment.actualVehicles;
+
+            if (renderIndex >= startIndex && renderIndex < endIndex) {
+                targetFabId = assignment.fabId;
+                localIndex = renderIndex - startIndex;
+                break;
+            }
+        }
+
+        if (!targetFabId) return renderIndex;
+
+        // 2. Worker buffer에서 해당 fab의 offset 찾기
+        const workerAssignment = fabAssignments.get(targetFabId);
+        if (!workerAssignment) return renderIndex;
+
+        // Worker offset은 bytes 단위, index로 변환
+        const workerStartIndex = workerAssignment.vehicleRegion.offset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+
+        return workerStartIndex + localIndex;
+    };
 
     const findNearestVehicle = (clickX: number, clickY: number) => {
-        // SHM mode only
+        // SHM mode only - use render buffer (has fab offset applied)
         const actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
-        const data = useShmSimulatorStore.getState().getVehicleFullData();
-        const dataSize = SHM_VEHICLE_DATA_SIZE;
-        const xOffset = ShmMovementData.X;
-        const yOffset = ShmMovementData.Y;
+        const data = useShmSimulatorStore.getState().getVehicleData();
 
         if (actualNumVehicles === 0 || !data) return;
 
         let minDistSq = Infinity;
-        let nearestVehicleId = -1;
+        let nearestRenderIndex = -1;
 
+        // Render buffer layout: [x, y, z, rotation] per vehicle (4 floats)
         for (let i = 0; i < actualNumVehicles; i++) {
-            const ptr = i * dataSize;
-            const x = data[ptr + xOffset];
-            const y = data[ptr + yOffset];
+            const ptr = i * VEHICLE_RENDER_SIZE;
+            const x = data[ptr + 0];
+            const y = data[ptr + 1];
 
             if (x === undefined || y === undefined) {
                 continue;
@@ -42,19 +80,21 @@ const VehicleSelector: React.FC = () => {
 
             if (distSq < minDistSq) {
                 minDistSq = distSq;
-                nearestVehicleId = i;
+                nearestRenderIndex = i;
             }
         }
 
-        if (nearestVehicleId !== -1 && minDistSq <= SELECTION_THRESHOLD_SQ) {
-            useVehicleControlStore.getState().selectVehicle(nearestVehicleId);
+        if (nearestRenderIndex !== -1 && minDistSq <= SELECTION_THRESHOLD_SQ) {
+            // Convert render index to worker index for IndividualControlPanel
+            const workerIndex = convertRenderToWorkerIndex(nearestRenderIndex);
+            useVehicleControlStore.getState().selectVehicle(workerIndex);
         }
     };
 
     return (
-        <mesh 
-            visible={false} 
-            rotation={[0,0,0]} 
+        <mesh
+            visible={false}
+            rotation={[0,0,0]}
             position={[0,0,getMarkerConfig().Z]} // Vehicles are at Z height
             onClick={(e) => {
                 e.stopPropagation();
