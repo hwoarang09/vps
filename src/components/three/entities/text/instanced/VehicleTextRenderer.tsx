@@ -14,6 +14,7 @@ import {
 import { BaseInstancedText } from "./BaseInstancedText";
 import { VehicleSystemType } from "@/types/vehicle";
 import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
+import { getVehicleRenderConfig } from "@/config/renderConfig";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
@@ -50,7 +51,13 @@ const VehicleTextRenderer: React.FC<Props> = ({
   color = "#ffffff",
   zOffset = 1,
 }) => {
+  const vehicleConfig = getVehicleRenderConfig();
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
+
+  // Check visibility flag from config
+  if (!vehicleConfig.text.visible) {
+    return null;
+  }
 
   // 슬롯 데이터 계산 (Render Phase)
   const slotData = useMemo(() => {

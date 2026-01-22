@@ -7,7 +7,12 @@
     "markerRadius": 0.05,
     "markerSegments": 6,
     "tmpMarkerColor": "#888888",
-    "tmpMarkerRadius": 0.025
+    "tmpMarkerRadius": 0.025,
+    "text": {
+      "visible": true,
+      "color": "#00ff00",
+      "scale": 0.6
+    }
   },
   "edges": {
     "colors": {
@@ -19,7 +24,12 @@
       "DEFAULT": "#888888"
     },
     "lineWidth": 1.0,
-    "selectedColor": "#ff9800"
+    "selectedColor": "#ff9800",
+    "text": {
+      "visible": true,
+      "color": "#0066ff",
+      "scale": 0.6
+    }
   },
   "vehicles": {
     "defaultColor": "#ffffff",
@@ -62,6 +72,7 @@
       }
     },
     "text": {
+      "visible": true,
       "zOffset": -0.2,
       "color": "#FFD700",
       "scale": 0.5

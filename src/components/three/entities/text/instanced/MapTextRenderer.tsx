@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { getMapRenderConfig as getRendererConfig } from "@/config/renderConfig";
+import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, getStationConfig } from "@/config/renderConfig";
 import { getStationTextConfig } from "@/config/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";
@@ -18,14 +18,22 @@ interface Props {
 
 const MapTextRenderer: React.FC<Props> = (props) => {
   const mapConfig = getRendererConfig();
+  const nodeConfig = getNodeConfig();
+  const edgeConfig = getEdgeConfig();
+  const stationConfig = getStationConfig();
   const stationTextConfig = getStationTextConfig();
   const {
     mode,
     scale = mapConfig.scale,
-    nodeColor = "#00ff00",
-    edgeColor = "#0066ff",
+    nodeColor = nodeConfig.text.color,
+    edgeColor = edgeConfig.text.color,
     stationColor = stationTextConfig.COLOR,
   } = props;
+
+  // Text visibility flags from config
+  const showNodeText = nodeConfig.text.visible;
+  const showEdgeText = edgeConfig.text.visible;
+  const showStationText = stationConfig.text.visible;
   const {
     nodeTexts, edgeTexts, stationTexts,
     nodeTextsArray, edgeTextsArray, stationTextsArray,
@@ -148,13 +156,13 @@ const MapTextRenderer: React.FC<Props> = (props) => {
 
   return (
     <group name="map-text">
-      {nodeGroups.length > 0 && (
+      {showNodeText && nodeGroups.length > 0 && (
         <InstancedText groups={nodeGroups} scale={scale} color={nodeColor} />
       )}
-      {edgeGroups.length > 0 && (
+      {showEdgeText && edgeGroups.length > 0 && (
         <InstancedText groups={edgeGroups} scale={scale} color={edgeColor} />
       )}
-      {stationGroups.length > 0 && (
+      {showStationText && stationGroups.length > 0 && (
         <InstancedText groups={stationGroups} scale={scale} color={stationColor} />
       )}
     </group>

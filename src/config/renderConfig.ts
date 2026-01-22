@@ -10,6 +10,11 @@ export interface RenderConfig {
     markerSegments: number;
     tmpMarkerColor: string;
     tmpMarkerRadius: number;
+    text: {
+      visible: boolean;
+      color: string;
+      scale: number;
+    };
   };
   edges: {
     colors: {
@@ -22,6 +27,11 @@ export interface RenderConfig {
     };
     lineWidth: number;
     selectedColor: string;
+    text: {
+      visible: boolean;
+      color: string;
+      scale: number;
+    };
   };
   vehicles: {
     defaultColor: string;
@@ -49,6 +59,7 @@ export interface RenderConfig {
       };
     };
     text: {
+      visible: boolean;
       zOffset: number;
       color: string;
       scale: number;
@@ -84,6 +95,11 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         markerSegments: 6,
         tmpMarkerColor: "#888888",
         tmpMarkerRadius: 0.025,
+        text: {
+          visible: true,
+          color: "#00ff00",
+          scale: 0.6,
+        },
       },
       edges: {
         colors: {
@@ -96,6 +112,11 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         },
         lineWidth: 1.0,
         selectedColor: "#ff9800",
+        text: {
+          visible: true,
+          color: "#0066ff",
+          scale: 0.6,
+        },
       },
       vehicles: {
         defaultColor: "#ffffff",
@@ -138,6 +159,7 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
           },
         },
         text: {
+          visible: true,
           zOffset: -0.2,
           color: "#FFD700",
           scale: 0.6,
@@ -166,6 +188,11 @@ let renderConfig: RenderConfig = {
     markerSegments: 6,
     tmpMarkerColor: "#888888",
     tmpMarkerRadius: 0.025,
+    text: {
+      visible: true,
+      color: "#00ff00",
+      scale: 0.6,
+    },
   },
   edges: {
     colors: {
@@ -178,6 +205,11 @@ let renderConfig: RenderConfig = {
     },
     lineWidth: 1.0,
     selectedColor: "#ff9800",
+    text: {
+      visible: true,
+      color: "#0066ff",
+      scale: 0.6,
+    },
   },
   vehicles: {
     defaultColor: "#ffffff",
@@ -220,6 +252,7 @@ let renderConfig: RenderConfig = {
       },
     },
     text: {
+      visible: true,
       zOffset: -0.2,
       color: "#FFD700",
       scale: 0.6,
