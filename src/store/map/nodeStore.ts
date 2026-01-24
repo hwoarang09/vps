@@ -10,6 +10,17 @@ interface DeadlockZone {
 }
 
 /**
+ * 양방향 도달 가능 여부 확인
+ */
+function isBidirectionallyReachable(
+  nodeA: string,
+  nodeB: string,
+  graph: Map<string, string[]>
+): boolean {
+  return canReach(nodeA, nodeB, graph) && canReach(nodeB, nodeA, graph);
+}
+
+/**
  * BFS로 from에서 to로 도달 가능한지 확인
  */
 function canReach(from: string, to: string, graph: Map<string, string[]>): boolean {
@@ -55,15 +66,13 @@ function detectDeadlockZones(mergeNodes: string[], edges: Edge[]): DeadlockZone[
   // 각 merge node 쌍에 대해 양방향 도달 가능 여부 확인
   for (const nodeA of mergeNodes) {
     for (const nodeB of mergeNodes) {
-      if (nodeA === nodeB) continue;
-      if (assignedNodes.has(nodeA) || assignedNodes.has(nodeB)) continue;
+      if (nodeA === nodeB || assignedNodes.has(nodeA) || assignedNodes.has(nodeB)) continue;
 
       const pairKey = [nodeA, nodeB].sort((a, b) => a.localeCompare(b)).join('|');
       if (processedPairs.has(pairKey)) continue;
       processedPairs.add(pairKey);
 
-      // A → B 도달 가능 && B → A 도달 가능 → 데드락 존
-      if (canReach(nodeA, nodeB, outgoing) && canReach(nodeB, nodeA, outgoing)) {
+      if (isBidirectionallyReachable(nodeA, nodeB, outgoing)) {
         zones.push({
           mergeNodes: [nodeA, nodeB],
           branchNodes: new Set(),

@@ -13,6 +13,7 @@ import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
 import type { VehicleTransitionResult } from "./vehicleTransition";
 import type { MovementUpdateContext } from "./movementUpdate";
+import { DeadlockZoneStrategy } from "@/config/simulationConfig";
 
 // ============================================================================
 // 로그 중복 방지를 위한 상태 추적
@@ -113,47 +114,51 @@ function calculateRequestDistance(
 }
 
 /**
- * 경로를 따라가면서 모든 합류점 찾기
- * - 현재 위치에서 합류점까지의 누적 거리 계산
- * - 직선/곡선 합류 타입 결정
- * - BRANCH_FIFO: 데드락 합류점은 존 내부 edge에서만 요청 가능
+ * 현재 edge의 to_node가 합류점인지 확인하고 MergeTarget 반환
  */
-export function findAllMergeTargets(
+function checkCurrentEdgeMerge(
   lockMgr: LockMgr,
-  edgeArray: Edge[],
   currentEdge: Edge,
-  currentRatio: number,
-  data: Float32Array,
-  ptr: number
-): MergeTarget[] {
-  const targets: MergeTarget[] = [];
-  const isBranchFifo = lockMgr.getDeadlockZoneStrategy() === 'BRANCH_FIFO';
-
-  // 현재 edge 남은 거리
-  let accumulatedDist = currentEdge.distance * (1 - currentRatio);
-
-  // 1. currentEdge.tn 확인 (직선 합류)
-  if (lockMgr.isMergeNode(currentEdge.to_node)) {
-    const isDeadlockMerge = lockMgr.isDeadlockZoneNode(currentEdge.to_node);
-    const requestDistance = calculateRequestDistance(
-      lockMgr.getRequestDistanceFromMergingStr(),
-      isDeadlockMerge,
-      isBranchFifo,
-      currentEdge.isDeadlockZoneInside
-    );
-
-    targets.push({
-      type: 'STRAIGHT',
-      mergeNode: currentEdge.to_node,
-      requestEdge: currentEdge.edge_name,
-      distanceToMerge: accumulatedDist,
-      requestDistance,
-      waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
-      isDeadlockMerge,
-    });
+  accumulatedDist: number,
+  isBranchFifo: boolean
+): MergeTarget | null {
+  if (!lockMgr.isMergeNode(currentEdge.to_node)) {
+    return null;
   }
 
-  // 2. nextEdge들 순회 (최대 5개)
+  const isDeadlockMerge = lockMgr.isDeadlockZoneNode(currentEdge.to_node);
+  const requestDistance = calculateRequestDistance(
+    lockMgr.getRequestDistanceFromMergingStr(),
+    isDeadlockMerge,
+    isBranchFifo,
+    currentEdge.isDeadlockZoneInside
+  );
+
+  return {
+    type: 'STRAIGHT',
+    mergeNode: currentEdge.to_node,
+    requestEdge: currentEdge.edge_name,
+    distanceToMerge: accumulatedDist,
+    requestDistance,
+    waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
+    isDeadlockMerge,
+  };
+}
+
+/**
+ * nextEdge들을 순회하며 합류점 MergeTarget들 수집
+ */
+function collectNextEdgeMerges(
+  lockMgr: LockMgr,
+  edgeArray: Edge[],
+  data: Float32Array,
+  ptr: number,
+  initialAccumulatedDist: number,
+  isBranchFifo: boolean
+): MergeTarget[] {
+  const targets: MergeTarget[] = [];
+  let accumulatedDist = initialAccumulatedDist;
+
   for (const offset of NEXT_EDGE_OFFSETS) {
     const nextEdgeIdx = data[ptr + offset];
     if (nextEdgeIdx < 0) break;
@@ -161,7 +166,6 @@ export function findAllMergeTargets(
     const nextEdge = edgeArray[nextEdgeIdx];
     if (!nextEdge) break;
 
-    // 합류점인지 확인
     if (!lockMgr.isMergeNode(nextEdge.to_node)) {
       accumulatedDist += nextEdge.distance;
       continue;
@@ -195,6 +199,35 @@ export function findAllMergeTargets(
 
     accumulatedDist += nextEdge.distance;
   }
+
+  return targets;
+}
+
+/**
+ * 경로를 따라가면서 모든 합류점 찾기
+ */
+export function findAllMergeTargets(
+  lockMgr: LockMgr,
+  edgeArray: Edge[],
+  currentEdge: Edge,
+  currentRatio: number,
+  data: Float32Array,
+  ptr: number
+): MergeTarget[] {
+  const isBranchFifo = lockMgr.getDeadlockZoneStrategy() === DeadlockZoneStrategy.BRANCH_FIFO;
+  const accumulatedDist = currentEdge.distance * (1 - currentRatio);
+
+  const targets: MergeTarget[] = [];
+
+  // 1. currentEdge.tn 확인 (직선 합류)
+  const currentMerge = checkCurrentEdgeMerge(lockMgr, currentEdge, accumulatedDist, isBranchFifo);
+  if (currentMerge) {
+    targets.push(currentMerge);
+  }
+
+  // 2. nextEdge들 순회
+  const nextMerges = collectNextEdgeMerges(lockMgr, edgeArray, data, ptr, accumulatedDist, isBranchFifo);
+  targets.push(...nextMerges);
 
   return targets;
 }
@@ -521,58 +554,50 @@ function checkAndProcessMergeWait(ctx: MergeProcessContext): boolean {
 }
 
 /**
- * Merge 대기 로직 처리
- *
- * @returns true = 대기 필요 (차량이 대기 지점을 넘어가서 위치 조정 필요)
- *          false = 대기 불필요 (통과 가능 또는 대기 지점 도달 전)
- *
- * ## 핵심 로직
- * - **항상 직선 위에서만** lock 요청 여부를 계산
- * - 경로 전체(NEXT_EDGE_0~4)를 탐색해서 합류점 찾기
- * - 각 합류점까지의 **누적 거리** 기반으로 request/wait 판단
- * - 순차적으로 처리: 먼저 도달하는 합류점부터 처리
+ * 곡선 edge에서 lock 처리 (이미 획득한 상태 유지)
+ * @returns true = 곡선 처리 완료, false = 직선이므로 계속 진행
  */
-function processMergeLogicInline(ctx: MergeProcessContext): boolean {
-  const { lockMgr, edgeArray, currentEdge, vehId, currentRatio, data, ptr, target } = ctx;
-  // 곡선 위에서는 기본적으로 lock 계산 안 함 (이미 이전 직선에서 lock을 획득한 상태)
-  // 단, 곡선→곡선→합류 케이스는 별도 처리
-  if (currentEdge.vos_rail_type !== EdgeType.LINEAR) {
-    const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
+function handleCurveEdgeLock(ctx: MergeProcessContext): boolean {
+  const { lockMgr, edgeArray, currentEdge, vehId, currentRatio, data, ptr } = ctx;
 
-    // ACQUIRED 상태면 그대로 유지
-    if (currentTrafficState === TrafficState.ACQUIRED) {
-      return false;
-    }
-
-    // 곡선→곡선→합류 케이스 처리
-    handleCurveToCurveMerge(lockMgr, edgeArray, currentEdge, currentRatio, vehId, data, ptr);
-    return false; // 곡선에서는 항상 edge 끝까지 진행 허용
-  }
-
-  // 경로 전체를 탐색해서 합류점 찾기
-  const mergeTargets = findAllMergeTargets(
-    lockMgr,
-    edgeArray,
-    currentEdge,
-    currentRatio,
-    data,
-    ptr
-  );
-
-  // 합류점이 없으면 자유 통행
-  if (mergeTargets.length === 0) {
-    const currentReason = data[ptr + LogicData.STOP_REASON];
-    if ((currentReason & StopReason.LOCKED) !== 0) {
-      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-    }
-    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+  if (currentEdge.vos_rail_type === EdgeType.LINEAR) {
     return false;
   }
 
-  const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
-  const currentReason = data[ptr + LogicData.STOP_REASON];
+  // 곡선: ACQUIRED 아니면 곡선→곡선→합류 케이스 처리
+  if (data[ptr + LogicData.TRAFFIC_STATE] !== TrafficState.ACQUIRED) {
+    handleCurveToCurveMerge(lockMgr, edgeArray, currentEdge, currentRatio, vehId, data, ptr);
+  }
 
-  // 각 merge target을 순차적으로 처리
+  return true;
+}
+
+/**
+ * 합류점 없을 때 자유 통행 상태로 설정
+ */
+function setFreeTrafficState(data: Float32Array, ptr: number): void {
+  const currentReason = data[ptr + LogicData.STOP_REASON];
+  if ((currentReason & StopReason.LOCKED) !== 0) {
+    data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+  }
+  data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
+}
+
+interface MergeTargetProcessResult {
+  shouldWait: boolean;
+  waitRatio?: number;
+}
+
+/**
+ * 각 merge target을 순차적으로 처리
+ */
+function processMergeTargets(
+  ctx: MergeProcessContext,
+  mergeTargets: MergeTarget[],
+  currentReason: number
+): MergeTargetProcessResult {
+  const { lockMgr, currentEdge, vehId, currentRatio, data, ptr } = ctx;
+
   for (const mergeTarget of mergeTargets) {
     if (!shouldRequestLockNow(mergeTarget.distanceToMerge, mergeTarget.requestDistance)) {
       continue;
@@ -591,24 +616,55 @@ function processMergeLogicInline(ctx: MergeProcessContext): boolean {
 
       if (waitResult.shouldWait) {
         data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
-        target.x = waitResult.waitRatio ?? 0;
-        return true;
+        return { shouldWait: true, waitRatio: waitResult.waitRatio ?? 0 };
       }
 
-      // 대기 지점 이전이면 LOCKED 해제 후 현재 위치 유지
       if ((currentReason & StopReason.LOCKED) !== 0) {
         data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
       }
-      return false;
+      return { shouldWait: false };
     }
   }
 
-  // 모든 도달한 target의 lock 획득 성공 (또는 아직 어떤 request 지점에도 도달 안 함)
+  return { shouldWait: false };
+}
+
+/**
+ * Merge 대기 로직 처리
+ */
+function processMergeLogicInline(ctx: MergeProcessContext): boolean {
+  const { lockMgr, edgeArray, currentEdge, currentRatio, data, ptr, target, vehId } = ctx;
+
+  // 1. 곡선 위에서는 lock 계산 안 함
+  const isCurveHandled = handleCurveEdgeLock(ctx);
+  if (isCurveHandled) {
+    return false;
+  }
+
+  // 2. 경로 전체를 탐색해서 합류점 찾기
+  const mergeTargets = findAllMergeTargets(lockMgr, edgeArray, currentEdge, currentRatio, data, ptr);
+
+  // 3. 합류점이 없으면 자유 통행
+  if (mergeTargets.length === 0) {
+    setFreeTrafficState(data, ptr);
+    return false;
+  }
+
+  const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
+  const currentReason = data[ptr + LogicData.STOP_REASON];
+
+  // 4. 각 merge target을 순차적으로 처리
+  const result = processMergeTargets(ctx, mergeTargets, currentReason);
+  if (result.shouldWait) {
+    target.x = result.waitRatio ?? 0;
+    return true;
+  }
+
+  // 모든 도달한 target의 lock 획득 성공
   if ((currentReason & StopReason.LOCKED) !== 0) {
     data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
   }
 
-  // 하나라도 request 지점에 도달했고 lock 받았으면 ACQUIRED, 아니면 FREE 유지
   const anyRequested = mergeTargets.some(t => shouldRequestLockNow(t.distanceToMerge, t.requestDistance));
   const newState = anyRequested ? TrafficState.ACQUIRED : TrafficState.FREE;
 

@@ -84,30 +84,60 @@ function checkLockBlocking(
   }
 
   // 1. 현재 edge의 to_node가 merge node이고 lock이 없으면 block
-  if (lockMgr.isMergeNode(currentEdge.to_node)) {
-    if (!lockMgr.checkGrant(currentEdge.to_node, vehicleIndex)) {
-      devLog.veh(vehicleIndex).debug(
-        `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted`
-      );
-      return { blocked: true };
-    }
+  const isMergeNode = lockMgr.isMergeNode(currentEdge.to_node);
+  const hasGrant = lockMgr.checkGrant(currentEdge.to_node, vehicleIndex);
+  if (isMergeNode && !hasGrant) {
+    devLog.veh(vehicleIndex).debug(
+      `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted`
+    );
+    return { blocked: true };
   }
 
   // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
   if (nextEdgeIndex >= 0 && nextEdgeIndex < edgeArray.length) {
     const nextEdge = edgeArray[nextEdgeIndex];
-    if (nextEdge?.vos_rail_type !== EdgeType.LINEAR && lockMgr.isMergeNode(nextEdge.to_node)) {
-      if (!lockMgr.checkGrant(nextEdge.to_node, vehicleIndex)) {
-        const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
-        devLog.veh(vehicleIndex).debug(
-          `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdge.edge_name}`
-        );
-        return { blocked: true };
-      }
+    const isCurve = nextEdge?.vos_rail_type !== EdgeType.LINEAR;
+    const isNextMerge = lockMgr.isMergeNode(nextEdge.to_node);
+    const hasNextGrant = lockMgr.checkGrant(nextEdge.to_node, vehicleIndex);
+    if (isCurve && isNextMerge && !hasNextGrant) {
+      const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
+      devLog.veh(vehicleIndex).debug(
+        `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdge.edge_name}`
+      );
+      return { blocked: true };
     }
   }
 
   return { blocked: false };
+}
+
+/**
+ * 진입 시점 상태 로그 출력
+ */
+function logTransitionEntry(
+  vehicleIndex: number,
+  currentEdge: Edge | undefined,
+  currentRatio: number,
+  data: Float32Array,
+  ptr: number,
+  pathBufferFromAutoMgr?: Int32Array | null
+): void {
+  const initialNextEdges = [
+    data[ptr + MovementData.NEXT_EDGE_0],
+    data[ptr + MovementData.NEXT_EDGE_1],
+    data[ptr + MovementData.NEXT_EDGE_2],
+    data[ptr + MovementData.NEXT_EDGE_3],
+    data[ptr + MovementData.NEXT_EDGE_4],
+  ];
+  let pathLen = -1;
+  if (pathBufferFromAutoMgr) {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    pathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
+  }
+  devLog.veh(vehicleIndex).debug(
+    `[next_edge_memory] ENTER handleEdgeTransition edge=${currentEdge?.edge_name} ratio=${currentRatio.toFixed(3)} ` +
+    `nextEdges=[${initialNextEdges.join(',')}] pathBuf: len=${pathLen}`
+  );
 }
 
 /**
@@ -135,23 +165,7 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
   const data = vehicleDataArray.getData();
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
 
-  // 진입 시점 상태 로그
-  const initialNextEdges = [
-    data[ptr + MovementData.NEXT_EDGE_0],
-    data[ptr + MovementData.NEXT_EDGE_1],
-    data[ptr + MovementData.NEXT_EDGE_2],
-    data[ptr + MovementData.NEXT_EDGE_3],
-    data[ptr + MovementData.NEXT_EDGE_4],
-  ];
-  let pathLen = -1;
-  if (pathBufferFromAutoMgr) {
-    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    pathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
-  }
-  devLog.veh(vehicleIndex).debug(
-    `[next_edge_memory] ENTER handleEdgeTransition edge=${currentEdge?.edge_name} ratio=${currentRatio.toFixed(3)} ` +
-    `nextEdges=[${initialNextEdges.join(',')}] pathBuf: len=${pathLen}`
-  );
+  logTransitionEntry(vehicleIndex, currentEdge, currentRatio, data, ptr, pathBufferFromAutoMgr);
 
   let loopCount = 0;
   while (currentEdge && currentRatio >= 1) {

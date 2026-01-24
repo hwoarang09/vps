@@ -5,7 +5,8 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
 import { StationRawData } from "@/types/station";
-import type { GrantStrategy, DeadlockZoneStrategy } from "@/config/simulationConfig";
+import type { GrantStrategy } from "@/config/simulationConfig";
+import { DeadlockZoneStrategy } from "@/config/simulationConfig";
 
 // ============================================================================
 // [0] MEMORY REGION (Multi-Worker Support)
@@ -155,7 +156,7 @@ export function createDefaultConfig(): SimulationConfig {
     lockWaitDistanceFromMergingCurve: 1.89,
     lockRequestDistanceFromMergingCurve: 5.1,
     lockGrantStrategy: 'FIFO',
-    lockDeadlockZoneStrategy: 'BRANCH_FIFO',
+    lockDeadlockZoneStrategy: DeadlockZoneStrategy.BRANCH_FIFO,
     targetFps: 60,
     maxDelta: 0.1,
   };

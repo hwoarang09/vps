@@ -102,7 +102,7 @@ export function processVehicleTransition(
 
   // 동일 Edge에서의 target 도달 체크
   // Edge 전환이 일어나면 momentum 유지, 동일 Edge면 target limit 체크
-  if (processSameEdgeLogic(
+  const shouldApplyTargetLimit = processSameEdgeLogic(
     finalEdgeIndex === currentEdgeIndex,
     rawNewRatio,
     targetRatio,
@@ -110,7 +110,8 @@ export function processVehicleTransition(
     data,
     ptr,
     SCRATCH_TARGET_CHECK
-  )) {
+  );
+  if (shouldApplyTargetLimit) {
     finalRatio = SCRATCH_TARGET_CHECK.finalRatio;
     finalVelocity = SCRATCH_TARGET_CHECK.finalVelocity;
   }

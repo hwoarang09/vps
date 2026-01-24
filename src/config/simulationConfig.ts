@@ -4,8 +4,13 @@ import type { SimulationConfig } from "@/shmSimulator/types";
 /** Lock 승인 전략 타입 */
 export type GrantStrategy = 'FIFO' | 'BATCH';
 
-/** 데드락 존 전용 정책 타입 */
-export type DeadlockZoneStrategy = 'BRANCH_FIFO' | 'ZONE_YIELD';
+/** 데드락 존 전용 정책 */
+export enum DeadlockZoneStrategy {
+  /** 분기점에서 FIFO 순서로 진입 허용 */
+  BRANCH_FIFO = 'BRANCH_FIFO',
+  /** 존 내 차량에게 양보 */
+  ZONE_YIELD = 'ZONE_YIELD',
+}
 
 interface SimulationConfigFile {
   simulation: {
@@ -105,7 +110,7 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         waitDistanceFromMergingCurve: 1.89,
         requestDistanceFromMergingCurve: 5.1,
         grantStrategy: 'FIFO',
-        deadlockZoneStrategy: 'BRANCH_FIFO',
+        deadlockZoneStrategy: DeadlockZoneStrategy.BRANCH_FIFO,
       },
       vehicle: {
         body: {
@@ -170,7 +175,7 @@ let simulationConfig: SimulationConfigFile = {
     waitDistanceFromMergingCurve: 1.89,
     requestDistanceFromMergingCurve: 5.1,
     grantStrategy: 'FIFO',
-    deadlockZoneStrategy: 'BRANCH_FIFO',
+    deadlockZoneStrategy: DeadlockZoneStrategy.BRANCH_FIFO,
   },
   vehicle: {
     body: {
