@@ -10,7 +10,10 @@ interface EdgeState {
   setEdges: (edges: Edge[]) => void; // 여기서 토폴로지 자동 계산
   addEdge: (edge: Edge) => void;
   clearEdges: () => void;
-  
+
+  // 데드락 존 정보 업데이트 (nodeStore.updateTopology 이후 호출)
+  updateDeadlockZoneFlags: () => void;
+
   // Utility
   getEdgeByIndex: (index: number) => Edge | undefined;
 }
@@ -133,6 +136,48 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
   }),
 
   clearEdges: () => set({ edges: [], edgeNameToIndex: new Map() }),
+
+  // 데드락 존 정보 업데이트 (nodeStore.updateTopology 이후 호출해야 함)
+  updateDeadlockZoneFlags: () => {
+    const { edges } = get();
+    const nodeStore = useNodeStore.getState();
+    const nodes = nodeStore.nodes;
+
+    // Node Lookup Map 생성
+    const nodeMap = new Map<string, Node>();
+    for (const n of nodes) {
+      nodeMap.set(n.node_name, n);
+    }
+
+    // Edge에 데드락 존 플래그 추가
+    const updatedEdges = edges.map(edge => {
+      const fromNode = nodeMap.get(edge.from_node);
+      const toNode = nodeMap.get(edge.to_node);
+
+      // 분기점 → 합류점: 존 내부 edge
+      const isDeadlockZoneInside =
+        fromNode?.isDeadlockBranchNode === true &&
+        toNode?.isDeadlockMergeNode === true;
+
+      // toNode가 분기점: 존으로 향하는 entry edge
+      const isDeadlockZoneEntry =
+        toNode?.isDeadlockBranchNode === true &&
+        !fromNode?.isDeadlockMergeNode; // 합류점에서 나오는 건 entry 아님
+
+      // 관련 존 ID (from 또는 to 중 하나에서)
+      const deadlockZoneId =
+        fromNode?.deadlockZoneId ?? toNode?.deadlockZoneId;
+
+      return {
+        ...edge,
+        isDeadlockZoneInside: isDeadlockZoneInside || undefined,
+        isDeadlockZoneEntry: isDeadlockZoneEntry || undefined,
+        deadlockZoneId,
+      };
+    });
+
+    set({ edges: updatedEdges });
+  },
 
   getEdgeByIndex: (index) => get().edges[index],
 }));

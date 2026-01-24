@@ -12,6 +12,7 @@ import {
   getLinearPreBrakeDeceleration,
   getCurveMaxSpeed,
   getCurveAcceleration,
+  type GrantStrategy,
 } from "@/config/simulationConfig";
 
 /**

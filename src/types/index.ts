@@ -7,25 +7,8 @@ import * as THREE from "three";
 // NODE TYPES
 // ============================================================================
 
-/**
- * Node interface - matches nodes.cfg format
- * CFG 필수 데이터 + 렌더링용 옵셔널 데이터
- */
-export interface Node {
-  // CFG 필수 데이터 (무조건 있어야 함)
-  node_name: string; // 노드 이름 (고유 식별자)
-  editor_x: number; // X 좌표
-  editor_y: number; // Y 좌표
-  editor_z: number; // Z 좌표
-  barcode: number; // 바코드 (당분간 0)
-
-  // 렌더링/UI용 옵셔널 데이터
-  color?: string; // 노드 색상
-  size?: number; // 노드 크기
-  rendering_mode?: "normal" | "preview"; // 렌더링 모드
-  source?: "config" | "user" | "system"; // 데이터 소스
-  readonly?: boolean; // 읽기 전용 여부
-}
+// Node 타입은 node.ts에서 정의 (topology, deadlock zone 필드 포함)
+export type { Node } from "./node";
 
 // ============================================================================
 // EDGE TYPES

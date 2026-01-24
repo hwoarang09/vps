@@ -15,7 +15,8 @@
     "requestDistanceFromMergingStr": 5.1,
     "waitDistanceFromMergingCurve": 0,
     "requestDistanceFromMergingCurve": 1,
-    "grantStrategy": "BATCH"
+    "grantStrategy": "BATCH",
+    "deadlockZoneStrategy": "BRANCH_FIFO"
   },
   "vehicle": {
     "body": {

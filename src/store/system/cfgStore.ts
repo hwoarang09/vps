@@ -490,11 +490,14 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       const edgeStore = useEdgeStore.getState();
       edgeStore.setEdges(edges);
 
-      // 7. Update node topology
+      // 7. Update node topology (merge/diverge + deadlock zone detection)
       const calculatedEdges = edgeStore.edges;
       nodeStore.updateTopology(calculatedEdges);
 
-      // 8. Load stations to stationStore (if data exists)
+      // 8. Update edge deadlock zone flags (after node topology is ready)
+      edgeStore.updateDeadlockZoneFlags();
+
+      // 9. Load stations to stationStore (if data exists)
       let stations: any[] = [];
       if (stationRawData.length > 0) {
         const stationStore = useStationStore.getState();

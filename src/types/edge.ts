@@ -90,4 +90,22 @@ export interface Edge {
    * (toNodeIsMerge가 True면 length > 1, 자기 자신 포함)
    */
   prevEdgeIndices?: number[];
+
+  // ============================================================================
+  // [6] DEADLOCK ZONE FLAGS
+  // ============================================================================
+  /**
+   * 데드락 존 내부 edge인지 (분기점 → 합류점)
+   */
+  isDeadlockZoneInside?: boolean;
+
+  /**
+   * 데드락 존으로 향하는 edge인지 (toNode가 데드락 분기점)
+   */
+  isDeadlockZoneEntry?: boolean;
+
+  /**
+   * 관련 데드락 존 ID
+   */
+  deadlockZoneId?: number;
 }

@@ -75,6 +75,7 @@ export interface MergeTarget {
   distanceToMerge: number;  // 현재 위치에서 합류점까지의 누적 거리
   requestDistance: number;  // lock 요청 거리 (설정값)
   waitDistance: number;     // 대기 거리 (설정값)
+  isDeadlockMerge: boolean; // 데드락 유발 합류점인지
 }
 
 /** Next Edge 오프셋 배열 */
@@ -90,6 +91,7 @@ const NEXT_EDGE_OFFSETS = [
  * 경로를 따라가면서 모든 합류점 찾기
  * - 현재 위치에서 합류점까지의 누적 거리 계산
  * - 직선/곡선 합류 타입 결정
+ * - BRANCH_FIFO: 데드락 합류점은 존 내부 edge에서만 요청 가능
  */
 export function findAllMergeTargets(
   lockMgr: LockMgr,
@@ -100,19 +102,33 @@ export function findAllMergeTargets(
   ptr: number
 ): MergeTarget[] {
   const targets: MergeTarget[] = [];
+  const isBranchFifo = lockMgr.getDeadlockZoneStrategy() === 'BRANCH_FIFO';
 
   // 현재 edge 남은 거리
   let accumulatedDist = currentEdge.distance * (1 - currentRatio);
 
   // 1. currentEdge.tn 확인 (직선 합류)
   if (lockMgr.isMergeNode(currentEdge.to_node)) {
+    const isDeadlockMerge = lockMgr.isDeadlockZoneNode(currentEdge.to_node);
+
+    // BRANCH_FIFO: 데드락 합류점은 isDeadlockZoneInside edge에서만 요청
+    let requestDistance = lockMgr.getRequestDistanceFromMergingStr();
+    if (isDeadlockMerge && isBranchFifo) {
+      if (currentEdge.isDeadlockZoneInside) {
+        requestDistance = 0; // 분기점 통과 후 즉시 요청 (edge 끝에서)
+      } else {
+        requestDistance = Infinity; // 요청하지 않음 (아직 분기점 진입 전)
+      }
+    }
+
     targets.push({
       type: 'STRAIGHT',
       mergeNode: currentEdge.to_node,
-      requestEdge: currentEdge.edge_name,  // 현재 edge가 merge node로 직접 들어감
+      requestEdge: currentEdge.edge_name,
       distanceToMerge: accumulatedDist,
-      requestDistance: lockMgr.getRequestDistanceFromMergingStr(),
+      requestDistance,
       waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
+      isDeadlockMerge,
     });
   }
 
@@ -126,28 +142,50 @@ export function findAllMergeTargets(
 
     // 곡선이고 tn이 합류점이면 → 곡선 합류
     if (nextEdge.vos_rail_type !== EdgeType.LINEAR && lockMgr.isMergeNode(nextEdge.to_node)) {
-      // e8 곡선 합류 디버그 로그
-      if (nextEdge.edge_name === 'e8') {
-        devLog.debug(`[MERGE_TARGET] 곡선 합류 타겟 발견: currentEdge=${currentEdge.edge_name}, nextEdge=e8, mergeNode=${nextEdge.to_node}, distanceToMerge=${accumulatedDist.toFixed(2)}, requestDist=${lockMgr.getRequestDistanceFromMergingCurve()}`);
+      const isDeadlockMerge = lockMgr.isDeadlockZoneNode(nextEdge.to_node);
+
+      // BRANCH_FIFO: 데드락 합류점은 isDeadlockZoneInside edge에서만 요청
+      let requestDistance = lockMgr.getRequestDistanceFromMergingCurve();
+      if (isDeadlockMerge && isBranchFifo) {
+        if (nextEdge.isDeadlockZoneInside) {
+          requestDistance = 0;
+        } else {
+          requestDistance = Infinity;
+        }
       }
+
       targets.push({
         type: 'CURVE',
         mergeNode: nextEdge.to_node,
-        requestEdge: nextEdge.edge_name,  // 곡선 edge가 merge node로 들어감
-        distanceToMerge: accumulatedDist, // 곡선의 fn까지 거리 (현재 edge 끝까지 거리)
-        requestDistance: lockMgr.getRequestDistanceFromMergingCurve(),
+        requestEdge: nextEdge.edge_name,
+        distanceToMerge: accumulatedDist,
+        requestDistance,
         waitDistance: lockMgr.getWaitDistanceFromMergingCurve(),
+        isDeadlockMerge,
       });
     }
     // 직선이고 tn이 합류점이면 → 직선 합류
     else if (lockMgr.isMergeNode(nextEdge.to_node)) {
+      const isDeadlockMerge = lockMgr.isDeadlockZoneNode(nextEdge.to_node);
+
+      // BRANCH_FIFO: 데드락 합류점은 isDeadlockZoneInside edge에서만 요청
+      let requestDistance = lockMgr.getRequestDistanceFromMergingStr();
+      if (isDeadlockMerge && isBranchFifo) {
+        if (nextEdge.isDeadlockZoneInside) {
+          requestDistance = 0;
+        } else {
+          requestDistance = Infinity;
+        }
+      }
+
       targets.push({
         type: 'STRAIGHT',
         mergeNode: nextEdge.to_node,
-        requestEdge: nextEdge.edge_name,  // 직선 edge가 merge node로 들어감
-        distanceToMerge: accumulatedDist + nextEdge.distance, // edge 끝까지 거리
-        requestDistance: lockMgr.getRequestDistanceFromMergingStr(),
+        requestEdge: nextEdge.edge_name,
+        distanceToMerge: accumulatedDist + nextEdge.distance,
+        requestDistance,
         waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
+        isDeadlockMerge,
       });
     }
 
@@ -160,11 +198,15 @@ export function findAllMergeTargets(
 /**
  * Lock 요청 시점 판단
  * - 합류점까지의 누적 거리가 requestDistance 이하일 때 요청
+ * - requestDistance가 Infinity면 요청하지 않음 (BRANCH_FIFO에서 사용)
  */
 export function shouldRequestLockNow(
   distanceToMerge: number,
   requestDistance: number
 ): boolean {
+  if (!Number.isFinite(requestDistance)) {
+    return false; // Infinity면 요청하지 않음 (아직 분기점 진입 전)
+  }
   if (requestDistance < 0) {
     return true;
   }

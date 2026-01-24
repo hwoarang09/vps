@@ -54,4 +54,22 @@ export interface Node {
    * 이 노드에서 출발하는 엣지들의 인덱스 목록 (Store 기준)
    */
   outgoingEdgeIndices?: number[];
+
+  // ============================================================================
+  // [4] DEADLOCK ZONE DATA (Derived / Calculated)
+  // ============================================================================
+  /**
+   * 데드락 유발 합류점인지 (순환 구조 내 상호 도달 가능한 merge node)
+   */
+  isDeadlockMergeNode?: boolean;
+
+  /**
+   * 데드락 유발 분기점인지 (데드락 합류점 직전 노드)
+   */
+  isDeadlockBranchNode?: boolean;
+
+  /**
+   * 속한 데드락 존 ID (같은 ID면 같은 순환 구조)
+   */
+  deadlockZoneId?: number;
 }

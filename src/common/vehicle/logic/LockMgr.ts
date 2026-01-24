@@ -2,7 +2,7 @@
 // Shared LockMgr for vehicleArrayMode and shmSimulator
 
 import type { Edge } from "@/types/edge";
-import { getLockWaitDistanceFromMergingStr, getLockRequestDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve, getLockRequestDistanceFromMergingCurve, getLockGrantStrategy, type GrantStrategy } from "@/config/simulationConfig";
+import { getLockWaitDistanceFromMergingStr, getLockRequestDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve, getLockRequestDistanceFromMergingCurve, getLockGrantStrategy, getDeadlockZoneStrategy, type GrantStrategy, type DeadlockZoneStrategy } from "@/config/simulationConfig";
 import { devLog } from "@/logger/DevLogger";
 
 /**
@@ -20,10 +20,22 @@ export interface LockConfig {
  */
 export interface LockPolicy {
   grantStrategy: GrantStrategy;
+  deadlockZoneStrategy?: DeadlockZoneStrategy;
 }
 
 // Rule C.1: Use export...from syntax for re-exports
-export type { GrantStrategy } from "@/config/simulationConfig";
+export type { GrantStrategy, DeadlockZoneStrategy } from "@/config/simulationConfig";
+
+/**
+ * 데드락 존 정보
+ * 순환 구조에서 상호 도달 가능한 합류점들을 그룹으로 관리
+ */
+export interface DeadlockZone {
+  /** 존에 포함된 합류점 노드들 */
+  nodes: Set<string>;
+  /** 관련 분기 노드들 (합류점 직전 노드) */
+  branchNodes: Set<string>;
+}
 
 // Ring buffer for O(1) enqueue/dequeue
 export class RingBuffer<T> {
@@ -335,9 +347,16 @@ export class LockMgr {
   private lockWaitDistanceFromMergingCurve: number;
   private lockRequestDistanceFromMergingCurve: number;
   private strategyType: GrantStrategy;
+  private deadlockZoneStrategyType: DeadlockZoneStrategy;
   // Rule D.1: Add readonly modifier - only assigned in constructor
   private readonly batchSize: number;
   private readonly passLimit: number;
+
+  // 데드락 존 관련 필드 (Edge에서 읽어온 정보)
+  /** 데드락 유발 노드 집합 (빠른 조회용) */
+  private readonly deadlockZoneNodes: Set<string> = new Set();
+  /** 데드락 존 정보 (그룹별) */
+  private readonly deadlockZones: DeadlockZone[] = [];
 
   constructor(policy?: LockPolicy) {
     // 기본값은 전역 config에서 가져옴
@@ -346,9 +365,10 @@ export class LockMgr {
     this.lockWaitDistanceFromMergingCurve = getLockWaitDistanceFromMergingCurve();
     this.lockRequestDistanceFromMergingCurve = getLockRequestDistanceFromMergingCurve();
     this.strategyType = policy?.grantStrategy ?? getLockGrantStrategy();
+    this.deadlockZoneStrategyType = policy?.deadlockZoneStrategy ?? getDeadlockZoneStrategy();
     this.batchSize = 5; // 동시에 grant 가능한 최대 대수
     this.passLimit = 3; // 전환 체크 기준 (이만큼 통과하면 다른 edge 체크)
-    devLog.info(`[LockMgr] strategyType=${this.strategyType}`);
+    devLog.info(`[LockMgr] strategyType=${this.strategyType}, deadlockZoneStrategy=${this.deadlockZoneStrategyType}`);
   }
 
   /**
@@ -367,7 +387,10 @@ export class LockMgr {
   setLockPolicy(policy: LockPolicy) {
     const prev = this.strategyType;
     this.strategyType = policy.grantStrategy;
-    devLog.info(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}`);
+    if (policy.deadlockZoneStrategy) {
+      this.deadlockZoneStrategyType = policy.deadlockZoneStrategy;
+    }
+    devLog.info(`[LockMgr] setLockPolicy: ${prev} -> ${policy.grantStrategy}, deadlockZone=${this.deadlockZoneStrategyType}`);
 
     // BATCH 전략으로 변경 시 기존 node들에 대해 controller 생성
     if (this.strategyType === 'BATCH' && prev !== 'BATCH') {
@@ -400,7 +423,17 @@ export class LockMgr {
    * 현재 lock 정책 반환
    */
   getLockPolicy(): LockPolicy {
-    return { grantStrategy: this.strategyType };
+    return {
+      grantStrategy: this.strategyType,
+      deadlockZoneStrategy: this.deadlockZoneStrategyType,
+    };
+  }
+
+  /**
+   * 현재 deadlockZoneStrategy 반환
+   */
+  getDeadlockZoneStrategy(): DeadlockZoneStrategy {
+    return this.deadlockZoneStrategyType;
   }
 
   /**
@@ -427,13 +460,22 @@ export class LockMgr {
   reset() {
     this.lockTable = {};
     this.batchControllers.clear();
+    this.deadlockZoneNodes.clear();
+    this.deadlockZones.length = 0;
     // 설정값은 유지 (reset은 테이블만 초기화)
   }
 
   initFromEdges(edges: Edge[]) {
     this.lockTable = {};
     this.batchControllers.clear();
+    this.deadlockZoneNodes.clear();
+    this.deadlockZones.length = 0;
+
     const incomingEdgesByNode = new Map<string, string[]>();
+
+    // 데드락 존 정보 추출용
+    const zoneIdToMergeNodes = new Map<number, Set<string>>();
+    const zoneIdToBranchNodes = new Map<number, Set<string>>();
 
     for (const edge of edges) {
       const toNode = edge.to_node;
@@ -443,8 +485,39 @@ export class LockMgr {
       } else {
         incomingEdgesByNode.set(toNode, [edge.edge_name]);
       }
+
+      // Edge에서 데드락 존 정보 추출 (맵 파싱 시점에 계산됨)
+      if (edge.isDeadlockZoneInside && edge.deadlockZoneId !== undefined) {
+        // to_node는 데드락 합류점
+        if (!zoneIdToMergeNodes.has(edge.deadlockZoneId)) {
+          zoneIdToMergeNodes.set(edge.deadlockZoneId, new Set());
+        }
+        zoneIdToMergeNodes.get(edge.deadlockZoneId)!.add(edge.to_node);
+        this.deadlockZoneNodes.add(edge.to_node);
+
+        // from_node는 데드락 분기점
+        if (!zoneIdToBranchNodes.has(edge.deadlockZoneId)) {
+          zoneIdToBranchNodes.set(edge.deadlockZoneId, new Set());
+        }
+        zoneIdToBranchNodes.get(edge.deadlockZoneId)!.add(edge.from_node);
+      }
     }
 
+    // 데드락 존 구성
+    for (const [zoneId, mergeNodes] of zoneIdToMergeNodes) {
+      const branchNodes = zoneIdToBranchNodes.get(zoneId) || new Set();
+      this.deadlockZones.push({
+        nodes: mergeNodes,
+        branchNodes,
+      });
+      devLog.info(`[LockMgr] Deadlock zone ${zoneId}: merges=[${[...mergeNodes].join(', ')}], branches=[${[...branchNodes].join(', ')}]`);
+    }
+
+    if (this.deadlockZoneNodes.size > 0) {
+      devLog.info(`[LockMgr] Total deadlock zone nodes: ${this.deadlockZoneNodes.size}, zones: ${this.deadlockZones.length}`);
+    }
+
+    // 합류점(merge node) 등록
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
@@ -467,6 +540,32 @@ export class LockMgr {
         this.batchControllers.set(mergeName, new BatchController(this.batchSize, this.passLimit));
       }
     }
+  }
+
+  /**
+   * 특정 노드가 데드락 유발 존에 포함되는지 확인
+   */
+  isDeadlockZoneNode(nodeName: string): boolean {
+    return this.deadlockZoneNodes.has(nodeName);
+  }
+
+  /**
+   * 데드락 존 정보 반환
+   */
+  getDeadlockZones(): DeadlockZone[] {
+    return this.deadlockZones;
+  }
+
+  /**
+   * 특정 노드가 속한 데드락 존의 분기 노드들 반환
+   */
+  getBranchNodesForDeadlockZone(nodeName: string): Set<string> | undefined {
+    for (const zone of this.deadlockZones) {
+      if (zone.nodes.has(nodeName)) {
+        return zone.branchNodes;
+      }
+    }
+    return undefined;
   }
 
   getTable() {

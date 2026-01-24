@@ -4,6 +4,9 @@ import type { SimulationConfig } from "@/shmSimulator/types";
 /** Lock 승인 전략 타입 */
 export type GrantStrategy = 'FIFO' | 'BATCH';
 
+/** 데드락 존 전용 정책 타입 */
+export type DeadlockZoneStrategy = 'BRANCH_FIFO' | 'ZONE_YIELD';
+
 interface SimulationConfigFile {
   simulation: {
     maxVehicles: number;
@@ -27,8 +30,10 @@ interface SimulationConfigFile {
     waitDistanceFromMergingCurve: number;
     /** 곡선에서 합류할 때 요청 시점 - fromNode 앞 거리 (m) */
     requestDistanceFromMergingCurve: number;
-    /** 승인 전략: FIFO 또는 BATCH */
+    /** 일반 합류점 승인 전략: FIFO 또는 BATCH */
     grantStrategy: GrantStrategy;
+    /** 데드락 유발 존 전용 정책: BRANCH_FIFO 또는 ZONE_YIELD */
+    deadlockZoneStrategy: DeadlockZoneStrategy;
   };
   vehicle: {
     body: {
@@ -100,6 +105,7 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         waitDistanceFromMergingCurve: 1.89,
         requestDistanceFromMergingCurve: 5.1,
         grantStrategy: 'FIFO',
+        deadlockZoneStrategy: 'BRANCH_FIFO',
       },
       vehicle: {
         body: {
@@ -164,6 +170,7 @@ let simulationConfig: SimulationConfigFile = {
     waitDistanceFromMergingCurve: 1.89,
     requestDistanceFromMergingCurve: 5.1,
     grantStrategy: 'FIFO',
+    deadlockZoneStrategy: 'BRANCH_FIFO',
   },
   vehicle: {
     body: {
@@ -250,6 +257,7 @@ export const getSimulationConfig = (): SimulationConfig => {
     lockWaitDistanceFromMergingCurve: simulationConfig.lock.waitDistanceFromMergingCurve,
     lockRequestDistanceFromMergingCurve: simulationConfig.lock.requestDistanceFromMergingCurve,
     lockGrantStrategy: simulationConfig.lock.grantStrategy,
+    lockDeadlockZoneStrategy: simulationConfig.lock.deadlockZoneStrategy,
   };
 };
 
@@ -291,6 +299,7 @@ export const getLockRequestDistanceFromMergingStr = () => simulationConfig.lock.
 export const getLockWaitDistanceFromMergingCurve = () => simulationConfig.lock.waitDistanceFromMergingCurve;
 export const getLockRequestDistanceFromMergingCurve = () => simulationConfig.lock.requestDistanceFromMergingCurve;
 export const getLockGrantStrategy = () => simulationConfig.lock.grantStrategy;
+export const getDeadlockZoneStrategy = () => simulationConfig.lock.deadlockZoneStrategy;
 
 // Individual getters - Log
 export const getDevLogEnabled = () => simulationConfig.log.devLogEnabled;
