@@ -264,51 +264,49 @@ export class TransferMgr {
   }
 
   /**
-   * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
+   * Path buffer에서 next edges 읽기
    */
-  private fillNextEdges(ctx: FillNextEdgesContext): void {
-    const { data, ptr, firstNextEdgeIndex, edgeArray, vehicleLoopMap, edgeNameToIndex, mode, vehicleIndex } = ctx;
-    const nextEdgeOffsets = [
-      MovementData.NEXT_EDGE_0,
-      MovementData.NEXT_EDGE_1,
-      MovementData.NEXT_EDGE_2,
-      MovementData.NEXT_EDGE_3,
-      MovementData.NEXT_EDGE_4,
-    ];
+  private fillNextEdgesFromPathBuffer(
+    data: Float32Array,
+    ptr: number,
+    vehicleIndex: number,
+    nextEdgeOffsets: number[]
+  ): void {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+    const len = this.pathBufferFromAutoMgr![pathPtr + PATH_LEN];
 
-    // Path buffer가 있으면 직접 순차적으로 읽기
-    if (this.pathBufferFromAutoMgr && (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE)) {
-      const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-      const len = this.pathBufferFromAutoMgr[pathPtr + PATH_LEN];
-
-      const filledEdges: number[] = [];
-      for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
-        if (i < len) {
-          const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
-          data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 0 ? edgeIdx : -1;
-          filledEdges.push(edgeIdx >= 0 ? edgeIdx : -1);
-        } else {
-          data[ptr + nextEdgeOffsets[i]] = -1;
-          filledEdges.push(-1);
-        }
+    const filledEdges: number[] = [];
+    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+      if (i < len) {
+        const edgeIdx = this.pathBufferFromAutoMgr![pathPtr + PATH_EDGES_START + i];
+        data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 0 ? edgeIdx : -1;
+        filledEdges.push(edgeIdx >= 0 ? edgeIdx : -1);
+      } else {
+        data[ptr + nextEdgeOffsets[i]] = -1;
+        filledEdges.push(-1);
       }
-
-      data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
-      devLog.veh(vehicleIndex).debug(
-        `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}]`
-      );
-      return;
     }
 
-    // Path buffer가 없으면 기존 방식 사용
+    data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+    devLog.veh(vehicleIndex).debug(
+      `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}]`
+    );
+  }
+
+  /**
+   * Loop map에서 next edges 결정
+   */
+  private fillNextEdgesFromLoopMap(
+    ctx: FillNextEdgesContext,
+    nextEdgeOffsets: number[]
+  ): void {
+    const { data, ptr, firstNextEdgeIndex, edgeArray, vehicleLoopMap, edgeNameToIndex, mode, vehicleIndex } = ctx;
     let currentEdgeIdx = firstNextEdgeIndex;
 
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       if (i === 0) {
-        // 첫 번째는 이미 결정됨
         data[ptr + nextEdgeOffsets[i]] = firstNextEdgeIndex;
       } else {
-        // 이전 edge의 next edge 결정
         const prevEdge = edgeArray[currentEdgeIdx];
         if (!prevEdge) {
           data[ptr + nextEdgeOffsets[i]] = -1;
@@ -326,7 +324,6 @@ export class TransferMgr {
         data[ptr + nextEdgeOffsets[i]] = nextIdx;
 
         if (nextIdx === -1) {
-          // 더 이상 next edge 없음 - 나머지는 -1로 채움
           for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
             data[ptr + nextEdgeOffsets[j]] = -1;
           }
@@ -338,6 +335,29 @@ export class TransferMgr {
     }
 
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+  }
+
+  /**
+   * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
+   */
+  private fillNextEdges(ctx: FillNextEdgesContext): void {
+    const { data, ptr, mode, vehicleIndex } = ctx;
+    const nextEdgeOffsets = [
+      MovementData.NEXT_EDGE_0,
+      MovementData.NEXT_EDGE_1,
+      MovementData.NEXT_EDGE_2,
+      MovementData.NEXT_EDGE_3,
+      MovementData.NEXT_EDGE_4,
+    ];
+
+    const usePathBuffer = this.pathBufferFromAutoMgr &&
+      (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE);
+
+    if (usePathBuffer) {
+      this.fillNextEdgesFromPathBuffer(data, ptr, vehicleIndex, nextEdgeOffsets);
+    } else {
+      this.fillNextEdgesFromLoopMap(ctx, nextEdgeOffsets);
+    }
   }
 
   private determineNextEdge(
