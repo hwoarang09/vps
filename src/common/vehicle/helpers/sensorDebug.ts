@@ -1,7 +1,6 @@
 // common/vehicle/helpers/sensorDebug.ts
 
 import {
-  SensorPoint,
   SENSOR_DATA_SIZE,
   SENSOR_POINT_SIZE,
   type ISensorPointArray,

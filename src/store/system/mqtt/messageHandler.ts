@@ -85,10 +85,9 @@ const routeMessage = (topic: string, message: unknown): void => {
   // Check if this is for transferMgr
   if (parsed.receiver === "transferMgr") {
     handleTransferMgrMessage(parsed.sender, parsed.service, message);
-    return;
   }
 
-  // Log unhandled receivers
+  // Other receivers can be added here with else-if
 };
 
 /**

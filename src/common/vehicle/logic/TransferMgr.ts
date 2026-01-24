@@ -28,6 +28,18 @@ export type VehicleLoop = {
   edgeSequence: string[];
 };
 
+/** fillNextEdges Context */
+interface FillNextEdgesContext {
+  data: Float32Array;
+  ptr: number;
+  firstNextEdgeIndex: number;
+  edgeArray: Edge[];
+  vehicleLoopMap: Map<number, VehicleLoop>;
+  edgeNameToIndex: Map<string, number>;
+  mode: TransferMode;
+  vehicleIndex: number;
+}
+
 export interface IVehicleDataArray {
   getData(): Float32Array;
 }
@@ -237,16 +249,16 @@ export class TransferMgr {
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
       } else {
         // 5개의 next edge를 채우기
-        this.fillNextEdges(
+        this.fillNextEdges({
           data,
           ptr,
-          nextEdgeIndex,
+          firstNextEdgeIndex: nextEdgeIndex,
           edgeArray,
           vehicleLoopMap,
           edgeNameToIndex,
           mode,
-          vehId
-        );
+          vehicleIndex: vehId,
+        });
       }
     }
   }
@@ -254,16 +266,8 @@ export class TransferMgr {
   /**
    * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
    */
-  private fillNextEdges(
-    data: Float32Array,
-    ptr: number,
-    firstNextEdgeIndex: number,
-    edgeArray: Edge[],
-    vehicleLoopMap: Map<number, VehicleLoop>,
-    edgeNameToIndex: Map<string, number>,
-    mode: TransferMode,
-    vehicleIndex: number
-  ): void {
+  private fillNextEdges(ctx: FillNextEdgesContext): void {
+    const { data, ptr, firstNextEdgeIndex, edgeArray, vehicleLoopMap, edgeNameToIndex, mode, vehicleIndex } = ctx;
     const nextEdgeOffsets = [
       MovementData.NEXT_EDGE_0,
       MovementData.NEXT_EDGE_1,
@@ -466,6 +470,37 @@ export class TransferMgr {
 
   // --- Helper Methods ---
 
+  /**
+   * Path 연결성 검증 및 edge indices 반환
+   * @returns edge indices 배열 또는 연결이 끊긴 경우 null
+   */
+  private validatePathConnectivity(
+    path: Array<{ edgeId: string; targetRatio?: number }>,
+    currentEdge: Edge,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>
+  ): number[] | null {
+    let prevEdge = currentEdge;
+    const edgeIndices: number[] = [];
+
+    for (const pathItem of path) {
+      const pathEdgeIndex = edgeNameToIndex.get(pathItem.edgeId);
+
+      if (pathEdgeIndex === undefined) {
+        return null;
+      }
+
+      if (!prevEdge.nextEdgeIndices?.includes(pathEdgeIndex)) {
+        return null;
+      }
+
+      edgeIndices.push(pathEdgeIndex);
+      prevEdge = edgeArray[pathEdgeIndex];
+    }
+
+    return edgeIndices;
+  }
+
   private validateCommandData(
     vehicleDataArray: IVehicleDataArray | undefined,
     edgeArray: Edge[] | undefined,
@@ -490,23 +525,9 @@ export class TransferMgr {
     this.reservedNextEdges.delete(vehId);
 
     // Validate path connectivity
-    let prevEdge = currentEdge;
-    const edgeIndices: number[] = [];
-
-    for (const pathItem of path) {
-      const pathEdgeId = pathItem.edgeId;
-      const pathEdgeIndex = edgeNameToIndex.get(pathEdgeId);
-
-      if (pathEdgeIndex === undefined) {
-        return;
-      }
-
-      if (!prevEdge.nextEdgeIndices?.includes(pathEdgeIndex)) {
-        return;
-      }
-
-      edgeIndices.push(pathEdgeIndex);
-      prevEdge = edgeArray[pathEdgeIndex];
+    const edgeIndices = this.validatePathConnectivity(path, currentEdge, edgeArray, edgeNameToIndex);
+    if (!edgeIndices) {
+      return;
     }
 
     // Write to path buffer

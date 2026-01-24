@@ -61,6 +61,55 @@ export interface EdgeTransitionParams {
   lockMgr?: IEdgeTransitionLockMgr;
 }
 
+/** Lock 상태 체크 결과 */
+interface LockCheckResult {
+  blocked: boolean;
+}
+
+/**
+ * Lock 기반 전환 차단 여부 체크
+ * @returns blocked=true면 전환 불가
+ */
+function checkLockBlocking(
+  lockMgr: IEdgeTransitionLockMgr | undefined,
+  currentEdge: Edge,
+  nextEdgeIndex: number,
+  edgeArray: Edge[],
+  vehicleIndex: number,
+  trafficState: number
+): LockCheckResult {
+  if (!lockMgr) {
+    // 하위 호환: lockMgr 없으면 기존 WAITING 전역 체크
+    return { blocked: trafficState === TrafficState.WAITING };
+  }
+
+  // 1. 현재 edge의 to_node가 merge node이고 lock이 없으면 block
+  if (lockMgr.isMergeNode(currentEdge.to_node)) {
+    if (!lockMgr.checkGrant(currentEdge.to_node, vehicleIndex)) {
+      devLog.veh(vehicleIndex).debug(
+        `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted`
+      );
+      return { blocked: true };
+    }
+  }
+
+  // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
+  if (nextEdgeIndex >= 0 && nextEdgeIndex < edgeArray.length) {
+    const nextEdge = edgeArray[nextEdgeIndex];
+    if (nextEdge?.vos_rail_type !== EdgeType.LINEAR && lockMgr.isMergeNode(nextEdge.to_node)) {
+      if (!lockMgr.checkGrant(nextEdge.to_node, vehicleIndex)) {
+        const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
+        devLog.veh(vehicleIndex).debug(
+          `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdge.edge_name}`
+        );
+        return { blocked: true };
+      }
+    }
+  }
+
+  return { blocked: false };
+}
+
 /**
  * Zero-GC: Handles edge transition, writes result to target object.
  * @param params - The input parameters for edge transition logic
@@ -120,48 +169,10 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     );
 
     // Edge transition 가능 여부 체크
-    // lockMgr가 있으면: 현재 edge의 to_node에 대한 lock만 체크 (다른 merge node의 WAITING과 무관)
-    // lockMgr가 없으면: 기존 WAITING 전역 체크 (하위 호환)
-    if (lockMgr) {
-      // 1. 현재 edge의 to_node가 merge node이고 lock이 없으면 block
-      if (lockMgr.isMergeNode(currentEdge.to_node)) {
-        const isGranted = lockMgr.checkGrant(currentEdge.to_node, vehicleIndex);
-        if (!isGranted) {
-          devLog.veh(vehicleIndex).debug(
-            `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted (other merges may have lock)`
-          );
-          currentRatio = 1;
-          break;
-        }
-      }
-
-      // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
-      // (곡선 위에서는 감속 불가능하므로, 곡선 진입 전에 대기해야 함)
-      // - 직선→곡선→합류: 직선 끝에서 대기
-      // - 곡선→곡선→합류: 첫 곡선 끝에서 대기
-      if (nextEdgeIndex >= 0 && nextEdgeIndex < edgeArray.length) {
-        const nextEdgeForCheck = edgeArray[nextEdgeIndex];
-        if (nextEdgeForCheck &&
-            nextEdgeForCheck.vos_rail_type !== EdgeType.LINEAR &&
-            lockMgr.isMergeNode(nextEdgeForCheck.to_node)) {
-          const isGranted = lockMgr.checkGrant(nextEdgeForCheck.to_node, vehicleIndex);
-          if (!isGranted) {
-            const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
-            devLog.veh(vehicleIndex).debug(
-              `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdgeForCheck.edge_name}, mergeNode=${nextEdgeForCheck.to_node}`
-            );
-            currentRatio = 1;
-            break;
-          }
-        }
-      }
-      // Note: 직선→직선→합류 케이스는 processMergeLogicInline의 되돌림 로직에서 처리
-    } else {
-      // 하위 호환: lockMgr 없으면 기존 WAITING 전역 체크
-      if (trafficState === TrafficState.WAITING) {
-        currentRatio = 1;
-        break;
-      }
+    const lockCheck = checkLockBlocking(lockMgr, currentEdge, nextEdgeIndex, edgeArray, vehicleIndex, trafficState);
+    if (lockCheck.blocked) {
+      currentRatio = 1;
+      break;
     }
 
     if (nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {
@@ -249,9 +260,72 @@ function updateSensorPresetForEdge(
   data[ptr + SensorData.PRESET_IDX] = presetIdx;
 }
 
+/** PathBuffer shift 결과 */
+interface PathBufferShiftResult {
+  beforeLen: number;
+  afterLen: number;
+  beforeEdges: number[];
+  afterEdges: number[];
+}
+
+/** PathBuffer shift 수행 */
+function shiftPathBuffer(
+  pathBuffer: Int32Array,
+  vehicleIndex: number
+): PathBufferShiftResult {
+  const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+  const beforeLen = pathBuffer[pathPtr + PATH_LEN];
+  const beforeEdges: number[] = [];
+  const afterEdges: number[] = [];
+
+  if (beforeLen <= 0) {
+    return { beforeLen, afterLen: 0, beforeEdges, afterEdges };
+  }
+
+  // shift 전 상태 기록
+  for (let i = 0; i < Math.min(beforeLen, 10); i++) {
+    beforeEdges.push(pathBuffer[pathPtr + PATH_EDGES_START + i]);
+  }
+
+  // 실제 shift
+  for (let i = 0; i < beforeLen - 1; i++) {
+    pathBuffer[pathPtr + PATH_EDGES_START + i] = pathBuffer[pathPtr + PATH_EDGES_START + i + 1];
+  }
+  pathBuffer[pathPtr + PATH_LEN] = beforeLen - 1;
+  const afterLen = beforeLen - 1;
+
+  // shift 후 상태 기록
+  for (let i = 0; i < Math.min(afterLen, 10); i++) {
+    afterEdges.push(pathBuffer[pathPtr + PATH_EDGES_START + i]);
+  }
+
+  return { beforeLen, afterLen, beforeEdges, afterEdges };
+}
+
+/** 새 NEXT_EDGE_4 값 결정 */
+function getNewLastEdge(
+  pathBuffer: Int32Array | null | undefined,
+  vehicleIndex: number,
+  afterPathLen: number,
+  edgeArray: Edge[]
+): number {
+  if (!pathBuffer || afterPathLen <= 0) return -1;
+
+  const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+  const pathOffset = NEXT_EDGE_COUNT - 1; // = 4
+
+  if (pathOffset >= afterPathLen) return -1;
+
+  const candidateEdgeIdx = pathBuffer[pathPtr + PATH_EDGES_START + pathOffset];
+  if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {
+    return candidateEdgeIdx;
+  }
+
+  return -1;
+}
+
 /**
  * pathBuffer와 nextEdges를 동시에 shift하고, NEXT_EDGE_4를 pathBuffer에서 채움
- * Edge transition 성공 시에만 호출 (NEXT_EDGE_0 사용 후)
  */
 function shiftAndRefillNextEdges(
   data: Float32Array,
@@ -260,7 +334,6 @@ function shiftAndRefillNextEdges(
   pathBufferFromAutoMgr: Int32Array | null | undefined,
   edgeArray: Edge[]
 ): void {
-  // 이전 상태 기록
   const beforeNextEdges = [
     data[ptr + MovementData.NEXT_EDGE_0],
     data[ptr + MovementData.NEXT_EDGE_1],
@@ -269,61 +342,23 @@ function shiftAndRefillNextEdges(
     data[ptr + MovementData.NEXT_EDGE_4],
   ];
 
-  let beforePathLen = -1;
-  let afterPathLen = -1;
-  let beforePathEdges: number[] = [];
-  let afterPathEdges: number[] = [];
-
-  // 1. pathBuffer shift (맨 앞 edge 제거)
+  // 1. pathBuffer shift
+  let shiftResult: PathBufferShiftResult = { beforeLen: -1, afterLen: -1, beforeEdges: [], afterEdges: [] };
   if (pathBufferFromAutoMgr) {
-    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    beforePathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
-
-    if (beforePathLen > 0) {
-      // shift 전 상태 기록
-      for (let i = 0; i < Math.min(beforePathLen, 10); i++) {
-        beforePathEdges.push(pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]);
-      }
-
-      // 실제 shift: 모든 edge를 한 칸 앞으로
-      for (let i = 0; i < beforePathLen - 1; i++) {
-        pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] =
-          pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i + 1];
-      }
-      // 길이 감소
-      pathBufferFromAutoMgr[pathPtr + PATH_LEN] = beforePathLen - 1;
-      afterPathLen = beforePathLen - 1;
-
-      // shift 후 상태 기록
-      for (let i = 0; i < Math.min(afterPathLen, 10); i++) {
-        afterPathEdges.push(pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]);
-      }
-    } else {
-      afterPathLen = 0;
-    }
+    shiftResult = shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
   }
 
-  // 2. nextEdges shift: 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 4
+  // 2. nextEdges shift
   data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
   data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
   data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
   data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
 
-  // 3. NEXT_EDGE_4를 pathBuffer[4]에서 채우기 (shift 후 기준)
-  let newLastEdge = -1;
-  if (pathBufferFromAutoMgr && afterPathLen > 0) {
-    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    const pathOffset = NEXT_EDGE_COUNT - 1; // = 4
-    if (pathOffset < afterPathLen) {
-      const candidateEdgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + pathOffset];
-      if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {
-        newLastEdge = candidateEdgeIdx;
-      }
-    }
-  }
+  // 3. NEXT_EDGE_4 채우기
+  const newLastEdge = getNewLastEdge(pathBufferFromAutoMgr, vehicleIndex, shiftResult.afterLen, edgeArray);
   data[ptr + MovementData.NEXT_EDGE_4] = newLastEdge;
 
-  // 로그: shift 결과
+  // 로그
   const afterNextEdges = [
     data[ptr + MovementData.NEXT_EDGE_0],
     data[ptr + MovementData.NEXT_EDGE_1],
@@ -332,7 +367,7 @@ function shiftAndRefillNextEdges(
     data[ptr + MovementData.NEXT_EDGE_4],
   ];
   devLog.veh(vehicleIndex).debug(
-    `[SHIFT] pathBuf: [${beforePathEdges.join(',')}](len=${beforePathLen}) → [${afterPathEdges.join(',')}](len=${afterPathLen}) | ` +
+    `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
     `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
   );
 

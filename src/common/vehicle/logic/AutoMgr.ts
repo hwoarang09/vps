@@ -156,29 +156,7 @@ export class AutoMgr {
       if (pathIndices && pathIndices.length > 0) {
         devLog.veh(vehId).debug(`[pathBuff] DIJKSTRA from=${currentEdgeIdx} to=${candidate.edgeIndex} result=[${pathIndices.slice(0, 10).join(',')}${pathIndices.length > 10 ? '...' : ''}] len=${pathIndices.length}`);
 
-        // 경로 변경 전에 새 경로에 없는 락 취소
-        if (lockMgr) {
-          this.cancelObsoleteLocks(vehId, pathIndices, edgeArray, lockMgr);
-        }
-
-        const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
-
-        // Assign
-        const command: VehicleCommand = {
-          path: pathCommand
-        };
-
-        this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
-
-        // Update Shared Memory for UI
-        const ptr = vehId * VEHICLE_DATA_SIZE;
-        const data = vehicleDataArray.getData();
-        if (data) {
-          data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex;
-          data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
-        }
-
-        transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
+        this.applyPathToVehicle(vehId, pathIndices, candidate, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
         return true;
       }
     }
@@ -188,6 +166,40 @@ export class AutoMgr {
 
   getDestinationInfo(vehId: number) {
     return this.vehicleDestinations.get(vehId);
+  }
+
+  /**
+   * 경로를 차량에 적용
+   */
+  private applyPathToVehicle(
+    vehId: number,
+    pathIndices: number[],
+    candidate: { name: string; edgeIndex: number },
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
+  ): void {
+    // 경로 변경 전에 새 경로에 없는 락 취소
+    if (lockMgr) {
+      this.cancelObsoleteLocks(vehId, pathIndices, edgeArray, lockMgr);
+    }
+
+    const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
+    const command: VehicleCommand = { path: pathCommand };
+
+    this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
+
+    // Update Shared Memory for UI
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+    const data = vehicleDataArray.getData();
+    if (data) {
+      data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex;
+      data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
+    }
+
+    transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
   }
 
   /**

@@ -83,7 +83,7 @@ export function checkMergePreBraking({
   }
 
   // 감속 필요 거리 계산
-  const deceleration = config.linearPreBrakeDeceleration ?? -2.0;
+  const deceleration = config.linearPreBrakeDeceleration ?? -2;
   const brakeDistance = calculateBrakeDistance(currentVelocity, 0, deceleration);
 
   devLog.veh(vehId).debug(

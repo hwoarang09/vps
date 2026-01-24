@@ -53,21 +53,20 @@ const VehicleTextRenderer: React.FC<Props> = ({
 }) => {
   const vehicleConfig = getVehicleRenderConfig();
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
+  const isVisible = vehicleConfig.text.visible;
 
-  // Check visibility flag from config
-  if (!vehicleConfig.text.visible) {
-    return null;
-  }
-
-  // 슬롯 데이터 계산 (Render Phase)
+  // 슬롯 데이터 계산 (Render Phase) - hooks는 항상 호출되어야 함
   const slotData = useMemo(() => {
+    if (!isVisible) return null;
     return buildVehicleSlotData(numVehicles, LABEL_LENGTH);
-  }, [numVehicles]);
+  }, [numVehicles, isVisible]);
 
   const instRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(CHAR_COUNT).fill(null));
 
-  // 렌더링 루프
+  // 렌더링 루프 - hooks는 항상 호출되어야 함
   useFrame(({ camera }) => {
+    // visibility 체크는 hook 내부에서
+    if (!isVisible) return;
     const D = slotData;
     if (!D || numVehicles === 0) return;
 
@@ -101,6 +100,11 @@ const VehicleTextRenderer: React.FC<Props> = ({
       isSharedMemory ? SHM_LAYOUT : ARRAY_LAYOUT
     );
   });
+
+  // Early return AFTER all hooks have been called
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <BaseInstancedText

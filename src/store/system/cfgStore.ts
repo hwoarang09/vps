@@ -173,7 +173,8 @@ const calculateEdgeRenderingPoints = (
     };
 
     return PointsCalculator.calculateRenderingPoints(edgeRowData);
-  } catch (error) {
+  } catch {
+    // Rendering points calculation failed - return empty array as fallback
     return [];
   }
 };
@@ -475,7 +476,8 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       try {
         const vehiclesContent = await loadCFGFile(mapFolder, "vehicles.cfg");
         vehicleConfigs = parseVehiclesCFG(vehiclesContent);
-      } catch (error) {
+      } catch {
+        // vehicles.cfg is optional - silently ignore if not found
       }
 
       // 5. Load and parse station.map (optional)
@@ -483,7 +485,8 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       try {
         const stationContent = await loadCFGFile(mapFolder, "station.map");
         stationRawData = parseStationMap(stationContent);
-      } catch (error) {
+      } catch {
+        // station.map is optional - silently ignore if not found
       }
 
       // 6. Set edges to store

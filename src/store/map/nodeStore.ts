@@ -58,7 +58,7 @@ function detectDeadlockZones(mergeNodes: string[], edges: Edge[]): DeadlockZone[
       if (nodeA === nodeB) continue;
       if (assignedNodes.has(nodeA) || assignedNodes.has(nodeB)) continue;
 
-      const pairKey = [nodeA, nodeB].sort().join('|');
+      const pairKey = [nodeA, nodeB].sort((a, b) => a.localeCompare(b)).join('|');
       if (processedPairs.has(pairKey)) continue;
       processedPairs.add(pairKey);
 
@@ -141,7 +141,6 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
 
     // 1단계: merge/diverge 계산
     const mergeNodes: string[] = [];
-    const nodeNameToNode = new Map<string, typeof nodes[0]>();
 
     const nodesWithBasicTopology = nodes.map(node => {
       const inCount = nodeIncomingCount.get(node.node_name) || 0;
@@ -152,26 +151,22 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
         mergeNodes.push(node.node_name);
       }
 
-      const updated = {
+      return {
         ...node,
         isMerge,
         isDiverge: outCount > 1,
         isTerminal: (inCount + outCount) === 1,
       };
-      nodeNameToNode.set(node.node_name, updated);
-      return updated;
     });
 
     // 2단계: 데드락 존 감지 (양방향 도달 가능한 merge node 쌍 찾기)
     const deadlockZones = detectDeadlockZones(mergeNodes, edges);
 
     // 3단계: 분기점 식별 (데드락 합류점 직전 노드)
-    const deadlockBranchNodes = new Set<string>();
     for (const zone of deadlockZones) {
       for (const mergeNode of zone.mergeNodes) {
         const fromNodes = nodeIncomingFromNodes.get(mergeNode) || [];
         for (const fromNode of fromNodes) {
-          deadlockBranchNodes.add(fromNode);
           zone.branchNodes.add(fromNode);
         }
       }

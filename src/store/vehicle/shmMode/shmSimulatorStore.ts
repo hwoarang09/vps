@@ -152,7 +152,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       }
     });
 
-    controller.onError((error) => {
+    controller.onError((_error) => {
+      // Error logged by MultiWorkerController internally
     });
 
     try {
@@ -211,7 +212,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       if (!controller.isLoggingEnabled()) {
         try {
           await controller.enableLogging("OPFS");
-        } catch (error) {
+        } catch {
+          // OPFS logging not available - continue without logging
         }
       }
 
@@ -244,7 +246,8 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       if (!controller.isLoggingEnabled()) {
         try {
           await controller.enableLogging("OPFS");
-        } catch (error) {
+        } catch {
+          // OPFS logging not available - continue without logging
         }
       }
 

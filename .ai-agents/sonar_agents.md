@@ -23,10 +23,56 @@
 1.  **No Negated Conditions in `else if`**: `else if` 블록에서 부정 조건(`!condition`)을 사용하지 마십시오. 긍정 조건(`condition`)을 먼저 처리하거나, 로직을 단순화하십시오.
     * *Bad*: `if (a) { ... } else if (!b) { ... }`
     * *Fix*: 부정 논리를 제거하고 로직 순서를 재정비하여 가독성을 높일 것.
-2.  **Loop Preference**: `.forEach()` 대신 **`for...of`**를 사용하십시오.
+2.  **Prefer Optional Chaining**: `obj && obj.property` 패턴 대신 **Optional Chaining (`?.`)**을 사용하십시오. 더 간결하고 가독성이 좋습니다.
+    * *Bad*: `if (controller && controller.state.currentBatchEdge === grantedEdge)`
+    * *Fix*: `if (controller?.state.currentBatchEdge === grantedEdge)`
+    * *Note*: 깊은 중첩 접근도 동일하게 적용 (`a && a.b && a.b.c` → `a?.b?.c`)
+3.  **Loop Preference**: `.forEach()` 대신 **`for...of`**를 사용하십시오.
     * *Reason*: 디버깅 용이성, `break/continue` 제어 가능, 성능 이점.
     * *Bad*: `items.forEach(item => ...)`
     * *Fix*: `for (const item of items) { ... }`
+4.  **No Lonely If in Else**: `else` 블록 안에 `if`문만 단독으로 있으면 **`else if`**로 병합하십시오.
+    * *Bad*:
+    ```typescript
+    if (condition1) {
+      // ...
+    } else {
+      if (condition2) {
+        // ...
+      }
+    }
+    ```
+    * *Fix*:
+    ```typescript
+    if (condition1) {
+      // ...
+    } else if (condition2) {
+      // ...
+    }
+    ```
+5.  **No Nested Ternary**: 중첩된 삼항연산자는 **헬퍼 함수**로 추출하십시오.
+    * *Bad*:
+    ```typescript
+    const prevStr = currentTrafficState === TrafficState.FREE ? 'FREE'
+      : currentTrafficState === TrafficState.ACQUIRED ? 'ACQUIRED'
+      : currentTrafficState === TrafficState.WAITING ? 'WAITING'
+      : `UNKNOWN(${currentTrafficState})`;
+    ```
+    * *Fix*:
+    ```typescript
+    function trafficStateToString(state: TrafficState): string {
+      switch (state) {
+        case TrafficState.FREE: return 'FREE';
+        case TrafficState.ACQUIRED: return 'ACQUIRED';
+        case TrafficState.WAITING: return 'WAITING';
+        default: return `UNKNOWN(${state})`;
+      }
+    }
+
+    const prevStr = trafficStateToString(currentTrafficState);
+    ```
+    * *Reason*: 가독성 향상, 디버깅 용이, 재사용 가능.
+    * *Note*: 단순한 삼항연산자 1단계(`a ? b : c`)는 허용. 2단계 이상 중첩 시 추출 필수.
 
 ### C. Module & Exports (모듈 관리)
 1.  **Re-export Syntax**: Import 후 다시 Export 하지 말고, `export ... from` 문법을 사용하십시오.
@@ -42,6 +88,61 @@
 1.  **No Object Stringification**: Error 객체를 `String()`이나 문자열 템플릿에 바로 넣지 마십시오.
     * *Bad*: `console.log(String(err))` -> `[object Object]` 출력됨.
     * *Fix*: `console.log(err.message)` 또는 적절한 에러 처리 유틸 사용.
+
+### F. Function Structure (함수 구조)
+1.  **Cognitive Complexity**: 함수의 인지 복잡도(Cognitive Complexity)는 **15 이하**로 유지하십시오.
+    * *Reason*: 복잡도가 높은 함수는 이해, 테스트, 유지보수가 어려움.
+    * *Fix*: 중첩된 조건문/반복문을 별도 함수로 추출하거나, early return 패턴을 사용하여 단순화.
+    * *Tip*: `if/else`, `for`, `while`, `switch`, `catch`, 삼항연산자, 논리연산자(`&&`, `||`) 중첩이 복잡도를 높임.
+
+2.  **Max Parameters (Context Object Pattern)**: 함수 파라미터는 **최대 7개**까지 허용됩니다. 초과 시 **Context Object** 패턴을 사용하십시오.
+    * *Bad*:
+    ```typescript
+    private fillNextEdges(
+      data: Float32Array,
+      ptr: number,
+      firstNextEdgeIndex: number,
+      edgeArray: Edge[],
+      vehicleLoopMap: Map<number, VehicleLoop>,
+      edgeNameToIndex: Map<string, number>,
+      mode: TransferMode,
+      vehicleIndex: number
+    ): void { ... }
+    ```
+    * *Fix*:
+    ```typescript
+    interface FillNextEdgesContext {
+      data: Float32Array;
+      ptr: number;
+      firstNextEdgeIndex: number;
+      edgeArray: Edge[];
+      vehicleLoopMap: Map<number, VehicleLoop>;
+      edgeNameToIndex: Map<string, number>;
+      mode: TransferMode;
+      vehicleIndex: number;
+    }
+
+    private fillNextEdges(ctx: FillNextEdgesContext): void { ... }
+
+    // 호출 시
+    this.fillNextEdges({
+      data,
+      ptr,
+      firstNextEdgeIndex,
+      edgeArray,
+      vehicleLoopMap,
+      edgeNameToIndex,
+      mode,
+      vehicleIndex,
+    });
+    ```
+    * *Reason*: 가독성 향상, 파라미터 순서 실수 방지, 확장 용이.
+
+### G. Literals & Formatting (리터럴 및 서식)
+1.  **No Zero Fraction**: 정수 값에 불필요한 `.0`을 붙이지 마십시오.
+    * *Bad*: `const deceleration = -2.0;`
+    * *Fix*: `const deceleration = -2;`
+    * *Note*: TypeScript에서 `number` 타입은 정수/실수 구분이 없으므로 `.0`은 의미 없는 노이즈.
 
 ---
 

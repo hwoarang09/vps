@@ -472,52 +472,75 @@ export class LockMgr {
     this.deadlockZones.length = 0;
 
     const incomingEdgesByNode = new Map<string, string[]>();
-
-    // 데드락 존 정보 추출용
     const zoneIdToMergeNodes = new Map<number, Set<string>>();
     const zoneIdToBranchNodes = new Map<number, Set<string>>();
 
+    // 1. Edge 정보 수집
     for (const edge of edges) {
-      const toNode = edge.to_node;
-      const edgeNames = incomingEdgesByNode.get(toNode);
-      if (edgeNames) {
-        edgeNames.push(edge.edge_name);
-      } else {
-        incomingEdgesByNode.set(toNode, [edge.edge_name]);
-      }
-
-      // Edge에서 데드락 존 정보 추출 (맵 파싱 시점에 계산됨)
-      if (edge.isDeadlockZoneInside && edge.deadlockZoneId !== undefined) {
-        // to_node는 데드락 합류점
-        if (!zoneIdToMergeNodes.has(edge.deadlockZoneId)) {
-          zoneIdToMergeNodes.set(edge.deadlockZoneId, new Set());
-        }
-        zoneIdToMergeNodes.get(edge.deadlockZoneId)!.add(edge.to_node);
-        this.deadlockZoneNodes.add(edge.to_node);
-
-        // from_node는 데드락 분기점
-        if (!zoneIdToBranchNodes.has(edge.deadlockZoneId)) {
-          zoneIdToBranchNodes.set(edge.deadlockZoneId, new Set());
-        }
-        zoneIdToBranchNodes.get(edge.deadlockZoneId)!.add(edge.from_node);
-      }
+      this.collectEdgeInfo(edge, incomingEdgesByNode, zoneIdToMergeNodes, zoneIdToBranchNodes);
     }
 
-    // 데드락 존 구성
+    // 2. 데드락 존 구성
+    this.buildDeadlockZones(zoneIdToMergeNodes, zoneIdToBranchNodes);
+
+    // 3. 합류점(merge node) 등록
+    this.registerMergeNodes(incomingEdgesByNode);
+  }
+
+  /** Edge 정보를 수집하여 맵에 추가 */
+  private collectEdgeInfo(
+    edge: Edge,
+    incomingEdgesByNode: Map<string, string[]>,
+    zoneIdToMergeNodes: Map<number, Set<string>>,
+    zoneIdToBranchNodes: Map<number, Set<string>>
+  ): void {
+    // Incoming edge 등록
+    const edgeNames = incomingEdgesByNode.get(edge.to_node);
+    if (edgeNames) {
+      edgeNames.push(edge.edge_name);
+    } else {
+      incomingEdgesByNode.set(edge.to_node, [edge.edge_name]);
+    }
+
+    // 데드락 존 정보 추출
+    if (!edge.isDeadlockZoneInside || edge.deadlockZoneId === undefined) {
+      return;
+    }
+
+    const zoneId = edge.deadlockZoneId;
+
+    // to_node는 데드락 합류점
+    if (!zoneIdToMergeNodes.has(zoneId)) {
+      zoneIdToMergeNodes.set(zoneId, new Set());
+    }
+    zoneIdToMergeNodes.get(zoneId)!.add(edge.to_node);
+    this.deadlockZoneNodes.add(edge.to_node);
+
+    // from_node는 데드락 분기점
+    if (!zoneIdToBranchNodes.has(zoneId)) {
+      zoneIdToBranchNodes.set(zoneId, new Set());
+    }
+    zoneIdToBranchNodes.get(zoneId)!.add(edge.from_node);
+  }
+
+  /** 데드락 존 구성 */
+  private buildDeadlockZones(
+    zoneIdToMergeNodes: Map<number, Set<string>>,
+    zoneIdToBranchNodes: Map<number, Set<string>>
+  ): void {
     for (const [zoneId, mergeNodes] of zoneIdToMergeNodes) {
       const branchNodes = zoneIdToBranchNodes.get(zoneId) || new Set();
-      this.deadlockZones.push({
-        nodes: mergeNodes,
-        branchNodes,
-      });
+      this.deadlockZones.push({ nodes: mergeNodes, branchNodes });
       devLog.info(`[LockMgr] Deadlock zone ${zoneId}: merges=[${[...mergeNodes].join(', ')}], branches=[${[...branchNodes].join(', ')}]`);
     }
 
     if (this.deadlockZoneNodes.size > 0) {
       devLog.info(`[LockMgr] Total deadlock zone nodes: ${this.deadlockZoneNodes.size}, zones: ${this.deadlockZones.length}`);
     }
+  }
 
-    // 합류점(merge node) 등록
+  /** 합류점(merge node) 등록 */
+  private registerMergeNodes(incomingEdgesByNode: Map<string, string[]>): void {
     for (const [mergeName, incomingEdgeNames] of incomingEdgesByNode.entries()) {
       if (incomingEdgeNames.length < 2) continue;
 
@@ -535,7 +558,6 @@ export class LockMgr {
         strategyState: {},
       };
 
-      // BATCH 전략인 경우 BatchController 생성
       if (this.strategyType === 'BATCH') {
         this.batchControllers.set(mergeName, new BatchController(this.batchSize, this.passLimit));
       }
@@ -793,60 +815,65 @@ export class LockMgr {
     const node = this.lockTable[nodeName];
     if (!node) return false;
 
-    // granted에서 확인 및 제거
+    // granted에서 취소 시도
+    if (this.cancelFromGranted(node, nodeName, vehId)) {
+      return true;
+    }
+
+    // requests에서 취소 시도
+    return this.cancelFromRequests(node, nodeName, vehId);
+  }
+
+  /** granted에서 락 취소 */
+  private cancelFromGranted(node: MergeLockNode, nodeName: string, vehId: number): boolean {
     const grantIdx = node.granted.findIndex(g => g.veh === vehId);
-    if (grantIdx !== -1) {
-      const grantedEdge = node.granted[grantIdx].edge;
-      devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${grantedEdge} (was granted)`);
+    if (grantIdx === -1) return false;
 
-      node.granted.splice(grantIdx, 1);
+    const grantedEdge = node.granted[grantIdx].edge;
+    devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${grantedEdge} (was granted)`);
 
-      // edgeQueue에서도 제거 (granted는 큐 맨 앞이므로 dequeue)
-      node.edgeQueues[grantedEdge]?.dequeue();
+    node.granted.splice(grantIdx, 1);
+    node.edgeQueues[grantedEdge]?.dequeue();
 
-      // BATCH 전략인 경우 controller 상태 업데이트
-      if (this.strategyType === 'BATCH') {
-        const controller = this.batchControllers.get(nodeName);
-        if (controller && controller.state.currentBatchEdge === grantedEdge) {
-          // 취소된 차량은 release 없이 사라지므로 batchReleasedCount 증가
-          controller.state.batchReleasedCount++;
-          devLog.debug(`[cancelLock] BATCH: adjusted batchReleasedCount for cancelled vehicle`);
-        }
+    // BATCH 전략인 경우 controller 상태 업데이트
+    if (this.strategyType === 'BATCH') {
+      const controller = this.batchControllers.get(nodeName);
+      if (controller?.state.currentBatchEdge === grantedEdge) {
+        controller.state.batchReleasedCount++;
+        devLog.debug(`[cancelLock] BATCH: adjusted batchReleasedCount for cancelled vehicle`);
       }
-
-      this.logNodeState(nodeName);
-      return true;
     }
 
-    // requests에서 확인 및 제거
+    this.logNodeState(nodeName);
+    return true;
+  }
+
+  /** requests에서 락 취소 */
+  private cancelFromRequests(node: MergeLockNode, nodeName: string, vehId: number): boolean {
     const reqIdx = node.requests.findIndex(r => r.vehId === vehId);
-    if (reqIdx !== -1) {
-      const requestEdge = node.requests[reqIdx].edgeName;
-      devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${requestEdge} (was pending)`);
+    if (reqIdx === -1) return false;
 
-      node.requests.splice(reqIdx, 1);
+    const requestEdge = node.requests[reqIdx].edgeName;
+    devLog.veh(vehId).debug(`[cancelLock] node=${nodeName} edge=${requestEdge} (was pending)`);
 
-      // edgeQueue에서 해당 vehId 제거 (pending은 큐 중간에 있을 수 있음)
-      // RingBuffer는 중간 제거가 O(n)이지만, 경로 변경은 드물게 발생
-      const queue = node.edgeQueues[requestEdge];
-      if (queue) {
-        // 새 큐로 재구성 (해당 vehId 제외)
-        const newQueue = new RingBuffer<number>();
-        const size = queue.size;
-        for (let i = 0; i < size; i++) {
-          const item = queue.dequeue();
-          if (item !== undefined && item !== vehId) {
-            newQueue.enqueue(item);
-          }
+    node.requests.splice(reqIdx, 1);
+
+    // edgeQueue에서 해당 vehId 제거 (큐 재구성)
+    const queue = node.edgeQueues[requestEdge];
+    if (queue) {
+      const newQueue = new RingBuffer<number>();
+      const size = queue.size;
+      for (let i = 0; i < size; i++) {
+        const item = queue.dequeue();
+        if (item !== undefined && item !== vehId) {
+          newQueue.enqueue(item);
         }
-        node.edgeQueues[requestEdge] = newQueue;
       }
-
-      this.logNodeState(nodeName);
-      return true;
+      node.edgeQueues[requestEdge] = newQueue;
     }
 
-    return false;
+    this.logNodeState(nodeName);
+    return true;
   }
 }
 

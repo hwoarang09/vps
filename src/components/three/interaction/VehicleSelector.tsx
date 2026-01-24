@@ -30,8 +30,7 @@ const VehicleSelector: React.FC = () => {
         let targetFabId: string | null = null;
         let localIndex = 0;
 
-        for (let i = 0; i < fabRenderAssignments.length; i++) {
-            const assignment = fabRenderAssignments[i];
+        for (const assignment of fabRenderAssignments) {
             const startIndex = assignment.vehicleRenderOffset / (VEHICLE_RENDER_SIZE * Float32Array.BYTES_PER_ELEMENT);
             const endIndex = startIndex + assignment.actualVehicles;
 

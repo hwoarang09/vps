@@ -61,30 +61,34 @@ export function commitVehicleState(
   updateSensorPoints(sensorPointArray, vehicleIndex, finalX, finalY, finalRotation, presetIdx, config);
 
   // 위치 로그: edge 변경 또는 0.5초 경과 시
-  logPositionIfNeeded(
-    vehicleIndex,
-    finalEdgeIndex,
+  logPositionIfNeeded({
+    vehId: vehicleIndex,
+    edgeIndex: finalEdgeIndex,
     prevEdgeIndex,
-    finalRatio,
-    finalX,
-    finalY,
-    finalVelocity,
-    simulationTime ?? 0,
-    edgeArray
-  );
+    ratio: finalRatio,
+    x: finalX,
+    y: finalY,
+    velocity: finalVelocity,
+    simTime: simulationTime ?? 0,
+    edgeArray,
+  });
 }
 
-function logPositionIfNeeded(
-  vehId: number,
-  edgeIndex: number,
-  prevEdgeIndex: number,
-  ratio: number,
-  x: number,
-  y: number,
-  velocity: number,
-  simTime: number,
-  edgeArray: { edge_name: string }[]
-): void {
+/** logPositionIfNeeded Context */
+interface LogPositionContext {
+  vehId: number;
+  edgeIndex: number;
+  prevEdgeIndex: number;
+  ratio: number;
+  x: number;
+  y: number;
+  velocity: number;
+  simTime: number;
+  edgeArray: { edge_name: string }[];
+}
+
+function logPositionIfNeeded(ctx: LogPositionContext): void {
+  const { vehId, edgeIndex, prevEdgeIndex, ratio, x, y, velocity, simTime, edgeArray } = ctx;
   const lastLog = vehicleLastPositionLog.get(vehId);
   const edgeChanged = edgeIndex !== prevEdgeIndex;
   const intervalPassed = !lastLog || (simTime - lastLog.simTime >= POSITION_LOG_INTERVAL_MS);
