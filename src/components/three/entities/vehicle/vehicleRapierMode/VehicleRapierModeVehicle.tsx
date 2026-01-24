@@ -31,11 +31,14 @@ const VehicleRapierModeVehicle: React.FC<VehicleRapierModeVehicleProps> = ({
     });
   }, []);
 
-  const {
-    BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
-    SENSOR: { LENGTH: sensorLength, WIDTH: sensorWidth, HEIGHT: sensorHeight },
-    LABEL: { TEXT_HEIGHT: labelTextHeight, Z_OFFSET: labelZOffset }
-  } = config;
+  const bodyLength = config.body.length;
+  const bodyWidth = config.body.width;
+  const bodyHeight = config.body.height;
+  const sensorLength = bodyLength + config.spacing.vehicleSpacing;
+  const sensorWidth = bodyWidth;
+  const sensorHeight = bodyHeight;
+  const labelTextHeight = config.label.textHeight;
+  const labelZOffset = config.label.zOffset;
 
   const spriteText = useMemo(() => {
     const sprite = new SpriteText(vehicleIndex.toString());

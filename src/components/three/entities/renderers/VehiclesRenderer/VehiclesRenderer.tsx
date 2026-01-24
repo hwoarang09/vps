@@ -17,7 +17,7 @@ interface VehiclesRendererProps {
 
 const VehiclesRenderer: React.FC<VehiclesRendererProps> = ({
   mode,
-  numVehicles,
+  numVehicles: _numVehicles,
 }) => {
   // Get actualNumVehicles from rapierStore for rapier-dict mode
   const rapierActualNumVehicles = useVehicleRapierStore((state) => state.actualNumVehicles);

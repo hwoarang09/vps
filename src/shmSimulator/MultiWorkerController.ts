@@ -629,10 +629,10 @@ export class MultiWorkerController {
       mode,
       sessionId: sessionId ?? `sim_${Date.now()}`,
       onReady: () => {},
-      onFlushed: (count) => {},
-      onUploaded: (url, count) => {},
-      onClosed: (total) => {},
-      onError: (error) => {},
+      onFlushed: (_count) => {},
+      onUploaded: (_url, _count) => {},
+      onClosed: (_total) => {},
+      onError: (_error) => {},
     });
 
     await this.loggerController.init();

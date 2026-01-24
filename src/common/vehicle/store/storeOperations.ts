@@ -88,7 +88,7 @@ export function moveVehicleToEdge(
 export function clearAllVehicles(
   vehicleDataArray: VehicleDataArrayBase,
   edgeVehicleQueue: EdgeVehicleQueue,
-  logPrefix: string = "[Store]"
+  _logPrefix: string = "[Store]"
 ): void {
   edgeVehicleQueue.clearAll();
   vehicleDataArray.clearAll();

@@ -123,16 +123,16 @@ const handleTransferMgrMessage = (
 };
 
 // Service Handlers (to be implemented)
-const handleMoveCommand = (sender: string, _message: unknown): void => {
+const handleMoveCommand = (_sender: string, _message: unknown): void => {
   useShmSimulatorStore.getState().sendCommand(_message);
 };
 
-const handleTransferCommand = (sender: string, _message: unknown): void => {
+const handleTransferCommand = (_sender: string, _message: unknown): void => {
   useShmSimulatorStore.getState().sendCommand(_message);
 };
 
-const handleStopCommand = (sender: string, _message: unknown): void => {
+const handleStopCommand = (_sender: string, _message: unknown): void => {
 };
 
-const handleStatus = (sender: string, _message: unknown): void => {
+const handleStatus = (_sender: string, _message: unknown): void => {
 };

@@ -660,8 +660,8 @@ export class TransferMgr {
 
   private handlePathQueue(
     vehicleIndex: number,
-    edgeNameToIndex: Map<string, number>,
-    currentEdgeName?: string
+    _edgeNameToIndex: Map<string, number>,
+    _currentEdgeName?: string
   ): number | null {
     if (!this.pathBufferFromAutoMgr) return null;
 

@@ -108,7 +108,8 @@ interface RequestModeInputProps {
   onChange: (value: number | undefined) => void;
 }
 
-const RequestModeInput: React.FC<RequestModeInputProps> = ({
+// Exported for future use (currently unused)
+export const RequestModeInput: React.FC<RequestModeInputProps> = ({
   value,
   baseValue,
   onChange,

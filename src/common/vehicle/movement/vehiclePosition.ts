@@ -27,7 +27,7 @@ const mergeLockLogStates = new Map<number, MergeLockLogState>();
 const LOG_THROTTLE_MS = 2000; // 같은 상태일 때 2초마다만 로그
 
 /** TrafficState를 문자열로 변환하는 헬퍼 함수 */
-function trafficStateToString(state: TrafficState): string {
+function trafficStateToString(state: number): string {
   switch (state) {
     case TrafficState.FREE: return 'FREE';
     case TrafficState.ACQUIRED: return 'ACQUIRED';
@@ -215,38 +215,6 @@ export function shouldRequestLockNow(
     return true;
   }
   return distanceToMerge <= requestDistance;
-}
-
-/**
- * 대기 지점의 ratio 계산
- * - 합류점까지의 누적 거리에서 waitDistance를 뺀 위치
- */
-function getWaitRatio(
-  currentEdge: Edge,
-  currentRatio: number,
-  distanceToMerge: number,
-  waitDistance: number
-): number {
-  // 대기 지점까지의 거리 = distanceToMerge - waitDistance
-  const distanceToWait = distanceToMerge - waitDistance;
-  if (distanceToWait <= 0) {
-    return 0; // 이미 대기 지점을 지남
-  }
-
-  // 현재 edge 남은 거리
-  const remainingInCurrentEdge = currentEdge.distance * (1 - currentRatio);
-
-  // 대기 지점이 현재 edge 내에 있는지 확인
-  if (distanceToWait <= remainingInCurrentEdge) {
-    // 현재 edge 내에 대기 지점이 있음
-    // waitRatio = currentRatio + (remainingInCurrentEdge - distanceToWait) / currentEdge.distance
-    // 간단히: waitRatio = 1 - distanceToWait / currentEdge.distance
-    return 1 - distanceToWait / currentEdge.distance;
-  }
-
-  // 대기 지점이 현재 edge 밖에 있음 (다음 edge에 있음)
-  // 현재 edge에서는 대기할 필요 없음 → ratio 1 반환 (edge 끝까지 갈 수 있음)
-  return 1;
 }
 
 /** Blocking merge 결과 (lock 못 받은 첫 번째 merge) */

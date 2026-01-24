@@ -37,11 +37,15 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
     });
   }, [rendererName]);
 
-  const {
-    BODY: { LENGTH: bodyLength, WIDTH: bodyWidth, HEIGHT: bodyHeight },
-    SENSOR: { LENGTH: sensorLength, WIDTH: sensorWidth, HEIGHT: sensorHeight },
-    VEHICLE_COLOR: vehicleColor,
-  } = config;
+  const bodyLength = config.body.length;
+  const bodyWidth = config.body.width;
+  const bodyHeight = config.body.height;
+  // Sensor dimensions are based on body dimensions
+  const sensorLength = bodyLength + config.spacing.vehicleSpacing;
+  const sensorWidth = bodyWidth;
+  const sensorHeight = bodyHeight;
+  // Default vehicle color
+  const vehicleColor = "#1a85ff";
 
   // Geometry & Material (공통 - 메모이제이션)
   const bodyGeometry = useMemo(() => new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight), [bodyLength, bodyWidth, bodyHeight]);

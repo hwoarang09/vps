@@ -12,6 +12,7 @@ import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { MAX_PATH_LENGTH } from "./MemoryLayoutManager";
 
 // Fab별 버퍼 및 데이터 관리
 interface FabBufferData {
@@ -19,6 +20,7 @@ interface FabBufferData {
   fabId: string;
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
+  pathBuffer: SharedArrayBuffer;
   vehicleData: Float32Array;
   sensorPointData: Float32Array;
   actualNumVehicles: number;
@@ -87,10 +89,15 @@ export class ShmSimulatorController {
     const sensorPointBuffer = new SharedArrayBuffer(sensorBufferSize);
     const sensorPointData = new Float32Array(sensorPointBuffer);
 
+    // Allocate SharedArrayBuffer for path data
+    const pathBufferSize = this.config.maxVehicles * MAX_PATH_LENGTH * Int32Array.BYTES_PER_ELEMENT;
+    const pathBuffer = new SharedArrayBuffer(pathBufferSize);
+
     return {
       fabId,
       sharedBuffer,
       sensorPointBuffer,
+      pathBuffer,
       vehicleData,
       sensorPointData,
       actualNumVehicles: 0,
@@ -137,6 +144,7 @@ export class ShmSimulatorController {
         fabId: fabParams.fabId,
         sharedBuffer: bufferData.sharedBuffer,
         sensorPointBuffer: bufferData.sensorPointBuffer,
+        pathBuffer: bufferData.pathBuffer,
         edges: fabParams.edges,
         nodes: fabParams.nodes,
         vehicleConfigs: fabParams.vehicleConfigs ?? [],
@@ -192,6 +200,7 @@ export class ShmSimulatorController {
       fabId: fabParams.fabId,
       sharedBuffer: bufferData.sharedBuffer,
       sensorPointBuffer: bufferData.sensorPointBuffer,
+      pathBuffer: bufferData.pathBuffer,
       edges: fabParams.edges,
       nodes: fabParams.nodes,
       vehicleConfigs: fabParams.vehicleConfigs ?? [],

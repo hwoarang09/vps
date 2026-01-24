@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Search, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, ChevronDown } from "lucide-react";
 import { getLockMgr, type MergeLockNode } from "@/common/vehicle/logic/LockMgr";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
@@ -13,7 +13,7 @@ const LockInfoPanel: React.FC = () => {
   const [allNodes, setAllNodes] = useState<string[]>([]);
   const [selectedFab, setSelectedFab] = useState<string>("");
   const [strategy, setStrategy] = useState<string>("");
-  const [isLive, setIsLive] = useState(false);
+  const [, setIsLive] = useState(false);
   const [isNodeListOpen, setIsNodeListOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

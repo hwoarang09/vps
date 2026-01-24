@@ -284,21 +284,21 @@ export class MemoryLayoutManager {
   /**
    * 레이아웃 정보 출력 (디버그용)
    */
-  printLayoutInfo(layout: MemoryLayout): void {
+  printLayoutInfo(_layout: MemoryLayout): void {
     // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 
   /**
    * 렌더 레이아웃 정보 출력 (디버그용)
    */
-  printRenderLayoutInfo(renderLayout: RenderBufferLayout): void {
+  printRenderLayoutInfo(_renderLayout: RenderBufferLayout): void {
     // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 
   /**
    * 워커 분배 정보 출력 (디버그용)
    */
-  printWorkerAssignments(assignments: WorkerAssignment[]): void {
+  printWorkerAssignments(_assignments: WorkerAssignment[]): void {
     // Rule A.1 & A.2: Remove useless assignments and empty blocks
   }
 }

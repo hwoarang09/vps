@@ -6,13 +6,11 @@ import {
   type ISensorPointArray,
 } from "@/common/vehicle/collision/sensorCollision";
 
-const DEBUG = false;
-
 export function logSensorData(
-  sensorPointArray: ISensorPointArray,
-  vehIdx: number,
-  label: string = "",
-  zoneIndex: number = 0
+  _sensorPointArray: ISensorPointArray,
+  _vehIdx: number,
+  _label: string = "",
+  _zoneIndex: number = 0
 ) {
   // Rule A.1: Remove useless assignments - variables not used
   // Rule A.2: Remove empty block - DEBUG is always false

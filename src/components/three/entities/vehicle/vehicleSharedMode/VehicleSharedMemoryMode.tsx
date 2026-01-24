@@ -151,7 +151,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       initMultiFab({ fabs, config, sharedMapData, workerCount })
         .then(() => {
         })
-        .catch((error) => {
+        .catch(() => {
         });
     } else {
       // 단일 Fab 모드: 기존 방식
@@ -166,7 +166,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       })
         .then(() => {
         })
-        .catch((error) => {
+        .catch(() => {
         });
     }
 

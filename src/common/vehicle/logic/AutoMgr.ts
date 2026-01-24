@@ -20,6 +20,18 @@ interface StationTarget {
 // Maximum number of path findings per frame to prevent spikes
 const MAX_PATH_FINDS_PER_FRAME = 10;
 
+/** applyPathToVehicle Context */
+interface ApplyPathContext {
+  vehId: number;
+  pathIndices: number[];
+  candidate: { name: string; edgeIndex: number };
+  vehicleDataArray: IVehicleDataArray;
+  edgeArray: Edge[];
+  edgeNameToIndex: Map<string, number>;
+  transferMgr: TransferMgr;
+  lockMgr?: LockMgr;
+}
+
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
@@ -156,7 +168,16 @@ export class AutoMgr {
       if (pathIndices && pathIndices.length > 0) {
         devLog.veh(vehId).debug(`[pathBuff] DIJKSTRA from=${currentEdgeIdx} to=${candidate.edgeIndex} result=[${pathIndices.slice(0, 10).join(',')}${pathIndices.length > 10 ? '...' : ''}] len=${pathIndices.length}`);
 
-        this.applyPathToVehicle(vehId, pathIndices, candidate, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
+        this.applyPathToVehicle({
+          vehId,
+          pathIndices,
+          candidate,
+          vehicleDataArray,
+          edgeArray,
+          edgeNameToIndex,
+          transferMgr,
+          lockMgr,
+        });
         return true;
       }
     }
@@ -171,16 +192,8 @@ export class AutoMgr {
   /**
    * 경로를 차량에 적용
    */
-  private applyPathToVehicle(
-    vehId: number,
-    pathIndices: number[],
-    candidate: { name: string; edgeIndex: number },
-    vehicleDataArray: IVehicleDataArray,
-    edgeArray: Edge[],
-    edgeNameToIndex: Map<string, number>,
-    transferMgr: TransferMgr,
-    lockMgr?: LockMgr
-  ): void {
+  private applyPathToVehicle(ctx: ApplyPathContext): void {
+    const { vehId, pathIndices, candidate, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr } = ctx;
     // 경로 변경 전에 새 경로에 없는 락 취소
     if (lockMgr) {
       this.cancelObsoleteLocks(vehId, pathIndices, edgeArray, lockMgr);

@@ -34,7 +34,7 @@ import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 /**
  * Log safety configuration on mount
  */
-function logSafetyConfig(bodyLength: number, sensorLength: number, vehicleSpacing: number, sameEdgeSafeDistance: number, resumeDistance: number) {
+function logSafetyConfig(_bodyLength: number, _sensorLength: number, _vehicleSpacing: number, _sameEdgeSafeDistance: number, _resumeDistance: number) {
   // Rule A.2: Empty function - no implementation
 }
 
@@ -67,11 +67,9 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
     });
   }, []);
 
-  const {
-    BODY: { LENGTH: bodyLength },
-    SENSOR: { LENGTH: sensorLength },
-    VEHICLE_SPACING: vehicleSpacing,
-  } = config;
+  const bodyLength = config.body.length;
+  const sensorLength = bodyLength + config.spacing.vehicleSpacing;
+  const vehicleSpacing = config.spacing.vehicleSpacing;
 
   const sameEdgeSafeDistance = useMemo(() => bodyLength + sensorLength, [bodyLength, sensorLength]);
   const resumeDistance = useMemo(() => sameEdgeSafeDistance * 1, [sameEdgeSafeDistance]);

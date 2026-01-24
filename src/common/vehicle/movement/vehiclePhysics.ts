@@ -3,7 +3,6 @@
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
 import {
-  VEHICLE_DATA_SIZE,
   MovementData,
   SensorData,
   LogicData,
