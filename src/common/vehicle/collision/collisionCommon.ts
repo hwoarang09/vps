@@ -7,7 +7,7 @@ import {
   MovingStatus,
   HitZone,
 } from "@/common/vehicle/initialize/constants";
-import { SENSOR_PRESETS } from "./sensorPresets";
+import { SENSOR_PRESETS, type SensorPreset } from "./sensorPresets";
 
 export interface CollisionConfig {
   approachMinSpeed: number;
@@ -15,6 +15,8 @@ export interface CollisionConfig {
   bodyLength: number;
   /** 충돌 체크 주기 (ms) - 차량별로 이 주기마다 충돌 검사 수행 */
   collisionCheckInterval?: number;
+  /** fab별 커스텀 센서 프리셋 (없으면 기본 SENSOR_PRESETS 사용) */
+  sensorPresets?: SensorPreset[];
 }
 
 export function getCollisionCheckParams(
@@ -28,7 +30,8 @@ export function getCollisionCheckParams(
   const velocity = vehicleArrayData[ptr + MovementData.VELOCITY];
 
   const presetIdx = Math.trunc(vehicleArrayData[ptr + SensorData.PRESET_IDX]);
-  const preset = SENSOR_PRESETS[presetIdx] ?? SENSOR_PRESETS[0];
+  const presets = config.sensorPresets ?? SENSOR_PRESETS;
+  const preset = presets[presetIdx] ?? presets[0];
 
   return { approachMinSpeed, brakeMinSpeed, vehicleLength, velocity, preset };
 }
@@ -56,10 +59,11 @@ export function applyCollisionZoneLogic(
   data: Float32Array,
   ptrBack: number,
   targetVehId: number = -1,
-  config?: { approachMinSpeed: number; brakeMinSpeed: number }
+  config?: { approachMinSpeed: number; brakeMinSpeed: number; sensorPresets?: SensorPreset[] }
 ) {
   const approachMinSpeed = config?.approachMinSpeed ?? 2;
   const brakeMinSpeed = config?.brakeMinSpeed ?? 1;
+  const presets = config?.sensorPresets ?? SENSOR_PRESETS;
   data[ptrBack + SensorData.HIT_ZONE] = hitZone;
 
   if (hitZone === HitZone.NONE) {
@@ -75,7 +79,7 @@ export function applyCollisionZoneLogic(
 
   const velocity = data[ptrBack + MovementData.VELOCITY];
   const presetIdx = Math.trunc(data[ptrBack + SensorData.PRESET_IDX]);
-  const preset = SENSOR_PRESETS[presetIdx] ?? SENSOR_PRESETS[0];
+  const preset = presets[presetIdx] ?? presets[0];
 
   if (hitZone === HitZone.STOP) {
     data[ptrBack + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;

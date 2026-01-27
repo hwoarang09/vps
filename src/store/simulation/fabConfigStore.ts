@@ -14,6 +14,12 @@ import {
   getCurveAcceleration,
   type GrantStrategy,
 } from "@/config/simulationConfig";
+import {
+  SENSOR_PRESETS,
+  type SensorPreset,
+  type SensorZone,
+  type SensorZoneKey,
+} from "@/common/vehicle/collision/sensorPresets";
 
 /**
  * Fab별로 오버라이드 가능한 Lock 설정
@@ -46,11 +52,46 @@ export interface MovementConfigOverride {
 }
 
 /**
+ * 센서 존 오버라이드 (부분 적용 가능)
+ */
+export interface SensorZoneOverride {
+  leftAngle?: number;
+  rightAngle?: number;
+  leftLength?: number;
+  rightLength?: number;
+  dec?: number;
+}
+
+/**
+ * 단일 프리셋 오버라이드
+ */
+export interface SensorPresetOverride {
+  zones?: {
+    approach?: SensorZoneOverride;
+    brake?: SensorZoneOverride;
+    stop?: SensorZoneOverride;
+  };
+  leftAngle?: number;
+  rightAngle?: number;
+  leftLength?: number;
+  rightLength?: number;
+}
+
+/**
+ * Fab별로 오버라이드 가능한 Sensor 설정
+ */
+export interface SensorConfigOverride {
+  /** 프리셋 인덱스 -> 오버라이드 값 */
+  presets?: Partial<Record<number, SensorPresetOverride>>;
+}
+
+/**
  * Fab별로 오버라이드 가능한 전체 설정
  */
 export interface FabConfigOverride {
   lock?: LockConfigOverride;
   movement?: MovementConfigOverride;
+  sensor?: SensorConfigOverride;
 }
 
 /**
@@ -104,6 +145,16 @@ interface FabConfigStore {
     };
   };
   hasOverride: (fabIndex: number) => boolean;
+
+  /**
+   * fab별 센서 프리셋 배열 반환 (base + override 병합)
+   */
+  getFabSensorPresets: (fabIndex: number) => SensorPreset[];
+
+  /**
+   * fab의 센서 오버라이드만 반환 (있는 경우만)
+   */
+  getFabSensorOverride: (fabIndex: number) => SensorConfigOverride | undefined;
 
   // simulationConfig에서 baseConfig 동기화
   syncFromSimulationConfig: () => void;
@@ -213,5 +264,55 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   hasOverride: (fabIndex) => {
     return fabIndex in get().fabOverrides;
+  },
+
+  getFabSensorOverride: (fabIndex) => {
+    const { fabOverrides } = get();
+    const override = fabOverrides[fabIndex];
+    return override?.sensor;
+  },
+
+  /**
+   * fab별 센서 프리셋 배열 반환 (base + override 병합)
+   * override가 없으면 기본 SENSOR_PRESETS 반환
+   */
+  getFabSensorPresets: (fabIndex) => {
+    const { fabOverrides } = get();
+    const override = fabOverrides[fabIndex]?.sensor;
+
+    if (!override?.presets) {
+      return SENSOR_PRESETS;
+    }
+
+    // 오버라이드된 프리셋 배열 생성
+    return SENSOR_PRESETS.map((basePreset, presetIndex) => {
+      const presetOverride = override.presets?.[presetIndex];
+      if (!presetOverride) {
+        return basePreset;
+      }
+
+      // zone별 병합
+      const mergedZones = {} as Record<SensorZoneKey, SensorZone>;
+      for (const zoneKey of ["approach", "brake", "stop"] as const) {
+        const baseZone = basePreset.zones[zoneKey];
+        const zoneOverride = presetOverride.zones?.[zoneKey];
+
+        mergedZones[zoneKey] = {
+          leftAngle: zoneOverride?.leftAngle ?? baseZone.leftAngle,
+          rightAngle: zoneOverride?.rightAngle ?? baseZone.rightAngle,
+          leftLength: zoneOverride?.leftLength ?? baseZone.leftLength,
+          rightLength: zoneOverride?.rightLength ?? baseZone.rightLength,
+          dec: zoneOverride?.dec ?? baseZone.dec,
+        };
+      }
+
+      return {
+        zones: mergedZones,
+        leftAngle: presetOverride.leftAngle ?? basePreset.leftAngle,
+        rightAngle: presetOverride.rightAngle ?? basePreset.rightAngle,
+        leftLength: presetOverride.leftLength ?? basePreset.leftLength,
+        rightLength: presetOverride.rightLength ?? basePreset.rightLength,
+      };
+    });
   },
 }));

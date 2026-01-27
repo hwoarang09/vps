@@ -7,6 +7,7 @@ import { TransferMode } from "@/common/vehicle/initialize/constants";
 import { StationRawData } from "@/types/station";
 import type { GrantStrategy } from "@/config/simulationConfig";
 import { DeadlockZoneStrategy } from "@/config/simulationConfig";
+import type { SensorPreset } from "@/common/vehicle/collision/sensorPresets";
 
 // ============================================================================
 // [0] MEMORY REGION (Multi-Worker Support)
@@ -122,6 +123,10 @@ export interface SimulationConfig {
   devLogEnabled?: boolean;
   /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
   edgeTransitLogEnabled?: boolean;
+
+  // Sensor presets (fab별 오버라이드 가능)
+  /** fab별 커스텀 센서 프리셋 (없으면 기본 SENSOR_PRESETS 사용) */
+  sensorPresets?: SensorPreset[];
 }
 
 export interface VehicleInitConfig {

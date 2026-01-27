@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 
@@ -17,6 +17,44 @@ export const PerformanceMonitorUI: React.FC = () => {
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(performance.now());
   const UPDATE_INTERVAL = 5000; // 5 seconds in milliseconds
+
+  // Drag state
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Ignore if clicking the worker expand button
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: rect.left,
+      origY: rect.top,
+    };
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      setPosition({
+        x: dragRef.current.origX + dx,
+        y: dragRef.current.origY + dy,
+      });
+    };
+
+    const handleMouseUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, []);
 
   // Get worker performance stats from store
   const workerPerfStats = useShmSimulatorStore((state) => state.workerPerfStats);
@@ -75,10 +113,13 @@ export const PerformanceMonitorUI: React.FC = () => {
 
   return (
     <div
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
       style={{
         position: "fixed",
-        bottom: "10px", // Aligned with bottom
-        right: "360px", // Left of r3f-perf panel (approx width 350px)
+        ...(position
+          ? { left: `${position.x}px`, top: `${position.y}px` }
+          : { bottom: "10px", right: "360px" }),
         padding: "10px 14px",
         backgroundColor: "rgba(0, 0, 0, 0.75)",
         color: "white",
@@ -90,6 +131,7 @@ export const PerformanceMonitorUI: React.FC = () => {
         textShadow: "1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black",
         zIndex: 9999,
         userSelect: "none",
+        cursor: "grab",
         display: "flex",
         flexDirection: "column",
         gap: "4px",
