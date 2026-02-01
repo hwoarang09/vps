@@ -95,9 +95,11 @@ src/components/test/VehicleTest/TopControlBar.tsx
     NumberInput → 숫자 입력 (스피너 숨김, 중앙 정렬)
 
   style:
-    menuContainerVariants, menuButtonVariants 사용
+    상단 바: menuContainerVariants({ level: 1 }), menuButtonVariants 사용
+    드롭다운 메뉴: menuContainerVariants({ level: 2 }) + p-0 space-x-0
     menuDividerClass로 섹션 구분
-    각 드롭다운에 accent color 적용 (cyan, purple, yellow)
+    툴팁: rect.bottom - 40 (버튼 바로 아래 표시)
+    드롭다운 아이템: px-2 py-2 (좌우 패딩 최소화로 hover 배경 꽉 참)
 
 src/components/react/system/LogIndicator.tsx
   purpose: 우측 상단 로그 파일 관리 버튼 (MenuLevel1 스타일)
