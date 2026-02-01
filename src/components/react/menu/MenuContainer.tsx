@@ -14,9 +14,10 @@ import MqttStatusIndicator from "../system/MqttStatusIndicator";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 
 const MenuContainer: React.FC = () => {
-  const { activeMainMenu, rightPanelOpen } = useMenuStore();
+  const { activeMainMenu, activeSubMenu, rightPanelOpen } = useMenuStore();
   const { loadConfig } = useMqttStore();
-  const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
+  const isPanelOpen = useVehicleControlStore((state) => state.isPanelOpen);
+  const openPanel = useVehicleControlStore((state) => state.openPanel);
   const closePanel = useVehicleControlStore((state) => state.closePanel);
 
   // Load MQTT config on mount and auto-connect
@@ -24,13 +25,23 @@ const MenuContainer: React.FC = () => {
     loadConfig();
   }, [loadConfig]);
 
+  // Open/close panel based on search-vehicle menu
+  useEffect(() => {
+    if (activeSubMenu === "search-vehicle") {
+      openPanel();
+    } else if (activeMainMenu !== "Search" && isPanelOpen) {
+      // Close panel when leaving Search menu (but not when switching within Search)
+      // Only auto-close if user navigated away from Search entirely
+    }
+  }, [activeSubMenu, activeMainMenu, openPanel, isPanelOpen]);
+
   return (
     <>
       {/* MQTT Status Indicator - Top Left */}
       <MqttStatusIndicator />
 
-      {/* Left Panel - Individual Vehicle Control (Ctrl+Click) */}
-      {selectedVehicleId !== null && (
+      {/* Left Panel - Individual Vehicle Control (Ctrl+Click or Search Menu) */}
+      {isPanelOpen && (
         <div
           style={{
             position: "fixed",
@@ -43,7 +54,7 @@ const MenuContainer: React.FC = () => {
           className="bg-white border-r border-gray-300 shadow-lg flex flex-col"
         >
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">Individual Control</h2>
+            <h2 className="text-lg font-semibold text-gray-800">Vehicle Control</h2>
             <button
               onClick={closePanel}
               className="text-gray-500 hover:text-gray-700 text-xl"

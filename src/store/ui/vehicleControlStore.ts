@@ -5,6 +5,7 @@ interface VehicleControlState {
   isPanelOpen: boolean;
 
   selectVehicle: (id: number) => void;
+  openPanel: () => void;
   closePanel: () => void;
   togglePanel: () => void;
 }
@@ -14,6 +15,7 @@ export const useVehicleControlStore = create<VehicleControlState>((set) => ({
   isPanelOpen: false,
 
   selectVehicle: (id: number) => set({ selectedVehicleId: id, isPanelOpen: true }),
+  openPanel: () => set({ isPanelOpen: true }),
   closePanel: () => set({ isPanelOpen: false, selectedVehicleId: null }),
   togglePanel: () => set((state) => ({ isPanelOpen: !state.isPanelOpen })),
 }));

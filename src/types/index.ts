@@ -73,7 +73,8 @@ export type MainMenuType =
   | "LayoutBuilder"
   | "DataPanel"
   | "MQTT"
-  | "DevTools";
+  | "DevTools"
+  | "Search";
 
 
 

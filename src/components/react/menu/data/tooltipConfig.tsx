@@ -10,6 +10,7 @@ export const tooltipsByLevel: {
     // 메인메뉴 레벨
     MapLoader: "맵 불러오기",
     Statistics: "통계 및 분석",
+    Search: "검색 (Vehicle, Node, Edge, Station)",
     Vehicle: "차량 관리",
     Operation: "운영 관리",
     MapBuilder: "도로 편집기",
@@ -59,6 +60,11 @@ export const tooltipsByLevel: {
     "mqtt-connection": "MQTT 브로커 연결 관리",
 
     "devtools-lock": "노드별 Lock 상태 확인",
+
+    "search-vehicle": "차량 ID로 검색",
+    "search-node": "노드 이름으로 검색",
+    "search-edge": "엣지 이름으로 검색",
+    "search-station": "스테이션 이름으로 검색",
   },
   3: {
     // 서브서브메뉴 레벨 (필요한 경우에만)

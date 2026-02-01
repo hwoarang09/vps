@@ -144,6 +144,21 @@
     * *Fix*: `const deceleration = -2;`
     * *Note*: TypeScript에서 `number` 타입은 정수/실수 구분이 없으므로 `.0`은 의미 없는 노이즈.
 
+### H. Environment & Runtime (환경 및 런타임)
+1.  **Prefer `globalThis` over `window`**: 전역 객체 접근 시 `window` 대신 **`globalThis`**를 사용하십시오.
+    * *Bad*:
+    ```typescript
+    window.addEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+    ```
+    * *Fix*:
+    ```typescript
+    globalThis.addEventListener("mousemove", handleMouseMove);
+    globalThis.removeEventListener("mouseup", handleMouseUp);
+    ```
+    * *Reason*: `globalThis`는 모든 JavaScript 환경(브라우저, Node.js, Web Worker)에서 동일하게 동작합니다. `window`는 브라우저 전용이며 Web Worker에서는 존재하지 않습니다.
+    * *Note*: 이 프로젝트는 Web Worker를 적극 활용하므로, 환경 호환성을 위해 `globalThis` 사용을 권장합니다.
+
 ---
 
 ## 3. Analysis & Output Format

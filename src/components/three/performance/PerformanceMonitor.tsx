@@ -48,12 +48,12 @@ export const PerformanceMonitorUI: React.FC = () => {
 
     const handleMouseUp = () => {
       dragRef.current = null;
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      globalThis.removeEventListener("mousemove", handleMouseMove);
+      globalThis.removeEventListener("mouseup", handleMouseUp);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    globalThis.addEventListener("mousemove", handleMouseMove);
+    globalThis.addEventListener("mouseup", handleMouseUp);
   }, []);
 
   // Get worker performance stats from store
@@ -119,7 +119,7 @@ export const PerformanceMonitorUI: React.FC = () => {
         position: "fixed",
         ...(position
           ? { left: `${position.x}px`, top: `${position.y}px` }
-          : { bottom: "10px", right: "360px" }),
+          : { bottom: "10px", left: "10px" }),
         padding: "10px 14px",
         backgroundColor: "rgba(0, 0, 0, 0.75)",
         color: "white",

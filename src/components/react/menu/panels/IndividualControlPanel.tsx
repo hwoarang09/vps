@@ -629,29 +629,51 @@ const IndividualControlPanel: React.FC = () => {
             return;
         }
 
+        // Get actual vehicle count based on mode
+        const shmActualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
+        const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
+        const actualNumVehicles = isShmMode ? shmActualNumVehicles : arrayActualNumVehicles;
+
+        // Debug: 현재 상태 출력
+        console.log('[VehicleSearch] mode:', isShmMode ? 'SHM' : 'ARRAY');
+        console.log('[VehicleSearch] actualNumVehicles:', actualNumVehicles);
+        console.log('[VehicleSearch] vehicles map size:', vehiclesRef.current.size);
+        console.log('[VehicleSearch] searchTerm:', searchTerm);
+
         let found = -1;
-        
+
         // Direct Index Mapping
         const match = searchTerm.match(/(\d+)/);
         if (match) {
             const idNum = Number.parseInt(match[0], 10);
             const targetIdx = idNum; // ID corresponds to index directly (VEH00001 -> Index 1)
 
-            const v = vehiclesRef.current.get(targetIdx);
-            
-            // If the vehicle exists at that index, we consider it found.
-            // We relaxed the check so "1" finds "VEH00001"
-            if (v) {
-                found = targetIdx;
+            console.log('[VehicleSearch] parsed idNum:', idNum, 'targetIdx:', targetIdx);
+
+            // SHM 모드: vehicles map 대신 actualNumVehicles로 유효성 검사
+            if (isShmMode) {
+                if (targetIdx >= 0 && targetIdx < actualNumVehicles) {
+                    found = targetIdx;
+                    console.log('[VehicleSearch] SHM mode - valid index');
+                } else {
+                    console.log('[VehicleSearch] SHM mode - index out of range (0 ~', actualNumVehicles - 1, ')');
+                }
+            } else {
+                // Array 모드: vehicles map에서 찾기
+                const v = vehiclesRef.current.get(targetIdx);
+                console.log('[VehicleSearch] found vehicle at index:', v);
+                if (v) {
+                    found = targetIdx;
+                }
             }
         }
 
         if (found >= 0) {
             setFoundVehicleIndex(found);
-            // Optionally sync back to store? Maybe not needed if this panel is the "driver"
-            // useVehicleControlStore.getState().selectVehicle(found); 
+            console.log('[VehicleSearch] SUCCESS - foundVehicleIndex:', found);
         } else {
             setFoundVehicleIndex(null);
+            console.log('[VehicleSearch] FAILED - vehicle not found');
             alert("Vehicle not found");
         }
     };
@@ -680,12 +702,18 @@ const IndividualControlPanel: React.FC = () => {
             </div>
 
             {/* Monitor Area - Isolated Re-renders */}
-            {foundVehicleIndex !== null && (
+            {foundVehicleIndex !== null ? (
                 <VehicleMonitor
                     vehicleIndex={foundVehicleIndex}
                     vehicles={vehicles}
                     isShmMode={isShmMode}
                 />
+            ) : (
+                <div className="text-center text-gray-400 py-8">
+                    <Search size={48} className="mx-auto mb-4 opacity-50" />
+                    <p className="text-sm">차량 ID를 검색하세요</p>
+                    <p className="text-xs mt-1">예: VEH00001 또는 1</p>
+                </div>
             )}
         </div>
     );

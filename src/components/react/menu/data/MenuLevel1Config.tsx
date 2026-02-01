@@ -7,6 +7,7 @@ import {
   Table,
   Building,
   Wrench,
+  Search,
 } from "lucide-react";
 import {
   MenuLevel1Item,
@@ -51,7 +52,24 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       ),
     },
   ],
-  // Group 3: Vehicle & Operation
+  // Group 3: Search
+  [
+    {
+      id: "Search",
+      label: "Search",
+      shortcutLabel: "f",
+      iconFn: (isActive) => (
+        <Search
+          size={ICON_SIZE_MEDIUM}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+  ],
+  // Group 4: Vehicle & Operation (previously Group 3)
   [
     {
       id: "Vehicle",

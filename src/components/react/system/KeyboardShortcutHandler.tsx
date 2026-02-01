@@ -9,6 +9,7 @@ const LV1_SHORTCUT_MAP: Record<string, MainMenuType> = {
   v: "Vehicle",
   m: "MQTT",
   d: "DevTools",
+  f: "Search",
 };
 
 // Shortcut key to lv2 menu mapping (within currently active lv1 menu)
@@ -21,6 +22,12 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
   },
   DevTools: {
     l: "devtools-lock",
+  },
+  Search: {
+    v: "search-vehicle",
+    n: "search-node",
+    e: "search-edge",
+    s: "search-station",
   },
 };
 
@@ -133,8 +140,8 @@ const KeyboardShortcutHandler = () => {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    globalThis.addEventListener("keydown", handleKeyDown);
+    return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, [
     activeMainMenu,
     activeSubMenu,

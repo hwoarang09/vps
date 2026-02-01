@@ -21,6 +21,10 @@ import {
   Upload,
   Square,
   Lock,
+  Car,
+  Circle,
+  GitBranch,
+  MapPin,
 } from "lucide-react";
 import { ReactComponent as Curve180Icon } from "@/assets/icons/curve180.svg";
 import { ReactComponent as Curve90Icon } from "@/assets/icons/curve90.svg";
@@ -415,6 +419,64 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       shortcutLabel: "l",
       iconFn: (isActive: boolean) => (
         <Lock
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+  ],
+  Search: [
+    {
+      id: "search-vehicle",
+      label: "Vehicle",
+      shortcutLabel: "v",
+      iconFn: (isActive: boolean) => (
+        <Car
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "search-node",
+      label: "Node",
+      shortcutLabel: "n",
+      iconFn: (isActive: boolean) => (
+        <Circle
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "search-edge",
+      label: "Edge",
+      shortcutLabel: "e",
+      iconFn: (isActive: boolean) => (
+        <GitBranch
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "search-station",
+      label: "Station",
+      shortcutLabel: "s",
+      iconFn: (isActive: boolean) => (
+        <MapPin
           size={ICON_SIZE_LARGE}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
