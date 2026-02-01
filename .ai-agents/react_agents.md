@@ -370,6 +370,7 @@ src/components/react/menu/shared/panelStyles.ts
     panelButtonVariants:
       - variant: primary/success/danger/warning/purple/ghost/glow-*
       - size: sm/md/lg
+      - ghost: 비활성화 버튼용 (bg-gray-600, border-gray-400, glow 효과)
 
     panelCardVariants:
       - variant: default/interactive/highlight/glow-*
