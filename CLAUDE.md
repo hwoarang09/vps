@@ -55,3 +55,12 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
 -   **Pathfinding**: Dijkstra (Node-based). Edge costs are dynamic (BPR function).
 -   **Collision**: Custom logic checking `currentEdge` and `distance` on the rail. NOT using physics engines like Cannon.js/Rapier (except for specific test modes).
 -   **Logging**: High-frequency logs are buffered in Worker and flushed to OPFS or Main Thread periodically.
+
+## 6. Git Workflow
+-   **mypush**: 커밋과 푸시를 한번에 수행하는 스크립트
+    ```bash
+    /home/vosui/vosui/scripts/mypush.sh "커밋 메시지"
+    ```
+    -   자동으로 버전 번호 증가 (package.json)
+    -   커밋 메시지 앞에 버전 정보 추가
+    -   origin/main으로 푸시
