@@ -1,9 +1,10 @@
 // EdgeRenderer.tsx - InstancedMesh 통합 버전 (슬롯 기반 렌더링)
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
 import { getEdgeColors as getEdgeColorConfig } from "@/config/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
+import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
@@ -13,6 +14,9 @@ import {
   RENDER_ORDER_RAIL_CURVE_CSC,
   RENDER_ORDER_RAIL_LINEAR,
 } from "@/utils/renderOrder";
+
+// Selected edge highlight color
+const SELECTED_EDGE_COLOR = "#00ff00";
 
 interface EdgeRendererProps {
   edges: Edge[];
@@ -25,9 +29,9 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   const slots = useFabStore((state) => state.slots);
   const fabs = useFabStore((state) => state.fabs);
 
-  // Group edges by type (원본 데이터 기준)
+  // Group edges by type with original indices (원본 데이터 기준)
   const edgesByType = useMemo(() => {
-    const grouped: Record<string, Edge[]> = {
+    const grouped: Record<string, { edge: Edge; originalIndex: number }[]> = {
       [EdgeType.LINEAR]: [],
       [EdgeType.CURVE_90]: [],
       [EdgeType.CURVE_180]: [],
@@ -35,53 +39,61 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
       [EdgeType.S_CURVE]: [],
     };
 
-    for (const edge of edges) {
-      if (edge.rendering_mode === "preview") continue;
+    edges.forEach((edge, originalIndex) => {
+      if (edge.rendering_mode === "preview") return;
 
       if (edge.renderingPoints && edge.renderingPoints.length > 0) {
         const type = edge.vos_rail_type || EdgeType.LINEAR;
         if (grouped[type]) {
-          grouped[type].push(edge);
+          grouped[type].push({ edge, originalIndex });
         }
       }
-    }
+    });
 
     return grouped;
   }, [edges]);
+
+  // Subscribe to selected edge from store
+  const selectedEdgeIndex = useEdgeControlStore((state) => state.selectedEdgeIndex);
 
   // 단일 fab이거나 슬롯이 없으면 기본 렌더링
   if (fabs.length <= 1 || slots.length === 0) {
     return (
       <group>
         <EdgeTypeRenderer
-          edges={edgesByType[EdgeType.LINEAR]}
+          edgesWithIndex={edgesByType[EdgeType.LINEAR]}
           edgeType={EdgeType.LINEAR}
           color={colors.LINEAR}
           renderOrder={RENDER_ORDER_RAIL_LINEAR}
+          selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
-          edges={edgesByType[EdgeType.CURVE_90]}
+          edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
           edgeType={EdgeType.CURVE_90}
           color={colors.CURVE_90}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+          selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
-          edges={edgesByType[EdgeType.CURVE_180]}
+          edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
           edgeType={EdgeType.CURVE_180}
           color={colors.CURVE_180}
           renderOrder={RENDER_ORDER_RAIL_CURVE_180}
+          selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
-          edges={edgesByType[EdgeType.CURVE_CSC]}
+          edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
           edgeType={EdgeType.CURVE_CSC}
           color={colors.CURVE_CSC}
           renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
+          selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
-          edges={edgesByType[EdgeType.S_CURVE]}
+          edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
           edgeType={EdgeType.S_CURVE}
           color={colors.S_CURVE}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+          selectedEdgeIndex={selectedEdgeIndex}
         />
       </group>
     );
@@ -93,34 +105,39 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
       {slots.map((slot) => (
         <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
           <EdgeTypeRenderer
-            edges={edgesByType[EdgeType.LINEAR]}
+            edgesWithIndex={edgesByType[EdgeType.LINEAR]}
             edgeType={EdgeType.LINEAR}
             color={colors.LINEAR}
             renderOrder={RENDER_ORDER_RAIL_LINEAR}
+            selectedEdgeIndex={selectedEdgeIndex}
           />
           <EdgeTypeRenderer
-            edges={edgesByType[EdgeType.CURVE_90]}
+            edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
             edgeType={EdgeType.CURVE_90}
             color={colors.CURVE_90}
             renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+            selectedEdgeIndex={selectedEdgeIndex}
           />
           <EdgeTypeRenderer
-            edges={edgesByType[EdgeType.CURVE_180]}
+            edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
             edgeType={EdgeType.CURVE_180}
             color={colors.CURVE_180}
             renderOrder={RENDER_ORDER_RAIL_CURVE_180}
+            selectedEdgeIndex={selectedEdgeIndex}
           />
           <EdgeTypeRenderer
-            edges={edgesByType[EdgeType.CURVE_CSC]}
+            edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
             edgeType={EdgeType.CURVE_CSC}
             color={colors.CURVE_CSC}
             renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
+            selectedEdgeIndex={selectedEdgeIndex}
           />
           <EdgeTypeRenderer
-            edges={edgesByType[EdgeType.S_CURVE]}
+            edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
             edgeType={EdgeType.S_CURVE}
             color={colors.S_CURVE}
             renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+            selectedEdgeIndex={selectedEdgeIndex}
           />
         </group>
       ))}
@@ -128,34 +145,60 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   );
 };
 
+interface EdgeWithIndex {
+  edge: Edge;
+  originalIndex: number;
+}
+
 interface EdgeTypeRendererProps {
-  edges: Edge[];
+  edgesWithIndex: EdgeWithIndex[];
   edgeType: EdgeType;
   color: string;
   renderOrder: number;
+  selectedEdgeIndex: number | null;
 }
 
 const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
-  edges,
+  edgesWithIndex,
   edgeType,
   color,
   renderOrder,
+  selectedEdgeIndex,
 }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
+  const selectedAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
   const prevInstanceCountRef = useRef(0);
+  const prevSelectedRef = useRef<number | null>(null);
 
-  // Calculate total instance count based on edge type
-  const instanceCount = useMemo(() => {
+  // Calculate total instance count and build edge→instance mapping
+  const { instanceCount, edgeToInstanceMap } = useMemo(() => {
+    const mapping = new Map<number, { start: number; count: number }>();
+    let total = 0;
+
     if (edgeType === EdgeType.LINEAR) {
-      return edges.length; // 1 instance per edge
+      edgesWithIndex.forEach(({ edge, originalIndex }) => {
+        if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+          const startPos = edge.renderingPoints[0];
+          const endPos = edge.renderingPoints.at(-1)!;
+          const length = startPos.distanceTo(endPos);
+          if (length >= 0.01) {
+            mapping.set(originalIndex, { start: total, count: 1 });
+            total++;
+          }
+        }
+      });
     } else {
-      // For curves, count segments
-      return edges.reduce((total, edge) => {
+      edgesWithIndex.forEach(({ edge, originalIndex }) => {
         const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
-        return total + segmentCount;
-      }, 0);
+        if (segmentCount > 0) {
+          mapping.set(originalIndex, { start: total, count: segmentCount });
+          total += segmentCount;
+        }
+      });
     }
-  }, [edges, edgeType]);
+
+    return { instanceCount: total, edgeToInstanceMap: mapping };
+  }, [edgesWithIndex, edgeType]);
 
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
 
@@ -164,6 +207,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       uniforms: {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(color) },
+        uSelectedColor: { value: new THREE.Color(SELECTED_EDGE_COLOR) },
         uOpacity: { value: 1 },
         uIsPreview: { value: 0 },
         uLength: { value: 1 },
@@ -178,6 +222,59 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
     });
   }, [color]);
 
+  // Create selected attribute
+  useEffect(() => {
+    const mesh = instancedMeshRef.current;
+    if (!mesh || instanceCount === 0) return;
+
+    const selectedArray = new Float32Array(instanceCount).fill(0);
+    const attr = new THREE.InstancedBufferAttribute(selectedArray, 1);
+    attr.setUsage(THREE.DynamicDrawUsage);
+    mesh.geometry.setAttribute("aSelected", attr);
+    selectedAttrRef.current = attr;
+
+    return () => {
+      mesh.geometry.deleteAttribute("aSelected");
+      selectedAttrRef.current = null;
+    };
+  }, [instanceCount]);
+
+  // Update selected state (no React re-render, just GPU buffer update)
+  const updateSelectedState = useCallback((newSelectedIndex: number | null) => {
+    const attr = selectedAttrRef.current;
+    if (!attr) return;
+
+    const array = attr.array as Float32Array;
+
+    // Clear previous selection
+    if (prevSelectedRef.current !== null) {
+      const prevInfo = edgeToInstanceMap.get(prevSelectedRef.current);
+      if (prevInfo) {
+        for (let i = 0; i < prevInfo.count; i++) {
+          array[prevInfo.start + i] = 0;
+        }
+      }
+    }
+
+    // Set new selection
+    if (newSelectedIndex !== null) {
+      const info = edgeToInstanceMap.get(newSelectedIndex);
+      if (info) {
+        for (let i = 0; i < info.count; i++) {
+          array[info.start + i] = 1;
+        }
+      }
+    }
+
+    attr.needsUpdate = true;
+    prevSelectedRef.current = newSelectedIndex;
+  }, [edgeToInstanceMap]);
+
+  // React to selectedEdgeIndex changes
+  useEffect(() => {
+    updateSelectedState(selectedEdgeIndex);
+  }, [selectedEdgeIndex, updateSelectedState]);
+
   // Update instance matrices (원본 데이터만 처리, fab visibility 없음)
   useEffect(() => {
     const mesh = instancedMeshRef.current;
@@ -191,7 +288,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
 
     let instanceIndex = 0;
 
-    for (const edge of edges) {
+    for (const { edge } of edgesWithIndex) {
       const points = edge.renderingPoints;
       if (!points || points.length === 0) continue;
 
@@ -244,7 +341,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
     }
 
     mesh.instanceMatrix.needsUpdate = true;
-  }, [edges, edgeType, instanceCount]);
+  }, [edgesWithIndex, edgeType, instanceCount]);
 
   // Cleanup when data is deleted (instanceCount decreases)
   useEffect(() => {

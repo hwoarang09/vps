@@ -94,6 +94,44 @@ src/common/vehicle/memory/SensorPointArrayBase.ts
     FL_X: 0, FL_Y: 1, FR_X: 2, FR_Y: 3
     BL_X: 4, BL_Y: 5, BR_X: 6, BR_Y: 7
     SL_X: 8, SL_Y: 9, SR_X: 10, SR_Y: 11
+
+src/components/three/entities/renderers/EdgeRenderer.tsx
+  purpose: InstancedMesh 기반 Edge 렌더링 (타입별 그룹화)
+
+  components:
+    EdgeRenderer: 전체 오케스트레이터, 타입별 EdgeTypeRenderer 생성
+    EdgeTypeRenderer: 특정 EdgeType의 InstancedMesh 렌더링
+
+  selection highlight:
+    store: useEdgeControlStore.selectedEdgeIndex
+    attribute: aSelected (InstancedBufferAttribute, float)
+    shader: mix(uColor, uSelectedColor, vSelected)
+    color: SELECTED_EDGE_COLOR (#00ff00)
+
+  edge→instance mapping:
+    LINEAR: 1 edge = 1 instance
+    CURVE: 1 edge = N segments (instances)
+    edgeToInstanceMap: Map<originalIndex, { start, count }>
+
+  key refs:
+    instancedMeshRef: InstancedMesh
+    selectedAttrRef: InstancedBufferAttribute
+
+src/components/three/entities/edge/shaders/edgeVertex.glsl
+  attributes:
+    aSelected: float  # 0.0 = normal, 1.0 = selected
+
+  varyings:
+    vSelected: float  # fragment로 전달
+
+src/components/three/entities/edge/shaders/edgeFragment.glsl
+  uniforms:
+    uColor: vec3           # 기본 색상
+    uSelectedColor: vec3   # 선택 시 색상
+    uOpacity: float
+
+  logic:
+    finalColor = mix(uColor, uSelectedColor, vSelected)
 ```
 
 ## Logic Flow
@@ -157,6 +195,30 @@ Main Thread:
   → 차량 수 = sum(모든 fab의 actualNumVehicles)
 ```
 
+### Edge Selection Highlight
+```
+EdgeControlPanel에서 edge 선택:
+  handleEdgeSelect(edgeIndex) / handleSearch()
+  → edgeControlStore.selectEdge(edgeIndex)
+
+EdgeRenderer에서 하이라이트:
+  useEdgeControlStore 구독 (selectedEdgeIndex)
+  → updateSelectedState(selectedEdgeIndex) 호출
+  → edgeToInstanceMap에서 instance 범위 조회
+  → selectedAttr.array[start..start+count] = 1.0
+  → selectedAttr.needsUpdate = true
+  → GPU만 업데이트 (React 리렌더링 없음)
+
+Shader 처리:
+  vertex: vSelected = aSelected
+  fragment: finalColor = mix(uColor, uSelectedColor, vSelected)
+
+성능:
+  - React 리렌더링: 없음
+  - 맵 로딩: 없음
+  - GPU 업데이트만 발생 (O(1))
+```
+
 ## Critical Rules
 
 **Zero-Copy 원칙:**
@@ -207,6 +269,9 @@ other section: [SL_x, SL_y, SR_x, SR_y]  (zones)
 | instanceData attribute 변경 | shader, buffer 업데이트 로직 |
 | fabOffset 로직 변경 | 렌더링 위치, multi-fab 정렬 |
 | 버퍼 크기 계산 | calculateRenderLayout, shmSimulatorStore |
+| Edge 선택 색상 변경 | EdgeRenderer (SELECTED_EDGE_COLOR), edgeFragment.glsl |
+| edgeControlStore 변경 | EdgeRenderer, EdgeControlPanel |
+| Edge shader 변경 | edgeVertex.glsl, edgeFragment.glsl, EdgeRenderer |
 
 ## Performance Tips
 

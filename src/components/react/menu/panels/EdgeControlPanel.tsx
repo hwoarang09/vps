@@ -15,6 +15,7 @@ const EdgeControlPanel: React.FC = () => {
   const edges = useEdgeStore((state) => state.edges);
   const edgeNameToIndex = useEdgeStore((state) => state.edgeNameToIndex);
   const selectedEdgeIndex = useEdgeControlStore((state) => state.selectedEdgeIndex);
+  const selectEdge = useEdgeControlStore((state) => state.selectEdge);
   const getNodeByName = useNodeStore((state) => state.getNodeByName);
   const setCameraView = useCameraStore((state) => state.setCameraView);
 
@@ -156,6 +157,7 @@ const EdgeControlPanel: React.FC = () => {
 
     if (foundIdx !== null) {
       setFoundEdgeIndex(foundIdx);
+      selectEdge(foundIdx);  // Update store for EdgeRenderer highlight
       navigateToEdge(foundIdx);
     } else {
       setFoundEdgeIndex(null);
@@ -167,6 +169,7 @@ const EdgeControlPanel: React.FC = () => {
     setFoundEdgeIndex(edgeIndex);
     setSearchTerm(edges[edgeIndex]?.edge_name || "");
     setIsEdgeDropdownOpen(false);
+    selectEdge(edgeIndex);  // Update store for EdgeRenderer highlight
     navigateToEdge(edgeIndex);
   };
 

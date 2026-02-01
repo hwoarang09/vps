@@ -115,6 +115,7 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
     - Edge 드롭다운 (그룹별 정렬, BAY 또는 접두사 기준)
     - 검색 (이름/인덱스, Enter로 실행)
     - 카메라 자동 이동 (선택/검색 시 해당 Edge로 이동)
+    - Edge 선택 시 3D 뷰에서 하이라이트 (초록색)
 
   state:
     selectedFabIndex: number        # 선택된 Fab
@@ -128,6 +129,9 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
     useEdgeStore:
       - edges: Edge[]               # Edge 목록
       - edgeNameToIndex: Map        # 이름→인덱스 조회
+    useEdgeControlStore:
+      - selectedEdgeIndex           # 선택된 Edge (store)
+      - selectEdge(index)           # Edge 선택 → EdgeRenderer로 전달
     useNodeStore:
       - getNodeByName()             # Edge 좌표 계산용
     useCameraStore:
@@ -137,6 +141,11 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
     - Edge의 from_node, to_node 중간점 계산
     - Multi-fab일 경우 fab offset 적용
     - cameraHeight: 15, cameraOffset: 8
+
+  highlight flow:
+    handleEdgeSelect/handleSearch → selectEdge(index)
+    → EdgeRenderer가 store 구독
+    → 해당 Edge의 InstancedMesh 색상 변경 (GPU only)
 ```
 
 ## Store Map

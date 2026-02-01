@@ -1,13 +1,18 @@
 // Edge vertex shader for InstancedMesh
 uniform float uTime;
 uniform float uLength;
+
+attribute float aSelected;
+
 varying vec3 vPosition;
 varying float vProgress;
 varying vec2 vUv;
+varying float vSelected;
 
 void main() {
     vPosition = position;
     vUv = uv;
+    vSelected = aSelected;
 
     // Calculate progress along the edge (0.0 to 1.0)
     vProgress = (position.x + 0.5);
