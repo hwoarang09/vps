@@ -325,6 +325,96 @@ src/config/testSettingConfig.ts
 | EdgeControlPanel 변경 | RightPanel, useFabStore, useCameraStore |
 | cameraStore 변경 | EdgeControlPanel, IndividualControlPanel |
 
+## Styling System
+
+### CVA (Class Variance Authority) 기반 스타일
+```yaml
+src/components/react/menu/shared/menuStyles.ts
+  exports:
+    menuButtonVariants:
+      - active: true/false (버튼 활성화 상태)
+      - size: small/large (Level 1/2 크기)
+
+    menuContainerVariants:
+      - level: 1/2 (메뉴 레벨)
+      - 자동 glow 효과 (shadow-menu-container-glow)
+
+    menuDividerClass: 메뉴 구분선
+    bottomLabelVariants: 버튼 라벨 텍스트
+
+src/components/react/menu/shared/panelStyles.ts
+  exports:
+    panelContainerVariants:
+      - position: right/top/floating
+      - padding: none/sm/md/lg
+
+    panelHeaderVariants, panelTitleVariants:
+      - size: sm/md/lg
+      - color: white/orange/muted/cyan
+
+    panelInputVariants:
+      - size: sm/md/lg
+      - width: auto/full/fixed
+
+    panelSelectVariants:
+      - accent: cyan/orange/purple/default
+      - size: sm/md
+
+    panelButtonVariants:
+      - variant: primary/success/danger/warning/purple/ghost/glow-*
+      - size: sm/md/lg
+
+    panelCardVariants:
+      - variant: default/interactive/highlight/glow-*
+      - padding: sm/md/lg
+
+    panelTextVariants, panelLabelVariants, panelBadgeVariants
+```
+
+### Tailwind 커스텀 설정 (tailwind.config.js)
+```yaml
+colors:
+  menu:
+    active-bg: rgba(94, 197, 255, 0.85)
+    inactive-bg: #262C3F
+    container-bg: #353948
+    container-bg-lv2: #464959
+    border-*: 메뉴 테두리 색상들
+
+  panel:
+    bg: rgba(30, 40, 60, 0.95)
+    bg-solid: #1e283c
+    bg-light: rgba(40, 50, 70, 0.9)
+    border: rgba(100, 130, 160, 0.5)
+
+  accent-*: orange/cyan/green/red/purple/yellow
+
+boxShadow:
+  menu-glow: 활성 버튼 glow
+  menu-hover: 호버 시 glow
+  menu-container-glow: 메뉴 컨테이너 glow
+  glow-*: 패널 카드용 (orange/cyan/blue/green/purple/red)
+  glow-*-strong: 강조 상태용
+```
+
+### 사용 예시
+```tsx
+// 메뉴 버튼
+<button className={menuButtonVariants({ active: isActive, size: "large" })}>
+
+// 메뉴 컨테이너
+<div className={menuContainerVariants({ level: 1 })}>
+
+// 패널 카드 (glow 효과)
+<div className={panelCardVariants({ variant: "glow-cyan", padding: "md" })}>
+
+// 패널 버튼
+<button className={panelButtonVariants({ variant: "primary", size: "sm" })}>
+
+// 클래스 병합 (twMerge 사용)
+<input className={twMerge(panelInputVariants({ size: "md" }), "w-full")} />
+```
+
 ## Debugging
 
 ### 메뉴 상태 확인
