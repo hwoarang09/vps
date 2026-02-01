@@ -26,9 +26,8 @@ import { TestSetting } from "@/config/testSettingConfig";
 
 // Dropdown menu item style
 const dropdownItemClass = twMerge(
-  "w-full px-3 py-2 text-left text-xs font-mono",
-  "text-gray-200 hover:text-white hover:bg-white/10 transition-colors",
-  "border-b border-white/5 last:border-b-0"
+  "w-full px-2 py-2 text-left text-xs font-mono",
+  "text-gray-200 hover:text-white hover:bg-white/10 transition-colors"
 );
 
 const dropdownActiveClass = "bg-accent-cyan/20 text-accent-cyan font-bold";
@@ -56,7 +55,7 @@ const DropdownButton: React.FC<DropdownButtonProps> = ({
 
   const handleMouseEnter = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(menuId, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom }, 2);
+    showTooltip(menuId, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom - 40 }, 2);
   };
 
   return (
@@ -103,7 +102,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 
   const handleMouseEnter = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(menuId, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom }, 2);
+    showTooltip(menuId, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom - 40 }, 2);
   };
 
   const getIconColor = () => {
@@ -275,7 +274,12 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
             accentColor="text-accent-cyan"
           />
           {activeDropdown === "map" && (
-            <div className="absolute top-12 left-0 min-w-[200px] bg-gray-900/98 border border-accent-cyan/40 rounded-lg shadow-lg shadow-accent-cyan/20 z-50 overflow-hidden">
+            <div
+              className={twMerge(
+                menuContainerVariants({ level: 2 }),
+                "absolute top-16 left-0 min-w-[200px] flex-col z-50 overflow-hidden p-0 space-x-0"
+              )}
+            >
               {testSettings.map((setting) => (
                 <button
                   key={setting.id}
@@ -306,7 +310,12 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
             accentColor="text-accent-purple"
           />
           {activeDropdown === "mode" && (
-            <div className="absolute top-12 left-0 min-w-[120px] bg-gray-900/98 border border-accent-purple/40 rounded-lg shadow-lg shadow-accent-purple/20 z-50 overflow-hidden">
+            <div
+              className={twMerge(
+                menuContainerVariants({ level: 2 }),
+                "absolute top-16 left-0 min-w-[120px] flex-col z-50 overflow-hidden p-0 space-x-0"
+              )}
+            >
               {Object.entries(transferModeLabels).map(([mode, label]) => (
                 <button
                   key={mode}
