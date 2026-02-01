@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
-import { Search, Play, Pause, Settings, Octagon } from "lucide-react";
+import { Search, Play, Pause, Settings, Octagon, Video, VideoOff } from "lucide-react";
+import { useCameraStore } from "@/store/ui/cameraStore";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
@@ -172,6 +173,12 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     const [tick, setTick] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Camera follow state
+    const followingVehicleId = useCameraStore((state) => state.followingVehicleId);
+    const followVehicle = useCameraStore((state) => state.followVehicle);
+    const stopFollowingVehicle = useCameraStore((state) => state.stopFollowingVehicle);
+    const isFollowing = followingVehicleId === vehicleIndex;
+
     // Poll for status updates
     useEffect(() => {
         intervalRef.current = setInterval(() => {
@@ -218,6 +225,14 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         const vehicleData = vehicleDataArray.get(vehicleIndex);
         const currentSensor = vehicleData.sensor.presetIdx;
         vehicleData.sensor.presetIdx = (currentSensor + 1) % 5;
+    };
+
+    const handleToggleFollow = () => {
+        if (isFollowing) {
+            stopFollowingVehicle();
+        } else {
+            followVehicle(vehicleIndex);
+        }
     };
 
     const getCurrentSensorPreset = () => {
@@ -348,35 +363,45 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     return (
         <div className="space-y-4">
              {/* Control Area */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
                     <button
                         onClick={handleStop}
-                        className="flex flex-col items-center justify-center p-3 border border-red-200 bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-2 border border-red-200 bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors"
                     >
-                        <Octagon size={24} className="mb-1 fill-red-100" />
-                        <span className="text-xs font-medium">Stop</span>
+                        <Octagon size={20} className="mb-1 fill-red-100" />
+                        <span className="text-[10px] font-medium">Stop</span>
                     </button>
                     <button
                         onClick={handlePause}
-                        className="flex flex-col items-center justify-center p-3 border border-orange-200 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-2 border border-orange-200 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 transition-colors"
                     >
-                        <Pause size={24} className="mb-1" />
-                        <span className="text-xs font-medium">Pause</span>
+                        <Pause size={20} className="mb-1" />
+                        <span className="text-[10px] font-medium">Pause</span>
                     </button>
                     <button
                         onClick={handleResume}
-                        className="flex flex-col items-center justify-center p-3 border border-green-200 bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-2 border border-green-200 bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
                     >
-                        <Play size={24} className="mb-1" />
-                        <span className="text-xs font-medium">Resume</span>
+                        <Play size={20} className="mb-1" />
+                        <span className="text-[10px] font-medium">Resume</span>
                     </button>
-                    
+                    <button
+                        onClick={handleToggleFollow}
+                        className={`flex flex-col items-center justify-center p-2 border rounded transition-colors ${
+                            isFollowing
+                                ? "border-purple-400 bg-purple-100 text-purple-700 hover:bg-purple-200"
+                                : "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
+                        }`}
+                    >
+                        {isFollowing ? <Video size={20} className="mb-1" /> : <VideoOff size={20} className="mb-1" />}
+                        <span className="text-[10px] font-medium">{isFollowing ? "Following" : "Follow"}</span>
+                    </button>
                     <button
                         onClick={handleChangeSensor}
-                        className="flex flex-col items-center justify-center p-3 border border-blue-200 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                        className="flex flex-col items-center justify-center p-2 border border-blue-200 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
                     >
-                            <Settings size={24} className="mb-1" />
-                            <span className="text-[10px] font-medium leading-tight text-center px-1">
+                            <Settings size={20} className="mb-1" />
+                            <span className="text-[10px] font-medium leading-tight text-center">
                             {Object.keys(PresetIndex).find(key => PresetIndex[key as keyof typeof PresetIndex] === getCurrentSensorPreset()) || "SENSOR"}
                             </span>
                     </button>
@@ -621,11 +646,15 @@ const IndividualControlPanel: React.FC = () => {
     const vehiclesRef = useRef(vehicles);
     vehiclesRef.current = vehicles;
 
+    // Camera follow
+    const followVehicle = useCameraStore((state) => state.followVehicle);
+    const stopFollowingVehicle = useCameraStore((state) => state.stopFollowingVehicle);
+
     // Helper to find vehicle index by ID string
-    // Optimization based on user feedback: ID is strictly sequential (VEH001 -> Index 0)
     const handleSearch = () => {
         if (!searchTerm) {
             setFoundVehicleIndex(null);
+            stopFollowingVehicle();
             return;
         }
 
@@ -634,34 +663,22 @@ const IndividualControlPanel: React.FC = () => {
         const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
         const actualNumVehicles = isShmMode ? shmActualNumVehicles : arrayActualNumVehicles;
 
-        // Debug: 현재 상태 출력
-        console.log('[VehicleSearch] mode:', isShmMode ? 'SHM' : 'ARRAY');
-        console.log('[VehicleSearch] actualNumVehicles:', actualNumVehicles);
-        console.log('[VehicleSearch] vehicles map size:', vehiclesRef.current.size);
-        console.log('[VehicleSearch] searchTerm:', searchTerm);
-
         let found = -1;
 
         // Direct Index Mapping
         const match = searchTerm.match(/(\d+)/);
         if (match) {
             const idNum = Number.parseInt(match[0], 10);
-            const targetIdx = idNum; // ID corresponds to index directly (VEH00001 -> Index 1)
+            const targetIdx = idNum;
 
-            console.log('[VehicleSearch] parsed idNum:', idNum, 'targetIdx:', targetIdx);
-
-            // SHM 모드: vehicles map 대신 actualNumVehicles로 유효성 검사
+            // SHM 모드: actualNumVehicles로 유효성 검사
             if (isShmMode) {
                 if (targetIdx >= 0 && targetIdx < actualNumVehicles) {
                     found = targetIdx;
-                    console.log('[VehicleSearch] SHM mode - valid index');
-                } else {
-                    console.log('[VehicleSearch] SHM mode - index out of range (0 ~', actualNumVehicles - 1, ')');
                 }
             } else {
                 // Array 모드: vehicles map에서 찾기
                 const v = vehiclesRef.current.get(targetIdx);
-                console.log('[VehicleSearch] found vehicle at index:', v);
                 if (v) {
                     found = targetIdx;
                 }
@@ -670,10 +687,11 @@ const IndividualControlPanel: React.FC = () => {
 
         if (found >= 0) {
             setFoundVehicleIndex(found);
-            console.log('[VehicleSearch] SUCCESS - foundVehicleIndex:', found);
+            // 자동으로 카메라 팔로우 시작
+            followVehicle(found);
         } else {
             setFoundVehicleIndex(null);
-            console.log('[VehicleSearch] FAILED - vehicle not found');
+            stopFollowingVehicle();
             alert("Vehicle not found");
         }
     };
@@ -683,8 +701,10 @@ const IndividualControlPanel: React.FC = () => {
         if (selectedVehicleId !== null) {
             setFoundVehicleIndex(selectedVehicleId);
             setSearchTerm(`VEH${String(selectedVehicleId).padStart(5, '0')}`);
+            // 자동으로 카메라 팔로우 시작
+            followVehicle(selectedVehicleId);
         }
-    }, [selectedVehicleId]);
+    }, [selectedVehicleId, followVehicle]);
 
     return (
         <div className="space-y-4">

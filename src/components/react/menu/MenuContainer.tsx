@@ -9,6 +9,7 @@ import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
+import { useCameraStore } from "@/store/ui/cameraStore";
 import { MenuTooltip } from "./MenuTooltip";
 import MqttStatusIndicator from "../system/MqttStatusIndicator";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
@@ -19,6 +20,13 @@ const MenuContainer: React.FC = () => {
   const isPanelOpen = useVehicleControlStore((state) => state.isPanelOpen);
   const openPanel = useVehicleControlStore((state) => state.openPanel);
   const closePanel = useVehicleControlStore((state) => state.closePanel);
+  const stopFollowingVehicle = useCameraStore((state) => state.stopFollowingVehicle);
+
+  // Close panel and stop following
+  const handleClosePanel = () => {
+    closePanel();
+    stopFollowingVehicle();
+  };
 
   // Load MQTT config on mount and auto-connect
   useEffect(() => {
@@ -56,7 +64,7 @@ const MenuContainer: React.FC = () => {
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800">Vehicle Control</h2>
             <button
-              onClick={closePanel}
+              onClick={handleClosePanel}
               className="text-gray-500 hover:text-gray-700 text-xl"
             >
               ×

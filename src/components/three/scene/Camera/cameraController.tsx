@@ -5,10 +5,19 @@ import { useCameraStore } from "@store/ui/cameraStore";
 import { useMenuStore } from "@store/ui/menuStore";
 import { OrbitControls } from 'three-stdlib';
 import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "@/config/cameraConfig";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
+import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/memory/VehicleDataArrayBase";
 
 // Zero-GC Scratchpads (모듈 레벨에서 한 번만 할당)
 const _scratchZAxis = new THREE.Vector3(0, 0, 1);
 const _scratchOffset = new THREE.Vector3();
+const _scratchTargetPos = new THREE.Vector3();
+const _scratchTargetTarget = new THREE.Vector3();
+
+// Lerp smoothing factor (0 = no movement, 1 = instant)
+const CAMERA_LERP_FACTOR = 0.08;
 
 const CameraController: React.FC = () => {
   const { camera, controls } = useThree(); // controls는 drei가 set해줌
@@ -228,7 +237,7 @@ const CameraController: React.FC = () => {
     }
   }, [camera, controls, rotateZDeg, _resetRotateZ, activeMainMenu, activeSubMenu]);
 
-  // Vehicle following logic
+  // Vehicle following logic with smooth lerp
   useFrame(() => {
     if (!controls || followingVehicleId === null) return;
 
@@ -236,28 +245,50 @@ const CameraController: React.FC = () => {
     const isBayBuilderMode = activeMainMenu === "LayoutBuilder" && activeSubMenu === "layout-menu-1";
     if (isBayBuilderMode) return;
 
-    // Get vehicle position from vehicleDataArray
-    // @ts-ignore - accessing global globalThis object
-    const vehicleData = globalThis.vehicleDataArray?.get(followingVehicleId);
+    // Get vehicle position based on mode (SHM or Array)
+    let vehX = 0, vehY = 0, vehZ = 0;
+    let vehicleFound = false;
 
-    if (vehicleData && vehicleData.status.status !== 0) {
-      const vehX = vehicleData.movement.x;
-      const vehY = vehicleData.movement.y;
-      const vehZ = vehicleData.movement.z;
+    const shmData = useShmSimulatorStore.getState().getVehicleFullData();
+    const shmActualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
 
-      const orbitControls = controls as OrbitControls;
-
-      // Update camera position with offset
-      camera.position.set(
-        vehX + followOffset[0],
-        vehY + followOffset[1],
-        vehZ + followOffset[2]
-      );
-
-      // Update target to vehicle position
-      orbitControls.target.set(vehX, vehY, vehZ);
-      orbitControls.update();
+    if (shmData && shmActualNumVehicles > 0 && followingVehicleId < shmActualNumVehicles) {
+      // SHM mode
+      const ptr = followingVehicleId * VEHICLE_DATA_SIZE;
+      vehX = shmData[ptr + MovementData.X];
+      vehY = shmData[ptr + MovementData.Y];
+      vehZ = shmData[ptr + MovementData.Z];
+      vehicleFound = true;
+    } else {
+      // Array mode fallback
+      const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
+      if (arrayActualNumVehicles > 0 && followingVehicleId < arrayActualNumVehicles) {
+        const vehicleData = vehicleDataArray.get(followingVehicleId);
+        if (vehicleData) {
+          vehX = vehicleData.movement.x;
+          vehY = vehicleData.movement.y;
+          vehZ = vehicleData.movement.z;
+          vehicleFound = true;
+        }
+      }
     }
+
+    if (!vehicleFound) return;
+
+    const orbitControls = controls as OrbitControls;
+
+    // Calculate target positions
+    _scratchTargetPos.set(
+      vehX + followOffset[0],
+      vehY + followOffset[1],
+      vehZ + followOffset[2]
+    );
+    _scratchTargetTarget.set(vehX, vehY, vehZ);
+
+    // Smooth lerp interpolation
+    camera.position.lerp(_scratchTargetPos, CAMERA_LERP_FACTOR);
+    orbitControls.target.lerp(_scratchTargetTarget, CAMERA_LERP_FACTOR);
+    orbitControls.update();
   });
  
    // Fine zoom adjustment with + and - keys
