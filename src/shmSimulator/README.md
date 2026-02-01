@@ -421,6 +421,129 @@ perfStats.physics += performance.now() - start;
 console.log("Avg physics:", (perfStats.physics / frameCount).toFixed(2), "ms");
 ```
 
+## Worker-Main 통신
+
+Worker와 Main Thread 간의 통신은 두 가지 방식으로 이루어집니다:
+
+### 1. SharedArrayBuffer (고빈도 데이터)
+차량 위치, 센서 포인트 등 60fps로 업데이트되는 데이터는 SharedArrayBuffer를 통해 공유합니다.
+
+```
+Worker: vehicleDataArray[ptr] = newPosition
+                    ↓ (공유 메모리)
+Main Thread: instancedMesh.matrix = vehicleDataArray[ptr]
+```
+
+### 2. postMessage (저빈도 이벤트)
+에러, 성능 통계, 상태 변경 등 간헐적인 이벤트는 postMessage로 전달합니다.
+
+| 메시지 타입 | 방향 | 용도 |
+|------------|------|------|
+| `INIT` | Main → Worker | 초기화 |
+| `START/STOP` | Main → Worker | 시뮬레이션 제어 |
+| `COMMAND` | Main → Worker | Fab별 명령 |
+| `PERF_STATS` | Worker → Main | 성능 통계 (5초마다) |
+| `ERROR` | Worker → Main | 에러 발생 |
+| `UNUSUAL_MOVE` | Worker → Main | 비정상 이동 감지 |
+
+## 에러 감지: UnusualMove
+
+### 개요
+차량이 연결되지 않은 edge로 이동하려 할 때 감지되는 에러입니다. 이 에러가 발생하면:
+1. 시뮬레이션이 자동으로 중지됩니다
+2. 화면에 상세 정보가 포함된 모달이 표시됩니다
+
+### 감지 조건
+```typescript
+// src/common/vehicle/movement/edgeTransition.ts
+if (currentEdge.to_node !== nextEdge.from_node) {
+  // 이전 edge의 도착 노드와 다음 edge의 출발 노드가 다름
+  // → 연결되지 않은 edge로 이동 시도
+  onUnusualMove({ ... });
+}
+```
+
+### 데이터 구조
+```typescript
+interface UnusualMoveData {
+  vehicleIndex: number;      // 문제가 발생한 차량
+  fabId: string;             // Fab ID
+  prevEdge: {
+    name: string;            // 이전 edge 이름
+    toNode: string;          // 이전 edge의 도착 노드
+  };
+  nextEdge: {
+    name: string;            // 다음 edge 이름
+    fromNode: string;        // 다음 edge의 출발 노드
+  };
+  position: { x: number; y: number };  // 발생 위치
+  timestamp: number;         // 시뮬레이션 시간 (ms)
+}
+```
+
+### 이벤트 흐름
+```
+1. Worker: edgeTransition에서 감지
+      ↓
+2. Worker: postMessage({ type: "UNUSUAL_MOVE", data })
+      ↓
+3. Main: MultiWorkerController.onUnusualMove 콜백 호출
+      ↓
+4. Main: shmSimulatorStore에 상태 저장 + 시뮬레이션 중지
+      ↓
+5. React: UnusualMoveModal 렌더링
+```
+
+### 사용 예시
+```typescript
+// Store에서 UnusualMove 상태 확인
+const unusualMove = useShmSimulatorStore((s) => s.unusualMove);
+
+if (unusualMove) {
+  console.log(`Vehicle ${unusualMove.vehicleIndex} attempted invalid transition`);
+  console.log(`From: ${unusualMove.prevEdge.name} (to: ${unusualMove.prevEdge.toNode})`);
+  console.log(`To: ${unusualMove.nextEdge.name} (from: ${unusualMove.nextEdge.fromNode})`);
+}
+
+// 상태 초기화
+useShmSimulatorStore.getState().clearUnusualMove();
+```
+
+## 새로운 Worker → Main 이벤트 추가하기
+
+1. **타입 정의** (`types.ts`)
+```typescript
+// MainMessage에 추가
+| { type: "NEW_EVENT"; data: NewEventData };
+```
+
+2. **Worker에서 발생** (`FabContext.ts` 또는 관련 파일)
+```typescript
+globalThis.postMessage({ type: "NEW_EVENT", data: eventData });
+```
+
+3. **Controller에서 수신** (`MultiWorkerController.ts`)
+```typescript
+private onNewEventCallback: ((data: NewEventData) => void) | null = null;
+
+onNewEvent(callback: (data: NewEventData) => void): void {
+  this.onNewEventCallback = callback;
+}
+
+// handleWorkerMessage에서
+case "NEW_EVENT":
+  this.onNewEventCallback?.(message.data);
+  break;
+```
+
+4. **Store에서 처리** (`shmSimulatorStore.ts`)
+```typescript
+controller.onNewEvent((data) => {
+  set({ newEventData: data });
+  // 필요시 추가 액션
+});
+```
+
 ## 관련 문서
 - [시스템 전체 아키텍처](../../doc/README.md)
 - [Multi-Worker Architecture](../../doc/dev_req/MULTI_WORKER_ARCHITECTURE.md)
