@@ -45,6 +45,20 @@ export interface EdgeTransitionResult {
  *        NOTE: This flag is somewhat legacy now that we support nextTargetRatio, but kept for compatibility.
  * @param nextTargetRatio - The target ratio to set for the new edge (optional).
  */
+/** UnusualMove 이벤트 데이터 */
+export interface UnusualMoveEvent {
+  vehicleIndex: number;
+  prevEdgeName: string;
+  prevEdgeToNode: string;
+  nextEdgeName: string;
+  nextEdgeFromNode: string;
+  posX: number;
+  posY: number;
+}
+
+/** UnusualMove 콜백 타입 */
+export type OnUnusualMoveCallback = (event: UnusualMoveEvent) => void;
+
 export interface EdgeTransitionParams {
   vehicleDataArray: IVehicleDataArray;
   store: IEdgeTransitionStore;
@@ -59,6 +73,8 @@ export interface EdgeTransitionParams {
   pathBufferFromAutoMgr?: Int32Array | null;
   /** Lock manager for checking per-node lock status (optional for backward compat) */
   lockMgr?: IEdgeTransitionLockMgr;
+  /** UnusualMove 발생 시 콜백 (optional) */
+  onUnusualMove?: OnUnusualMoveCallback;
 }
 
 /** Lock 상태 체크 결과 */
@@ -156,7 +172,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     preserveTargetRatio = false,
     nextTargetRatio,
     pathBufferFromAutoMgr,
-    lockMgr
+    lockMgr,
+    onUnusualMove
   } = params;
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
@@ -209,6 +226,19 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
         `prevEdge=${currentEdge.edge_name}(to:${currentEdge.to_node}) → nextEdge=${nextEdge.edge_name}(from:${nextEdge.from_node}), ` +
         `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)})`
       );
+
+      // 콜백 호출
+      if (onUnusualMove) {
+        onUnusualMove({
+          vehicleIndex,
+          prevEdgeName: currentEdge.edge_name,
+          prevEdgeToNode: currentEdge.to_node,
+          nextEdgeName: nextEdge.edge_name,
+          nextEdgeFromNode: nextEdge.from_node,
+          posX: prevX,
+          posY: prevY,
+        });
+      }
     }
 
     store.moveVehicleToEdge(vehicleIndex, nextEdgeIndex, overflowDist / nextEdge.distance);

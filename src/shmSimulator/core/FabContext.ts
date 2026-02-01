@@ -21,7 +21,7 @@ import {
 } from "../MemoryLayoutManager";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import type { SimulationConfig, TransferMode, VehicleInitConfig, FabMemoryAssignment, SharedMapRef, FabRenderOffset } from "../types";
+import type { SimulationConfig, TransferMode, VehicleInitConfig, FabMemoryAssignment, SharedMapRef, FabRenderOffset, UnusualMoveData } from "../types";
 import type { StationRawData } from "@/types/station";
 
 export interface FabInitParams {
@@ -358,6 +358,7 @@ export class FabContext {
     // 3. Movement Update
     const tracker = this.edgeTransitTracker;
     const edges = this.edges;
+    const fabId = this.fabId;
 
     const movementCtx: MovementUpdateContext = {
       vehicleDataArray: this.vehicleDataArray,
@@ -386,6 +387,24 @@ export class FabContext {
             tracker.onEdgeEnter(vehId, toEdgeIndex, timestamp);
           }
         : undefined,
+      onUnusualMove: (event) => {
+        // Worker에서 Main Thread로 UnusualMove 이벤트 전송
+        const data: UnusualMoveData = {
+          vehicleIndex: event.vehicleIndex,
+          fabId,
+          prevEdge: {
+            name: event.prevEdgeName,
+            toNode: event.prevEdgeToNode,
+          },
+          nextEdge: {
+            name: event.nextEdgeName,
+            fromNode: event.nextEdgeFromNode,
+          },
+          position: { x: event.posX, y: event.posY },
+          timestamp: simulationTime,
+        };
+        globalThis.postMessage({ type: "UNUSUAL_MOVE", data });
+      },
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
     };
     updateMovement(movementCtx);

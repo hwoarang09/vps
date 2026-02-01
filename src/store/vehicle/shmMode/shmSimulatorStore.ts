@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import { MultiWorkerController, MultiFabInitParams, WorkerPerfStats } from "@/shmSimulator/MultiWorkerController";
 import { TransferMode } from "@/shmSimulator";
-import type { SimulationConfig, VehicleInitConfig, SharedMapData } from "@/shmSimulator";
+import type { SimulationConfig, VehicleInitConfig, SharedMapData, UnusualMoveData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { getSimulationConfig } from "@/config/simulationConfig";
@@ -27,6 +27,8 @@ interface ShmSimulatorState {
   workerStdDev: number;
   workerCV: number;
   workerP99: number;
+  /** UnusualMove 이벤트 정보 (발생 시 모달 표시용) */
+  unusualMove: UnusualMoveData | null;
 
   // Actions
   init: (params: {
@@ -78,6 +80,8 @@ interface ShmSimulatorState {
   deleteLogFile: (fileName: string) => Promise<void>;
   deleteAllLogFiles: () => Promise<number>;
   getLockTableData: (fabId: string) => Promise<import("@/shmSimulator/types").LockTableData | null>;
+  /** UnusualMove 상태 초기화 */
+  clearUnusualMove: () => void;
 }
 
 export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
@@ -94,6 +98,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   workerStdDev: 0,
   workerCV: 0,
   workerP99: 0,
+  unusualMove: null,
 
   init: async (params) => {
     const {
@@ -154,6 +159,13 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 
     controller.onError((_error) => {
       // Error logged by MultiWorkerController internally
+    });
+
+    controller.onUnusualMove((data) => {
+      // UnusualMove 발생 시 상태 저장 및 시뮬레이션 중지
+      set({ unusualMove: data });
+      controller.stop();
+      set({ isRunning: false });
     });
 
     try {
@@ -275,6 +287,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       workerStdDev: 0,
       workerCV: 0,
       workerP99: 0,
+      unusualMove: null,
     });
   },
 
@@ -377,6 +390,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (!controller) return null;
     return controller.getLockTableData(fabId);
+  },
+
+  clearUnusualMove: () => {
+    set({ unusualMove: null });
   },
 }));
 

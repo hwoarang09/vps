@@ -7,7 +7,7 @@ import {
   MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 import type { SpeedConfig } from "@/common/vehicle/physics/speedCalculator";
-import type { IEdgeTransitionStore } from "./edgeTransition";
+import type { IEdgeTransitionStore, OnUnusualMoveCallback } from "./edgeTransition";
 import type { SensorPointsConfig } from "@/common/vehicle/helpers/sensorPoints";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
 import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
@@ -62,6 +62,8 @@ export interface MovementUpdateContext {
   simulationTime?: number;
   /** Edge 통과 이벤트 콜백 (로깅용) */
   onEdgeTransit?: OnEdgeTransitCallback;
+  /** UnusualMove 이벤트 콜백 (연결되지 않은 edge로 이동 감지 시) */
+  onUnusualMove?: OnUnusualMoveCallback;
   /** 곡선 사전 감속 체크를 위한 차량별 누적 시간 (ms) */
   curveBrakeCheckTimers?: Map<number, number>;
 }

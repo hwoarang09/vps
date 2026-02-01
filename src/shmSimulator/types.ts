@@ -339,7 +339,24 @@ export type MainMessage =
     }
   | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }
   | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string }
-  | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData };
+  | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData }
+  | { type: "UNUSUAL_MOVE"; data: UnusualMoveData };
+
+// UnusualMove 이벤트 데이터
+export interface UnusualMoveData {
+  vehicleIndex: number;
+  fabId: string;
+  prevEdge: {
+    name: string;
+    toNode: string;
+  };
+  nextEdge: {
+    name: string;
+    fromNode: string;
+  };
+  position: { x: number; y: number };
+  timestamp: number;
+}
 
 // Lock 테이블 데이터 (직렬화 가능한 형태)
 export interface LockNodeData {

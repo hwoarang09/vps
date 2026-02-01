@@ -10,6 +10,7 @@ import type {
   FabInitData,
   SharedMapData,
   FabMemoryAssignment,
+  UnusualMoveData,
 } from "./types";
 import { TransferMode, createDefaultConfig } from "./types";
 import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment, RenderBufferLayout } from "./MemoryLayoutManager";
@@ -105,6 +106,7 @@ export class MultiWorkerController {
   // 콜백
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
+  private onUnusualMoveCallback: ((data: UnusualMoveData) => void) | null = null;
 
   // Rule D.1: Add readonly modifier - never reassigned after constructor
   // Lock 테이블 요청 대기
@@ -116,6 +118,10 @@ export class MultiWorkerController {
 
   onError(callback: (error: string) => void): void {
     this.onErrorCallback = callback;
+  }
+
+  onUnusualMove(callback: (data: UnusualMoveData) => void): void {
+    this.onUnusualMoveCallback = callback;
   }
 
   /**
@@ -395,6 +401,10 @@ export class MultiWorkerController {
         }
         break;
       }
+
+      case "UNUSUAL_MOVE":
+        this.onUnusualMoveCallback?.(message.data);
+        break;
     }
   }
 

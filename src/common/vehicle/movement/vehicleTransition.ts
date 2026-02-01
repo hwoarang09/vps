@@ -184,7 +184,8 @@ function processEdgeTransitionLogic(
       preserveTargetRatio: preserveTargetRatio,
       nextTargetRatio: nextTargetRatio,
       pathBufferFromAutoMgr: ctx.transferMgr.getPathBufferFromAutoMgr(),
-      lockMgr: ctx.lockMgr
+      lockMgr: ctx.lockMgr,
+      onUnusualMove: ctx.onUnusualMove
     });
 
     // Edge transit 콜백 호출 (로깅용)
