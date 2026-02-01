@@ -34,6 +34,8 @@ src/components/react/menu/RightPanel.tsx:237
   content routing:
     - MapBuilder → 부품 목록 표시
     - devtools-lock → LockInfoPanel
+    - search-vehicle → IndividualControlPanel
+    - search-edge → EdgeControlPanel
     - 기타 → 샘플 콘텐츠
 
 src/components/react/menu/data/MenuLevel1Config.tsx:148
@@ -59,6 +61,7 @@ src/components/react/menu/data/menuLevel2Config.tsx:428
     Operation: Routes, Schedule, Monitor, Alerts, Logs
     MapBuilder: Straight, 90° Curve, 180° Curve, S Curve, H/R Shape, Junction, Bridge, Custom
     LayoutBuilder: Bay Builder, Station Builder, Equipment Builder
+    Search: Vehicle Search, Edge Search, Node Search, Station Search
     DevTools: Lock
 
 src/components/test/VehicleTest/VehicleTest.tsx
@@ -103,6 +106,37 @@ src/components/react/menu/panels/IndividualControlPanel.tsx
 
   data source:
     vehicleControlStore.selectedVehicleId
+
+src/components/react/menu/panels/EdgeControlPanel.tsx
+  purpose: Edge 검색 및 카메라 이동 패널
+
+  features:
+    - Fab 선택 드롭다운 (multi-fab일 때만 표시)
+    - Edge 드롭다운 (그룹별 정렬, BAY 또는 접두사 기준)
+    - 검색 (이름/인덱스, Enter로 실행)
+    - 카메라 자동 이동 (선택/검색 시 해당 Edge로 이동)
+
+  state:
+    selectedFabIndex: number        # 선택된 Fab
+    foundEdgeIndex: number | null   # 찾은 Edge 인덱스
+    isEdgeDropdownOpen: boolean     # 드롭다운 열림 상태
+
+  dependencies:
+    useFabStore:
+      - fabs: FabInfo[]             # Fab 목록
+      - isMultiFab()                # 멀티팹 여부
+    useEdgeStore:
+      - edges: Edge[]               # Edge 목록
+      - edgeNameToIndex: Map        # 이름→인덱스 조회
+    useNodeStore:
+      - getNodeByName()             # Edge 좌표 계산용
+    useCameraStore:
+      - setCameraView()             # 카메라 이동
+
+  camera navigation:
+    - Edge의 from_node, to_node 중간점 계산
+    - Multi-fab일 경우 fab offset 적용
+    - cameraHeight: 15, cameraOffset: 8
 ```
 
 ## Store Map
@@ -172,6 +206,7 @@ MenuLevel1 (하단)
 ├── MapBuilder → Straight, Curves, Junction, etc. → RightPanel (부품 목록)
 ├── LayoutBuilder → Bay, Station, Equipment
 ├── DataPanel → ConfigDataPanel 표시
+├── Search → Vehicle, Edge, Node, Station → RightPanel (각 패널)
 └── DevTools → Lock → RightPanel (LockInfoPanel)
 
 클릭 흐름:
@@ -263,6 +298,8 @@ src/config/testSettingConfig.ts
 | vehicleTestStore 변경 | VehicleTest, VehicleTestRunner |
 | fabConfigStore 변경 | SimulationParamsModal, VehicleSharedMemoryMode |
 | testSettingConfig 변경 | VehicleTest dropdown |
+| EdgeControlPanel 변경 | RightPanel, useFabStore, useCameraStore |
+| cameraStore 변경 | EdgeControlPanel, IndividualControlPanel |
 
 ## Debugging
 
