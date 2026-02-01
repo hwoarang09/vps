@@ -10,7 +10,7 @@ src/components/react/menu/MenuContainer.tsx:112
     - IndividualControlPanel (left, when vehicle selected)
     - MenuLevel1 (bottom)
     - MenuLevel2 (appears when lv1 active)
-    - RightPanel (right, when rightPanelOpen)
+    - RightPanel (right: 10px 여백, when rightPanelOpen)
     - ConfigDataPanel (when DataPanel menu active)
     - MenuTooltip
     - MapLoader
@@ -72,6 +72,7 @@ src/components/test/VehicleTest/VehicleTest.tsx
     customNumVehicles → 차량 수
     fabCountX/Y → 멀티 fab 그리드 크기
     isTestCreated → 테스트 생성 여부
+    activeLogDropdown → 'logs' | 'devlogs' | null (드롭다운 중복 열림 방지)
 
   data source:
     testSettingConfig.ts → getTestSettings()
@@ -80,7 +81,10 @@ src/components/test/VehicleTest/VehicleTest.tsx
   key actions:
     loadTestSetting(settingId) → 맵 로드 + 차량 생성
     handlePlay/Pause → vehicleTestStore.setPaused()
-    handleDownloadLog → shmSimulatorStore.downloadLogs()
+
+  log components:
+    LogFileManager → OPFS 로그 파일 관리 (props: isOpen, onToggle)
+    DevLogFileManager → 개발용 로그 파일 관리 (props: isOpen, onToggle)
 
 src/components/test/VehicleTest/SimulationParamsModal.tsx
   purpose: Fab별 시뮬레이션 파라미터 설정 모달
@@ -245,11 +249,14 @@ MenuLevel1 (하단)
 VehicleTest.tsx 렌더링 위치: MenuContainer 내부
 
 UI 구성:
-┌─────────────────────────────────────────┐
-│ [Test Setting Dropdown] [Fab X×Y]       │
-│ [Vehicle Count Input] [Max: N]          │
-│ [▶ Play] [⏸ Pause] [⚙ Settings] [📥]   │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ [Setting▼] [Mode▼] VEHICLES:[___]/max [Create][Delete] │ FAB:[X]×[Y] │
+│ [▶Play][⏸Pause] │ [📋Logs][📝DevLogs]                                │
+└──────────────────────────────────────────────────────────────────────┘
+
+로그 드롭다운 상태:
+- activeLogDropdown으로 통합 관리
+- Logs 열면 DevLogs 닫힘, 반대도 동일
 
 데이터 흐름:
 1. Test Setting 선택 → loadTestSetting(settingId)
@@ -263,7 +270,7 @@ UI 구성:
 3. Settings 버튼 → SimulationParamsModal 열기
    → fabConfigStore.setFabOverride()
 
-4. Download 버튼 → shmSimulatorStore.downloadLogs()
+4. Logs/DevLogs 버튼 → 드롭다운으로 OPFS 파일 목록 관리
 ```
 
 ## Config Files
