@@ -199,7 +199,7 @@ export const panelButtonVariants = cva(
         danger: "bg-accent-red hover:bg-accent-red/80 hover:shadow-glow-red",
         warning: "bg-accent-yellow hover:bg-accent-yellow/80 hover:shadow-glow-orange",
         purple: "bg-accent-purple hover:bg-accent-purple/80 hover:shadow-glow-purple",
-        ghost: "bg-transparent border border-panel-border hover:bg-panel-bg-light",
+        ghost: "bg-gray-600 border-2 border-gray-400 text-gray-300 shadow-[0_0_10px_rgba(150,160,170,0.4)]",
         // Glow variants - for active/selected states
         "glow-cyan": "bg-accent-cyan shadow-glow-cyan-strong border border-accent-cyan/50",
         "glow-orange": "bg-accent-orange shadow-glow-orange-strong border border-accent-orange/50",
