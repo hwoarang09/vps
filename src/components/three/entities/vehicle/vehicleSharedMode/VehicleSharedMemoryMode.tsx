@@ -118,10 +118,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           lockWaitDistanceFromMergingCurve: fabConfig.lock.waitDistanceFromMergingCurve,
           lockRequestDistanceFromMergingCurve: fabConfig.lock.requestDistanceFromMergingCurve,
           lockGrantStrategy: fabConfig.lock.grantStrategy,
-          ...(hasSensorOverride ? { sensorPresets } : {}),
+          ...(hasSensorOverride ? { customSensorPresets: sensorPresets } : {}),
         } : undefined;
-
-        // Rule A.2: Remove empty block
 
         return {
           fabId: fabData.fabId,

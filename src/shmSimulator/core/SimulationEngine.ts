@@ -82,8 +82,6 @@ export class SimulationEngine {
         ? { ...this.config, ...fabData.config }
         : this.config;
 
-      // Rule A.2: Remove empty block
-
       if (this.sharedMapRef && fabData.fabOffset) {
         // [최적화 모드] 공유 맵 참조 + fab offset 사용 (복제 없음!)
         const fabOffset = this.calculateFabOffset(

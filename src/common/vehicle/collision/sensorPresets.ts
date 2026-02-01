@@ -24,7 +24,8 @@ export interface SensorPreset {
   rightLength: number;
 }
 
-export const SENSOR_PRESETS: SensorPreset[] = [
+/** 기본 센서 프리셋 (fab별 커스텀 설정이 없을 때 사용) */
+export const DEFAULT_SENSOR_PRESETS: SensorPreset[] = [
   // 0: STRAIGHT
   {
     zones: {
@@ -113,4 +114,15 @@ export function getSensorZone(
   zone: SensorZoneKey = "approach"
 ): SensorZone {
   return preset.zones[zone];
+}
+
+/**
+ * 센서 프리셋을 가져옵니다.
+ * @param presetIdx 프리셋 인덱스 (0: STRAIGHT, 1: CURVE_LEFT, ...)
+ * @param customPresets fab별 커스텀 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용)
+ * @returns 해당 인덱스의 프리셋 (유효하지 않은 인덱스면 첫 번째 프리셋)
+ */
+export function getPreset(presetIdx: number, customPresets?: SensorPreset[]): SensorPreset {
+  const presets = customPresets ?? DEFAULT_SENSOR_PRESETS;
+  return presets[presetIdx] ?? presets[0];
 }

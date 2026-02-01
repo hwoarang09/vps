@@ -15,7 +15,7 @@ import {
   type GrantStrategy,
 } from "@/config/simulationConfig";
 import {
-  SENSOR_PRESETS,
+  DEFAULT_SENSOR_PRESETS,
   type SensorPreset,
   type SensorZone,
   type SensorZoneKey,
@@ -274,18 +274,18 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   /**
    * fab별 센서 프리셋 배열 반환 (base + override 병합)
-   * override가 없으면 기본 SENSOR_PRESETS 반환
+   * override가 없으면 기본 DEFAULT_SENSOR_PRESETS 반환
    */
   getFabSensorPresets: (fabIndex) => {
     const { fabOverrides } = get();
     const override = fabOverrides[fabIndex]?.sensor;
 
     if (!override?.presets) {
-      return SENSOR_PRESETS;
+      return DEFAULT_SENSOR_PRESETS;
     }
 
     // 오버라이드된 프리셋 배열 생성
-    return SENSOR_PRESETS.map((basePreset, presetIndex) => {
+    return DEFAULT_SENSOR_PRESETS.map((basePreset, presetIndex) => {
       const presetOverride = override.presets?.[presetIndex];
       if (!presetOverride) {
         return basePreset;

@@ -125,8 +125,8 @@ export interface SimulationConfig {
   edgeTransitLogEnabled?: boolean;
 
   // Sensor presets (fab별 오버라이드 가능)
-  /** fab별 커스텀 센서 프리셋 (없으면 기본 SENSOR_PRESETS 사용) */
-  sensorPresets?: SensorPreset[];
+  /** fab별 커스텀 센서 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용) */
+  customSensorPresets?: SensorPreset[];
 }
 
 export interface VehicleInitConfig {

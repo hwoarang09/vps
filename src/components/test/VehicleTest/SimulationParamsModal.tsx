@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useFabConfigStore, type FabConfigOverride, type GrantStrategy, type SensorZoneOverride } from "@/store/simulation/fabConfigStore";
 import { useFabStore } from "@/store/map/fabStore";
-import { SENSOR_PRESETS, PresetIndex, type SensorZoneKey } from "@/common/vehicle/collision/sensorPresets";
+import { DEFAULT_SENSOR_PRESETS, PresetIndex, type SensorZoneKey } from "@/common/vehicle/collision/sensorPresets";
 
 interface ParamInputProps {
   label: string;
@@ -654,7 +654,7 @@ const SensorPresetEditor: React.FC<SensorPresetEditorProps> = ({ fabIndex }) => 
       color="#2ecc71"
       defaultOpen={false}
     >
-      {SENSOR_PRESETS.map((basePreset, presetIndex) => {
+      {DEFAULT_SENSOR_PRESETS.map((basePreset, presetIndex) => {
         const presetOverride = sensorOverride?.presets?.[presetIndex];
         const hasOverrides = presetOverride?.zones && Object.keys(presetOverride.zones).some(
           zk => presetOverride.zones![zk as SensorZoneKey] && Object.keys(presetOverride.zones![zk as SensorZoneKey]!).length > 0

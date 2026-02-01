@@ -113,6 +113,7 @@ function checkAgainstCompetitors(
     applyCollisionZoneLogic(mostCriticalHitZone, data, ptr, criticalTargetId, {
       approachMinSpeed: config.approachMinSpeed,
       brakeMinSpeed: config.brakeMinSpeed,
+      customSensorPresets: config.customSensorPresets,
     });
   }
 }

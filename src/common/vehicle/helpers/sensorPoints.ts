@@ -6,7 +6,7 @@ import {
   SensorPoint,
   type ISensorPointArray,
 } from "@/common/vehicle/collision/sensorCollision";
-import { SENSOR_PRESETS, getSensorZone } from "@/common/vehicle/collision/sensorPresets";
+import { getPreset, getSensorZone, type SensorPreset } from "@/common/vehicle/collision/sensorPresets";
 
 const DEG2RAD = Math.PI / 180;
 
@@ -16,6 +16,8 @@ const ZONE_KEYS = ["approach", "brake", "stop"] as const;
 export interface SensorPointsConfig {
   bodyLength: number;
   bodyWidth: number;
+  /** fab별 커스텀 센서 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용) */
+  customSensorPresets?: SensorPreset[];
 }
 
 export function updateSensorPoints(
@@ -29,7 +31,7 @@ export function updateSensorPoints(
 ): void {
   const d = sensorPointArray.getData();
   const base = vehIdx * SENSOR_DATA_SIZE;
-  const preset = SENSOR_PRESETS[presetIdx] ?? SENSOR_PRESETS[0];
+  const preset = getPreset(presetIdx, config.customSensorPresets);
 
   const HALF_L = config.bodyLength / 2;
   const HALF_W = config.bodyWidth / 2;

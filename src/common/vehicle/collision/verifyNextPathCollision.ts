@@ -109,5 +109,6 @@ export function verifyNextPathCollision(
   applyCollisionZoneLogic(mostCriticalHitZone, vehicleArrayData, ptrMe, targetIdx, {
     approachMinSpeed: config.approachMinSpeed,
     brakeMinSpeed: config.brakeMinSpeed,
+    customSensorPresets: config.customSensorPresets,
   });
 }

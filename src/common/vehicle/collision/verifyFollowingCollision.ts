@@ -2,7 +2,7 @@
 
 import type { Edge } from "@/types/edge";
 import { SensorData, VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
-import { SENSOR_PRESETS } from "./sensorPresets";
+import { getPreset } from "./sensorPresets";
 import { determineLinearHitZone, applyCollisionZoneLogic, shouldCheckCollision } from "./collisionCommon";
 import { checkSensorCollision } from "./sensorCollision";
 import type { CollisionCheckContext } from "./collisionCheck";
@@ -48,7 +48,7 @@ export function verifyFollowingCollision(
       const distance = Math.abs(frontPos - backPos);
 
       const presetIdx = Math.trunc(vehicleArrayData[ptrBack + SensorData.PRESET_IDX]);
-      const preset = SENSOR_PRESETS[presetIdx] ?? SENSOR_PRESETS[0];
+      const preset = getPreset(presetIdx, config.customSensorPresets);
 
       const stopDist = preset.zones.stop.leftLength + vehicleLength;
       const brakeDist = preset.zones.brake.leftLength + vehicleLength;
@@ -60,6 +60,7 @@ export function verifyFollowingCollision(
     applyCollisionZoneLogic(hitZone, vehicleArrayData, ptrBack, frontVehId, {
       approachMinSpeed: config.approachMinSpeed,
       brakeMinSpeed: config.brakeMinSpeed,
+      customSensorPresets: config.customSensorPresets,
     });
   }
 }
