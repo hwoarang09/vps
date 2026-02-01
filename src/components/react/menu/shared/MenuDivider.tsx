@@ -1,11 +1,7 @@
+// components/react/menu/shared/MenuDivider.tsx
 import React from "react";
+import { menuDividerClass } from "./menuStyles";
 
 export const MenuDivider: React.FC = () => (
-  <div
-    className="h-8 w-px"
-    style={{
-      background: "linear-gradient(to bottom, transparent, white, transparent)",
-      opacity: 0.3,
-    }}
-  />
+  <div className={menuDividerClass} />
 );

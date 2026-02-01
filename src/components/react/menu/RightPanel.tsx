@@ -9,7 +9,16 @@ import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
-
+import {
+  panelContainerVariants,
+  panelHeaderVariants,
+  panelTitleVariants,
+  panelContentVariants,
+  panelCloseButtonClass,
+  panelBadgeVariants,
+  panelCardVariants,
+  panelTextVariants,
+} from "./shared/panelStyles";
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
@@ -42,34 +51,38 @@ const RightPanel: React.FC = () => {
 
   const renderContent = () => {
     if (!activeMainMenu || !activeSubMenu) {
-      return <div className="text-gray-500">Select a menu to view details</div>;
+      return (
+        <div className={panelTextVariants({ variant: "muted" })}>
+          Select a menu to view details
+        </div>
+      );
     }
 
     // MapBuilder의 경우 부품 목록 표시
     if (activeMainMenu === "MapBuilder") {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-800">
+          <h3 className={panelTitleVariants({ size: "lg", color: "orange" })}>
             {getMenuLabel(activeSubMenu)} Components
           </h3>
 
           {activeSubMenu === "map-menu-1" && (
             <div className="space-y-3">
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Straight Rail 1m</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Straight Rail 1m</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Standard straight track piece
                 </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Straight Rail 5m</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Straight Rail 5m</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Medium straight track piece
                 </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Straight Rail 10m</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Straight Rail 10m</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Long straight track piece
                 </div>
               </div>
@@ -78,32 +91,38 @@ const RightPanel: React.FC = () => {
 
           {activeSubMenu === "map-menu-2" && (
             <div className="space-y-3">
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Curved Rail 15°</div>
-                <div className="text-sm text-gray-500">Radius: 50m</div>
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Curved Rail 15°</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
+                  Radius: 50m
+                </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Curved Rail 30°</div>
-                <div className="text-sm text-gray-500">Radius: 25m</div>
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Curved Rail 30°</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
+                  Radius: 25m
+                </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Curved Rail 45°</div>
-                <div className="text-sm text-gray-500">Radius: 20m</div>
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Curved Rail 45°</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
+                  Radius: 20m
+                </div>
               </div>
             </div>
           )}
 
           {activeSubMenu === "map-menu-3" && (
             <div className="space-y-3">
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Y-Junction</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Y-Junction</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Left/Right 15° branching
                 </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">T-Junction</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">T-Junction</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Right angle branching
                 </div>
               </div>
@@ -115,15 +134,15 @@ const RightPanel: React.FC = () => {
             activeSubMenu
           ) && (
             <div className="space-y-3">
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Component 1</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Component 1</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Sample component for {getMenuLabel(activeSubMenu)}
                 </div>
               </div>
-              <div className="border border-gray-300 rounded p-3 hover:bg-gray-50 cursor-pointer">
-                <div className="font-medium">Component 2</div>
-                <div className="text-sm text-gray-500">
+              <div className={panelCardVariants({ variant: "interactive" })}>
+                <div className="font-medium text-white">Component 2</div>
+                <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
                   Another component option
                 </div>
               </div>
@@ -151,35 +170,37 @@ const RightPanel: React.FC = () => {
     // 다른 메뉴들의 경우
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-800">
+        <h3 className={panelTitleVariants({ size: "lg", color: "orange" })}>
           {getMenuLabel(activeSubMenu)}
         </h3>
-        <div className="text-gray-600">
+        <div className={panelTextVariants({ variant: "body" })}>
           Current selection: {activeMainMenu} → {activeSubMenu}
         </div>
-        <div className="space-y-2 text-sm text-gray-500">
-          <p>
+        <div className="space-y-2">
+          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>
             This panel will show detailed content for{" "}
             {getMenuLabel(activeSubMenu)}.
           </p>
-          <p>Charts, settings, and data will be displayed here.</p>
+          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>
+            Charts, settings, and data will be displayed here.
+          </p>
         </div>
 
         {/* 샘플 콘텐츠 */}
-        <div className="border border-gray-200 rounded p-4 bg-gray-50">
-          <h4 className="font-medium mb-2">Sample Content</h4>
+        <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+          <h4 className="font-medium text-white mb-2">Sample Content</h4>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span>Item 1:</span>
-              <span className="font-mono">Value 1</span>
+              <span className={panelTextVariants({ variant: "body" })}>Item 1:</span>
+              <span className="font-mono text-accent-orange">Value 1</span>
             </div>
             <div className="flex justify-between">
-              <span>Item 2:</span>
-              <span className="font-mono">Value 2</span>
+              <span className={panelTextVariants({ variant: "body" })}>Item 2:</span>
+              <span className="font-mono text-accent-orange">Value 2</span>
             </div>
             <div className="flex justify-between">
-              <span>Item 3:</span>
-              <span className="font-mono">Value 3</span>
+              <span className={panelTextVariants({ variant: "body" })}>Item 3:</span>
+              <span className="font-mono text-accent-orange">Value 3</span>
             </div>
           </div>
         </div>
@@ -231,17 +252,19 @@ const RightPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-white border-l border-gray-300 h-full flex flex-col shadow-lg">
+    <div className={panelContainerVariants({ position: "right" })}>
       {/* 헤더 */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+      <div className={panelHeaderVariants({ size: "md" })}>
         <div className="flex items-center space-x-3">
-          <h2 className="text-lg font-semibold text-gray-800">{getPanelTitle()}</h2>
+          <h2 className={panelTitleVariants({ size: "md", color: "white" })}>
+            {getPanelTitle()}
+          </h2>
           {activeSubMenu === "devtools-lock" && simMode && (
             <div className="flex items-center space-x-2">
-              <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">
+              <span className={panelBadgeVariants({ variant: "default" })}>
                 {simMode}
               </span>
-              <span className="flex items-center text-xs text-green-600">
+              <span className={`flex items-center ${panelBadgeVariants({ variant: "success" })}`}>
                 <Radio size={12} className="mr-1 animate-pulse" />
                 Live
               </span>
@@ -250,14 +273,16 @@ const RightPanel: React.FC = () => {
         </div>
         <button
           onClick={handleClose}
-          className="text-gray-500 hover:text-gray-700 text-xl"
+          className={panelCloseButtonClass}
         >
           ×
         </button>
       </div>
 
       {/* 내용 */}
-      <div className="flex-1 p-4 overflow-y-auto">{renderContent()}</div>
+      <div className={panelContentVariants({ padding: "md" })}>
+        {renderContent()}
+      </div>
     </div>
   );
 };

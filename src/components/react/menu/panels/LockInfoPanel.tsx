@@ -4,6 +4,12 @@ import { getLockMgr, type MergeLockNode } from "@/common/vehicle/logic/LockMgr";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import type { LockNodeData } from "@/shmSimulator/types";
+import {
+  panelSelectVariants,
+  panelCardVariants,
+  panelTextVariants,
+} from "../shared/panelStyles";
+import { twMerge } from "tailwind-merge";
 
 type SimMode = "array" | "shm" | "none";
 
@@ -17,13 +23,9 @@ const LockInfoPanel: React.FC = () => {
   const [isNodeListOpen, setIsNodeListOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Array 모드용
   const [arrayNodeInfo, setArrayNodeInfo] = useState<MergeLockNode | null>(null);
-
-  // SHM 모드용
   const [shmNodeInfo, setShmNodeInfo] = useState<LockNodeData | null>(null);
 
-  // Store 접근
   const shmController = useShmSimulatorStore((s) => s.controller);
   const shmFabIds = useShmSimulatorStore((s) => s.getFabIds);
   const shmIsInitialized = useShmSimulatorStore((s) => s.isInitialized);
@@ -31,7 +33,6 @@ const LockInfoPanel: React.FC = () => {
 
   const arrayNumVehicles = useVehicleArrayStore((s) => s.actualNumVehicles);
 
-  // 모드 감지
   const detectMode = useCallback((): SimMode => {
     if (shmIsInitialized && shmController) return "shm";
     if (arrayNumVehicles > 0) return "array";
@@ -39,11 +40,8 @@ const LockInfoPanel: React.FC = () => {
   }, [shmIsInitialized, shmController, arrayNumVehicles]);
 
   const [mode, setMode] = useState<SimMode>("none");
-
-  // Fab 목록
   const [fabList, setFabList] = useState<string[]>([]);
 
-  // 모드 감지 및 fab 목록 갱신
   useEffect(() => {
     const currentMode = detectMode();
     setMode(currentMode);
@@ -60,7 +58,6 @@ const LockInfoPanel: React.FC = () => {
     }
   }, [detectMode, shmFabIds, selectedFab]);
 
-  // 노드 목록 갱신
   const refreshNodeList = useCallback(async () => {
     if (mode === "array") {
       const lockMgr = getLockMgr();
@@ -76,12 +73,10 @@ const LockInfoPanel: React.FC = () => {
     }
   }, [mode, selectedFab, getLockTableData]);
 
-  // 초기 노드 목록 로드
   useEffect(() => {
     refreshNodeList();
   }, [refreshNodeList]);
 
-  // 주기적 갱신
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -120,7 +115,6 @@ const LockInfoPanel: React.FC = () => {
     };
   }, [nodeName, mode, selectedFab, getLockTableData]);
 
-  // 노드 정보 렌더링 (array/shm 공통화)
   const renderNodeInfo = () => {
     const nodeInfo = mode === "array" ? arrayNodeInfo : shmNodeInfo;
     if (!nodeInfo) return null;
@@ -139,66 +133,66 @@ const LockInfoPanel: React.FC = () => {
 
     return (
       <div className="space-y-4">
-        <div className="border border-gray-200 rounded p-3 bg-gray-50">
-          <h4 className="font-medium mb-2 text-gray-800">Node: {nodeInfo.name}</h4>
-          <div className="text-sm text-gray-600">Strategy: {strategy}</div>
+        <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+          <h4 className="font-medium mb-2 text-accent-orange">Node: {nodeInfo.name}</h4>
+          <div className="text-sm text-gray-400">Strategy: <span className="text-white">{strategy}</span></div>
         </div>
 
-        <div className="border border-gray-200 rounded p-3">
-          <h4 className="font-medium mb-2 text-green-700">
+        <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+          <h4 className="font-medium mb-2 text-accent-green">
             Granted ({granted.length})
           </h4>
           {granted.length === 0 ? (
-            <div className="text-sm text-gray-500">No vehicles have lock</div>
+            <div className={panelTextVariants({ variant: "muted", size: "sm" })}>No vehicles have lock</div>
           ) : (
             <div className="space-y-1">
               {granted.map((g, idx) => (
                 <div
                   key={idx}
-                  className="flex justify-between text-sm bg-green-50 p-2 rounded"
+                  className="flex justify-between text-sm bg-accent-green/10 p-2 rounded border border-accent-green/20"
                 >
-                  <span className="font-mono">Vehicle {g.veh}</span>
-                  <span className="text-gray-600">from {g.edge}</span>
+                  <span className="font-mono text-accent-green">Vehicle {g.veh}</span>
+                  <span className="text-gray-400">from {g.edge}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="border border-gray-200 rounded p-3">
-          <h4 className="font-medium mb-2 text-orange-700">
+        <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+          <h4 className="font-medium mb-2 text-accent-orange">
             Requests ({requests.length})
           </h4>
           {requests.length === 0 ? (
-            <div className="text-sm text-gray-500">No pending requests</div>
+            <div className={panelTextVariants({ variant: "muted", size: "sm" })}>No pending requests</div>
           ) : (
             <div className="space-y-1">
               {requests.map((r, idx) => (
                 <div
                   key={idx}
-                  className="flex justify-between text-sm bg-orange-50 p-2 rounded"
+                  className="flex justify-between text-sm bg-accent-orange/10 p-2 rounded border border-accent-orange/20"
                 >
-                  <span className="font-mono">Vehicle {r.vehId}</span>
-                  <span className="text-gray-600">from {r.edgeName}</span>
+                  <span className="font-mono text-accent-orange">Vehicle {r.vehId}</span>
+                  <span className="text-gray-400">from {r.edgeName}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="border border-gray-200 rounded p-3">
-          <h4 className="font-medium mb-2 text-blue-700">Edge Queues</h4>
+        <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+          <h4 className="font-medium mb-2 text-accent-cyan">Edge Queues</h4>
           {edgeQueueEntries.length === 0 ? (
-            <div className="text-sm text-gray-500">No edge queues</div>
+            <div className={panelTextVariants({ variant: "muted", size: "sm" })}>No edge queues</div>
           ) : (
             <div className="space-y-1">
               {edgeQueueEntries.map(([edgeName, size]) => (
                 <div
                   key={edgeName}
-                  className="flex justify-between text-sm bg-blue-50 p-2 rounded"
+                  className="flex justify-between text-sm bg-accent-cyan/10 p-2 rounded border border-accent-cyan/20"
                 >
-                  <span className="font-mono">{edgeName}</span>
-                  <span className="text-gray-600">{size} waiting</span>
+                  <span className="font-mono text-accent-cyan">{edgeName}</span>
+                  <span className="text-gray-400">{size} waiting</span>
                 </div>
               ))}
             </div>
@@ -210,7 +204,7 @@ const LockInfoPanel: React.FC = () => {
 
   if (mode === "none") {
     return (
-      <div className="text-sm text-gray-500 p-4">
+      <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
         No simulation running. Start a simulation first.
       </div>
     );
@@ -231,7 +225,7 @@ const LockInfoPanel: React.FC = () => {
               setArrayNodeInfo(null);
               setShmNodeInfo(null);
             }}
-            className="w-24 px-2 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className={twMerge(panelSelectVariants({ accent: "cyan", size: "sm" }), "w-24")}
           >
             {fabList.map((fab) => (
               <option key={fab} value={fab}>
@@ -243,10 +237,8 @@ const LockInfoPanel: React.FC = () => {
 
         {/* 노드 선택 (검색 가능한 드롭다운) */}
         <div className="relative w-36">
-          <div
-            className="flex items-center border border-gray-300 rounded focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500"
-          >
-            <Search size={12} className="ml-1.5 text-gray-400 shrink-0" />
+          <div className="flex items-center border border-panel-border rounded bg-panel-bg-solid focus-within:ring-1 focus-within:ring-accent-cyan focus-within:border-accent-cyan">
+            <Search size={12} className="ml-1.5 text-gray-500 shrink-0" />
             <input
               ref={inputRef}
               type="text"
@@ -263,18 +255,18 @@ const LockInfoPanel: React.FC = () => {
                 }
               }}
               placeholder={nodeName || "Node..."}
-              className="flex-1 min-w-0 px-1 py-1.5 text-sm focus:outline-none bg-transparent"
+              className="flex-1 min-w-0 px-1 py-1.5 text-sm focus:outline-none bg-transparent text-white placeholder-gray-500"
             />
             <button
               onClick={() => setIsNodeListOpen(!isNodeListOpen)}
-              className="px-1 py-1.5 text-gray-500 hover:text-gray-700 shrink-0"
+              className="px-1 py-1.5 text-gray-500 hover:text-gray-300 shrink-0"
             >
               <ChevronDown size={12} className={`transition-transform ${isNodeListOpen ? "rotate-180" : ""}`} />
             </button>
           </div>
           {isNodeListOpen && (
-            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg">
-              <div className="p-1 text-xs text-gray-500 border-b">
+            <div className="absolute z-10 w-full mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg">
+              <div className="p-1 text-xs text-gray-500 border-b border-panel-border">
                 {allNodes.length} nodes
               </div>
               <div className="max-h-48 overflow-y-auto">
@@ -290,8 +282,8 @@ const LockInfoPanel: React.FC = () => {
                         setSearchQuery("");
                         setIsNodeListOpen(false);
                       }}
-                      className={`w-full text-left text-sm px-3 py-2 hover:bg-gray-100 ${
-                        name === nodeName ? "bg-blue-100 text-blue-700" : ""
+                      className={`w-full text-left text-sm px-3 py-2 hover:bg-accent-cyan/20 transition-colors ${
+                        name === nodeName ? "bg-accent-cyan/30 text-accent-cyan" : "text-gray-300"
                       }`}
                     >
                       {name}
@@ -312,7 +304,7 @@ const LockInfoPanel: React.FC = () => {
 
       {/* 노드 정보 */}
       {nodeName && !arrayNodeInfo && !shmNodeInfo && (
-        <div className="text-sm text-gray-500">
+        <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
           Node &quot;{nodeName}&quot; not found or is not a merge node
         </div>
       )}

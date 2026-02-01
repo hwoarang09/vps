@@ -23,6 +23,16 @@ import { getStationTextConfig } from "@/config/stationConfig";
 import LogFileManager from "./LogFileManager";
 import DevLogFileManager from "./DevLogFileManager";
 import { DevLogger } from "@/logger";
+import { twMerge } from "tailwind-merge";
+import {
+  panelContainerVariants,
+  panelSelectVariants,
+  panelInputVariants,
+  panelButtonVariants,
+  panelLabelVariants,
+  panelDividerClass,
+  panelTextVariants,
+} from "@/components/react/menu/shared/panelStyles";
 
 /**
  * VehicleTest
@@ -362,36 +372,19 @@ const VehicleTest: React.FC = () => {
     <>
       {/* Test Setting Selector */}
       <div
-        style={{
-          position: "fixed",
-          top: "10px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "rgba(0, 0, 0, 0.8)",
-          color: "white",
-          padding: "10px 20px",
-          borderRadius: "8px",
-          fontFamily: "monospace",
-          fontSize: "12px",
-          zIndex: 1001,
-          display: "flex",
-          alignItems: "center",
-          gap: "15px",
-        }}
+        className={twMerge(
+          panelContainerVariants({ position: "top", padding: "sm" }),
+          "flex items-center gap-4 font-mono text-xs"
+        )}
       >
-        <label style={{ fontWeight: "bold" }}>TEST SETTING:</label>
+        {/* Test Setting */}
+        <label className={panelLabelVariants({ color: "white", size: "sm" })}>
+          TEST SETTING:
+        </label>
         <select
           value={selectedSettingId}
           onChange={(e) => handleSettingChange(e.target.value)}
-          style={{
-            padding: "5px 10px",
-            background: "#333",
-            color: "white",
-            border: "1px solid #4ecdc4",
-            borderRadius: "4px",
-            fontSize: "12px",
-            cursor: "pointer",
-          }}
+          className={panelSelectVariants({ accent: "cyan", size: "sm" })}
         >
           {testSettings.map((setting) => (
             <option key={setting.id} value={setting.id}>
@@ -404,15 +397,7 @@ const VehicleTest: React.FC = () => {
         <select
           value={transferMode}
           onChange={(e) => setTransferMode(e.target.value as TransferMode)}
-          style={{
-            padding: "5px 10px",
-            background: "#333",
-            color: "white",
-            border: "1px solid #9b59b6",
-            borderRadius: "4px",
-            fontSize: "12px",
-            cursor: "pointer",
-          }}
+          className={panelSelectVariants({ accent: "purple", size: "sm" })}
         >
           <option value={TransferMode.LOOP}>LOOP</option>
           <option value={TransferMode.RANDOM}>RANDOM</option>
@@ -420,72 +405,46 @@ const VehicleTest: React.FC = () => {
           <option value={TransferMode.AUTO_ROUTE}>AUTO_ROUTE</option>
         </select>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <label style={{ fontWeight: "bold" }}>VEHICLES:</label>
+        {/* Vehicles */}
+        <div className="flex items-center gap-2">
+          <label className={panelLabelVariants({ color: "white", size: "sm" })}>
+            VEHICLES:
+          </label>
           <input
             type="number"
             min="1"
             max="10000"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            style={{
-              width: "70px",
-              padding: "5px 8px",
-              background: "#333",
-              color: "white",
-              border: "1px solid #4ecdc4",
-              borderRadius: "4px",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
+            className={twMerge(
+              panelInputVariants({ size: "sm", width: "fixed" }),
+              "text-center"
+            )}
           />
-          <span style={{ color: "#aaa", fontSize: "11px" }}>
+          <span className={panelTextVariants({ variant: "muted", size: "xs" })}>
             / {maxVehicleCapacity || "---"}
           </span>
         </div>
 
         <button
           onClick={handleCreate}
-          style={{
-            padding: "5px 15px",
-            background: "#27ae60",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
+          className={panelButtonVariants({ variant: "success", size: "md" })}
         >
           Create
         </button>
 
         <button
           onClick={handleDelete}
-          style={{
-            padding: "5px 15px",
-            background: "#e74c3c",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
+          className={panelButtonVariants({ variant: "danger", size: "md" })}
         >
           Delete
         </button>
 
         {/* FAB Controls */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          marginLeft: "15px",
-          paddingLeft: "15px",
-          borderLeft: "1px solid #555",
-        }}>
-          <label style={{ fontWeight: "bold", color: "#f39c12" }}>FAB:</label>
+        <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
+          <label className={panelLabelVariants({ color: "orange", size: "sm" })}>
+            FAB:
+          </label>
           <input
             type="number"
             min="1"
@@ -493,19 +452,14 @@ const VehicleTest: React.FC = () => {
             value={fabCountX}
             onChange={(e) => setFabCountX(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
-            style={{
-              width: "50px",
-              padding: "5px 4px",
-              background: isFabApplied ? "#555" : "#333",
-              color: "white",
-              border: "1px solid #f39c12",
-              borderRadius: "4px",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
+            className={twMerge(
+              panelInputVariants({ size: "sm" }),
+              "w-[50px] text-center border-accent-yellow",
+              isFabApplied && "opacity-50 cursor-not-allowed"
+            )}
             title="가로 개수"
           />
-          <span style={{ color: "#f39c12", fontWeight: "bold" }}>×</span>
+          <span className="text-accent-yellow font-bold">×</span>
           <input
             type="number"
             min="1"
@@ -513,68 +467,41 @@ const VehicleTest: React.FC = () => {
             value={fabCountY}
             onChange={(e) => setFabCountY(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
             disabled={isFabApplied}
-            style={{
-              width: "50px",
-              padding: "5px 4px",
-              background: isFabApplied ? "#555" : "#333",
-              color: "white",
-              border: "1px solid #f39c12",
-              borderRadius: "4px",
-              fontSize: "12px",
-              textAlign: "center",
-            }}
+            className={twMerge(
+              panelInputVariants({ size: "sm" }),
+              "w-[50px] text-center border-accent-yellow",
+              isFabApplied && "opacity-50 cursor-not-allowed"
+            )}
             title="세로 개수"
           />
-          <span style={{ color: "#888", fontSize: "11px" }}>
+          <span className={panelTextVariants({ variant: "muted", size: "xs" })}>
             ={fabCountX * fabCountY}
           </span>
           <button
             onClick={handleFabCreate}
-            style={{
-              padding: "5px 12px",
-              background: isFabApplied ? "#7f8c8d" : "#f39c12",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: isFabApplied ? "not-allowed" : "pointer",
-              fontWeight: "bold",
-            }}
             disabled={isFabApplied}
+            className={panelButtonVariants({
+              variant: isFabApplied ? "ghost" : "warning",
+              size: "md",
+              disabled: isFabApplied,
+            })}
           >
             Create
           </button>
           <button
             onClick={handleFabClear}
-            style={{
-              padding: "5px 12px",
-              background: isFabApplied ? "#e67e22" : "#7f8c8d",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: isFabApplied ? "pointer" : "not-allowed",
-              fontWeight: "bold",
-            }}
             disabled={!isFabApplied}
+            className={panelButtonVariants({
+              variant: isFabApplied ? "warning" : "ghost",
+              size: "md",
+              disabled: !isFabApplied,
+            })}
           >
             Clear
           </button>
           <button
             onClick={() => useFabConfigStore.getState().setModalOpen(true)}
-            style={{
-              padding: "5px 12px",
-              background: "#9b59b6",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
+            className={panelButtonVariants({ variant: "purple", size: "md" })}
             title="Configure simulation parameters per fab"
           >
             <Settings size={14} />
@@ -583,24 +510,18 @@ const VehicleTest: React.FC = () => {
         </div>
 
         {/* Play/Pause buttons */}
-        <div style={{ display: "flex", gap: "5px", marginLeft: "10px" }}>
+        <div className="flex gap-1 ml-2">
           <button
             onClick={() => setPaused(false)}
             disabled={!isPaused}
-            style={{
-              padding: "5px 10px",
-              background: isPaused ? "#27ae60" : "#555",
-              color: "white",
-              border: isPaused ? "2px solid #2ecc71" : "1px solid #666",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: isPaused ? "pointer" : "not-allowed",
-              fontWeight: "bold",
-              display: "flex",
-              alignItems: "center",
-              gap: "5px",
-              opacity: isPaused ? 1 : 0.5,
-            }}
+            className={twMerge(
+              panelButtonVariants({
+                variant: isPaused ? "success" : "ghost",
+                size: "md",
+                disabled: !isPaused,
+              }),
+              isPaused && "border-2 border-accent-green"
+            )}
             title="Play simulation"
           >
             <Play size={14} />
@@ -610,20 +531,14 @@ const VehicleTest: React.FC = () => {
           <button
             onClick={() => setPaused(true)}
             disabled={isPaused}
-            style={{
-              padding: "5px 10px",
-              background: !isPaused ? "#f39c12" : "#555",
-              color: "white",
-              border: !isPaused ? "2px solid #f1c40f" : "1px solid #666",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: !isPaused ? "pointer" : "not-allowed",
-              fontWeight: "bold",
-              display: "flex",
-              alignItems: "center",
-              gap: "5px",
-              opacity: !isPaused ? 1 : 0.5,
-            }}
+            className={twMerge(
+              panelButtonVariants({
+                variant: !isPaused ? "warning" : "ghost",
+                size: "md",
+                disabled: isPaused,
+              }),
+              !isPaused && "border-2 border-accent-yellow"
+            )}
             title="Pause simulation"
           >
             <Pause size={14} />
@@ -632,28 +547,18 @@ const VehicleTest: React.FC = () => {
         </div>
 
         {/* Log Download Section */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          marginLeft: "15px",
-          paddingLeft: "15px",
-          borderLeft: "1px solid #555",
-        }}>
+        <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
           <button
             onClick={handleDownloadLog}
             disabled={!isSimInitialized}
-            style={{
-              padding: "5px 12px",
-              background: isSimInitialized ? "#3498db" : "#555",
-              color: "white",
-              border: isSimInitialized ? "2px solid #2980b9" : "1px solid #666",
-              borderRadius: "4px",
-              fontSize: "11px",
-              cursor: isSimInitialized ? "pointer" : "not-allowed",
-              fontWeight: "bold",
-              opacity: isSimInitialized ? 1 : 0.5,
-            }}
+            className={twMerge(
+              panelButtonVariants({
+                variant: isSimInitialized ? "primary" : "ghost",
+                size: "sm",
+                disabled: !isSimInitialized,
+              }),
+              isSimInitialized && "border-2 border-accent-cyan/50"
+            )}
             title={isSimInitialized ? "Download current session log" : "Start simulation first"}
           >
             📥 Latest

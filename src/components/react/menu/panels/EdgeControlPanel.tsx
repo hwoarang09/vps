@@ -5,6 +5,15 @@ import { useNodeStore } from "@/store/map/nodeStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import { useCameraStore } from "@/store/ui/cameraStore";
 import { useFabStore } from "@/store/map/fabStore";
+import {
+  panelInputVariants,
+  panelSelectVariants,
+  panelCardVariants,
+  panelTextVariants,
+  panelButtonVariants,
+  panelLabelVariants,
+} from "../shared/panelStyles";
+import { twMerge } from "tailwind-merge";
 
 const EdgeControlPanel: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -19,11 +28,9 @@ const EdgeControlPanel: React.FC = () => {
   const getNodeByName = useNodeStore((state) => state.getNodeByName);
   const setCameraView = useCameraStore((state) => state.setCameraView);
 
-  // Fab store
   const fabs = useFabStore((state) => state.fabs);
   const isMultiFab = useFabStore((state) => state.isMultiFab);
 
-  // Navigate camera to edge center
   const navigateToEdge = (edgeIndex: number) => {
     const edge = edges[edgeIndex];
     if (!edge) return;
@@ -36,7 +43,6 @@ const EdgeControlPanel: React.FC = () => {
       return;
     }
 
-    // Get fab offset if multi-fab
     let fabOffsetX = 0;
     let fabOffsetY = 0;
     if (isMultiFab() && fabs.length > selectedFabIndex) {
@@ -48,12 +54,10 @@ const EdgeControlPanel: React.FC = () => {
       }
     }
 
-    // Calculate edge center point with fab offset
     const centerX = (fromNode.editor_x + toNode.editor_x) / 2 + fabOffsetX;
     const centerY = (fromNode.editor_y + toNode.editor_y) / 2 + fabOffsetY;
     const centerZ = 0;
 
-    // Camera position: above and slightly offset from edge center
     const cameraHeight = 15;
     const cameraOffset = 8;
     const cameraPosition: [number, number, number] = [
@@ -66,21 +70,17 @@ const EdgeControlPanel: React.FC = () => {
     setCameraView(cameraPosition, cameraTarget);
   };
 
-  // Group edges by prefix (e.g., E00, E01, etc.)
   const groupedEdges = useMemo(() => {
     const groups: Record<string, { index: number; name: string }[]> = {};
 
     edges.forEach((edge, index) => {
-      // Extract group key from edge name (first 3-4 chars or bay pattern)
       const name = edge.edge_name;
       let groupKey = "Other";
 
-      // Try to extract bay-like pattern (e.g., "BAY01", "BAY26")
       const bayMatch = name.match(/BAY\d+/i);
       if (bayMatch) {
         groupKey = bayMatch[0].toUpperCase();
       } else {
-        // Use first 3 characters as group (e.g., E00, E01)
         const prefixMatch = name.match(/^([A-Z]+\d{1,2})/i);
         if (prefixMatch) {
           groupKey = prefixMatch[1].toUpperCase();
@@ -95,7 +95,6 @@ const EdgeControlPanel: React.FC = () => {
       groups[groupKey].push({ index, name });
     });
 
-    // Sort groups and edges within groups
     const sortedGroups = Object.entries(groups)
       .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
       .map(([key, items]) => ({
@@ -106,7 +105,6 @@ const EdgeControlPanel: React.FC = () => {
     return sortedGroups;
   }, [edges]);
 
-  // Sync from store selection and navigate
   useEffect(() => {
     if (selectedEdgeIndex !== null) {
       const edge = edges[selectedEdgeIndex];
@@ -127,13 +125,11 @@ const EdgeControlPanel: React.FC = () => {
 
     let foundIdx: number | null = null;
 
-    // 1. Try exact name match
     const exactIndex = edgeNameToIndex.get(searchTerm.trim());
     if (exactIndex !== undefined) {
       foundIdx = exactIndex;
     }
 
-    // 2. Try index if number
     if (foundIdx === null) {
       const numMatch = searchTerm.match(/^(\d+)$/);
       if (numMatch) {
@@ -144,7 +140,6 @@ const EdgeControlPanel: React.FC = () => {
       }
     }
 
-    // 3. Try partial match (case-insensitive)
     if (foundIdx === null) {
       const lowerSearch = searchTerm.toLowerCase();
       const partialMatch = edges.findIndex((e) =>
@@ -157,7 +152,7 @@ const EdgeControlPanel: React.FC = () => {
 
     if (foundIdx !== null) {
       setFoundEdgeIndex(foundIdx);
-      selectEdge(foundIdx, selectedFabIndex);  // Update store for EdgeRenderer highlight
+      selectEdge(foundIdx, selectedFabIndex);
       navigateToEdge(foundIdx);
     } else {
       setFoundEdgeIndex(null);
@@ -169,7 +164,7 @@ const EdgeControlPanel: React.FC = () => {
     setFoundEdgeIndex(edgeIndex);
     setSearchTerm(edges[edgeIndex]?.edge_name || "");
     setIsEdgeDropdownOpen(false);
-    selectEdge(edgeIndex, selectedFabIndex);  // Update store for EdgeRenderer highlight
+    selectEdge(edgeIndex, selectedFabIndex);
     navigateToEdge(edgeIndex);
   };
 
@@ -180,11 +175,13 @@ const EdgeControlPanel: React.FC = () => {
       {/* Fab Selector (only show if multi-fab) */}
       {isMultiFab() && fabs.length > 0 && (
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Select Fab</label>
+          <label className={twMerge(panelLabelVariants({ color: "muted", size: "xs" }), "block mb-1")}>
+            Select Fab
+          </label>
           <select
             value={selectedFabIndex}
             onChange={(e) => setSelectedFabIndex(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            className={twMerge(panelSelectVariants({ accent: "cyan", size: "md" }), "w-full")}
           >
             {fabs.map((fab) => (
               <option key={fab.fabIndex} value={fab.fabIndex}>
@@ -197,40 +194,42 @@ const EdgeControlPanel: React.FC = () => {
 
       {/* Edge Dropdown */}
       <div className="relative">
-        <label className="block text-xs text-gray-500 mb-1">Select Edge</label>
+        <label className={twMerge(panelLabelVariants({ color: "muted", size: "xs" }), "block mb-1")}>
+          Select Edge
+        </label>
         <button
           onClick={() => setIsEdgeDropdownOpen(!isEdgeDropdownOpen)}
-          className="w-full px-3 py-2 border border-gray-300 rounded bg-white flex justify-between items-center hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-panel-border rounded bg-panel-bg-solid flex justify-between items-center hover:border-accent-cyan/50 focus:outline-none focus:ring-1 focus:ring-accent-cyan transition-colors"
         >
-          <span className={foundEdge ? "text-gray-900" : "text-gray-400"}>
+          <span className={foundEdge ? "text-white" : "text-gray-500"}>
             {foundEdge ? foundEdge.edge_name : "Choose an edge..."}
           </span>
-          <ChevronDown size={16} className={`text-gray-400 transition-transform ${isEdgeDropdownOpen ? "rotate-180" : ""}`} />
+          <ChevronDown size={16} className={`text-gray-500 transition-transform ${isEdgeDropdownOpen ? "rotate-180" : ""}`} />
         </button>
 
         {isEdgeDropdownOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-64 overflow-y-auto">
+          <div className="absolute z-50 w-full mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg max-h-64 overflow-y-auto">
             {groupedEdges.map((group) => (
               <div key={group.key}>
-                <div className="px-3 py-1.5 bg-gray-100 text-xs font-semibold text-gray-600 sticky top-0">
+                <div className="px-3 py-1.5 bg-panel-bg text-xs font-semibold text-gray-400 sticky top-0 border-b border-panel-border">
                   {group.key} ({group.items.length})
                 </div>
                 {group.items.map((item) => (
                   <button
                     key={item.index}
                     onClick={() => handleEdgeSelect(item.index)}
-                    className={`w-full px-4 py-1.5 text-left text-sm hover:bg-blue-50 ${
-                      foundEdgeIndex === item.index ? "bg-blue-100 text-blue-700" : "text-gray-700"
+                    className={`w-full px-4 py-1.5 text-left text-sm hover:bg-accent-cyan/20 transition-colors ${
+                      foundEdgeIndex === item.index ? "bg-accent-cyan/30 text-accent-cyan" : "text-gray-300"
                     }`}
                   >
                     {item.name}
-                    <span className="text-gray-400 text-xs ml-2">#{item.index}</span>
+                    <span className="text-gray-500 text-xs ml-2">#{item.index}</span>
                   </button>
                 ))}
               </div>
             ))}
             {groupedEdges.length === 0 && (
-              <div className="px-3 py-4 text-center text-gray-400 text-sm">
+              <div className="px-3 py-4 text-center text-gray-500 text-sm">
                 No edges available
               </div>
             )}
@@ -240,94 +239,96 @@ const EdgeControlPanel: React.FC = () => {
 
       {/* Search Area */}
       <div className="relative">
-        <label className="block text-xs text-gray-500 mb-1">Or search by name/index</label>
+        <label className={twMerge(panelLabelVariants({ color: "muted", size: "xs" }), "block mb-1")}>
+          Or search by name/index
+        </label>
         <input
           type="text"
           placeholder="E0001 or 0"
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={twMerge(panelInputVariants({ size: "md", width: "full" }), "pl-10 pr-4 py-2")}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
         />
-        <Search className="absolute left-3 top-8 text-gray-400" size={18} />
+        <Search className="absolute left-3 top-8 text-gray-500" size={18} />
       </div>
 
       {/* Edge Info */}
       {foundEdge ? (
-        <div className="mt-4 p-4 border border-gray-200 rounded bg-gray-50">
+        <div className={panelCardVariants({ variant: "glow-cyan", padding: "md" })}>
           <div className="flex justify-between items-center mb-2">
-            <h4 className="font-semibold">Edge Info</h4>
+            <h4 className="font-semibold text-white">Edge Info</h4>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => foundEdgeIndex !== null && navigateToEdge(foundEdgeIndex)}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                className={panelButtonVariants({ variant: "primary", size: "sm" })}
                 title="Go to Edge"
               >
                 <Navigation size={12} />
                 Go
               </button>
-              <span className="text-xs text-gray-400 font-mono">#{foundEdgeIndex}</span>
+              <span className="text-xs text-gray-500 font-mono">#{foundEdgeIndex}</span>
             </div>
           </div>
 
-          <div className="space-y-1 text-sm bg-white p-2 rounded border border-gray-100">
+          <div className="space-y-1 text-sm bg-panel-bg-solid p-2 rounded border border-panel-border">
             {/* Basic Info */}
-            <div className="flex justify-between border-b border-gray-100 pb-1 mb-1">
-              <span className="text-gray-500">Name</span>
-              <span className="font-mono font-bold">{foundEdge.edge_name}</span>
+            <div className="flex justify-between border-b border-panel-border pb-1 mb-1">
+              <span className="text-gray-400">Name</span>
+              <span className="font-mono font-bold text-accent-orange">{foundEdge.edge_name}</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Type</span>
-              <span className="font-mono">{foundEdge.vos_rail_type || "Unknown"}</span>
+              <span className="text-gray-400">Type</span>
+              <span className="font-mono text-white">{foundEdge.vos_rail_type || "Unknown"}</span>
             </div>
 
             <div className="flex justify-between">
-              <span>Distance</span>
-              <span className="font-mono">{foundEdge.distance?.toFixed(2) || "N/A"} m</span>
+              <span className="text-gray-400">Distance</span>
+              <span className="font-mono text-white">{foundEdge.distance?.toFixed(2) || "N/A"} m</span>
             </div>
 
-            <div className="my-2 border-t border-gray-200"></div>
+            <div className="my-2 border-t border-panel-border"></div>
 
             {/* Node Info */}
-            <div className="flex justify-between text-xs text-blue-600">
+            <div className="flex justify-between text-xs text-accent-cyan">
               <span>From Node</span>
               <span className="font-mono">{foundEdge.from_node}</span>
             </div>
 
-            <div className="flex justify-between text-xs text-blue-600">
+            <div className="flex justify-between text-xs text-accent-cyan">
               <span>To Node</span>
               <span className="font-mono">{foundEdge.to_node}</span>
             </div>
 
-            <div className="my-2 border-t border-gray-200"></div>
+            <div className="my-2 border-t border-panel-border"></div>
 
             {/* Topology Flags */}
             <div className="text-xs text-gray-500 mb-1">Topology</div>
             <div className="flex flex-wrap gap-1">
               {foundEdge.fromNodeIsMerge && (
-                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-orange-50 text-orange-700 border-orange-200">
+                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-accent-orange/20 text-accent-orange border-accent-orange/30">
                   FN:Merge
                 </span>
               )}
               {foundEdge.fromNodeIsDiverge && (
-                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-purple-50 text-purple-700 border-purple-200">
+                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-purple-500/20 text-purple-400 border-purple-500/30">
                   FN:Diverge
                 </span>
               )}
               {foundEdge.toNodeIsMerge && (
-                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-orange-50 text-orange-700 border-orange-200">
+                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-accent-orange/20 text-accent-orange border-accent-orange/30">
                   TN:Merge
                 </span>
               )}
               {foundEdge.toNodeIsDiverge && (
-                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-purple-50 text-purple-700 border-purple-200">
+                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-purple-500/20 text-purple-400 border-purple-500/30">
                   TN:Diverge
                 </span>
               )}
               {!foundEdge.fromNodeIsMerge && !foundEdge.fromNodeIsDiverge &&
                !foundEdge.toNodeIsMerge && !foundEdge.toNodeIsDiverge && (
-                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-gray-100 text-gray-500 border-gray-200">
+                <span className="px-1.5 py-0.5 text-[10px] rounded border bg-panel-bg text-gray-500 border-panel-border">
                   Linear
                 </span>
               )}
@@ -336,26 +337,26 @@ const EdgeControlPanel: React.FC = () => {
             {/* Curve Direction */}
             {foundEdge.curve_direction && (
               <div className="flex justify-between mt-2">
-                <span>Curve</span>
-                <span className="font-mono">{foundEdge.curve_direction}</span>
+                <span className="text-gray-400">Curve</span>
+                <span className="font-mono text-white">{foundEdge.curve_direction}</span>
               </div>
             )}
 
-            <div className="my-2 border-t border-gray-200"></div>
+            <div className="my-2 border-t border-panel-border"></div>
 
             {/* Next/Prev Edges */}
             {foundEdge.nextEdgeIndices && foundEdge.nextEdgeIndices.length > 0 && (
               <details className="text-xs">
-                <summary className="cursor-pointer text-cyan-700 font-medium hover:text-cyan-900">
+                <summary className="cursor-pointer text-accent-cyan font-medium hover:text-cyan-300">
                   Next Edges ({foundEdge.nextEdgeIndices.length})
                 </summary>
-                <div className="mt-1 pl-2 space-y-0.5 text-gray-600">
+                <div className="mt-1 pl-2 space-y-0.5 text-gray-400">
                   {foundEdge.nextEdgeIndices.map((idx: number) => {
                     const nextEdge = edges[idx];
                     return (
                       <div key={idx} className="flex justify-between font-mono">
                         <span>{nextEdge?.edge_name || "Unknown"}</span>
-                        <span className="text-gray-400">#{idx}</span>
+                        <span className="text-gray-600">#{idx}</span>
                       </div>
                     );
                   })}
@@ -365,16 +366,16 @@ const EdgeControlPanel: React.FC = () => {
 
             {foundEdge.prevEdgeIndices && foundEdge.prevEdgeIndices.length > 0 && (
               <details className="text-xs mt-1">
-                <summary className="cursor-pointer text-orange-700 font-medium hover:text-orange-900">
+                <summary className="cursor-pointer text-accent-orange font-medium hover:text-orange-300">
                   Prev Edges ({foundEdge.prevEdgeIndices.length})
                 </summary>
-                <div className="mt-1 pl-2 space-y-0.5 text-gray-600">
+                <div className="mt-1 pl-2 space-y-0.5 text-gray-400">
                   {foundEdge.prevEdgeIndices.map((idx: number) => {
                     const prevEdge = edges[idx];
                     return (
                       <div key={idx} className="flex justify-between font-mono">
                         <span>{prevEdge?.edge_name || "Unknown"}</span>
-                        <span className="text-gray-400">#{idx}</span>
+                        <span className="text-gray-600">#{idx}</span>
                       </div>
                     );
                   })}
@@ -385,21 +386,21 @@ const EdgeControlPanel: React.FC = () => {
             {/* Deadlock Zone Info */}
             {(foundEdge.isDeadlockZoneInside || foundEdge.isDeadlockZoneEntry) && (
               <>
-                <div className="my-2 border-t border-gray-200"></div>
-                <div className="text-xs text-red-600 font-medium">Deadlock Zone</div>
+                <div className="my-2 border-t border-panel-border"></div>
+                <div className="text-xs text-red-400 font-medium">Deadlock Zone</div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {foundEdge.isDeadlockZoneEntry && (
-                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-50 text-red-700 border-red-200">
+                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-500/20 text-red-400 border-red-500/30">
                       Entry
                     </span>
                   )}
                   {foundEdge.isDeadlockZoneInside && (
-                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-50 text-red-700 border-red-200">
+                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-500/20 text-red-400 border-red-500/30">
                       Inside
                     </span>
                   )}
                   {foundEdge.deadlockZoneId !== undefined && (
-                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-100 text-red-800 border-red-300 font-mono">
+                    <span className="px-1.5 py-0.5 text-[10px] rounded border bg-red-500/30 text-red-300 border-red-500/40 font-mono">
                       Zone #{foundEdge.deadlockZoneId}
                     </span>
                   )}
@@ -409,10 +410,10 @@ const EdgeControlPanel: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="text-center text-gray-400 py-8">
+        <div className="text-center text-gray-500 py-8">
           <Search size={48} className="mx-auto mb-4 opacity-50" />
-          <p className="text-sm">드롭다운에서 Edge를 선택하거나</p>
-          <p className="text-sm">이름/인덱스로 검색하세요</p>
+          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>드롭다운에서 Edge를 선택하거나</p>
+          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>이름/인덱스로 검색하세요</p>
         </div>
       )}
 

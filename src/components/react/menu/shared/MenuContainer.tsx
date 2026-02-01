@@ -1,28 +1,23 @@
 // components/react/menu/shared/MenuContainer.tsx
 import React from "react";
+import { menuContainerVariants } from "./menuStyles";
+import { twMerge } from "tailwind-merge";
 
 interface MenuContainerProps {
   children: React.ReactNode;
   className?: string;
-  style?: React.CSSProperties;
   position?: "bottom" | "floating";
   floatingPosition?: { x: number; y: number };
+  level?: 1 | 2;
 }
 
 export const MenuContainer: React.FC<MenuContainerProps> = ({
   children,
   className = "",
-  style = {},
   position = "bottom",
   floatingPosition,
+  level = 1,
 }) => {
-  const baseStyle = {
-    backgroundColor: "#353948",
-    borderColor: "#778397",
-    opacity: 0.98,
-    ...style,
-  };
-
   const positionClass =
     position === "bottom"
       ? "fixed bottom-2 left-0 right-0 z-50 flex justify-center"
@@ -40,8 +35,10 @@ export const MenuContainer: React.FC<MenuContainerProps> = ({
   return (
     <div className={positionClass} style={floatingStyle}>
       <div
-        className={`flex py-2 px-1 rounded-xl shadow-xl border-2 ${className}`}
-        style={baseStyle}
+        className={twMerge(
+          menuContainerVariants({ level }),
+          className
+        )}
       >
         {children}
       </div>

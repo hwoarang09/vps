@@ -4,6 +4,7 @@ import { useMenuStore } from "@store/ui/menuStore";
 import { MenuButton } from "./shared";
 import { menuLevel2Config } from "./data/menuLevel2Config";
 import { tooltipsByLevel } from "./data/tooltipConfig";
+import { menuContainerVariants } from "./shared/menuStyles";
 
 const MenuLevel2: React.FC = () => {
   const {
@@ -55,14 +56,7 @@ const MenuLevel2: React.FC = () => {
 
   return (
     <div className="fixed bottom-[80px] left-0 right-0 z-50 flex justify-center">
-      <div
-        className="flex space-x-2 p-2 rounded-xl shadow-lg border-2"
-        style={{
-          backgroundColor: "#464959",
-          borderColor: "#889498",
-          opacity: 0.95,
-        }}
-      >
+      <div className={menuContainerVariants({ level: 2 })}>
         {menuItems.map((item, index) => (
           <MenuButton
             key={item.id}
