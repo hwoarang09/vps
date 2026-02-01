@@ -65,14 +65,13 @@ src/components/react/menu/data/menuLevel2Config.tsx:428
     DevTools: Lock
 
 src/components/test/VehicleTest/VehicleTest.tsx
-  purpose: 상단 테스트 세팅 영역 (차량 테스트 제어)
+  purpose: 차량 테스트 제어 (로직 담당)
 
   state:
     selectedSettingId → 선택된 테스트 설정 ID
     customNumVehicles → 차량 수
     fabCountX/Y → 멀티 fab 그리드 크기
     isTestCreated → 테스트 생성 여부
-    activeLogDropdown → 'logs' | 'devlogs' | null (드롭다운 중복 열림 방지)
 
   data source:
     testSettingConfig.ts → getTestSettings()
@@ -82,9 +81,37 @@ src/components/test/VehicleTest/VehicleTest.tsx
     loadTestSetting(settingId) → 맵 로드 + 차량 생성
     handlePlay/Pause → vehicleTestStore.setPaused()
 
-  log components:
-    LogFileManager → OPFS 로그 파일 관리 (props: isOpen, onToggle)
-    DevLogFileManager → 개발용 로그 파일 관리 (props: isOpen, onToggle)
+  renders:
+    TopControlBar → 상단 컨트롤 UI
+    VehicleTestRunner → 테스트 실행
+    SimulationParamsModal → 파라미터 설정 모달
+
+src/components/test/VehicleTest/TopControlBar.tsx
+  purpose: 상단 테스트 컨트롤 바 (MenuLevel1/2 스타일)
+
+  components:
+    DropdownButton → 드롭다운 버튼 (Map, Mode 선택)
+    ActionButton → 액션 버튼 (Create, Delete, Play, Pause 등)
+    NumberInput → 숫자 입력 (스피너 숨김, 중앙 정렬)
+
+  style:
+    menuContainerVariants, menuButtonVariants 사용
+    menuDividerClass로 섹션 구분
+    각 드롭다운에 accent color 적용 (cyan, purple, yellow)
+
+src/components/react/system/LogIndicator.tsx
+  purpose: 우측 상단 로그 파일 관리 버튼 (MenuLevel1 스타일)
+
+  state:
+    activeLogDropdown → 'logs' | 'devlogs' | null
+
+  components:
+    LogFileManager → OPFS 로그 파일 관리
+    DevLogFileManager → 개발용 로그 파일 관리
+
+  style:
+    menuButtonVariants 사용 (MenuLevel1과 동일)
+    hover 시 MenuTooltip 표시
 
 src/components/test/VehicleTest/SimulationParamsModal.tsx
   purpose: Fab별 시뮬레이션 파라미터 설정 모달
@@ -247,16 +274,22 @@ MenuLevel1 (하단)
 ## VehicleTest Flow
 ```
 VehicleTest.tsx 렌더링 위치: MenuContainer 내부
+LogIndicator.tsx 렌더링 위치: 우측 상단 (MqttStatusIndicator 반대편)
 
-UI 구성:
-┌──────────────────────────────────────────────────────────────────────┐
-│ [Setting▼] [Mode▼] VEHICLES:[___]/max [Create][Delete] │ FAB:[X]×[Y] │
-│ [▶Play][⏸Pause] │ [📋Logs][📝DevLogs]                                │
-└──────────────────────────────────────────────────────────────────────┘
+UI 구성 (MenuLevel1/2 스타일):
+상단 컨트롤 바 (TopControlBar.tsx):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [🗺Map▼] │ [🛤Mode▼] │ [___]/max [🚗Create][🗑Delete] │                     │
+│          │           │ [_]x[_]=N [⊞FAB][✕Clear][⚙] │ [▶Play][⏸Pause]      │
+└─────────────────────────────────────────────────────────────────────────────┘
+- 드롭다운 버튼: accent color border + shadow
+- 숫자 입력: rounded-xl, 스피너 숨김, 중앙 정렬
+- 섹션 구분: menuDividerClass (mx-2 여백)
 
-로그 드롭다운 상태:
-- activeLogDropdown으로 통합 관리
-- Logs 열면 DevLogs 닫힘, 반대도 동일
+우측 상단 (LogIndicator):
+┌────────────┐
+│ [📄][📝]   │  ← Logs, DevLogs 버튼 (hover시 tooltip)
+└────────────┘
 
 데이터 흐름:
 1. Test Setting 선택 → loadTestSetting(settingId)
@@ -270,7 +303,9 @@ UI 구성:
 3. Settings 버튼 → SimulationParamsModal 열기
    → fabConfigStore.setFabOverride()
 
-4. Logs/DevLogs 버튼 → 드롭다운으로 OPFS 파일 목록 관리
+4. LogIndicator (우측 상단)
+   → Logs 버튼 클릭 → LogFileManager 드롭다운
+   → DevLogs 버튼 클릭 → DevLogFileManager 드롭다운
 ```
 
 ## Config Files

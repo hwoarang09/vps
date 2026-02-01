@@ -10,6 +10,7 @@ import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
 import MqttStatusIndicator from "../system/MqttStatusIndicator";
+import LogIndicator from "../system/LogIndicator";
 
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, rightPanelOpen } = useMenuStore();
@@ -24,6 +25,9 @@ const MenuContainer: React.FC = () => {
     <>
       {/* MQTT Status Indicator - Top Left */}
       <MqttStatusIndicator />
+
+      {/* Log Indicator - Top Right */}
+      <LogIndicator />
 
       {/* Top area - empty for now */}
       <div

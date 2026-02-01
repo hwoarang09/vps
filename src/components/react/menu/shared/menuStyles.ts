@@ -84,7 +84,7 @@ export type MenuContainerVariants = VariantProps<typeof menuContainerVariants>;
  * MenuDivider styles (simple class string)
  */
 export const menuDividerClass = twMerge(
-  "h-8 w-px",
+  "h-8 w-px mx-2",
   "bg-gradient-to-b from-transparent via-white to-transparent",
   "opacity-30"
 );

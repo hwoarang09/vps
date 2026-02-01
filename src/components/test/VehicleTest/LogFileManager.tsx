@@ -71,6 +71,7 @@ function groupFilesBySession(files: LogFileInfo[]): Map<string, ParsedFileInfo[]
 interface LogFileManagerProps {
   isOpen: boolean;
   onToggle: () => void;
+  hideButton?: boolean;
 }
 
 /**
@@ -79,7 +80,7 @@ interface LogFileManagerProps {
  * Dropdown component for managing OPFS log files
  * Uses direct OPFS access so it works without simulation running
  */
-const LogFileManager: React.FC<LogFileManagerProps> = ({ isOpen, onToggle }) => {
+const LogFileManager: React.FC<LogFileManagerProps> = ({ isOpen, onToggle, hideButton = false }) => {
   const { isRunning } = useShmSimulatorStore();
   const [files, setFiles] = useState<LogFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -216,25 +217,27 @@ const LogFileManager: React.FC<LogFileManagerProps> = ({ isOpen, onToggle }) => 
 
   return (
     <div style={{ position: "relative" }}>
-      <button
-        onClick={handleToggle}
-        style={{
-          padding: "3px 10px",
-          background: "#9b59b6",
-          color: "white",
-          border: "2px solid #8e44ad",
-          borderRadius: "4px",
-          fontSize: "12px",
-          cursor: "pointer",
-          fontWeight: "bold",
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-        }}
-        title="Manage log files"
-      >
-        📋Logs({files.length})
-      </button>
+      {!hideButton && (
+        <button
+          onClick={handleToggle}
+          style={{
+            padding: "3px 10px",
+            background: "#9b59b6",
+            color: "white",
+            border: "2px solid #8e44ad",
+            borderRadius: "4px",
+            fontSize: "12px",
+            cursor: "pointer",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+          title="Manage log files"
+        >
+          Logs({files.length})
+        </button>
+      )}
 
       {isOpen && (
         <div

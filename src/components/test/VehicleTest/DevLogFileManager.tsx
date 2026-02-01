@@ -10,6 +10,7 @@ import {
 interface DevLogFileManagerProps {
   isOpen: boolean;
   onToggle: () => void;
+  hideButton?: boolean;
 }
 
 /**
@@ -20,7 +21,7 @@ interface DevLogFileManagerProps {
  * - 선택한 파일들 병합 다운로드
  * - 전체 다운로드
  */
-const DevLogFileManager: React.FC<DevLogFileManagerProps> = ({ isOpen, onToggle }) => {
+const DevLogFileManager: React.FC<DevLogFileManagerProps> = ({ isOpen, onToggle, hideButton = false }) => {
   const [files, setFiles] = useState<DevLogFileInfo[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -173,25 +174,27 @@ const DevLogFileManager: React.FC<DevLogFileManagerProps> = ({ isOpen, onToggle 
 
   return (
     <div style={{ position: "relative" }}>
-      <button
-        onClick={handleToggle}
-        style={{
-          padding: "3px 10px",
-          background: "#27ae60",
-          color: "white",
-          border: "2px solid #1e8449",
-          borderRadius: "4px",
-          fontSize: "12px",
-          cursor: "pointer",
-          fontWeight: "bold",
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-        }}
-        title="개발용 로그 파일 관리"
-      >
-        📝DevLogs({files.length})
-      </button>
+      {!hideButton && (
+        <button
+          onClick={handleToggle}
+          style={{
+            padding: "3px 10px",
+            background: "#27ae60",
+            color: "white",
+            border: "2px solid #1e8449",
+            borderRadius: "4px",
+            fontSize: "12px",
+            cursor: "pointer",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+          }}
+          title="개발용 로그 파일 관리"
+        >
+          DevLogs({files.length})
+        </button>
+      )}
 
       {isOpen && (
         <div

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
-import { useVehicleArrayStore, TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
+import { useVehicleArrayStore } from "@store/vehicle/arrayMode/vehicleStore";
 import { useVehicleGeneralStore } from "@store/vehicle/vehicleGeneralStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCFGStore } from "@store/system/cfgStore";
@@ -8,8 +8,8 @@ import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "@/types/vehicle";
 import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
-import { Play, Pause, Settings } from "lucide-react";
 import SimulationParamsModal from "./SimulationParamsModal";
+import TopControlBar from "./TopControlBar";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr";
 import { useEdgeStore } from "@/store/map/edgeStore";
@@ -20,19 +20,7 @@ import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
-import LogFileManager from "./LogFileManager";
-import DevLogFileManager from "./DevLogFileManager";
 import { DevLogger } from "@/logger";
-import { twMerge } from "tailwind-merge";
-import {
-  panelContainerVariants,
-  panelSelectVariants,
-  panelInputVariants,
-  panelButtonVariants,
-  panelLabelVariants,
-  panelDividerClass,
-  panelTextVariants,
-} from "@/components/react/menu/shared/panelStyles";
 
 /**
  * VehicleTest
@@ -64,8 +52,6 @@ const VehicleTest: React.FC = () => {
   const [fabCountX, setFabCountX] = useState<number>(2);
   const [fabCountY, setFabCountY] = useState<number>(1);
   const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
-
-  const [activeLogDropdown, setActiveLogDropdown] = useState<'logs' | 'devlogs' | null>(null);
 
   // Calculate max vehicle capacity from edges (fab 개수 반영)
   const maxVehicleCapacity = React.useMemo(() => {
@@ -344,194 +330,30 @@ const VehicleTest: React.FC = () => {
 
   return (
     <>
-      {/* Test Setting Selector */}
-      <div
-        className={twMerge(
-          panelContainerVariants({ position: "top", padding: "sm" }),
-          "flex items-center gap-4 font-mono text-xs"
-        )}
-      >
-        {/* Test Setting */}
-        <label className={panelLabelVariants({ color: "white", size: "sm" })}>
-          TEST SETTING:
-        </label>
-        <select
-          value={selectedSettingId}
-          onChange={(e) => handleSettingChange(e.target.value)}
-          className={panelSelectVariants({ accent: "cyan", size: "sm" })}
-        >
-          {testSettings.map((setting) => (
-            <option key={setting.id} value={setting.id}>
-              {setting.name} ({setting.mapName})
-            </option>
-          ))}
-        </select>
-
-        {/* Transfer Mode Selector */}
-        <select
-          value={transferMode}
-          onChange={(e) => setTransferMode(e.target.value as TransferMode)}
-          className={panelSelectVariants({ accent: "purple", size: "sm" })}
-        >
-          <option value={TransferMode.LOOP}>LOOP</option>
-          <option value={TransferMode.RANDOM}>RANDOM</option>
-          <option value={TransferMode.MQTT_CONTROL}>MQTT</option>
-          <option value={TransferMode.AUTO_ROUTE}>AUTO_ROUTE</option>
-        </select>
-
-        {/* Vehicles */}
-        <div className="flex items-center gap-2">
-          <label className={panelLabelVariants({ color: "white", size: "sm" })}>
-            VEHICLES:
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="10000"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            className={twMerge(
-              panelInputVariants({ size: "sm", width: "fixed" }),
-              "text-center"
-            )}
-          />
-          <span className={panelTextVariants({ variant: "muted", size: "xs" })}>
-            / {maxVehicleCapacity || "---"}
-          </span>
-        </div>
-
-        <button
-          onClick={handleCreate}
-          className={panelButtonVariants({ variant: "success", size: "md" })}
-        >
-          Create
-        </button>
-
-        <button
-          onClick={handleDelete}
-          className={panelButtonVariants({ variant: "danger", size: "md" })}
-        >
-          Delete
-        </button>
-
-        {/* FAB Controls */}
-        <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
-          <label className={panelLabelVariants({ color: "orange", size: "sm" })}>
-            FAB:
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="100"
-            value={fabCountX}
-            onChange={(e) => setFabCountX(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
-            disabled={isFabApplied}
-            className={twMerge(
-              panelInputVariants({ size: "sm" }),
-              "w-[50px] text-center border-accent-yellow",
-              isFabApplied && "opacity-50 cursor-not-allowed"
-            )}
-            title="가로 개수"
-          />
-          <span className="text-accent-yellow font-bold">×</span>
-          <input
-            type="number"
-            min="1"
-            max="100"
-            value={fabCountY}
-            onChange={(e) => setFabCountY(Math.max(1, Math.min(100, Number.parseInt(e.target.value) || 1)))}
-            disabled={isFabApplied}
-            className={twMerge(
-              panelInputVariants({ size: "sm" }),
-              "w-[50px] text-center border-accent-yellow",
-              isFabApplied && "opacity-50 cursor-not-allowed"
-            )}
-            title="세로 개수"
-          />
-          <span className={panelTextVariants({ variant: "muted", size: "xs" })}>
-            ={fabCountX * fabCountY}
-          </span>
-          <button
-            onClick={handleFabCreate}
-            disabled={isFabApplied}
-            className={panelButtonVariants({
-              variant: isFabApplied ? "ghost" : "warning",
-              size: "md",
-              disabled: isFabApplied,
-            })}
-          >
-            Create
-          </button>
-          <button
-            onClick={handleFabClear}
-            disabled={!isFabApplied}
-            className={panelButtonVariants({
-              variant: isFabApplied ? "warning" : "ghost",
-              size: "md",
-              disabled: !isFabApplied,
-            })}
-          >
-            Clear
-          </button>
-          <button
-            onClick={() => useFabConfigStore.getState().setModalOpen(true)}
-            className={panelButtonVariants({ variant: "purple", size: "md" })}
-            title="Configure simulation parameters per fab"
-          >
-            <Settings size={14} />
-            Params
-          </button>
-        </div>
-
-        {/* Play/Pause buttons */}
-        <div className="flex gap-1 ml-2">
-          <button
-            onClick={() => setPaused(false)}
-            disabled={!isPaused}
-            className={twMerge(
-              panelButtonVariants({
-                variant: isPaused ? "success" : "ghost",
-                size: "md",
-                disabled: !isPaused,
-              }),
-              isPaused && "border-2 border-accent-green"
-            )}
-            title="Play simulation"
-          >
-            <Play size={14} />
-            Play
-          </button>
-
-          <button
-            onClick={() => setPaused(true)}
-            disabled={isPaused}
-            className={twMerge(
-              panelButtonVariants({
-                variant: !isPaused ? "warning" : "ghost",
-                size: "md",
-                disabled: isPaused,
-              }),
-              !isPaused && "border-2 border-accent-yellow"
-            )}
-            title="Pause simulation"
-          >
-            <Pause size={14} />
-            Pause
-          </button>
-        </div>
-
-        {/* Log Download Section */}
-        <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
-          <LogFileManager
-            isOpen={activeLogDropdown === 'logs'}
-            onToggle={() => setActiveLogDropdown(activeLogDropdown === 'logs' ? null : 'logs')}
-          />
-          <DevLogFileManager
-            isOpen={activeLogDropdown === 'devlogs'}
-            onToggle={() => setActiveLogDropdown(activeLogDropdown === 'devlogs' ? null : 'devlogs')}
-          />
-        </div>
-      </div>
+      {/* Top Control Bar - MenuLevel1/2 style */}
+      <TopControlBar
+        testSettings={testSettings}
+        selectedSettingId={selectedSettingId}
+        onSettingChange={handleSettingChange}
+        transferMode={transferMode}
+        onTransferModeChange={setTransferMode}
+        vehicleCount={inputValue}
+        onVehicleCountChange={setInputValue}
+        maxVehicleCapacity={maxVehicleCapacity}
+        onCreateVehicles={handleCreate}
+        onDeleteVehicles={handleDelete}
+        fabCountX={fabCountX}
+        fabCountY={fabCountY}
+        onFabCountXChange={setFabCountX}
+        onFabCountYChange={setFabCountY}
+        isFabApplied={isFabApplied}
+        onFabCreate={handleFabCreate}
+        onFabClear={handleFabClear}
+        onOpenParams={() => useFabConfigStore.getState().setModalOpen(true)}
+        isPaused={isPaused}
+        onPlay={() => setPaused(false)}
+        onPause={() => setPaused(true)}
+      />
 
       {/* Test Runner */}
       {isTestCreated && (
