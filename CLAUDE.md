@@ -64,3 +64,20 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
     -   자동으로 버전 번호 증가 (package.json)
     -   커밋 메시지 앞에 버전 정보 추가
     -   origin/main으로 푸시
+
+## 7. Slash Commands (에이전트 역할 전환)
+세션 시작 시 특정 역할로 전환하려면 슬래시 커맨드를 사용합니다.
+
+| 명령어 | 참조 파일 | 설명 |
+|--------|-----------|------|
+| `/my-agents` | - | 사용 가능한 에이전트 목록 보기 |
+| `/react-agents` | `.ai-agents/react_agents.md` | React UI 작업 |
+| `/lock-agents` | `.ai-agents/lock_agents.md` | Lock 시스템 작업 |
+| `/sonar-agents` | `.ai-agents/sonar_agents.md` | Sonar 시스템 작업 |
+| `/multi-fab` | `.ai-agents/multi_fab.md` | Multi-fab 작업 |
+| `/sensor-collision` | `.ai-agents/sensor_collision.md` | Sensor collision 작업 |
+| `/shm-simulator` | `.ai-agents/shmSimulator_agents.md` | ShmSimulator 작업 |
+| `/visualization` | `.ai-agents/visualization.md` | Visualization 작업 |
+
+-   커맨드 파일 위치: `.claude/commands/`
+-   에이전트 설정 파일 위치: `.ai-agents/`
