@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { X, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { useFabConfigStore, type FabConfigOverride, type GrantStrategy } from "@/store/simulation/fabConfigStore";
+import { useFabConfigStore, type FabConfigOverride, type GrantStrategy, type SensorZoneOverride } from "@/store/simulation/fabConfigStore";
 import { useFabStore } from "@/store/map/fabStore";
+import { SENSOR_PRESETS, PresetIndex, type SensorZoneKey } from "@/common/vehicle/collision/sensorPresets";
 
 interface ParamInputProps {
   label: string;
@@ -569,7 +570,131 @@ const FabOverrideEditor: React.FC<FabOverrideEditorProps> = ({ fabIndex, onRemov
           unit="m/s²"
         />
       </Section>
+
+      <SensorPresetEditor fabIndex={fabIndex} />
     </div>
+  );
+};
+
+// 프리셋 이름 매핑
+const PRESET_NAMES: Record<number, string> = {
+  [PresetIndex.STRAIGHT]: "STRAIGHT",
+  [PresetIndex.CURVE_LEFT]: "CURVE_LEFT",
+  [PresetIndex.CURVE_RIGHT]: "CURVE_RIGHT",
+  [PresetIndex.U_TURN]: "U_TURN",
+  [PresetIndex.MERGE]: "MERGE",
+  [PresetIndex.BRANCH]: "BRANCH",
+};
+
+const ZONE_KEYS: SensorZoneKey[] = ["approach", "brake", "stop"];
+const ZONE_FIELDS: (keyof SensorZoneOverride)[] = ["leftAngle", "rightAngle", "leftLength", "rightLength"];
+const ZONE_FIELD_UNITS: Record<string, string> = {
+  leftAngle: "°",
+  rightAngle: "°",
+  leftLength: "m",
+  rightLength: "m",
+};
+
+interface SensorPresetEditorProps {
+  fabIndex: number;
+}
+
+const SensorPresetEditor: React.FC<SensorPresetEditorProps> = ({ fabIndex }) => {
+  const { fabOverrides, setFabOverride } = useFabConfigStore();
+  const override = fabOverrides[fabIndex] || {};
+  const sensorOverride = override.sensor;
+
+  const updateSensorZone = (
+    presetIndex: number,
+    zoneKey: SensorZoneKey,
+    field: keyof SensorZoneOverride,
+    value: number | undefined,
+  ) => {
+    const newOverride: FabConfigOverride = JSON.parse(JSON.stringify(override));
+    if (!newOverride.sensor) newOverride.sensor = {};
+    if (!newOverride.sensor.presets) newOverride.sensor.presets = {};
+    if (!newOverride.sensor.presets[presetIndex]) newOverride.sensor.presets[presetIndex] = {};
+    const preset = newOverride.sensor.presets[presetIndex]!;
+    if (!preset.zones) preset.zones = {};
+    if (!preset.zones[zoneKey]) preset.zones[zoneKey] = {};
+
+    if (value === undefined) {
+      delete preset.zones[zoneKey]![field];
+      // 빈 zone 정리
+      if (Object.keys(preset.zones[zoneKey]!).length === 0) {
+        delete preset.zones[zoneKey];
+      }
+      // 빈 preset 정리
+      if (!preset.zones || Object.keys(preset.zones).length === 0) {
+        delete newOverride.sensor.presets![presetIndex];
+      }
+      // 빈 sensor 정리
+      if (!newOverride.sensor.presets || Object.keys(newOverride.sensor.presets).length === 0) {
+        delete newOverride.sensor;
+      }
+    } else {
+      preset.zones[zoneKey]![field] = value;
+    }
+
+    setFabOverride(fabIndex, newOverride);
+  };
+
+  const sensorOverrideCount = sensorOverride?.presets
+    ? Object.values(sensorOverride.presets).reduce((count, preset) => {
+        if (!preset?.zones) return count;
+        return count + Object.values(preset.zones).reduce((zc, zone) => {
+          return zc + (zone ? Object.keys(zone).length : 0);
+        }, 0);
+      }, 0)
+    : 0;
+
+  return (
+    <Section
+      title={`Sensor Presets${sensorOverrideCount > 0 ? ` (${sensorOverrideCount} overrides)` : ""}`}
+      color="#2ecc71"
+      defaultOpen={false}
+    >
+      {SENSOR_PRESETS.map((basePreset, presetIndex) => {
+        const presetOverride = sensorOverride?.presets?.[presetIndex];
+        const hasOverrides = presetOverride?.zones && Object.keys(presetOverride.zones).some(
+          zk => presetOverride.zones![zk as SensorZoneKey] && Object.keys(presetOverride.zones![zk as SensorZoneKey]!).length > 0
+        );
+
+        return (
+          <Section
+            key={presetIndex}
+            title={`${PRESET_NAMES[presetIndex] || `Preset ${presetIndex}`}${hasOverrides ? " *" : ""}`}
+            color="#27ae60"
+            defaultOpen={false}
+          >
+            {ZONE_KEYS.map((zoneKey) => {
+              const baseZone = basePreset.zones[zoneKey];
+              const zoneOverride = presetOverride?.zones?.[zoneKey];
+
+              return (
+                <div key={zoneKey} style={{ marginBottom: "8px" }}>
+                  <div style={{ fontSize: "11px", color: "#aaa", fontWeight: "bold", marginBottom: "4px", textTransform: "uppercase" }}>
+                    {zoneKey}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
+                    {ZONE_FIELDS.map((field) => (
+                      <ParamInput
+                        key={field}
+                        label={field}
+                        value={zoneOverride?.[field]}
+                        baseValue={baseZone[field as keyof typeof baseZone] as number}
+                        onChange={(v) => updateSensorZone(presetIndex, zoneKey, field, v)}
+                        unit={ZONE_FIELD_UNITS[field] || ""}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </Section>
+        );
+      })}
+    </Section>
   );
 };
 

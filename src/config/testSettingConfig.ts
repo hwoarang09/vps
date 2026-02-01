@@ -1,5 +1,6 @@
 // Test setting configuration interface
 import { TransferMode } from "@/common/vehicle/initialize/constants";
+import type { SensorConfigOverride } from "@/store/simulation/fabConfigStore";
 
 export interface TestSetting {
   id: string;
@@ -12,6 +13,8 @@ export interface TestSetting {
     position: [number, number, number];
     target: [number, number, number];
   };
+  /** 팹별 센서 프리셋 오버라이드 (fabIndex -> SensorConfigOverride) */
+  fabSensorOverrides?: Record<number, SensorConfigOverride>;
 }
 
 interface TestSettingConfig {

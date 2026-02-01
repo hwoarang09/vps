@@ -244,6 +244,16 @@ const VehicleTest: React.FC = () => {
     resetLockMgr();
     getLockMgr().initFromEdges(edges);
 
+    // testSetting에서 fabSensorOverrides가 있으면 fabConfigStore에 적용
+    if (selectedSetting.fabSensorOverrides) {
+      const fabConfigStore = useFabConfigStore.getState();
+      for (const [fabIndexStr, sensorOverride] of Object.entries(selectedSetting.fabSensorOverrides)) {
+        const fabIndex = Number(fabIndexStr);
+        const existing = fabConfigStore.fabOverrides[fabIndex] || {};
+        fabConfigStore.setFabOverride(fabIndex, { ...existing, sensor: sensorOverride });
+      }
+    }
+
     setIsFabApplied(true);
   };
 

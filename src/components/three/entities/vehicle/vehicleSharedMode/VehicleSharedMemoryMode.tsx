@@ -105,7 +105,9 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         const fabConfig = fabConfigStore.getFabConfig(fabData.fabIndex);
 
         // Fab별 config override 생성 (SimulationConfig의 Partial)
-        const configOverride = fabConfigStore.hasOverride(fabData.fabIndex) ? {
+        const sensorPresets = fabConfigStore.getFabSensorPresets(fabData.fabIndex);
+        const hasSensorOverride = !!fabConfigStore.getFabSensorOverride(fabData.fabIndex);
+        const configOverride = (fabConfigStore.hasOverride(fabData.fabIndex) || hasSensorOverride) ? {
           linearMaxSpeed: fabConfig.movement.linear.maxSpeed,
           linearAcceleration: fabConfig.movement.linear.acceleration,
           linearDeceleration: fabConfig.movement.linear.deceleration,
@@ -116,6 +118,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           lockWaitDistanceFromMergingCurve: fabConfig.lock.waitDistanceFromMergingCurve,
           lockRequestDistanceFromMergingCurve: fabConfig.lock.requestDistanceFromMergingCurve,
           lockGrantStrategy: fabConfig.lock.grantStrategy,
+          ...(hasSensorOverride ? { sensorPresets } : {}),
         } : undefined;
 
         // Rule A.2: Remove empty block
