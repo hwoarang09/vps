@@ -68,15 +68,19 @@ function groupFilesBySession(files: LogFileInfo[]): Map<string, ParsedFileInfo[]
   return groups;
 }
 
+interface LogFileManagerProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
 /**
  * LogFileManager
  *
  * Dropdown component for managing OPFS log files
  * Uses direct OPFS access so it works without simulation running
  */
-const LogFileManager: React.FC = () => {
+const LogFileManager: React.FC<LogFileManagerProps> = ({ isOpen, onToggle }) => {
   const { isRunning } = useShmSimulatorStore();
-  const [isOpen, setIsOpen] = useState(false);
   const [files, setFiles] = useState<LogFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
@@ -102,7 +106,7 @@ const LogFileManager: React.FC = () => {
     if (!isOpen) {
       await loadFiles();
     }
-    setIsOpen(!isOpen);
+    onToggle();
   };
 
   const handleDownload = async (file: LogFileInfo) => {
@@ -215,7 +219,7 @@ const LogFileManager: React.FC = () => {
       <button
         onClick={handleToggle}
         style={{
-          padding: "5px 15px",
+          padding: "3px 10px",
           background: "#9b59b6",
           color: "white",
           border: "2px solid #8e44ad",
@@ -225,11 +229,11 @@ const LogFileManager: React.FC = () => {
           fontWeight: "bold",
           display: "flex",
           alignItems: "center",
-          gap: "5px",
+          gap: "4px",
         }}
         title="Manage log files"
       >
-        📋 Logs ({files.length})
+        📋Logs({files.length})
       </button>
 
       {isOpen && (

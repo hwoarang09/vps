@@ -65,7 +65,7 @@ const VehicleTest: React.FC = () => {
   const [fabCountY, setFabCountY] = useState<number>(1);
   const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
 
-  const { downloadLogs, isInitialized: isSimInitialized } = useShmSimulatorStore();
+  const [activeLogDropdown, setActiveLogDropdown] = useState<'logs' | 'devlogs' | null>(null);
 
   // Calculate max vehicle capacity from edges (fab 개수 반영)
   const maxVehicleCapacity = React.useMemo(() => {
@@ -76,32 +76,6 @@ const VehicleTest: React.FC = () => {
     }
     return baseCapacity;
   }, [edges, isFabApplied, fabCountX, fabCountY]);
-
-  // Handle log download - directly from Logger Worker
-  const handleDownloadLog = async () => {
-    try {
-      const result = await downloadLogs();
-
-      if (!result) {
-        alert("No active logger. Start simulation first.");
-        return;
-      }
-
-
-      // Create blob and trigger download
-      const blob = new Blob([result.buffer], { type: "application/octet-stream" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = result.fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      alert(`Downloaded: ${result.fileName}\nRecords: ${result.recordCount}\nSize: ${(result.buffer.byteLength / 1024).toFixed(2)} KB`);
-    } catch (error) {
-      alert(`Failed to download log: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
 
   useEffect(() => {
     setInputValue(selectedSetting.numVehicles.toString());
@@ -548,23 +522,14 @@ const VehicleTest: React.FC = () => {
 
         {/* Log Download Section */}
         <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-600">
-          <button
-            onClick={handleDownloadLog}
-            disabled={!isSimInitialized}
-            className={twMerge(
-              panelButtonVariants({
-                variant: isSimInitialized ? "primary" : "ghost",
-                size: "sm",
-                disabled: !isSimInitialized,
-              }),
-              isSimInitialized && "border-2 border-accent-cyan/50"
-            )}
-            title={isSimInitialized ? "Download current session log" : "Start simulation first"}
-          >
-            📥 Latest
-          </button>
-          <LogFileManager />
-          <DevLogFileManager />
+          <LogFileManager
+            isOpen={activeLogDropdown === 'logs'}
+            onToggle={() => setActiveLogDropdown(activeLogDropdown === 'logs' ? null : 'logs')}
+          />
+          <DevLogFileManager
+            isOpen={activeLogDropdown === 'devlogs'}
+            onToggle={() => setActiveLogDropdown(activeLogDropdown === 'devlogs' ? null : 'devlogs')}
+          />
         </div>
       </div>
 

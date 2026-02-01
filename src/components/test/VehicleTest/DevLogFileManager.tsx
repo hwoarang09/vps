@@ -7,6 +7,11 @@ import {
   type DevLogFileInfo,
 } from "@/logger";
 
+interface DevLogFileManagerProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
 /**
  * DevLogFileManager
  *
@@ -15,8 +20,7 @@ import {
  * - 선택한 파일들 병합 다운로드
  * - 전체 다운로드
  */
-const DevLogFileManager: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
+const DevLogFileManager: React.FC<DevLogFileManagerProps> = ({ isOpen, onToggle }) => {
   const [files, setFiles] = useState<DevLogFileInfo[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +45,7 @@ const DevLogFileManager: React.FC = () => {
     if (!isOpen) {
       await loadFiles();
     }
-    setIsOpen(!isOpen);
+    onToggle();
   };
 
   const handleSelectAll = () => {
@@ -172,7 +176,7 @@ const DevLogFileManager: React.FC = () => {
       <button
         onClick={handleToggle}
         style={{
-          padding: "5px 15px",
+          padding: "3px 10px",
           background: "#27ae60",
           color: "white",
           border: "2px solid #1e8449",
@@ -182,11 +186,11 @@ const DevLogFileManager: React.FC = () => {
           fontWeight: "bold",
           display: "flex",
           alignItems: "center",
-          gap: "5px",
+          gap: "4px",
         }}
         title="개발용 로그 파일 관리"
       >
-        📝 DevLogs ({files.length})
+        📝DevLogs({files.length})
       </button>
 
       {isOpen && (

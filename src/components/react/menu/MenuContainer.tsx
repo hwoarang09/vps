@@ -51,7 +51,7 @@ const MenuContainer: React.FC = () => {
           style={{
             position: "fixed",
             top: 110,
-            right: 0,
+            right: 10,
             bottom: 140, // Extra space for bottom menu
             width: 320,
             zIndex: 20,
