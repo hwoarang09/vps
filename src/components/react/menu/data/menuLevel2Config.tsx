@@ -431,7 +431,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
   Search: [
     {
       id: "search-vehicle",
-      label: "Vehicle",
+      label: "Vehicle Search",
       shortcutLabel: "v",
       iconFn: (isActive: boolean) => (
         <Car
@@ -444,22 +444,8 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       ),
     },
     {
-      id: "search-node",
-      label: "Node",
-      shortcutLabel: "n",
-      iconFn: (isActive: boolean) => (
-        <Circle
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
       id: "search-edge",
-      label: "Edge",
+      label: "Edge Search",
       shortcutLabel: "e",
       iconFn: (isActive: boolean) => (
         <GitBranch
@@ -472,8 +458,22 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       ),
     },
     {
+      id: "search-node",
+      label: "Node Search",
+      shortcutLabel: "n",
+      iconFn: (isActive: boolean) => (
+        <Circle
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
       id: "search-station",
-      label: "Station",
+      label: "Station Search",
       shortcutLabel: "s",
       iconFn: (isActive: boolean) => (
         <MapPin

@@ -1,14 +1,20 @@
 // components/react/menu/RightPanel.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import { Radio } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { useCameraStore } from "@/store/ui/cameraStore";
+import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
+import EdgeControlPanel from "./panels/EdgeControlPanel";
+import IndividualControlPanel from "./panels/IndividualControlPanel";
 
 
 const RightPanel: React.FC = () => {
   const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
+  const stopFollowingVehicle = useCameraStore((s) => s.stopFollowingVehicle);
+  const closeVehiclePanel = useVehicleControlStore((s) => s.closePanel);
 
   // Mode detection for Lock Info panel
   const shmIsInitialized = useShmSimulatorStore((s) => s.isInitialized);
@@ -21,6 +27,14 @@ const RightPanel: React.FC = () => {
     return null;
   };
   const simMode = getSimMode();
+
+  // Stop camera following when leaving Vehicle Search menu
+  useEffect(() => {
+    if (activeSubMenu !== "search-vehicle") {
+      stopFollowingVehicle();
+      closeVehiclePanel();
+    }
+  }, [activeSubMenu, stopFollowingVehicle, closeVehiclePanel]);
 
   const handleClose = () => {
     setRightPanelOpen(false);
@@ -124,7 +138,15 @@ const RightPanel: React.FC = () => {
       return <LockInfoPanel />;
     }
 
+    // Search Vehicle Panel
+    if (activeSubMenu === "search-vehicle") {
+      return <IndividualControlPanel />;
+    }
 
+    // Search Edge Panel
+    if (activeSubMenu === "search-edge") {
+      return <EdgeControlPanel />;
+    }
 
     // 다른 메뉴들의 경우
     return (
@@ -190,6 +212,11 @@ const RightPanel: React.FC = () => {
       "map-menu-5": "Connection Tools",
       // DevTools
       "devtools-lock": "Lock Info",
+      // Search
+      "search-vehicle": "Vehicle Search",
+      "search-node": "Node Search",
+      "search-edge": "Edge Search",
+      "search-station": "Station Search",
     };
     return labels[menuId] || menuId;
   };
@@ -197,6 +224,8 @@ const RightPanel: React.FC = () => {
   // Get panel title based on active menu
   const getPanelTitle = () => {
     if (activeSubMenu === "devtools-lock") return "Lock Info";
+    if (activeSubMenu === "search-vehicle") return "Vehicle Search";
+    if (activeSubMenu === "search-edge") return "Edge Search";
     if (activeSubMenu) return getMenuLabel(activeSubMenu);
     return "Detail Panel";
   };
