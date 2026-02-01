@@ -115,10 +115,11 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
     - Edge 드롭다운 (그룹별 정렬, BAY 또는 접두사 기준)
     - 검색 (이름/인덱스, Enter로 실행)
     - 카메라 자동 이동 (선택/검색 시 해당 Edge로 이동)
-    - Edge 선택 시 3D 뷰에서 하이라이트 (초록색)
+    - Edge 선택 시 3D 뷰에서 하이라이트 (빨간색, config에서 설정)
+    - Multi-fab에서 선택한 fab에서만 하이라이트
 
   state:
-    selectedFabIndex: number        # 선택된 Fab
+    selectedFabIndex: number        # 선택된 Fab (local)
     foundEdgeIndex: number | null   # 찾은 Edge 인덱스
     isEdgeDropdownOpen: boolean     # 드롭다운 열림 상태
 
@@ -131,7 +132,8 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
       - edgeNameToIndex: Map        # 이름→인덱스 조회
     useEdgeControlStore:
       - selectedEdgeIndex           # 선택된 Edge (store)
-      - selectEdge(index)           # Edge 선택 → EdgeRenderer로 전달
+      - selectedFabIndex            # 선택된 Fab (store)
+      - selectEdge(index, fabIndex) # Edge+Fab 선택 → EdgeRenderer로 전달
     useNodeStore:
       - getNodeByName()             # Edge 좌표 계산용
     useCameraStore:
@@ -143,8 +145,9 @@ src/components/react/menu/panels/EdgeControlPanel.tsx
     - cameraHeight: 15, cameraOffset: 8
 
   highlight flow:
-    handleEdgeSelect/handleSearch → selectEdge(index)
-    → EdgeRenderer가 store 구독
+    handleEdgeSelect/handleSearch → selectEdge(index, fabIndex)
+    → EdgeRenderer가 store 구독 (selectedEdgeIndex, selectedFabIndex)
+    → Multi-fab: slotIndex === selectedFabIndex일 때만 하이라이트
     → 해당 Edge의 InstancedMesh 색상 변경 (GPU only)
 ```
 
@@ -203,6 +206,18 @@ src/store/ui/cameraStore.ts
 
   actions:
     setCameraView(position, target)
+
+src/store/ui/edgeControlStore.ts
+  state:
+    selectedEdgeIndex: number | null  # 선택된 Edge 인덱스
+    selectedFabIndex: number          # 선택된 Fab 인덱스 (multi-fab용)
+    isPanelOpen: boolean
+
+  actions:
+    selectEdge(index, fabIndex)       # Edge+Fab 선택, 패널 열기
+    openPanel()
+    closePanel()                      # 패널 닫기, selectedEdgeIndex 리셋
+    togglePanel()
 ```
 
 ## Menu Hierarchy Flow

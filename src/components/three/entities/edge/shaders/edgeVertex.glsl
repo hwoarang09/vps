@@ -19,6 +19,10 @@ void main() {
 
     // Apply instance matrix transformation
     vec4 instancePosition = instanceMatrix * vec4(position, 1.0);
+
+    // Lift selected edge slightly to avoid z-fighting with overlapping edges
+    instancePosition.z += aSelected * 0.025;
+
     vec4 modelPosition = modelMatrix * instancePosition;
     vec4 viewPosition = viewMatrix * modelPosition;
     vec4 projectedPosition = projectionMatrix * viewPosition;

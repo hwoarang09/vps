@@ -103,10 +103,16 @@ src/components/three/entities/renderers/EdgeRenderer.tsx
     EdgeTypeRenderer: 특정 EdgeType의 InstancedMesh 렌더링
 
   selection highlight:
-    store: useEdgeControlStore.selectedEdgeIndex
+    store: useEdgeControlStore (selectedEdgeIndex, selectedFabIndex)
     attribute: aSelected (InstancedBufferAttribute, float)
     shader: mix(uColor, uSelectedColor, vSelected)
-    color: SELECTED_EDGE_COLOR (#00ff00)
+    color: renderConfig.edges.selectedColor (#ff0000, config에서 로드)
+    z-offset: 선택된 edge Z += 0.025 (z-fighting 방지)
+
+  multi-fab highlight:
+    - slots.map()에서 slotIndex와 selectedFabIndex 비교
+    - effectiveSelectedIndex = (slotIndex === selectedFabIndex) ? selectedEdgeIndex : null
+    - 선택한 fab에서만 하이라이트 적용
 
   edge→instance mapping:
     LINEAR: 1 edge = 1 instance
@@ -124,10 +130,13 @@ src/components/three/entities/edge/shaders/edgeVertex.glsl
   varyings:
     vSelected: float  # fragment로 전달
 
+  z-fighting fix:
+    instancePosition.z += aSelected * 0.025  # 선택된 edge를 위로 띄움
+
 src/components/three/entities/edge/shaders/edgeFragment.glsl
   uniforms:
     uColor: vec3           # 기본 색상
-    uSelectedColor: vec3   # 선택 시 색상
+    uSelectedColor: vec3   # 선택 시 색상 (config에서 로드)
     uOpacity: float
 
   logic:
@@ -199,19 +208,36 @@ Main Thread:
 ```
 EdgeControlPanel에서 edge 선택:
   handleEdgeSelect(edgeIndex) / handleSearch()
-  → edgeControlStore.selectEdge(edgeIndex)
+  → edgeControlStore.selectEdge(edgeIndex, selectedFabIndex)
 
 EdgeRenderer에서 하이라이트:
-  useEdgeControlStore 구독 (selectedEdgeIndex)
-  → updateSelectedState(selectedEdgeIndex) 호출
-  → edgeToInstanceMap에서 instance 범위 조회
-  → selectedAttr.array[start..start+count] = 1.0
-  → selectedAttr.needsUpdate = true
-  → GPU만 업데이트 (React 리렌더링 없음)
+  useEdgeControlStore 구독 (selectedEdgeIndex, selectedFabIndex)
+
+  Single-fab:
+    → 모든 EdgeTypeRenderer에 selectedEdgeIndex 전달
+
+  Multi-fab:
+    → slots.map()에서 slotIndex와 selectedFabIndex 비교
+    → effectiveSelectedIndex = (slotIndex === selectedFabIndex) ? selectedEdgeIndex : null
+    → 선택한 fab에서만 하이라이트
+
+  하이라이트 처리:
+    → updateSelectedState(selectedEdgeIndex) 호출
+    → edgeToInstanceMap에서 instance 범위 조회
+    → selectedAttr.array[start..start+count] = 1.0
+    → selectedAttr.needsUpdate = true
+    → GPU만 업데이트 (React 리렌더링 없음)
 
 Shader 처리:
-  vertex: vSelected = aSelected
-  fragment: finalColor = mix(uColor, uSelectedColor, vSelected)
+  vertex:
+    vSelected = aSelected
+    instancePosition.z += aSelected * 0.025  # Z-fighting 방지
+  fragment:
+    finalColor = mix(uColor, uSelectedColor, vSelected)
+
+색상 설정:
+  - renderConfig.json → edges.selectedColor (#ff0000)
+  - EdgeRenderer에서 getEdgeConfig().selectedColor로 로드
 
 성능:
   - React 리렌더링: 없음
@@ -269,9 +295,10 @@ other section: [SL_x, SL_y, SR_x, SR_y]  (zones)
 | instanceData attribute 변경 | shader, buffer 업데이트 로직 |
 | fabOffset 로직 변경 | 렌더링 위치, multi-fab 정렬 |
 | 버퍼 크기 계산 | calculateRenderLayout, shmSimulatorStore |
-| Edge 선택 색상 변경 | EdgeRenderer (SELECTED_EDGE_COLOR), edgeFragment.glsl |
+| Edge 선택 색상 변경 | renderConfig.json, EdgeRenderer (getEdgeConfig) |
 | edgeControlStore 변경 | EdgeRenderer, EdgeControlPanel |
 | Edge shader 변경 | edgeVertex.glsl, edgeFragment.glsl, EdgeRenderer |
+| Multi-fab edge 선택 | EdgeRenderer (slotIndex vs selectedFabIndex), edgeControlStore |
 
 ## Performance Tips
 

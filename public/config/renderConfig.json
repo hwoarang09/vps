@@ -24,7 +24,7 @@
       "DEFAULT": "#888888"
     },
     "lineWidth": 1.0,
-    "selectedColor": "#ff9800",
+    "selectedColor": "#ff0000",
     "text": {
       "visible": true,
       "color": "#0066ff",

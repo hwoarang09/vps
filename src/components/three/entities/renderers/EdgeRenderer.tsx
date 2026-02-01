@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
-import { getEdgeColors as getEdgeColorConfig } from "@/config/renderConfig";
+import { getEdgeColors as getEdgeColorConfig, getEdgeConfig } from "@/config/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import * as THREE from "three";
@@ -15,8 +15,8 @@ import {
   RENDER_ORDER_RAIL_LINEAR,
 } from "@/utils/renderOrder";
 
-// Selected edge highlight color
-const SELECTED_EDGE_COLOR = "#00ff00";
+// Selected edge highlight color from config
+const getSelectedEdgeColor = () => getEdgeConfig().selectedColor;
 
 interface EdgeRendererProps {
   edges: Edge[];
@@ -55,6 +55,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
 
   // Subscribe to selected edge from store
   const selectedEdgeIndex = useEdgeControlStore((state) => state.selectedEdgeIndex);
+  const selectedFabIndex = useEdgeControlStore((state) => state.selectedFabIndex);
 
   // 단일 fab이거나 슬롯이 없으면 기본 렌더링
   if (fabs.length <= 1 || slots.length === 0) {
@@ -102,45 +103,49 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   // 멀티 fab: 슬롯 기반 렌더링 (각 슬롯마다 offset 적용)
   return (
     <group>
-      {slots.map((slot) => (
-        <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
-          <EdgeTypeRenderer
-            edgesWithIndex={edgesByType[EdgeType.LINEAR]}
-            edgeType={EdgeType.LINEAR}
-            color={colors.LINEAR}
-            renderOrder={RENDER_ORDER_RAIL_LINEAR}
-            selectedEdgeIndex={selectedEdgeIndex}
-          />
-          <EdgeTypeRenderer
-            edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
-            edgeType={EdgeType.CURVE_90}
-            color={colors.CURVE_90}
-            renderOrder={RENDER_ORDER_RAIL_CURVE_90}
-            selectedEdgeIndex={selectedEdgeIndex}
-          />
-          <EdgeTypeRenderer
-            edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
-            edgeType={EdgeType.CURVE_180}
-            color={colors.CURVE_180}
-            renderOrder={RENDER_ORDER_RAIL_CURVE_180}
-            selectedEdgeIndex={selectedEdgeIndex}
-          />
-          <EdgeTypeRenderer
-            edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
-            edgeType={EdgeType.CURVE_CSC}
-            color={colors.CURVE_CSC}
-            renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
-            selectedEdgeIndex={selectedEdgeIndex}
-          />
-          <EdgeTypeRenderer
-            edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
-            edgeType={EdgeType.S_CURVE}
-            color={colors.S_CURVE}
-            renderOrder={RENDER_ORDER_RAIL_CURVE_90}
-            selectedEdgeIndex={selectedEdgeIndex}
-          />
-        </group>
-      ))}
+      {slots.map((slot, slotIndex) => {
+        // Only highlight in the selected fab
+        const effectiveSelectedIndex = slotIndex === selectedFabIndex ? selectedEdgeIndex : null;
+        return (
+          <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+            <EdgeTypeRenderer
+              edgesWithIndex={edgesByType[EdgeType.LINEAR]}
+              edgeType={EdgeType.LINEAR}
+              color={colors.LINEAR}
+              renderOrder={RENDER_ORDER_RAIL_LINEAR}
+              selectedEdgeIndex={effectiveSelectedIndex}
+            />
+            <EdgeTypeRenderer
+              edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
+              edgeType={EdgeType.CURVE_90}
+              color={colors.CURVE_90}
+              renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+              selectedEdgeIndex={effectiveSelectedIndex}
+            />
+            <EdgeTypeRenderer
+              edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
+              edgeType={EdgeType.CURVE_180}
+              color={colors.CURVE_180}
+              renderOrder={RENDER_ORDER_RAIL_CURVE_180}
+              selectedEdgeIndex={effectiveSelectedIndex}
+            />
+            <EdgeTypeRenderer
+              edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
+              edgeType={EdgeType.CURVE_CSC}
+              color={colors.CURVE_CSC}
+              renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
+              selectedEdgeIndex={effectiveSelectedIndex}
+            />
+            <EdgeTypeRenderer
+              edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
+              edgeType={EdgeType.S_CURVE}
+              color={colors.S_CURVE}
+              renderOrder={RENDER_ORDER_RAIL_CURVE_90}
+              selectedEdgeIndex={effectiveSelectedIndex}
+            />
+          </group>
+        );
+      })}
     </group>
   );
 };
@@ -207,7 +212,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       uniforms: {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(color) },
-        uSelectedColor: { value: new THREE.Color(SELECTED_EDGE_COLOR) },
+        uSelectedColor: { value: new THREE.Color(getSelectedEdgeColor()) },
         uOpacity: { value: 1 },
         uIsPreview: { value: 0 },
         uLength: { value: 1 },

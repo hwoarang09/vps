@@ -111,7 +111,7 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
           DEFAULT: "#888888",
         },
         lineWidth: 1.0,
-        selectedColor: "#ff9800",
+        selectedColor: "#ff0000",
         text: {
           visible: true,
           color: "#0066ff",
@@ -204,7 +204,7 @@ let renderConfig: RenderConfig = {
       DEFAULT: "#888888",
     },
     lineWidth: 1.0,
-    selectedColor: "#ff9800",
+    selectedColor: "#ff0000",
     text: {
       visible: true,
       color: "#0066ff",

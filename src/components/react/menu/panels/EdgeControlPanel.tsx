@@ -157,7 +157,7 @@ const EdgeControlPanel: React.FC = () => {
 
     if (foundIdx !== null) {
       setFoundEdgeIndex(foundIdx);
-      selectEdge(foundIdx);  // Update store for EdgeRenderer highlight
+      selectEdge(foundIdx, selectedFabIndex);  // Update store for EdgeRenderer highlight
       navigateToEdge(foundIdx);
     } else {
       setFoundEdgeIndex(null);
@@ -169,7 +169,7 @@ const EdgeControlPanel: React.FC = () => {
     setFoundEdgeIndex(edgeIndex);
     setSearchTerm(edges[edgeIndex]?.edge_name || "");
     setIsEdgeDropdownOpen(false);
-    selectEdge(edgeIndex);  // Update store for EdgeRenderer highlight
+    selectEdge(edgeIndex, selectedFabIndex);  // Update store for EdgeRenderer highlight
     navigateToEdge(edgeIndex);
   };
 
