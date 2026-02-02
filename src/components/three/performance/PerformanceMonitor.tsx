@@ -21,7 +21,7 @@ export const PerformanceMonitorUI: React.FC = () => {
   // Drag state
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const containerRef = useRef<HTMLOutputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Ignore if clicking the worker expand button
@@ -112,10 +112,8 @@ export const PerformanceMonitorUI: React.FC = () => {
   }, []);
 
   return (
-    <output
+    <div
       ref={containerRef}
-      aria-label="Performance Monitor"
-      onMouseDown={handleMouseDown}
       style={{
         position: "fixed",
         ...(position
@@ -132,12 +130,28 @@ export const PerformanceMonitorUI: React.FC = () => {
         textShadow: "1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black",
         zIndex: 9999,
         userSelect: "none",
-        cursor: "grab",
         display: "flex",
         flexDirection: "column",
         gap: "4px",
       }}
     >
+      {/* Drag Handle */}
+      <button
+        type="button"
+        onMouseDown={handleMouseDown}
+        aria-label="Drag to move performance monitor"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "14px",
+          background: "transparent",
+          border: "none",
+          cursor: "grab",
+          padding: 0,
+        }}
+      />
       {/* Row 1: Main Thread */}
       <div style={{ display: "flex", flexDirection: "row", gap: "12px", alignItems: "center" }}>
         <div style={{ fontSize: "12px", color: "#888", width: "50px" }}>Main</div>
@@ -260,6 +274,6 @@ export const PerformanceMonitorUI: React.FC = () => {
           </div>
         </div>
       )}
-    </output>
+    </div>
   );
 };
