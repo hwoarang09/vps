@@ -18,6 +18,136 @@ import {
 // Selected edge highlight color from config
 const getSelectedEdgeColor = () => getEdgeConfig().selectedColor;
 
+// ============================================================
+// Helper Types & Functions
+// ============================================================
+
+interface EdgeWithIndex {
+  edge: Edge;
+  originalIndex: number;
+}
+
+interface InstanceMappingResult {
+  instanceCount: number;
+  edgeToInstanceMap: Map<number, { start: number; count: number }>;
+}
+
+/** Matrix 설정에 사용되는 Three.js 객체들 */
+interface MatrixContext {
+  matrix: THREE.Matrix4;
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  scale: THREE.Vector3;
+  euler: THREE.Euler;
+}
+
+/**
+ * Edge→Instance 매핑 빌드 (LINEAR vs CURVE 분기)
+ */
+function buildEdgeInstanceMapping(
+  edgesWithIndex: EdgeWithIndex[],
+  edgeType: EdgeType
+): InstanceMappingResult {
+  const mapping = new Map<number, { start: number; count: number }>();
+  let total = 0;
+
+  if (edgeType === EdgeType.LINEAR) {
+    for (const { edge, originalIndex } of edgesWithIndex) {
+      if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+        const startPos = edge.renderingPoints[0];
+        const endPos = edge.renderingPoints.at(-1)!;
+        const length = startPos.distanceTo(endPos);
+        if (length >= 0.01) {
+          mapping.set(originalIndex, { start: total, count: 1 });
+          total++;
+        }
+      }
+    }
+  } else {
+    for (const { edge, originalIndex } of edgesWithIndex) {
+      const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
+      if (segmentCount > 0) {
+        mapping.set(originalIndex, { start: total, count: segmentCount });
+        total += segmentCount;
+      }
+    }
+  }
+
+  return { instanceCount: total, edgeToInstanceMap: mapping };
+}
+
+/**
+ * LINEAR edge의 행렬 설정 (단일 인스턴스)
+ * @returns 행렬이 설정되었으면 true, skip되었으면 false
+ */
+function setLinearEdgeMatrix(
+  points: THREE.Vector3[],
+  ctx: MatrixContext,
+  mesh: THREE.InstancedMesh,
+  instanceIndex: number
+): boolean {
+  const startPos = points[0];
+  const endPos = points.at(-1)!;
+
+  const length = startPos.distanceTo(endPos);
+  if (length < 0.01) return false;
+
+  const centerX = (startPos.x + endPos.x) / 2;
+  const centerY = (startPos.y + endPos.y) / 2;
+  const centerZ = (startPos.z + endPos.z) / 2;
+  const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x);
+
+  ctx.position.set(centerX, centerY, centerZ);
+  ctx.euler.set(0, 0, angle);
+  ctx.quaternion.setFromEuler(ctx.euler);
+  ctx.scale.set(length, 0.25, 1);
+
+  ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
+  mesh.setMatrixAt(instanceIndex, ctx.matrix);
+  return true;
+}
+
+/**
+ * CURVE edge의 행렬 설정 (세그먼트별 다중 인스턴스)
+ * @returns 설정된 인스턴스 수
+ */
+function setCurveEdgeMatrices(
+  points: THREE.Vector3[],
+  ctx: MatrixContext,
+  mesh: THREE.InstancedMesh,
+  startInstanceIndex: number
+): number {
+  const segmentCount = points.length - 1;
+  let added = 0;
+
+  for (let i = 0; i < segmentCount; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+
+    const centerX = (start.x + end.x) / 2;
+    const centerY = (start.y + end.y) / 2;
+    const centerZ = (start.z + end.z) / 2;
+
+    const length = start.distanceTo(end);
+    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+    ctx.position.set(centerX, centerY, centerZ);
+    ctx.euler.set(0, 0, angle);
+    ctx.quaternion.setFromEuler(ctx.euler);
+    ctx.scale.set(length * 2, 0.25, 1);
+
+    ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
+    mesh.setMatrixAt(startInstanceIndex + added, ctx.matrix);
+    added++;
+  }
+
+  return added;
+}
+
+// ============================================================
+// Components
+// ============================================================
+
 interface EdgeRendererProps {
   edges: Edge[];
 }
@@ -150,11 +280,6 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   );
 };
 
-interface EdgeWithIndex {
-  edge: Edge;
-  originalIndex: number;
-}
-
 interface EdgeTypeRendererProps {
   edgesWithIndex: EdgeWithIndex[];
   edgeType: EdgeType;
@@ -176,34 +301,10 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   const prevSelectedRef = useRef<number | null>(null);
 
   // Calculate total instance count and build edge→instance mapping
-  const { instanceCount, edgeToInstanceMap } = useMemo(() => {
-    const mapping = new Map<number, { start: number; count: number }>();
-    let total = 0;
-
-    if (edgeType === EdgeType.LINEAR) {
-      for (const { edge, originalIndex } of edgesWithIndex) {
-        if (edge.renderingPoints && edge.renderingPoints.length > 0) {
-          const startPos = edge.renderingPoints[0];
-          const endPos = edge.renderingPoints.at(-1)!;
-          const length = startPos.distanceTo(endPos);
-          if (length >= 0.01) {
-            mapping.set(originalIndex, { start: total, count: 1 });
-            total++;
-          }
-        }
-      }
-    } else {
-      for (const { edge, originalIndex } of edgesWithIndex) {
-        const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
-        if (segmentCount > 0) {
-          mapping.set(originalIndex, { start: total, count: segmentCount });
-          total += segmentCount;
-        }
-      }
-    }
-
-    return { instanceCount: total, edgeToInstanceMap: mapping };
-  }, [edgesWithIndex, edgeType]);
+  const { instanceCount, edgeToInstanceMap } = useMemo(
+    () => buildEdgeInstanceMapping(edgesWithIndex, edgeType),
+    [edgesWithIndex, edgeType]
+  );
 
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
 
@@ -285,11 +386,13 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
     const mesh = instancedMeshRef.current;
     if (!mesh || instanceCount === 0) return;
 
-    const matrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-    const quaternion = new THREE.Quaternion();
-    const scale = new THREE.Vector3();
-    const euler = new THREE.Euler();
+    const ctx: MatrixContext = {
+      matrix: new THREE.Matrix4(),
+      position: new THREE.Vector3(),
+      quaternion: new THREE.Quaternion(),
+      scale: new THREE.Vector3(),
+      euler: new THREE.Euler(),
+    };
 
     let instanceIndex = 0;
 
@@ -298,50 +401,11 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       if (!points || points.length === 0) continue;
 
       if (edgeType === EdgeType.LINEAR) {
-        // Straight edge: single instance from first to last point
-        const startPos = points[0];
-        const endPos = points.at(-1)!;
-
-        const centerX = (startPos.x + endPos.x) / 2;
-        const centerY = (startPos.y + endPos.y) / 2;
-        const centerZ = (startPos.z + endPos.z) / 2;
-
-        const length = startPos.distanceTo(endPos);
-        const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x);
-
-        if (length < 0.01) continue;
-
-        position.set(centerX, centerY, centerZ);
-        euler.set(0, 0, angle);
-        quaternion.setFromEuler(euler);
-        scale.set(length, 0.25, 1);
-
-        matrix.compose(position, quaternion, scale);
-        mesh.setMatrixAt(instanceIndex, matrix);
-        instanceIndex++;
-      } else {
-        // Curve edges: multiple segments
-        const segmentCount = points.length - 1;
-        for (let i = 0; i < segmentCount; i++) {
-          const start = points[i];
-          const end = points[i + 1];
-
-          const centerX = (start.x + end.x) / 2;
-          const centerY = (start.y + end.y) / 2;
-          const centerZ = (start.z + end.z) / 2;
-
-          const length = start.distanceTo(end);
-          const angle = Math.atan2(end.y - start.y, end.x - start.x);
-
-          position.set(centerX, centerY, centerZ);
-          euler.set(0, 0, angle);
-          quaternion.setFromEuler(euler);
-          scale.set(length * 2, 0.25, 1);
-
-          matrix.compose(position, quaternion, scale);
-          mesh.setMatrixAt(instanceIndex, matrix);
+        if (setLinearEdgeMatrix(points, ctx, mesh, instanceIndex)) {
           instanceIndex++;
         }
+      } else {
+        instanceIndex += setCurveEdgeMatrices(points, ctx, mesh, instanceIndex);
       }
     }
 
