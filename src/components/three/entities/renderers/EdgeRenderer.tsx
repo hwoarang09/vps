@@ -39,8 +39,8 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
       [EdgeType.S_CURVE]: [],
     };
 
-    edges.forEach((edge, originalIndex) => {
-      if (edge.rendering_mode === "preview") return;
+    for (const [originalIndex, edge] of edges.entries()) {
+      if (edge.rendering_mode === "preview") continue;
 
       if (edge.renderingPoints && edge.renderingPoints.length > 0) {
         const type = edge.vos_rail_type || EdgeType.LINEAR;
@@ -48,7 +48,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           grouped[type].push({ edge, originalIndex });
         }
       }
-    });
+    }
 
     return grouped;
   }, [edges]);
@@ -181,7 +181,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
     let total = 0;
 
     if (edgeType === EdgeType.LINEAR) {
-      edgesWithIndex.forEach(({ edge, originalIndex }) => {
+      for (const { edge, originalIndex } of edgesWithIndex) {
         if (edge.renderingPoints && edge.renderingPoints.length > 0) {
           const startPos = edge.renderingPoints[0];
           const endPos = edge.renderingPoints.at(-1)!;
@@ -191,15 +191,15 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
             total++;
           }
         }
-      });
+      }
     } else {
-      edgesWithIndex.forEach(({ edge, originalIndex }) => {
+      for (const { edge, originalIndex } of edgesWithIndex) {
         const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
         if (segmentCount > 0) {
           mapping.set(originalIndex, { start: total, count: segmentCount });
           total += segmentCount;
         }
-      });
+      }
     }
 
     return { instanceCount: total, edgeToInstanceMap: mapping };

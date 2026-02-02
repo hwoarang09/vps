@@ -18,6 +18,8 @@ const UnusualMoveModal: React.FC = () => {
 
   return (
     <div
+      role="presentation"
+      tabIndex={-1}
       style={{
         position: "fixed",
         top: 0,
@@ -31,8 +33,16 @@ const UnusualMoveModal: React.FC = () => {
         zIndex: 3000,
       }}
       onClick={handleClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          handleClose();
+        }
+      }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="unusual-move-title"
         style={{
           background: "#1a1a2e",
           borderRadius: "12px",
@@ -55,7 +65,7 @@ const UnusualMoveModal: React.FC = () => {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <AlertTriangle size={28} color="#e74c3c" />
-            <h2 style={{ color: "#e74c3c", margin: 0, fontSize: "20px" }}>
+            <h2 id="unusual-move-title" style={{ color: "#e74c3c", margin: 0, fontSize: "20px" }}>
               Unusual Move Detected
             </h2>
           </div>
@@ -183,11 +193,7 @@ const UnusualMoveModal: React.FC = () => {
             }}
           >
             <div style={{ color: "#e74c3c", fontSize: "12px" }}>
-              <strong>Error:</strong> Previous edge's to_node (
-              <span style={{ color: "#f39c12" }}>{unusualMove.prevEdge.toNode}</span>
-              ) does not match next edge's from_node (
-              <span style={{ color: "#e74c3c" }}>{unusualMove.nextEdge.fromNode}</span>
-              )
+              <strong>Error:</strong> Previous edge's to_node (<span style={{ color: "#f39c12" }}>{unusualMove.prevEdge.toNode}</span>) does not match next edge's from_node (<span style={{ color: "#e74c3c" }}>{unusualMove.nextEdge.fromNode}</span>)
             </div>
           </div>
         </div>

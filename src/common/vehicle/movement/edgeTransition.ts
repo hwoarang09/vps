@@ -127,6 +127,69 @@ function checkLockBlocking(
   return { blocked: false };
 }
 
+/** 다음 Edge 전환 가능 여부 체크 결과 */
+interface NextEdgeCheckResult {
+  canTransition: boolean;
+  nextEdge: Edge | null;
+}
+
+/**
+ * 다음 Edge로 전환 가능한지 체크 (lock, state, edge 존재 여부)
+ */
+function checkCanTransitionToNextEdge(
+  lockMgr: IEdgeTransitionLockMgr | undefined,
+  currentEdge: Edge,
+  nextEdgeIndex: number,
+  nextState: number,
+  trafficState: number,
+  edgeArray: Edge[],
+  vehicleIndex: number
+): NextEdgeCheckResult {
+  const lockCheck = checkLockBlocking(lockMgr, currentEdge, nextEdgeIndex, edgeArray, vehicleIndex, trafficState);
+  if (lockCheck.blocked || nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {
+    return { canTransition: false, nextEdge: null };
+  }
+
+  const nextEdge = edgeArray[nextEdgeIndex];
+  if (!nextEdge) {
+    return { canTransition: false, nextEdge: null };
+  }
+
+  return { canTransition: true, nextEdge };
+}
+
+/**
+ * UnusualMove 감지 및 콜백 호출
+ */
+function checkAndReportUnusualMove(
+  currentEdge: Edge,
+  nextEdge: Edge,
+  vehicleIndex: number,
+  data: Float32Array,
+  ptr: number,
+  onUnusualMove?: OnUnusualMoveCallback
+): void {
+  if (currentEdge.to_node === nextEdge.from_node) return;
+
+  const prevX = data[ptr + MovementData.X];
+  const prevY = data[ptr + MovementData.Y];
+  devLog.veh(vehicleIndex).error(
+    `[UnusualMove] 연결되지 않은 edge로 이동! ` +
+    `prevEdge=${currentEdge.edge_name}(to:${currentEdge.to_node}) → nextEdge=${nextEdge.edge_name}(from:${nextEdge.from_node}), ` +
+    `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)})`
+  );
+
+  onUnusualMove?.({
+    vehicleIndex,
+    prevEdgeName: currentEdge.edge_name,
+    prevEdgeToNode: currentEdge.to_node,
+    nextEdgeName: nextEdge.edge_name,
+    nextEdgeFromNode: nextEdge.from_node,
+    posX: prevX,
+    posY: prevY,
+  });
+}
+
 /**
  * 진입 시점 상태 로그 출력
  */
@@ -200,70 +263,32 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     );
 
     // Edge transition 가능 여부 체크
-    const lockCheck = checkLockBlocking(lockMgr, currentEdge, nextEdgeIndex, edgeArray, vehicleIndex, trafficState);
-    if (lockCheck.blocked) {
-      currentRatio = 1;
-      break;
-    }
-
-    if (nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {
-      currentRatio = 1;
-      break;
-    }
-
-    const nextEdge = edgeArray[nextEdgeIndex];
-    if (!nextEdge) {
+    const { canTransition, nextEdge } = checkCanTransitionToNextEdge(
+      lockMgr, currentEdge, nextEdgeIndex, nextState, trafficState, edgeArray, vehicleIndex
+    );
+    if (!canTransition || !nextEdge) {
       currentRatio = 1;
       break;
     }
 
     // [UnusualMove] Edge 전환 시 연결 여부 검증
-    if (currentEdge.to_node !== nextEdge.from_node) {
-      const prevX = data[ptr + MovementData.X];
-      const prevY = data[ptr + MovementData.Y];
-      devLog.veh(vehicleIndex).error(
-        `[UnusualMove] 연결되지 않은 edge로 이동! ` +
-        `prevEdge=${currentEdge.edge_name}(to:${currentEdge.to_node}) → nextEdge=${nextEdge.edge_name}(from:${nextEdge.from_node}), ` +
-        `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)})`
-      );
-
-      // 콜백 호출
-      if (onUnusualMove) {
-        onUnusualMove({
-          vehicleIndex,
-          prevEdgeName: currentEdge.edge_name,
-          prevEdgeToNode: currentEdge.to_node,
-          nextEdgeName: nextEdge.edge_name,
-          nextEdgeFromNode: nextEdge.from_node,
-          posX: prevX,
-          posY: prevY,
-        });
-      }
-    }
+    checkAndReportUnusualMove(currentEdge, nextEdge, vehicleIndex, data, ptr, onUnusualMove);
 
     store.moveVehicleToEdge(vehicleIndex, nextEdgeIndex, overflowDist / nextEdge.distance);
 
     updateSensorPresetForEdge(vehicleDataArray, vehicleIndex, nextEdge);
 
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
-    const currentReason = data[ptr + LogicData.STOP_REASON];
-    if ((currentReason & StopReason.LOCKED) !== 0) {
-      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-    }
+    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;  // Clear LOCKED bit if set
 
     // Next Edge 배열을 한 칸씩 앞으로 당기고 마지막 슬롯 채우기
     shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray);
 
     // Set TARGET_RATIO for the new edge
-    if (nextTargetRatio !== undefined) {
-      // If explicit next target ratio is provided (from TransferMgr reservation)
-      data[ptr + MovementData.TARGET_RATIO] = nextTargetRatio;
-    } else if (!preserveTargetRatio) {
-      // Default behavior: Set to 1.0 (full traversal)
-      data[ptr + MovementData.TARGET_RATIO] = 1;
+    const newTargetRatio = nextTargetRatio ?? (preserveTargetRatio ? undefined : 1);
+    if (newTargetRatio !== undefined) {
+      data[ptr + MovementData.TARGET_RATIO] = newTargetRatio;
     }
-    // If preserveTargetRatio is true AND nextTargetRatio is undefined,
-    // we leave TARGET_RATIO as is (legacy behavior, though logically it might be 1.0 from previous frame)
 
     currentEdgeIdx = nextEdgeIndex;
     currentEdge = nextEdge;

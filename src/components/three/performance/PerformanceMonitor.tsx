@@ -114,7 +114,16 @@ export const PerformanceMonitorUI: React.FC = () => {
   return (
     <div
       ref={containerRef}
+      role="status"
+      aria-label="Performance Monitor"
+      tabIndex={0}
       onMouseDown={handleMouseDown}
+      onKeyDown={(e) => {
+        // Allow keyboard users to interact
+        if (e.key === "Escape") {
+          (e.target as HTMLElement).blur();
+        }
+      }}
       style={{
         position: "fixed",
         ...(position

@@ -31,6 +31,30 @@
     * *Reason*: 디버깅 용이성, `break/continue` 제어 가능, 성능 이점.
     * *Bad*: `items.forEach(item => ...)`
     * *Fix*: `for (const item of items) { ... }`
+    * *Example (Bad)*:
+    ```typescript
+    edges.forEach((edge, originalIndex) => {
+      if (edge.rendering_mode === "preview") return;
+      if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+        const type = edge.vos_rail_type || EdgeType.LINEAR;
+        if (grouped[type]) {
+          grouped[type].push({ edge, originalIndex });
+        }
+      }
+    });
+    ```
+    * *Example (Fix)*:
+    ```typescript
+    for (const [originalIndex, edge] of edges.entries()) {
+      if (edge.rendering_mode === "preview") continue;
+      if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+        const type = edge.vos_rail_type || EdgeType.LINEAR;
+        if (grouped[type]) {
+          grouped[type].push({ edge, originalIndex });
+        }
+      }
+    }
+    ```
 4.  **No Lonely If in Else**: `else` 블록 안에 `if`문만 단독으로 있으면 **`else if`**로 병합하십시오.
     * *Bad*:
     ```typescript
@@ -158,6 +182,82 @@
     ```
     * *Reason*: `globalThis`는 모든 JavaScript 환경(브라우저, Node.js, Web Worker)에서 동일하게 동작합니다. `window`는 브라우저 전용이며 Web Worker에서는 존재하지 않습니다.
     * *Note*: 이 프로젝트는 Web Worker를 적극 활용하므로, 환경 호환성을 위해 `globalThis` 사용을 권장합니다.
+
+### I. JSX & Accessibility (JSX 및 접근성)
+1.  **Interactive Elements**: 비대화형 요소(`div`, `span` 등)에 클릭 핸들러를 사용할 경우, **키보드 접근성**을 반드시 추가하십시오.
+    * *Rule*: 클릭 가능한 요소는 `role`, `tabIndex`, `onKeyDown` 속성을 함께 제공해야 합니다.
+    * *Bad*:
+    ```tsx
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.8)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 3000,
+      }}
+      onClick={handleClose}
+    >
+    ```
+    * *Fix*:
+    ```tsx
+    <div
+      role="button"
+      tabIndex={0}
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.8)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 3000,
+      }}
+      onClick={handleClose}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          handleClose();
+        }
+      }}
+    >
+    ```
+    * *Reason*: 스크린 리더 사용자와 키보드 전용 사용자가 해당 요소와 상호작용할 수 있어야 합니다.
+    * *Alternative*: 가능하면 `<button>` 같은 네이티브 대화형 요소를 사용하십시오.
+    * *Note*: 모달 오버레이의 경우 `role="dialog"` 또는 `role="presentation"`이 더 적절할 수 있습니다.
+
+2.  **JSX Child Element Spacing**: JSX에서 텍스트와 인라인 요소 사이의 공백은 **명시적으로** 표현하십시오.
+    * *Rule*: 줄바꿈으로 인한 모호한 공백은 `{" "}`로 명시하거나 한 줄로 작성하십시오.
+    * *Bad*:
+    ```tsx
+    <div style={{ color: "#e74c3c", fontSize: "12px" }}>
+      <strong>Error:</strong> Previous edge's to_node (
+      <span style={{ color: "#f39c12" }}>{unusualMove.prevEdge.toNode}</span>
+      ) does not match
+    </div>
+    ```
+    * *Fix (Option 1 - 명시적 공백)*:
+    ```tsx
+    <div style={{ color: "#e74c3c", fontSize: "12px" }}>
+      <strong>Error:</strong> Previous edge's to_node ({" "}
+      <span style={{ color: "#f39c12" }}>{unusualMove.prevEdge.toNode}</span>
+      {" "}) does not match
+    </div>
+    ```
+    * *Fix (Option 2 - 한 줄로 작성)*:
+    ```tsx
+    <div style={{ color: "#e74c3c", fontSize: "12px" }}>
+      <strong>Error:</strong> Previous edge's to_node (<span style={{ color: "#f39c12" }}>{unusualMove.prevEdge.toNode}</span>) does not match
+    </div>
+    ```
+    * *Reason*: JSX에서 줄바꿈은 공백으로 변환되지 않을 수 있어, 렌더링 결과가 예상과 다를 수 있습니다. 명시적 공백을 사용하면 의도가 명확해집니다.
 
 ---
 
