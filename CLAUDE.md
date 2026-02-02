@@ -73,6 +73,7 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
 | `/my-agents` | - | 사용 가능한 에이전트 목록 보기 |
 | `/react-agents` | `.ai-agents/react_agents.md` | React UI 작업 |
 | `/lock-agents` | `.ai-agents/lock_agents.md` | Lock 시스템 작업 |
+| `/log-agents` | `.ai-agents/log_agents.md` | Log 시스템 작업 |
 | `/sonar-agents` | `.ai-agents/sonar_agents.md` | Sonar 시스템 작업 |
 | `/multi-fab` | `.ai-agents/multi_fab.md` | Multi-fab 작업 |
 | `/sensor-collision` | `.ai-agents/sensor_collision.md` | Sensor collision 작업 |

@@ -30,9 +30,24 @@ src/common/vehicle/logic/LockMgr.ts:766
     getLocksForVehicle(vehId): {nodeName, edgeName, isGranted}[]
       - 차량이 보유한 모든 락 반환
 
-    step():  # BATCH 전략만
-      - 모든 node에 batchController.step()
+    step():  # BATCH 전략 + 양쪽 합류 노드
+      - 양쪽 합류 노드: handleArrivalOrder_Grant()
+      - 일반 노드: batchController.step()
       - newGrants → granted 추가
+
+    notifyArrival(nodeName, vehId):
+      - 차량이 대기 지점에 도착했음을 알림
+      - arrivalTime 기록
+      - 양쪽 합류 노드에서 도착 순서 기반 grant 재평가
+
+    isBothSideMergeNode(nodeName):bool
+      - deadlockZoneNodes에 포함되면 true
+      - 양쪽에서 합류하는 노드 (180도-180도, 분기 양쪽 다 합류)
+
+    handleArrivalOrder_Grant(node):
+      - 양쪽 합류 노드 전용
+      - arrivalTime이 있는 요청 중 가장 먼저 도착한 차량에게 grant
+      - BATCH 전략 무시, 도착 순서 기반
 
     initFromEdges(edges):
       - incomingEdges >= 2인 노드만 merge node 등록
@@ -157,6 +172,30 @@ edgeTransition (L916-935):
     - edgePassCount >= passLimit && hasWaitingOnOtherEdges
       → Yes: 다음 edge로 전환
       → No: edgePassCount 리셋, 같은 edge 계속
+```
+
+### ARRIVAL_ORDER Strategy (양쪽 합류 노드)
+```
+양쪽 합류 노드 (deadlock zone):
+  - BATCH 전략 무시
+  - 도착 순서 기반 grant
+
+Flow:
+1. requestLock → requests 배열 추가 (arrivalTime 없음)
+2. 차량이 대기 지점 도달 → notifyArrival → arrivalTime 기록
+3. step() 또는 releaseLock에서:
+   - handleArrivalOrder_Grant 호출
+   - arrivalTime 있는 요청 중 가장 빠른 차량에게 grant
+
+LockRequest 구조:
+  vehId: number
+  edgeName: string
+  requestTime: number     # 요청 시점
+  arrivalTime?: number    # 대기 지점 도착 시점 (notifyArrival로 설정)
+
+호출 위치:
+  vehiclePosition.ts processMergeTargets():
+    distanceToWait <= 0 → lockMgr.notifyArrival()
 ```
 
 ### Path Reroute
