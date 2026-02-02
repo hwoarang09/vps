@@ -42,6 +42,48 @@ interface MatrixContext {
 }
 
 /**
+ * LINEAR edge의 인스턴스 매핑 빌드 (edge당 1개 인스턴스)
+ */
+function buildLinearEdgeMapping(
+  edgesWithIndex: EdgeWithIndex[],
+  mapping: Map<number, { start: number; count: number }>,
+  startTotal: number
+): number {
+  let total = startTotal;
+  for (const { edge, originalIndex } of edgesWithIndex) {
+    if (edge.renderingPoints && edge.renderingPoints.length > 0) {
+      const startPos = edge.renderingPoints[0];
+      const endPos = edge.renderingPoints.at(-1)!;
+      const length = startPos.distanceTo(endPos);
+      if (length >= 0.01) {
+        mapping.set(originalIndex, { start: total, count: 1 });
+        total++;
+      }
+    }
+  }
+  return total;
+}
+
+/**
+ * CURVE edge의 인스턴스 매핑 빌드 (세그먼트 수만큼 인스턴스)
+ */
+function buildCurveEdgeMapping(
+  edgesWithIndex: EdgeWithIndex[],
+  mapping: Map<number, { start: number; count: number }>,
+  startTotal: number
+): number {
+  let total = startTotal;
+  for (const { edge, originalIndex } of edgesWithIndex) {
+    const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
+    if (segmentCount > 0) {
+      mapping.set(originalIndex, { start: total, count: segmentCount });
+      total += segmentCount;
+    }
+  }
+  return total;
+}
+
+/**
  * Edge→Instance 매핑 빌드 (LINEAR vs CURVE 분기)
  */
 function buildEdgeInstanceMapping(
@@ -49,30 +91,9 @@ function buildEdgeInstanceMapping(
   edgeType: EdgeType
 ): InstanceMappingResult {
   const mapping = new Map<number, { start: number; count: number }>();
-  let total = 0;
-
-  if (edgeType === EdgeType.LINEAR) {
-    for (const { edge, originalIndex } of edgesWithIndex) {
-      if (edge.renderingPoints && edge.renderingPoints.length > 0) {
-        const startPos = edge.renderingPoints[0];
-        const endPos = edge.renderingPoints.at(-1)!;
-        const length = startPos.distanceTo(endPos);
-        if (length >= 0.01) {
-          mapping.set(originalIndex, { start: total, count: 1 });
-          total++;
-        }
-      }
-    }
-  } else {
-    for (const { edge, originalIndex } of edgesWithIndex) {
-      const segmentCount = Math.max(0, (edge.renderingPoints?.length || 0) - 1);
-      if (segmentCount > 0) {
-        mapping.set(originalIndex, { start: total, count: segmentCount });
-        total += segmentCount;
-      }
-    }
-  }
-
+  const total = edgeType === EdgeType.LINEAR
+    ? buildLinearEdgeMapping(edgesWithIndex, mapping, 0)
+    : buildCurveEdgeMapping(edgesWithIndex, mapping, 0);
   return { instanceCount: total, edgeToInstanceMap: mapping };
 }
 
