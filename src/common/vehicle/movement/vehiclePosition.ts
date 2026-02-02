@@ -86,7 +86,8 @@ export interface MergeTarget {
   distanceToMerge: number;  // 현재 위치에서 합류점까지의 누적 거리
   requestDistance: number;  // lock 요청 거리 (설정값)
   waitDistance: number;     // 대기 거리 (설정값)
-  isDeadlockMerge: boolean; // 데드락 유발 합류점인지
+  isDeadlockMerge: boolean; // 데드락 유발 합류점인지 (to_node 기준, requestDistance용)
+  isFromDeadlockBranch: boolean; // 분기점에서 출발하는지 (from_node 기준, ARRIVAL_ORDER용)
 }
 
 /** Next Edge 오프셋 배열 */
@@ -126,7 +127,10 @@ function checkCurrentEdgeMerge(
     return null;
   }
 
+  // 합류점 기준 (calculateRequestDistance용)
   const isDeadlockMerge = lockMgr.isDeadlockZoneNode(currentEdge.to_node);
+  // 분기점 기준 (ARRIVAL_ORDER용)
+  const isFromDeadlockBranch = lockMgr.isDeadlockBranchNode(currentEdge.from_node);
   const requestDistance = calculateRequestDistance(
     lockMgr.getRequestDistanceFromMergingStr(),
     isDeadlockMerge,
@@ -142,6 +146,7 @@ function checkCurrentEdgeMerge(
     requestDistance,
     waitDistance: lockMgr.getWaitDistanceFromMergingStr(),
     isDeadlockMerge,
+    isFromDeadlockBranch,
   };
 }
 
@@ -171,7 +176,10 @@ function collectNextEdgeMerges(
       continue;
     }
 
+    // 합류점 기준 (calculateRequestDistance용)
     const isDeadlockMerge = lockMgr.isDeadlockZoneNode(nextEdge.to_node);
+    // 분기점 기준 (ARRIVAL_ORDER용)
+    const isFromDeadlockBranch = lockMgr.isDeadlockBranchNode(nextEdge.from_node);
     const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
 
     const baseRequestDist = isCurve
@@ -195,6 +203,7 @@ function collectNextEdgeMerges(
         ? lockMgr.getWaitDistanceFromMergingCurve()
         : lockMgr.getWaitDistanceFromMergingStr(),
       isDeadlockMerge,
+      isFromDeadlockBranch,
     });
 
     accumulatedDist += nextEdge.distance;
@@ -470,7 +479,9 @@ interface WaitResult {
 }
 
 /**
- * Lock 획득 실패 시 대기 지점 계산 및 처리
+ * Lock 획득 실패 시 대기 처리
+ * - 대기 지점에 도달하거나 지나쳤으면 현재 위치에서 멈춤
+ * - 뒤로 되돌리지 않음 (순간이동 방지)
  */
 function calculateWaitPosition(
   mergeTarget: MergeTarget,
@@ -480,28 +491,18 @@ function calculateWaitPosition(
 ): WaitResult {
   const distanceToWait = mergeTarget.distanceToMerge - mergeTarget.waitDistance;
 
-  // 대기 지점 이전이면 현재 위치 유지
+  // 대기 지점 이전이면 계속 진행
   if (distanceToWait > 0) {
     return { shouldWait: false };
   }
 
-  // 대기 지점을 넘어갔으면 되돌림
-  const waitRatio = currentRatio + distanceToWait / currentEdge.distance;
-
-  if (waitRatio < 0) {
-    devLog.veh(vehId).error(
-      `[MERGE_WAIT] BUG: 대기지점이 현재 edge 이전에 있음! mergeNode=${mergeTarget.mergeNode}, ` +
-      `currentEdge=${currentEdge.edge_name}, waitRatio=${waitRatio.toFixed(3)}`
-    );
-    return { shouldWait: true, waitRatio: 0 };
-  }
-
+  // 대기 지점에 도달했거나 지나침 → 현재 위치에서 멈춤 (뒤로 되돌리지 않음)
   devLog.veh(vehId).debug(
-    `[MERGE_WAIT] 대기지점 되돌림: mergeNode=${mergeTarget.mergeNode}, ` +
-    `currentRatio=${currentRatio.toFixed(3)} → waitRatio=${waitRatio.toFixed(3)}`
+    `[MERGE_WAIT] 대기: mergeNode=${mergeTarget.mergeNode}, ` +
+    `currentRatio=${currentRatio.toFixed(3)}, distanceToWait=${distanceToWait.toFixed(3)}`
   );
 
-  return { shouldWait: true, waitRatio };
+  return { shouldWait: true, waitRatio: currentRatio };
 }
 
 /**
@@ -615,6 +616,10 @@ function processMergeTargets(
       const waitResult = calculateWaitPosition(mergeTarget, currentEdge, currentRatio, vehId);
 
       if (waitResult.shouldWait) {
+        // 분기점에서 출발한 경우 도착 알림 (ARRIVAL_ORDER용)
+        if (mergeTarget.isFromDeadlockBranch) {
+          lockMgr.notifyArrival(mergeTarget.mergeNode, vehId);
+        }
         data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
         return { shouldWait: true, waitRatio: waitResult.waitRatio ?? 0 };
       }

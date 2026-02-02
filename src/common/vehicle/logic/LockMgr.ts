@@ -99,6 +99,7 @@ export type LockRequest = {
   vehId: number;
   edgeName: string;
   requestTime: number;
+  arrivalTime?: number;  // waiting point 도착 시점 (ARRIVAL_ORDER용)
 };
 
 export type BatchState = {
@@ -353,8 +354,10 @@ export class LockMgr {
   private readonly passLimit: number;
 
   // 데드락 존 관련 필드 (Edge에서 읽어온 정보)
-  /** 데드락 유발 노드 집합 (빠른 조회용) */
+  /** 데드락 유발 합류점 집합 (빠른 조회용) */
   private readonly deadlockZoneNodes: Set<string> = new Set();
+  /** 데드락 유발 분기점 집합 (빠른 조회용) */
+  private readonly deadlockZoneBranchNodes: Set<string> = new Set();
   /** 데드락 존 정보 (그룹별) */
   private readonly deadlockZones: DeadlockZone[] = [];
 
@@ -461,6 +464,7 @@ export class LockMgr {
     this.lockTable = {};
     this.batchControllers.clear();
     this.deadlockZoneNodes.clear();
+    this.deadlockZoneBranchNodes.clear();
     this.deadlockZones.length = 0;
     // 설정값은 유지 (reset은 테이블만 초기화)
   }
@@ -469,73 +473,120 @@ export class LockMgr {
     this.lockTable = {};
     this.batchControllers.clear();
     this.deadlockZoneNodes.clear();
+    this.deadlockZoneBranchNodes.clear();
     this.deadlockZones.length = 0;
 
     const incomingEdgesByNode = new Map<string, string[]>();
-    const zoneIdToMergeNodes = new Map<number, Set<string>>();
-    const zoneIdToBranchNodes = new Map<number, Set<string>>();
 
-    // 1. Edge 정보 수집
+    // 1. Edge 정보 수집 (incoming edges)
     for (const edge of edges) {
-      this.collectEdgeInfo(edge, incomingEdgesByNode, zoneIdToMergeNodes, zoneIdToBranchNodes);
+      const edgeNames = incomingEdgesByNode.get(edge.to_node);
+      if (edgeNames) {
+        edgeNames.push(edge.edge_name);
+      } else {
+        incomingEdgesByNode.set(edge.to_node, [edge.edge_name]);
+      }
     }
 
-    // 2. 데드락 존 구성
-    this.buildDeadlockZones(zoneIdToMergeNodes, zoneIdToBranchNodes);
+    // 2. 데드락 존 직접 계산 (edge.isDeadlockZoneInside 의존 안 함)
+    this.detectAndBuildDeadlockZones(edges, incomingEdgesByNode);
 
     // 3. 합류점(merge node) 등록
     this.registerMergeNodes(incomingEdgesByNode);
   }
 
-  /** Edge 정보를 수집하여 맵에 추가 */
-  private collectEdgeInfo(
-    edge: Edge,
-    incomingEdgesByNode: Map<string, string[]>,
-    zoneIdToMergeNodes: Map<number, Set<string>>,
-    zoneIdToBranchNodes: Map<number, Set<string>>
+  /**
+   * 데드락 존 감지 및 구성
+   * - 분기점 2개 → 합류점 2개 구조 찾기
+   * - edge.isDeadlockZoneInside 플래그 없이도 동작
+   */
+  private detectAndBuildDeadlockZones(
+    edges: Edge[],
+    incomingEdgesByNode: Map<string, string[]>
   ): void {
-    // Incoming edge 등록
-    const edgeNames = incomingEdgesByNode.get(edge.to_node);
-    if (edgeNames) {
-      edgeNames.push(edge.edge_name);
-    } else {
-      incomingEdgesByNode.set(edge.to_node, [edge.edge_name]);
+    // 분기점별 toNode 집합
+    const divergeToNodes = new Map<string, Set<string>>();
+    // 합류점별 incoming count
+    const incomingCount = new Map<string, number>();
+
+    for (const edge of edges) {
+      if (!divergeToNodes.has(edge.from_node)) {
+        divergeToNodes.set(edge.from_node, new Set());
+      }
+      divergeToNodes.get(edge.from_node)!.add(edge.to_node);
+      incomingCount.set(edge.to_node, (incomingCount.get(edge.to_node) || 0) + 1);
     }
 
-    // 데드락 존 정보 추출
-    if (!edge.isDeadlockZoneInside || edge.deadlockZoneId === undefined) {
-      return;
+    // 분기점 목록 (outgoing >= 2)
+    const divergeNodes: string[] = [];
+    for (const [node, toNodes] of divergeToNodes) {
+      if (toNodes.size >= 2) {
+        divergeNodes.push(node);
+      }
     }
 
-    const zoneId = edge.deadlockZoneId;
-
-    // to_node는 데드락 합류점
-    if (!zoneIdToMergeNodes.has(zoneId)) {
-      zoneIdToMergeNodes.set(zoneId, new Set());
+    // 합류점 집합 (incoming >= 2)
+    const mergeNodeSet = new Set<string>();
+    for (const [node, count] of incomingCount) {
+      if (count >= 2) {
+        mergeNodeSet.add(node);
+      }
     }
-    zoneIdToMergeNodes.get(zoneId)!.add(edge.to_node);
-    this.deadlockZoneNodes.add(edge.to_node);
 
-    // from_node는 데드락 분기점
-    if (!zoneIdToBranchNodes.has(zoneId)) {
-      zoneIdToBranchNodes.set(zoneId, new Set());
-    }
-    zoneIdToBranchNodes.get(zoneId)!.add(edge.from_node);
-  }
+    const usedDiverge = new Set<string>();
+    let zoneId = 0;
 
-  /** 데드락 존 구성 */
-  private buildDeadlockZones(
-    zoneIdToMergeNodes: Map<number, Set<string>>,
-    zoneIdToBranchNodes: Map<number, Set<string>>
-  ): void {
-    for (const [zoneId, mergeNodes] of zoneIdToMergeNodes) {
-      const branchNodes = zoneIdToBranchNodes.get(zoneId) || new Set();
-      this.deadlockZones.push({ nodes: mergeNodes, branchNodes });
-      devLog.info(`[LockMgr] Deadlock zone ${zoneId}: merges=[${[...mergeNodes].join(', ')}], branches=[${[...branchNodes].join(', ')}]`);
+    // 분기점 쌍 중 같은 합류점 2개로 분기하는 경우 찾기
+    for (let i = 0; i < divergeNodes.length; i++) {
+      const nodeA = divergeNodes[i];
+      if (usedDiverge.has(nodeA)) continue;
+
+      const toNodesA = divergeToNodes.get(nodeA)!;
+
+      for (let j = i + 1; j < divergeNodes.length; j++) {
+        const nodeD = divergeNodes[j];
+        if (usedDiverge.has(nodeD)) continue;
+
+        const toNodesD = divergeToNodes.get(nodeD)!;
+
+        // 공통 toNode 찾기
+        const commonToNodes: string[] = [];
+        for (const toNode of toNodesA) {
+          if (toNodesD.has(toNode)) {
+            commonToNodes.push(toNode);
+          }
+        }
+
+        // 공통 toNode가 정확히 2개이고, 둘 다 합류점이면 데드락 존
+        if (commonToNodes.length === 2) {
+          const [nodeB, nodeC] = commonToNodes;
+          if (mergeNodeSet.has(nodeB) && mergeNodeSet.has(nodeC)) {
+            // 데드락 존 등록
+            this.deadlockZoneNodes.add(nodeB);
+            this.deadlockZoneNodes.add(nodeC);
+            this.deadlockZoneBranchNodes.add(nodeA);
+            this.deadlockZoneBranchNodes.add(nodeD);
+
+            this.deadlockZones.push({
+              nodes: new Set([nodeB, nodeC]),
+              branchNodes: new Set([nodeA, nodeD]),
+            });
+
+            console.log(`[LockMgr] Deadlock zone ${zoneId}: merges=[${nodeB}, ${nodeC}], branches=[${nodeA}, ${nodeD}]`);
+            zoneId++;
+
+            usedDiverge.add(nodeA);
+            usedDiverge.add(nodeD);
+            break;
+          }
+        }
+      }
     }
 
     if (this.deadlockZoneNodes.size > 0) {
-      devLog.info(`[LockMgr] Total deadlock zone nodes: ${this.deadlockZoneNodes.size}, zones: ${this.deadlockZones.length}`);
+      console.log(`[LockMgr] Total deadlock zone nodes: ${this.deadlockZoneNodes.size}, zones: ${this.deadlockZones.length}`);
+    } else {
+      console.log(`[LockMgr] No deadlock zones detected`);
     }
   }
 
@@ -565,10 +616,17 @@ export class LockMgr {
   }
 
   /**
-   * 특정 노드가 데드락 유발 존에 포함되는지 확인
+   * 특정 노드가 데드락 유발 합류점인지 확인
    */
   isDeadlockZoneNode(nodeName: string): boolean {
     return this.deadlockZoneNodes.has(nodeName);
+  }
+
+  /**
+   * 특정 노드가 데드락 유발 분기점인지 확인
+   */
+  isDeadlockBranchNode(nodeName: string): boolean {
+    return this.deadlockZoneBranchNodes.has(nodeName);
   }
 
   /**
@@ -605,16 +663,78 @@ export class LockMgr {
   }
 
   /**
+   * 차량이 waiting point에 도착했음을 알림 (ARRIVAL_ORDER용)
+   * @param nodeName 합류점 이름
+   * @param vehId 차량 ID
+   */
+  notifyArrival(nodeName: string, vehId: number): void {
+    const node = this.lockTable[nodeName];
+    if (!node) return;
+
+    const request = node.requests.find(r => r.vehId === vehId);
+    if (request && !request.arrivalTime) {
+      request.arrivalTime = Date.now();
+      devLog.veh(vehId).debug(`[notifyArrival] node=${nodeName}, arrivalTime=${request.arrivalTime}`);
+    }
+  }
+
+  /**
+   * 데드락 존 합류점에 대해 도착 순서 기반 grant
+   * - arrivalTime이 있는 요청 중 가장 먼저 도착한 차량에게 우선 grant
+   * - arrivalTime 없으면 요청 순서(FIFO) 기반
+   * - 한 번에 1대만 grant (BATCH와 다름)
+   */
+  private handleArrivalOrder_Grant(node: MergeLockNode): Grant | null {
+    // 이미 grant된 차량이 있으면 대기
+    if (node.granted.length > 0) {
+      return null;
+    }
+
+    if (node.requests.length === 0) {
+      return null;
+    }
+
+    // arrivalTime이 있는 요청 우선
+    const arrivedRequests = node.requests.filter(r => r.arrivalTime !== undefined);
+
+    if (arrivedRequests.length > 0) {
+      // 도착 순서 기반 grant
+      arrivedRequests.sort((a, b) => a.arrivalTime! - b.arrivalTime!);
+      const earliest = arrivedRequests[0];
+      devLog.veh(earliest.vehId).debug(`[ARRIVAL_ORDER] Grant to earliest arrival at ${node.name}, arrivalTime=${earliest.arrivalTime}`);
+      return { veh: earliest.vehId, edge: earliest.edgeName };
+    }
+
+    // arrivalTime 없으면 요청 순서(FIFO) 기반
+    const first = node.requests[0];
+    devLog.veh(first.vehId).debug(`[ARRIVAL_ORDER] Grant to first request (no arrivalTime) at ${node.name}`);
+    return { veh: first.vehId, edge: first.edgeName };
+  }
+
+  /**
    * 매 프레임 호출되는 step 함수
-   * BATCH 전략에서 grant 결정을 수행
+   * - 데드락 존 합류점: ARRIVAL_ORDER로 처리
+   * - 일반 합류점: BATCH 전략으로 처리
    */
   step() {
-    if (this.strategyType !== 'BATCH') return;
-
     for (const [nodeName, node] of Object.entries(this.lockTable)) {
+      // 데드락 존 합류점은 ARRIVAL_ORDER로 처리
+      if (this.isDeadlockZoneNode(nodeName)) {
+        const grant = this.handleArrivalOrder_Grant(node);
+        if (grant) {
+          node.granted.push(grant);
+          node.requests = node.requests.filter(r => r.vehId !== grant.veh);
+          devLog.debug(`[LockMgr.step] ARRIVAL_ORDER granted to veh ${grant.veh} at ${nodeName}`);
+          this.logNodeState(nodeName);
+        }
+        continue;
+      }
+
+      // 일반 합류점은 기존 전략(BATCH/FIFO)으로 처리
+      if (this.strategyType !== 'BATCH') continue;
+
       let controller = this.batchControllers.get(nodeName);
       if (!controller) {
-        // Controller가 없으면 즉시 생성 (lazy initialization)
         controller = new BatchController(this.batchSize, this.passLimit);
         this.batchControllers.set(nodeName, controller);
         devLog.debug(`[LockMgr.step] Created BatchController for ${nodeName}`);
@@ -626,7 +746,6 @@ export class LockMgr {
 
       const newGrants = controller.step(node);
       if (newGrants.length > 0) {
-        // 여러 대에게 추가 grant (기존 granted에 append)
         node.granted.push(...newGrants);
         const grantedVehIds = newGrants.map(g => g.veh);
         node.requests = node.requests.filter((r) => !grantedVehIds.includes(r.vehId));

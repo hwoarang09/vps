@@ -494,8 +494,8 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
       edgeStore.setEdges(edges);
 
       // 7. Update node topology (merge/diverge + deadlock zone detection)
-      const calculatedEdges = edgeStore.edges;
-      nodeStore.updateTopology(calculatedEdges);
+      // 직접 파싱된 edges 사용 (edgeStore.edges는 이전 맵 데이터일 수 있음)
+      nodeStore.updateTopology(edges);
 
       // 8. Update edge deadlock zone flags (after node topology is ready)
       edgeStore.updateDeadlockZoneFlags();
