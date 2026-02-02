@@ -21,7 +21,7 @@ export const PerformanceMonitorUI: React.FC = () => {
   // Drag state
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLOutputElement>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Ignore if clicking the worker expand button
@@ -112,18 +112,10 @@ export const PerformanceMonitorUI: React.FC = () => {
   }, []);
 
   return (
-    <div
+    <output
       ref={containerRef}
-      role="status"
       aria-label="Performance Monitor"
-      tabIndex={0}
       onMouseDown={handleMouseDown}
-      onKeyDown={(e) => {
-        // Allow keyboard users to interact
-        if (e.key === "Escape") {
-          (e.target as HTMLElement).blur();
-        }
-      }}
       style={{
         position: "fixed",
         ...(position
@@ -268,6 +260,6 @@ export const PerformanceMonitorUI: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </output>
   );
 };
