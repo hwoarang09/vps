@@ -1,6 +1,6 @@
 // dev-logger.worker.ts
 // 개발용 로그를 OPFS에 저장하는 워커
-// global과 veh별로 파일 분리
+// 모든 로그를 단일 파일에 저장 (파일명: YYYYMMDD_HHmmss.txt)
 
 type LogEntry = {
   vehId: number | null;
@@ -11,7 +11,7 @@ type DevLoggerWorkerMessage =
   | { type: "INIT"; sessionId: string }
   | { type: "LOG"; entries: LogEntry[] }
   | { type: "FLUSH" }
-  | { type: "DOWNLOAD"; vehId?: number }
+  | { type: "DOWNLOAD" }
   | { type: "CLEAR" };
 
 type DevLoggerMainMessage =
@@ -21,68 +21,37 @@ type DevLoggerMainMessage =
   | { type: "CLEARED" }
   | { type: "ERROR"; error: string };
 
-interface FileHandle {
-  handle: FileSystemSyncAccessHandle;
-  offset: number;
-  fileName: string;
-}
-
-let sessionId = "";
 let logsDir: FileSystemDirectoryHandle | null = null;
+let fileHandle: FileSystemSyncAccessHandle | null = null;
+let fileOffset = 0;
+let fileName = "";
 const encoder = new TextEncoder();
 
-// global 파일과 veh별 파일 핸들
-let globalHandle: FileHandle | null = null;
-const vehHandles = new Map<number, FileHandle>();
-
-async function getOrCreateHandle(vehId: number | null): Promise<FileHandle> {
-  if (vehId === null) {
-    // global 핸들
-    if (!globalHandle) {
-      globalHandle = await createHandle("global");
-    }
-    return globalHandle;
-  }
-
-  // veh별 핸들
-  let handle = vehHandles.get(vehId);
-  if (!handle) {
-    handle = await createHandle(`veh_${vehId}`);
-    vehHandles.set(vehId, handle);
-  }
-  return handle;
-}
-
-async function createHandle(name: string): Promise<FileHandle> {
-  if (!logsDir) throw new Error("logsDir not initialized");
-
-  const fileName = `${sessionId}_${name}.txt`;
-  const fileHandle = await logsDir.getFileHandle(fileName, { create: true });
-  const handle = await fileHandle.createSyncAccessHandle();
-  const offset = handle.getSize();
-
-  // 세션 시작 헤더
-  const header = `\n${"=".repeat(50)}\n[${name.toUpperCase()}] ${new Date().toISOString()}\n${"=".repeat(50)}\n`;
-  const headerBytes = encoder.encode(header);
-  handle.write(headerBytes, { at: offset });
-
-  return {
-    handle,
-    offset: offset + headerBytes.byteLength,
-    fileName,
-  };
-}
-
-async function initOPFS(sid: string): Promise<void> {
-  sessionId = sid;
-
+async function initOPFS(): Promise<void> {
   try {
     const root = await navigator.storage.getDirectory();
     logsDir = await root.getDirectoryHandle("dev_logs", { create: true });
 
-    // global 핸들 미리 생성
-    globalHandle = await createHandle("global");
-    globalHandle.handle.flush();
+    // 파일명: YYYYMMDD_HHmmss.txt
+    const now = new Date();
+    const y = now.getFullYear();
+    const mo = (now.getMonth() + 1).toString().padStart(2, "0");
+    const d = now.getDate().toString().padStart(2, "0");
+    const h = now.getHours().toString().padStart(2, "0");
+    const mi = now.getMinutes().toString().padStart(2, "0");
+    const s = now.getSeconds().toString().padStart(2, "0");
+    fileName = `${y}${mo}${d}_${h}${mi}${s}.txt`;
+
+    const handle = await logsDir.getFileHandle(fileName, { create: true });
+    fileHandle = await handle.createSyncAccessHandle();
+    fileOffset = fileHandle.getSize();
+
+    // 세션 시작 헤더
+    const header = `\n${"=".repeat(60)}\n[SESSION] ${now.toISOString()}\n${"=".repeat(60)}\n`;
+    const headerBytes = encoder.encode(header);
+    fileHandle.write(headerBytes, { at: fileOffset });
+    fileOffset += headerBytes.byteLength;
+    fileHandle.flush();
 
     self.postMessage({ type: "READY" } as DevLoggerMainMessage);
   } catch (err) {
@@ -94,106 +63,39 @@ async function initOPFS(sid: string): Promise<void> {
 }
 
 function writeLog(entries: LogEntry[]): void {
-  // vehId별로 그룹핑
-  const grouped = new Map<number | null, string[]>();
+  if (!fileHandle) return;
 
-  for (const entry of entries) {
-    const key = entry.vehId;
-    let arr = grouped.get(key);
-    if (!arr) {
-      arr = [];
-      grouped.set(key, arr);
-    }
-    arr.push(entry.text);
-  }
-
-  // 각 그룹을 해당 파일에 쓰기
-  for (const [vehId, texts] of grouped) {
-    try {
-      // 동기적으로 핸들 가져오기 (이미 생성된 경우)
-      let fh: FileHandle | undefined;
-
-      if (vehId === null) {
-        fh = globalHandle ?? undefined;
-      } else {
-        fh = vehHandles.get(vehId);
-      }
-
-      if (!fh) {
-        // 핸들이 없으면 비동기로 생성해야 함 - 버퍼에 쌓아두기
-        // 여기서는 일단 skip하고 다음 flush에서 처리
-        continue;
-      }
-
-      const text = texts.join("");
-      const bytes = encoder.encode(text);
-      fh.handle.write(bytes, { at: fh.offset });
-      fh.offset += bytes.byteLength;
-    } catch {
-      // 쓰기 실패 무시
-    }
-  }
-}
-
-async function ensureHandles(entries: LogEntry[]): Promise<void> {
-  // 필요한 핸들들 미리 생성
-  const neededVehIds = new Set<number>();
-
-  for (const entry of entries) {
-    if (entry.vehId !== null && !vehHandles.has(entry.vehId)) {
-      neededVehIds.add(entry.vehId);
-    }
-  }
-
-  for (const vehId of neededVehIds) {
-    await getOrCreateHandle(vehId);
+  try {
+    const text = entries.map(e => e.text).join("");
+    const bytes = encoder.encode(text);
+    fileHandle.write(bytes, { at: fileOffset });
+    fileOffset += bytes.byteLength;
+  } catch {
+    // 쓰기 실패 무시
   }
 }
 
 function flush(): void {
-  // 모든 핸들 flush
-  globalHandle?.handle.flush();
-  for (const fh of vehHandles.values()) {
-    fh.handle.flush();
-  }
+  fileHandle?.flush();
   self.postMessage({ type: "FLUSHED" } as DevLoggerMainMessage);
 }
 
-function download(vehId?: number): void {
-  let fh: FileHandle | undefined;
-
-  if (vehId === undefined) {
-    fh = globalHandle ?? undefined;
-  } else {
-    fh = vehHandles.get(vehId);
-  }
-
-  if (!fh) {
+function download(): void {
+  if (!fileHandle) {
     self.postMessage({ type: "ERROR", error: "File not found" } as DevLoggerMainMessage);
     return;
   }
 
-  fh.handle.flush();
-  const size = fh.handle.getSize();
+  fileHandle.flush();
+  const size = fileHandle.getSize();
   const buffer = new ArrayBuffer(size);
   const view = new Uint8Array(buffer);
-  fh.handle.read(view, { at: 0 });
+  fileHandle.read(view, { at: 0 });
 
   self.postMessage(
-    { type: "DOWNLOADED", buffer, fileName: fh.fileName } as DevLoggerMainMessage,
+    { type: "DOWNLOADED", buffer, fileName } as DevLoggerMainMessage,
     [buffer]
   );
-}
-
-function closeAllHandles(): void {
-  if (globalHandle) {
-    globalHandle.handle.close();
-    globalHandle = null;
-  }
-  for (const fh of vehHandles.values()) {
-    fh.handle.close();
-  }
-  vehHandles.clear();
 }
 
 async function clearLogs(): Promise<void> {
@@ -201,8 +103,11 @@ async function clearLogs(): Promise<void> {
     const root = await navigator.storage.getDirectory();
     const dir = await root.getDirectoryHandle("dev_logs", { create: false });
 
-    // 모든 핸들 닫기
-    closeAllHandles();
+    // 핸들 닫기
+    if (fileHandle) {
+      fileHandle.close();
+      fileHandle = null;
+    }
 
     // 모든 로그 파일 삭제
     const entries: string[] = [];
@@ -227,18 +132,16 @@ self.onmessage = async (e: MessageEvent<DevLoggerWorkerMessage>) => {
 
   switch (msg.type) {
     case "INIT":
-      await initOPFS(msg.sessionId);
+      await initOPFS();
       break;
     case "LOG":
-      // 먼저 필요한 핸들 생성
-      await ensureHandles(msg.entries);
       writeLog(msg.entries);
       break;
     case "FLUSH":
       flush();
       break;
     case "DOWNLOAD":
-      download(msg.vehId);
+      download();
       break;
     case "CLEAR":
       await clearLogs();

@@ -1,7 +1,6 @@
 // DevLogger.ts
 // 개발용 텍스트 로그 시스템 - OPFS 저장, 파일:라인 포함
-// 메인 스레드: global과 veh별로 파일 분리
-// Worker 환경: 단일 파일
+// 모든 로그를 단일 파일에 저장 (파일명: YYYYMMDD_HHmmss.txt)
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
@@ -100,82 +99,60 @@ class DevLoggerImpl {
   private initialized = false;
   private enabled = true;
 
-  // Worker 환경용 동기식 OPFS 핸들 (veh별 분리)
-  private opfsGlobalHandle: FileSystemSyncAccessHandle | null = null;
-  private opfsGlobalOffset = 0;
-  private opfsVehHandles = new Map<number, { handle: FileSystemSyncAccessHandle; offset: number }>();
+  // Worker 환경용 동기식 OPFS 핸들 (단일 파일)
+  private opfsHandle: FileSystemSyncAccessHandle | null = null;
+  private opfsOffset = 0;
   private opfsLogsDir: FileSystemDirectoryHandle | null = null;
   private isWorker = false;
-  private workerId = "";
+  private opfsFileName = "";
 
   constructor() {
     this.sessionId = `dev_${Date.now()}`;
     this.isWorker = isWorkerEnvironment();
   }
 
-  async init(workerId?: string): Promise<void> {
+  async init(): Promise<void> {
     if (this.initialized) return;
 
     if (this.isWorker) {
       // Worker 환경 - 직접 OPFS 동기식 접근 (단일 파일)
-      await this.initWorkerOPFS(workerId);
+      await this.initWorkerOPFS();
     } else {
-      // 메인 스레드 - Worker 생성 (veh별 파일 분리)
+      // 메인 스레드 - Worker 생성 (단일 파일)
       await this.initMainThread();
     }
   }
 
-  private async initWorkerOPFS(workerId?: string): Promise<void> {
-    this.workerId = workerId || `sim_${Date.now()}`;
-
+  private async initWorkerOPFS(): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory();
       this.opfsLogsDir = await root.getDirectoryHandle("dev_logs", { create: true });
 
-      // global 파일 생성
-      const globalFileName = `${this.workerId}_global.txt`;
-      const globalFileHandle = await this.opfsLogsDir.getFileHandle(globalFileName, { create: true });
-      this.opfsGlobalHandle = await globalFileHandle.createSyncAccessHandle();
-      this.opfsGlobalOffset = this.opfsGlobalHandle.getSize();
+      // 파일명: YYYYMMDD_HHmmss.txt
+      const now = new Date();
+      const y = now.getFullYear();
+      const mo = (now.getMonth() + 1).toString().padStart(2, "0");
+      const d = now.getDate().toString().padStart(2, "0");
+      const h = now.getHours().toString().padStart(2, "0");
+      const mi = now.getMinutes().toString().padStart(2, "0");
+      const s = now.getSeconds().toString().padStart(2, "0");
+      this.opfsFileName = `${y}${mo}${d}_${h}${mi}${s}.txt`;
+
+      const fileHandle = await this.opfsLogsDir.getFileHandle(this.opfsFileName, { create: true });
+      this.opfsHandle = await fileHandle.createSyncAccessHandle();
+      this.opfsOffset = this.opfsHandle.getSize();
 
       // 세션 시작 헤더
-      const header = `\n${"=".repeat(60)}\n[GLOBAL] ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
+      const header = `\n${"=".repeat(60)}\n[SESSION] ${now.toISOString()}\n${"=".repeat(60)}\n`;
       const headerBytes = encoder.encode(header);
-      this.opfsGlobalHandle.write(headerBytes, { at: this.opfsGlobalOffset });
-      this.opfsGlobalOffset += headerBytes.byteLength;
-      this.opfsGlobalHandle.flush();
+      this.opfsHandle.write(headerBytes, { at: this.opfsOffset });
+      this.opfsOffset += headerBytes.byteLength;
+      this.opfsHandle.flush();
 
       this.initialized = true;
     } catch {
       // OPFS 실패시 콘솔 폴백
       this.initialized = true;
-    }
-  }
-
-  private async ensureVehHandle(vehId: number): Promise<{ handle: FileSystemSyncAccessHandle; offset: number } | null> {
-    const existing = this.opfsVehHandles.get(vehId);
-    if (existing) return existing;
-
-    if (!this.opfsLogsDir) return null;
-
-    try {
-      const fileName = `${this.workerId}_veh${vehId}.txt`;
-      const fileHandle = await this.opfsLogsDir.getFileHandle(fileName, { create: true });
-      const handle = await fileHandle.createSyncAccessHandle();
-      let offset = handle.getSize();
-
-      // 세션 시작 헤더
-      const header = `\n${"=".repeat(60)}\n[VEH ${vehId}] ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
-      const headerBytes = encoder.encode(header);
-      handle.write(headerBytes, { at: offset });
-      offset += headerBytes.byteLength;
-      handle.flush();
-
-      const entry = { handle, offset };
-      this.opfsVehHandles.set(vehId, entry);
-      return entry;
-    } catch {
-      return null;
     }
   }
 
@@ -229,30 +206,11 @@ class DevLoggerImpl {
     const text = formatEntry(entry);
 
     if (this.isWorker) {
-      // Worker 환경 - veh별 파일 분리
-      const bytes = encoder.encode(text);
-
-      if (vehId === null) {
-        // global 로그
-        if (this.opfsGlobalHandle) {
-          this.opfsGlobalHandle.write(bytes, { at: this.opfsGlobalOffset });
-          this.opfsGlobalOffset += bytes.byteLength;
-        }
-      } else {
-        // veh별 로그
-        const vehEntry = this.opfsVehHandles.get(vehId);
-        if (vehEntry) {
-          vehEntry.handle.write(bytes, { at: vehEntry.offset });
-          vehEntry.offset += bytes.byteLength;
-        } else {
-          // 핸들이 없으면 비동기로 생성
-          this.ensureVehHandle(vehId).then((entry) => {
-            if (entry) {
-              entry.handle.write(bytes, { at: entry.offset });
-              entry.offset += bytes.byteLength;
-            }
-          });
-        }
+      // Worker 환경 - 단일 파일
+      if (this.opfsHandle) {
+        const bytes = encoder.encode(text);
+        this.opfsHandle.write(bytes, { at: this.opfsOffset });
+        this.opfsOffset += bytes.byteLength;
       }
     } else if (this.worker && this.initialized) {
       // 메인 스레드 - 버퍼에 쌓고 Worker로 전송
@@ -270,11 +228,8 @@ class DevLoggerImpl {
 
   flush(): void {
     if (this.isWorker) {
-      // Worker 환경 - 모든 핸들 flush
-      this.opfsGlobalHandle?.flush();
-      for (const entry of this.opfsVehHandles.values()) {
-        entry.handle.flush();
-      }
+      // Worker 환경 - 단일 파일 flush
+      this.opfsHandle?.flush();
     } else if (this.worker && this.buffer.length > 0) {
       // 메인 스레드 - Worker로 전송
       const entries = this.buffer;
@@ -376,15 +331,11 @@ class DevLoggerImpl {
     this.flush();
 
     if (this.isWorker) {
-      // 모든 핸들 닫기
-      if (this.opfsGlobalHandle) {
-        this.opfsGlobalHandle.close();
-        this.opfsGlobalHandle = null;
+      // 핸들 닫기
+      if (this.opfsHandle) {
+        this.opfsHandle.close();
+        this.opfsHandle = null;
       }
-      for (const entry of this.opfsVehHandles.values()) {
-        entry.handle.close();
-      }
-      this.opfsVehHandles.clear();
     }
 
     if (this.worker) {

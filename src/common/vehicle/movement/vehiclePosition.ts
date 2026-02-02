@@ -587,6 +587,7 @@ function setFreeTrafficState(data: Float32Array, ptr: number): void {
 interface MergeTargetProcessResult {
   shouldWait: boolean;
   waitRatio?: number;
+  grantedTarget?: MergeTarget;
 }
 
 /**
@@ -599,39 +600,52 @@ function processMergeTargets(
 ): MergeTargetProcessResult {
   const { lockMgr, currentEdge, vehId, currentRatio, data, ptr } = ctx;
 
-  for (const mergeTarget of mergeTargets) {
-    if (!shouldRequestLockNow(mergeTarget.distanceToMerge, mergeTarget.requestDistance)) {
-      continue;
-    }
+  // 1. 곡선 합류(CURVE)는 모두 미리 락 요청 (edgeTransition에서 checkGrant 필요)
+  // 합류 → 합류 연속 상황에서 두 번째 합류점 락을 미리 걸어둬야 함
+  for (const t of mergeTargets) {
+    if (t.type !== 'CURVE') continue;
+    if (!shouldRequestLockNow(t.distanceToMerge, t.requestDistance)) continue;
 
-    lockMgr.requestLock(mergeTarget.mergeNode, mergeTarget.requestEdge, vehId);
-    const isGranted = lockMgr.checkGrant(mergeTarget.mergeNode, vehId);
-
-    if (mergeTarget.type === 'CURVE') {
-      logCurveMergeLockIfNeeded(vehId, mergeTarget, currentEdge.edge_name, isGranted);
-    }
-
-    if (!isGranted) {
-      data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
-      const waitResult = calculateWaitPosition(mergeTarget, currentEdge, currentRatio, vehId);
-
-      if (waitResult.shouldWait) {
-        // 분기점에서 출발한 경우 도착 알림 (ARRIVAL_ORDER용)
-        if (mergeTarget.isFromDeadlockBranch) {
-          lockMgr.notifyArrival(mergeTarget.mergeNode, vehId);
-        }
-        data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
-        return { shouldWait: true, waitRatio: waitResult.waitRatio ?? 0 };
-      }
-
-      if ((currentReason & StopReason.LOCKED) !== 0) {
-        data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
-      }
-      return { shouldWait: false };
-    }
+    lockMgr.requestLock(t.mergeNode, t.requestEdge, vehId);
+    const granted = lockMgr.checkGrant(t.mergeNode, vehId);
+    logCurveMergeLockIfNeeded(vehId, t, currentEdge.edge_name, granted);
   }
 
-  return { shouldWait: false };
+  // 2. 가장 가까운 target 하나만 대기 여부 결정 (STRAIGHT/CURVE 무관)
+  const target = mergeTargets[0];
+
+  if (!shouldRequestLockNow(target.distanceToMerge, target.requestDistance)) {
+    // 아직 요청 거리 밖 → 자유 통행
+    return { shouldWait: false };
+  }
+
+  // STRAIGHT는 여기서 요청 (CURVE는 위에서 이미 요청됨)
+  if (target.type === 'STRAIGHT') {
+    lockMgr.requestLock(target.mergeNode, target.requestEdge, vehId);
+  }
+  const isGranted = lockMgr.checkGrant(target.mergeNode, vehId);
+
+  if (!isGranted) {
+    data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.WAITING;
+    const waitResult = calculateWaitPosition(target, currentEdge, currentRatio, vehId);
+
+    if (waitResult.shouldWait) {
+      // 분기점에서 출발한 경우 도착 알림 (ARRIVAL_ORDER용)
+      if (target.isFromDeadlockBranch) {
+        lockMgr.notifyArrival(target.mergeNode, vehId);
+      }
+      data[ptr + LogicData.STOP_REASON] = currentReason | StopReason.LOCKED;
+      return { shouldWait: true, waitRatio: waitResult.waitRatio ?? 0 };
+    }
+
+    if ((currentReason & StopReason.LOCKED) !== 0) {
+      data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
+    }
+    return { shouldWait: false };
+  }
+
+  // granted 성공
+  return { shouldWait: false, grantedTarget: target };
 }
 
 /**
@@ -658,28 +672,27 @@ function processMergeLogicInline(ctx: MergeProcessContext): boolean {
   const currentTrafficState = data[ptr + LogicData.TRAFFIC_STATE];
   const currentReason = data[ptr + LogicData.STOP_REASON];
 
-  // 4. 각 merge target을 순차적으로 처리
+  // 4. 가장 가까운 merge target 하나만 처리
   const result = processMergeTargets(ctx, mergeTargets, currentReason);
   if (result.shouldWait) {
     target.x = result.waitRatio ?? 0;
     return true;
   }
 
-  // 모든 도달한 target의 lock 획득 성공
+  // lock 획득 성공 또는 아직 요청 거리 밖
   if ((currentReason & StopReason.LOCKED) !== 0) {
     data[ptr + LogicData.STOP_REASON] = currentReason & ~StopReason.LOCKED;
   }
 
-  const anyRequested = mergeTargets.some(t => shouldRequestLockNow(t.distanceToMerge, t.requestDistance));
-  const newState = anyRequested ? TrafficState.ACQUIRED : TrafficState.FREE;
+  // grantedTarget이 있으면 ACQUIRED, 없으면 FREE
+  const newState = result.grantedTarget ? TrafficState.ACQUIRED : TrafficState.FREE;
 
   // 디버그: 곡선 합류 시 trafficState 변경
-  const hasCurveMerge = mergeTargets.some(t => t.type === 'CURVE');
-  if (hasCurveMerge && newState !== currentTrafficState) {
+  if (result.grantedTarget?.type === 'CURVE' && newState !== currentTrafficState) {
     const prevStr = trafficStateToString(currentTrafficState);
     const newStr = trafficStateToString(newState);
-    const targetNodes = mergeTargets.map(t => `${t.mergeNode}(${t.type},${t.requestEdge})`).join(', ');
-    devLog.veh(vehId).debug(`[TRAFFIC_STATE] ${prevStr} → ${newStr}, targets=[${targetNodes}]`);
+    const t = result.grantedTarget;
+    devLog.veh(vehId).debug(`[TRAFFIC_STATE] ${prevStr} → ${newStr}, target=${t.mergeNode}(${t.type},${t.requestEdge})`);
   }
 
   data[ptr + LogicData.TRAFFIC_STATE] = newState;

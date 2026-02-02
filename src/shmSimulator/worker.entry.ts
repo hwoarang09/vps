@@ -10,7 +10,7 @@ let engine: SimulationEngine | null = null;
 function handleInit(payload: InitPayload): void {
   try {
     // DevLogger 초기화 (Worker 환경)
-    DevLogger.init(`sim_${Date.now()}`);
+    DevLogger.init();
 
     engine = new SimulationEngine();
     const fabVehicleCounts = engine.init(payload);
