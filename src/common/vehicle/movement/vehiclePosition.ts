@@ -166,9 +166,10 @@ function collectNextEdgeMerges(
 
   for (const offset of NEXT_EDGE_OFFSETS) {
     const nextEdgeIdx = data[ptr + offset];
-    if (nextEdgeIdx < 0) break;
+    // NOTE: nextEdgeIdx is 1-based. 0 is invalid sentinel.
+    if (nextEdgeIdx < 1) break;
 
-    const nextEdge = edgeArray[nextEdgeIdx];
+    const nextEdge = edgeArray[nextEdgeIdx - 1]; // Convert to 0-based for array access
     if (!nextEdge) break;
 
     if (!lockMgr.isMergeNode(nextEdge.to_node)) {
@@ -393,7 +394,8 @@ export function updateVehiclePosition(
   }
 
   // Merge 대기 처리
-  const finalEdge = edgeArray[finalEdgeIndex];
+  // NOTE: finalEdgeIndex is 1-based. 0 is invalid sentinel.
+  const finalEdge = finalEdgeIndex >= 1 ? edgeArray[finalEdgeIndex - 1] : undefined as unknown as Edge;
   const shouldWait = checkAndProcessMergeWait({
     lockMgr,
     edgeArray,
@@ -449,9 +451,10 @@ function handleCurveToCurveMerge(
   ptr: number
 ): void {
   const nextEdgeIdx = data[ptr + MovementData.NEXT_EDGE_0];
-  if (nextEdgeIdx < 0) return;
+  // NOTE: nextEdgeIdx is 1-based. 0 is invalid sentinel.
+  if (nextEdgeIdx < 1) return;
 
-  const nextEdge = edgeArray[nextEdgeIdx];
+  const nextEdge = edgeArray[nextEdgeIdx - 1]; // Convert to 0-based for array access
   if (!nextEdge) return;
   if (nextEdge.vos_rail_type === EdgeType.LINEAR) return;
   if (!lockMgr.isMergeNode(nextEdge.to_node)) return;

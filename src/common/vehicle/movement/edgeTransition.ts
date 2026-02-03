@@ -110,8 +110,9 @@ function checkLockBlocking(
   }
 
   // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
-  if (nextEdgeIndex >= 0 && nextEdgeIndex < edgeArray.length) {
-    const nextEdge = edgeArray[nextEdgeIndex];
+  // NOTE: nextEdgeIndex is 1-based. 0 is invalid sentinel.
+  if (nextEdgeIndex >= 1 && nextEdgeIndex <= edgeArray.length) {
+    const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
     const isCurve = nextEdge?.vos_rail_type !== EdgeType.LINEAR;
     const isNextMerge = lockMgr.isMergeNode(nextEdge.to_node);
     const hasNextGrant = lockMgr.checkGrant(nextEdge.to_node, vehicleIndex);
@@ -146,11 +147,12 @@ function checkCanTransitionToNextEdge(
   vehicleIndex: number
 ): NextEdgeCheckResult {
   const lockCheck = checkLockBlocking(lockMgr, currentEdge, nextEdgeIndex, edgeArray, vehicleIndex, trafficState);
-  if (lockCheck.blocked || nextState !== NextEdgeState.READY || nextEdgeIndex === -1) {
+  // NOTE: nextEdgeIndex is 1-based. 0 is invalid sentinel.
+  if (lockCheck.blocked || nextState !== NextEdgeState.READY || nextEdgeIndex === 0) {
     return { canTransition: false, nextEdge: null };
   }
 
-  const nextEdge = edgeArray[nextEdgeIndex];
+  const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
   if (!nextEdge) {
     return { canTransition: false, nextEdge: null };
   }
@@ -240,7 +242,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
   } = params;
   let currentEdgeIdx = initialEdgeIndex;
   let currentRatio = initialRatio;
-  let currentEdge = edgeArray[currentEdgeIdx];
+  // NOTE: currentEdgeIdx is 1-based. 0 is invalid sentinel.
+  let currentEdge = currentEdgeIdx >= 1 ? edgeArray[currentEdgeIdx - 1] : undefined;
 
   const data = vehicleDataArray.getData();
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
@@ -378,19 +381,20 @@ function getNewLastEdge(
   afterPathLen: number,
   edgeArray: Edge[]
 ): number {
-  if (!pathBuffer || afterPathLen <= 0) return -1;
+  if (!pathBuffer || afterPathLen <= 0) return 0; // 0 is invalid sentinel
 
   const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
   const pathOffset = NEXT_EDGE_COUNT - 1; // = 4
 
-  if (pathOffset >= afterPathLen) return -1;
+  if (pathOffset >= afterPathLen) return 0; // 0 is invalid sentinel
 
   const candidateEdgeIdx = pathBuffer[pathPtr + PATH_EDGES_START + pathOffset];
-  if (candidateEdgeIdx >= 0 && candidateEdgeIdx < edgeArray.length) {
+  // NOTE: candidateEdgeIdx is 1-based. Valid range is 1 to edgeArray.length.
+  if (candidateEdgeIdx >= 1 && candidateEdgeIdx <= edgeArray.length) {
     return candidateEdgeIdx;
   }
 
-  return -1;
+  return 0; // 0 is invalid sentinel
 }
 
 /**
@@ -440,8 +444,8 @@ function shiftAndRefillNextEdges(
     `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
   );
 
-  // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
-  if (data[ptr + MovementData.NEXT_EDGE_0] === -1) {
+  // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로 (0 is invalid sentinel)
+  if (data[ptr + MovementData.NEXT_EDGE_0] === 0) {
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
   }
 }

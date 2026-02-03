@@ -154,14 +154,14 @@ const prevArray: number[] = [];
 function ensureArraySize(size: number): void {
   while (distArray.length < size) {
     distArray.push(Infinity);
-    prevArray.push(-1);
+    prevArray.push(0); // 0 is invalid sentinel (1-based indexing)
   }
 }
 
 function resetArrays(size: number): void {
   for (let i = 0; i < size; i++) {
     distArray[i] = Infinity;
-    prevArray[i] = -1;
+    prevArray[i] = 0; // 0 is invalid sentinel (1-based indexing)
   }
 }
 
@@ -169,10 +169,12 @@ function resetArrays(size: number): void {
  * Finds the shortest path between startEdge and endEdge using Dijkstra's algorithm.
  * Uses Min-Heap for O(E log V) complexity and LRU cache for repeated queries.
  *
- * @param startEdgeIndex Index of the starting edge
- * @param endEdgeIndex Index of the destination edge
- * @param edgeArray Full array of all edges
- * @returns Array of edge INDICES representing the path (start -> ... -> end), or null if no path found.
+ * NOTE: All indices are 1-based. 0 is reserved as invalid sentinel.
+ *
+ * @param startEdgeIndex Index of the starting edge (1-based)
+ * @param endEdgeIndex Index of the destination edge (1-based)
+ * @param edgeArray Full array of all edges (0-based array)
+ * @returns Array of edge INDICES (1-based) representing the path (start -> ... -> end), or null if no path found.
  */
 export function findShortestPath(
   startEdgeIndex: number,
@@ -181,7 +183,9 @@ export function findShortestPath(
 ): number[] | null {
   const startTime = performance.now();
 
-  if (!edgeArray[startEdgeIndex] || !edgeArray[endEdgeIndex]) {
+  // Validate: 1-based index check and array bounds
+  if (startEdgeIndex < 1 || endEdgeIndex < 1 ||
+      !edgeArray[startEdgeIndex - 1] || !edgeArray[endEdgeIndex - 1]) {
     recordPerformance(performance.now() - startTime);
     return null;
   }
@@ -199,12 +203,13 @@ export function findShortestPath(
   }
   perfStats.cacheMisses++;
 
-  const n = edgeArray.length;
+  // Use array length + 1 to accommodate 1-based indexing
+  const n = edgeArray.length + 1;
   ensureArraySize(n);
   resetArrays(n);
   heap.clear();
 
-  // Init
+  // Init (using 1-based index directly)
   distArray[startEdgeIndex] = 0;
   heap.push(startEdgeIndex, 0);
 
@@ -230,13 +235,16 @@ export function findShortestPath(
 }
 
 function processNeighbors(u: number, cost: number, edgeArray: Edge[]): void {
-  const currentEdge = edgeArray[u];
+  // u is 1-based, convert to 0-based for array access
+  const currentEdge = edgeArray[u - 1];
+  if (!currentEdge) return;
   const nextIndices = currentEdge.nextEdgeIndices || [];
 
   for (const v of nextIndices) {
-    if (!edgeArray[v]) continue;
+    // v is 1-based, convert to 0-based for array access
+    if (v < 1 || !edgeArray[v - 1]) continue;
 
-    const weight = edgeArray[v].distance;
+    const weight = edgeArray[v - 1].distance;
     const alt = cost + weight;
 
     if (alt < distArray[v]) {
@@ -248,12 +256,12 @@ function processNeighbors(u: number, cost: number, edgeArray: Edge[]): void {
 }
 
 function reconstructPath(startEdgeIndex: number, endEdgeIndex: number): number[] | null {
-  if (prevArray[endEdgeIndex] === -1) return null;
+  if (prevArray[endEdgeIndex] === 0) return null; // 0 is invalid sentinel
 
   const path: number[] = [];
   let curr = endEdgeIndex;
 
-  while (curr !== -1 && curr !== startEdgeIndex) {
+  while (curr !== 0 && curr !== startEdgeIndex) { // 0 is invalid sentinel
     path.push(curr);
     curr = prevArray[curr];
   }

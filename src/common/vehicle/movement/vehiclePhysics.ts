@@ -77,7 +77,8 @@ export function calculateVehiclePhysics(
   const deceleration = data[ptr + MovementData.DECELERATION];
   const edgeRatio = data[ptr + MovementData.EDGE_RATIO];
 
-  const currentEdge = edgeArray[currentEdgeIndex];
+  // NOTE: currentEdgeIndex is 1-based. 0 is invalid sentinel.
+  const currentEdge = currentEdgeIndex >= 1 ? edgeArray[currentEdgeIndex - 1] : undefined as unknown as Edge;
 
   // 1. 충돌 감지 영역 계산
   const hitZone = calculateHitZone(data, ptr, deceleration);

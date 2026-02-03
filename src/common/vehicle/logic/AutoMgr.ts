@@ -226,10 +226,13 @@ export class AutoMgr {
   private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {
     const pathCommand: Array<{ edgeId: string; targetRatio?: number }> = [];
 
-    // Construct command from path (start from 1 as 0 is current edge)
+    // Construct command from path (start from 1 as 0 is current edge in the path array)
+    // NOTE: pathIndices contains 1-based edge indices
     for (let i = 1; i < pathIndices.length; i++) {
       const idx = pathIndices[i];
-      const edge = edgeArray[idx];
+      if (idx < 1) continue; // 1-based: 0 is invalid
+      const edge = edgeArray[idx - 1]; // Convert to 0-based for array access
+      if (!edge) continue;
       const isLast = (i === pathIndices.length - 1);
 
       pathCommand.push({
@@ -262,9 +265,11 @@ export class AutoMgr {
     }
 
     // 2. 새 경로에 포함된 노드들 수집 (to_node 기준)
+    // NOTE: edgeIdx is 1-based. 0 is invalid sentinel.
     const newPathNodes = new Set<string>();
     for (const edgeIdx of newPathIndices) {
-      const edge = edgeArray[edgeIdx];
+      if (edgeIdx < 1) continue; // 1-based: 0 is invalid
+      const edge = edgeArray[edgeIdx - 1]; // Convert to 0-based for array access
       if (edge) {
         newPathNodes.add(edge.to_node);
       }

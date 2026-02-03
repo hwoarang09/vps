@@ -7,7 +7,7 @@
     "curvePreBrakeCheckInterval": -1
   },
   "log": {
-    "devLogEnabled": false,
+    "devLogEnabled": true,
     "edgeTransitLogEnabled": false
   },
   "lock": {

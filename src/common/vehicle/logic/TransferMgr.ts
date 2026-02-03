@@ -176,7 +176,8 @@ export class TransferMgr {
     const data = vehicleDataArray!.getData();
     const ptr = vehId * VEHICLE_DATA_SIZE;
     const currentEdgeIndex = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-    const currentEdge = edgeArray![currentEdgeIndex];
+    if (currentEdgeIndex < 1) return; // 1-based: 0 is invalid
+    const currentEdge = edgeArray![currentEdgeIndex - 1]; // Convert to 0-based for array access
 
     if (!currentEdge) {
       return;
@@ -228,7 +229,11 @@ export class TransferMgr {
       const ptr = vehId * VEHICLE_DATA_SIZE;
 
       const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-      const currentEdge = edgeArray[currentEdgeIdx];
+      if (currentEdgeIdx < 1) { // 1-based: 0 is invalid
+        data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
+        continue;
+      }
+      const currentEdge = edgeArray[currentEdgeIdx - 1]; // Convert to 0-based for array access
 
       if (!currentEdge) {
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
@@ -243,8 +248,8 @@ export class TransferMgr {
         mode
       );
 
-      if (nextEdgeIndex === -1) {
-        // If no valid next edge found
+      if (nextEdgeIndex === 0) {
+        // If no valid next edge found (0 is invalid sentinel in 1-based indexing)
         // In MQTT_CONTROL mode, this effectively stops/waits if no command is present
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
       } else {
@@ -279,11 +284,11 @@ export class TransferMgr {
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       if (i < len) {
         const edgeIdx = this.pathBufferFromAutoMgr![pathPtr + PATH_EDGES_START + i];
-        data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 0 ? edgeIdx : -1;
-        filledEdges.push(edgeIdx >= 0 ? edgeIdx : -1);
+        data[ptr + nextEdgeOffsets[i]] = edgeIdx >= 1 ? edgeIdx : 0; // 1-based: 0 is invalid
+        filledEdges.push(edgeIdx >= 1 ? edgeIdx : 0);
       } else {
-        data[ptr + nextEdgeOffsets[i]] = -1;
-        filledEdges.push(-1);
+        data[ptr + nextEdgeOffsets[i]] = 0; // 0 is invalid sentinel
+        filledEdges.push(0);
       }
     }
 
@@ -307,9 +312,13 @@ export class TransferMgr {
       if (i === 0) {
         data[ptr + nextEdgeOffsets[i]] = firstNextEdgeIndex;
       } else {
-        const prevEdge = edgeArray[currentEdgeIdx];
+        if (currentEdgeIdx < 1) { // 1-based: 0 is invalid
+          data[ptr + nextEdgeOffsets[i]] = 0;
+          continue;
+        }
+        const prevEdge = edgeArray[currentEdgeIdx - 1]; // Convert to 0-based for array access
         if (!prevEdge) {
-          data[ptr + nextEdgeOffsets[i]] = -1;
+          data[ptr + nextEdgeOffsets[i]] = 0; // 0 is invalid sentinel
           continue;
         }
 
@@ -323,9 +332,9 @@ export class TransferMgr {
 
         data[ptr + nextEdgeOffsets[i]] = nextIdx;
 
-        if (nextIdx === -1) {
+        if (nextIdx === 0) { // 0 is invalid sentinel
           for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
-            data[ptr + nextEdgeOffsets[j]] = -1;
+            data[ptr + nextEdgeOffsets[j]] = 0;
           }
           break;
         }
@@ -415,8 +424,8 @@ export class TransferMgr {
         }
       }
     }
-    // Return -1 to indicate waiting/stop if no command
-    return -1;
+    // Return 0 to indicate waiting/stop if no command (0 is invalid sentinel)
+    return 0;
   }
 
   /**
@@ -449,7 +458,7 @@ export class TransferMgr {
       );
       return currentEdge.nextEdgeIndices![randomIndex];
     }
-    return -1;
+    return 0; // 0 is invalid sentinel
   }
 
   private canDirectlyTransition(currentEdge: Edge): boolean {
@@ -465,7 +474,7 @@ export class TransferMgr {
     vehicleLoopMap: Map<number, VehicleLoop>,
     edgeNameToIndex: Map<string, number>
   ): number {
-    let nextEdgeIndex = -1;
+    let nextEdgeIndex = 0; // 0 is invalid sentinel
     const loop = vehicleLoopMap.get(vehicleIndex);
 
     if (loop) {
@@ -481,7 +490,7 @@ export class TransferMgr {
       }
     }
 
-    if (nextEdgeIndex === -1 && currentEdge.nextEdgeIndices?.length) {
+    if (nextEdgeIndex === 0 && currentEdge.nextEdgeIndices?.length) {
       nextEdgeIndex = currentEdge.nextEdgeIndices[0];
     }
 
@@ -515,7 +524,7 @@ export class TransferMgr {
       }
 
       edgeIndices.push(pathEdgeIndex);
-      prevEdge = edgeArray[pathEdgeIndex];
+      prevEdge = edgeArray[pathEdgeIndex - 1]; // Convert to 0-based for array access
     }
 
     return edgeIndices;
@@ -588,8 +597,8 @@ export class TransferMgr {
           data[ptr + nextEdgeOffsets[i]] = edgeIndices[i];
           filledNextEdges.push(edgeIndices[i]);
         } else {
-          data[ptr + nextEdgeOffsets[i]] = -1;
-          filledNextEdges.push(-1);
+          data[ptr + nextEdgeOffsets[i]] = 0; // 0 is invalid sentinel
+          filledNextEdges.push(0);
         }
       }
       data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
@@ -647,8 +656,8 @@ export class TransferMgr {
     if (queue && queue.length > 0) {
       const lastReserved = queue.at(-1)!;
       const lastEdgeIndex = edgeNameToIndex.get(lastReserved.edgeId);
-      if (lastEdgeIndex !== undefined) {
-        referenceEdge = edgeArray[lastEdgeIndex];
+      if (lastEdgeIndex !== undefined && lastEdgeIndex >= 1) {
+        referenceEdge = edgeArray[lastEdgeIndex - 1]; // Convert to 0-based for array access
       }
     }
 
@@ -693,8 +702,8 @@ export class TransferMgr {
     // Get next edge index from path buffer (항상 인덱스 0)
     const nextEdgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START];
 
-    // Validate edge index
-    if (nextEdgeIdx < 0) return null;
+    // Validate edge index (1-based: must be >= 1)
+    if (nextEdgeIdx < 1) return null;
 
     return nextEdgeIdx;
   }
@@ -717,7 +726,7 @@ export class TransferMgr {
 
       for (let i = 0; i < len; i++) {
         const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
-        if (edgeIdx >= 0) {
+        if (edgeIdx >= 1) { // 1-based: 0 is invalid
           result.push(edgeIdx);
         }
       }
@@ -740,7 +749,8 @@ export class TransferMgr {
     let accumulatedDistance = initialDistance;
 
     for (const edgeIndex of fullPath) {
-      const edge = edgeArray[edgeIndex];
+      if (edgeIndex < 1) continue; // 1-based: 0 is invalid
+      const edge = edgeArray[edgeIndex - 1]; // Convert to 0-based for array access
       if (!edge) continue;
 
       // 곡선 발견!
@@ -796,7 +806,8 @@ export class TransferMgr {
       }
 
       const nextEdgeIndex = edge.nextEdgeIndices[0];
-      const nextEdge = edgeArray[nextEdgeIndex];
+      if (nextEdgeIndex < 1) break; // 1-based: 0 is invalid
+      const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
       if (!nextEdge) break;
 
       if (visited.has(nextEdge.edge_name)) {
@@ -858,7 +869,8 @@ export class TransferMgr {
       }
 
       const nextEdgeIndex = edge.nextEdgeIndices[0];
-      const nextEdge = edgeArray[nextEdgeIndex];
+      if (nextEdgeIndex < 1) break; // 1-based: 0 is invalid
+      const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
       if (!nextEdge) break;
 
       if (visited.has(nextEdge.edge_name)) {
@@ -898,7 +910,8 @@ export class TransferMgr {
     let accumulatedDistance = currentEdgeRemainingDistance;
 
     for (const edgeIndex of fullPath) {
-      const edge = edgeArray[edgeIndex];
+      if (edgeIndex < 1) continue; // 1-based: 0 is invalid
+      const edge = edgeArray[edgeIndex - 1]; // Convert to 0-based for array access
       if (!edge) continue;
 
       if (isMergeNode(edge.to_node)) {

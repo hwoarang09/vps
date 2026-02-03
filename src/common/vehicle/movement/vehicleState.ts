@@ -94,7 +94,8 @@ function logPositionIfNeeded(ctx: LogPositionContext): void {
   const intervalPassed = !lastLog || (simTime - lastLog.simTime >= POSITION_LOG_INTERVAL_MS);
 
   if (edgeChanged || intervalPassed) {
-    const edgeName = edgeArray[edgeIndex]?.edge_name ?? `idx:${edgeIndex}`;
+    // NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+    const edgeName = edgeIndex >= 1 ? (edgeArray[edgeIndex - 1]?.edge_name ?? `idx:${edgeIndex}`) : `idx:${edgeIndex}`;
     const reason = edgeChanged ? "edge_change" : "interval";
     devLog.veh(vehId).debug(
       `[POS] ${reason} edge=${edgeName} ratio=${ratio.toFixed(3)} pos=(${x.toFixed(2)},${y.toFixed(2)}) vel=${velocity.toFixed(2)}`

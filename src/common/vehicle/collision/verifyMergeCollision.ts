@@ -84,7 +84,9 @@ function checkAgainstCompetitors(
 
     if (compCount === 0) continue;
 
-    const compEdge = edgeArray[compEdgeIdx];
+    // NOTE: compEdgeIdx is 1-based. 0 is invalid sentinel.
+    if (compEdgeIdx < 1) continue;
+    const compEdge = edgeArray[compEdgeIdx - 1]; // Convert to 0-based for array access
     if (!compEdge) continue;
 
     let compThreshold = 0;

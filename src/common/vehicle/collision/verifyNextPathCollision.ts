@@ -94,7 +94,9 @@ export function verifyNextPathCollision(
     if (checkedEdges.has(nextEdgeIdx)) continue;
     checkedEdges.add(nextEdgeIdx);
 
-    const nextEdge = edgeArray[nextEdgeIdx];
+    // NOTE: nextEdgeIdx is 1-based. 0 is invalid sentinel.
+    if (nextEdgeIdx < 1) continue;
+    const nextEdge = edgeArray[nextEdgeIdx - 1]; // Convert to 0-based for array access
     if (!nextEdge) continue;
 
     const result = checkEdgeTailCollision(nextEdgeIdx, myVehIdx, mostCriticalHitZone, ctx);

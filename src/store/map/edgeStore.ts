@@ -39,16 +39,17 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
     const nameToIndex = new Map<string, number>();
 
     // 1차 순회: 인덱싱 및 노드 연결 관계 수집
+    // NOTE: Index starts from 1 (1-based). 0 is reserved as invalid/sentinel value.
     for (const [idx, edge] of rawEdges.entries()) {
-      nameToIndex.set(edge.edge_name, idx);
+      nameToIndex.set(edge.edge_name, idx + 1); // 1-based index
 
-      // From Node (Outgoing)
+      // From Node (Outgoing) - 1-based index
       if (!nodeOutgoing.has(edge.from_node)) nodeOutgoing.set(edge.from_node, []);
-      nodeOutgoing.get(edge.from_node)!.push(idx);
+      nodeOutgoing.get(edge.from_node)!.push(idx + 1);
 
-      // To Node (Incoming)
+      // To Node (Incoming) - 1-based index
       if (!nodeIncoming.has(edge.to_node)) nodeIncoming.set(edge.to_node, []);
-      nodeIncoming.get(edge.to_node)!.push(idx);
+      nodeIncoming.get(edge.to_node)!.push(idx + 1);
     }
 
     // 2차 순회: Edge 데이터에 토폴로지 정보 주입 (불변성 유지)
@@ -123,10 +124,10 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
   },
 
   addEdge: (edge) => set((state) => {
-    // *주의: 단일 추가 시에는 전체 토폴로지 재계산이 안 됨. 
+    // *주의: 단일 추가 시에는 전체 토폴로지 재계산이 안 됨.
     // 런타임에 맵을 수정한다면 addEdge 후 별도의 재계산 로직이 필요할 수 있음.
     // 여기서는 단순 추가만 구현.
-    const newIndex = state.edges.length;
+    const newIndex = state.edges.length + 1; // 1-based index
     const newMap = new Map(state.edgeNameToIndex);
     newMap.set(edge.edge_name, newIndex);
     return {
@@ -179,5 +180,6 @@ export const useEdgeStore = create<EdgeState>((set, get) => ({
     set({ edges: updatedEdges });
   },
 
-  getEdgeByIndex: (index) => get().edges[index],
+  // NOTE: index is 1-based. 0 is invalid sentinel.
+  getEdgeByIndex: (index) => index >= 1 ? get().edges[index - 1] : undefined,
 }));

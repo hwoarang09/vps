@@ -199,8 +199,9 @@ function processEdgeTransitionLogic(
     }
 
     // Edge 전환 완료 - 경로에서 지나간 Edge 제거
-    if (out.finalEdgeIndex !== currentEdgeIndex) {
-      const passedEdge = ctx.edgeArray[out.finalEdgeIndex];
+    // NOTE: out.finalEdgeIndex is 1-based. 0 is invalid sentinel.
+    if (out.finalEdgeIndex !== currentEdgeIndex && out.finalEdgeIndex >= 1) {
+      const passedEdge = ctx.edgeArray[out.finalEdgeIndex - 1]; // Convert to 0-based for array access
       if (passedEdge) {
         ctx.transferMgr.onEdgeTransition(vehicleIndex, passedEdge.edge_name);
       }

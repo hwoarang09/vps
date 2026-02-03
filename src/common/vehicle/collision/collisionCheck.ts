@@ -34,10 +34,13 @@ export interface CollisionCheckContext {
 export function checkCollisions(ctx: CollisionCheckContext) {
   const { edgeArray, edgeVehicleQueue } = ctx;
 
-  for (let edgeIdx = 0; edgeIdx < edgeArray.length; edgeIdx++) {
-    const edge = edgeArray[edgeIdx];
+  // NOTE: Internal loop uses 0-based index for array access,
+  // but passes 1-based index to verifyEdgeCollision
+  for (let arrayIdx = 0; arrayIdx < edgeArray.length; arrayIdx++) {
+    const edge = edgeArray[arrayIdx];
     if (!edge) continue;
 
+    const edgeIdx = arrayIdx + 1; // Convert to 1-based for external use
     const count = edgeVehicleQueue.getCount(edgeIdx);
     if (count === 0) continue;
 

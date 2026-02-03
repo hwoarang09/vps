@@ -159,13 +159,14 @@ export class FabContext {
     } else {
       this.edges = params.edges ?? [];
       this.nodes = params.nodes ?? [];
+      // NOTE: Index starts from 1 (1-based). 0 is reserved as invalid/sentinel value.
       this.edgeNameToIndex.clear();
       for (let idx = 0; idx < this.edges.length; idx++) {
-        this.edgeNameToIndex.set(this.edges[idx].edge_name, idx);
+        this.edgeNameToIndex.set(this.edges[idx].edge_name, idx + 1); // 1-based
       }
       this.nodeNameToIndex.clear();
       for (let idx = 0; idx < this.nodes.length; idx++) {
-        this.nodeNameToIndex.set(this.nodes[idx].node_name, idx);
+        this.nodeNameToIndex.set(this.nodes[idx].node_name, idx + 1); // 1-based
       }
     }
 
@@ -277,7 +278,8 @@ export class FabContext {
 
     for (let i = 0; i < this.actualNumVehicles; i++) {
       const currentEdgeIndex = this.store.getVehicleCurrentEdge(i);
-      const currentEdge = this.edges[currentEdgeIndex];
+      if (currentEdgeIndex < 1) continue; // 1-based: 0 is invalid
+      const currentEdge = this.edges[currentEdgeIndex - 1]; // Convert to 0-based for array access
       if (!currentEdge) continue;
 
       const sequence: string[] = [currentEdge.edge_name];
@@ -285,8 +287,10 @@ export class FabContext {
 
       for (let j = 0; j < 100; j++) {
         if (!edge.nextEdgeIndices?.length) break;
+        const nextIdx = edge.nextEdgeIndices[0];
+        if (nextIdx < 1) break; // 1-based: 0 is invalid
 
-        const nextEdge = this.edges[edge.nextEdgeIndices[0]];
+        const nextEdge = this.edges[nextIdx - 1]; // Convert to 0-based for array access
         if (!nextEdge || nextEdge.edge_name === currentEdge.edge_name) break;
 
         sequence.push(nextEdge.edge_name);
@@ -378,8 +382,8 @@ export class FabContext {
       simulationTime,
       onEdgeTransit: tracker
         ? (vehId, fromEdgeIndex, toEdgeIndex, timestamp) => {
-            // 이전 edge 통과 로그
-            const fromEdge = edges[fromEdgeIndex];
+            // 이전 edge 통과 로그 (fromEdgeIndex is 1-based)
+            const fromEdge = fromEdgeIndex >= 1 ? edges[fromEdgeIndex - 1] : undefined;
             if (fromEdge) {
               tracker.onEdgeExit(vehId, fromEdgeIndex, timestamp, fromEdge);
             }

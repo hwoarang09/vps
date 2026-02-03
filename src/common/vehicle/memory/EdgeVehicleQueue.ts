@@ -27,12 +27,18 @@ export class EdgeVehicleQueue {
     }
   }
 
+  /**
+   * Add a vehicle to an edge's queue
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   addVehicle(edgeIndex: number, vehicleIndex: number): void {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return;
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     const count = this.data[offset];
 
     if (count >= MAX_VEHICLES_PER_EDGE) {
@@ -50,12 +56,18 @@ export class EdgeVehicleQueue {
     this.data[offset] = count + 1;
   }
 
+  /**
+   * Remove a vehicle from an edge's queue
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   removeVehicle(edgeIndex: number, vehicleIndex: number): void {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return;
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     const count = this.data[offset];
 
     for (let i = 0; i < count; i++) {
@@ -71,12 +83,18 @@ export class EdgeVehicleQueue {
 
   }
 
+  /**
+   * Get all vehicles on an edge
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   getVehicles(edgeIndex: number): number[] {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return [];
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     const count = this.data[offset];
     const vehicles: number[] = [];
 
@@ -87,21 +105,33 @@ export class EdgeVehicleQueue {
     return vehicles;
   }
 
+  /**
+   * Get vehicle count on an edge
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   getCount(edgeIndex: number): number {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return 0;
     }
 
-    return this.data[edgeIndex * EDGE_LIST_SIZE];
+    return this.data[idx * EDGE_LIST_SIZE];
   }
 
+  /**
+   * Get edge data as Int32Array view
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   getData(edgeIndex: number): Int32Array | null {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return null;
     }
 
     // Return zero-copy view of this edge's data
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     return this.data.subarray(offset, offset + EDGE_LIST_SIZE);
   }
 
@@ -121,17 +151,25 @@ export class EdgeVehicleQueue {
   /**
    * Calculate offset for direct array access
    * Usage: data[offset + 0] = count, data[offset + 1...] = vehicle IDs
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
    */
   getOffsetForEdge(edgeIndex: number): number {
-    return edgeIndex * EDGE_LIST_SIZE;
+    // Convert 1-based to 0-based for internal array access
+    return (edgeIndex - 1) * EDGE_LIST_SIZE;
   }
 
+  /**
+   * Clear all vehicles from an edge
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   clearEdge(edgeIndex: number): void {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return;
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     this.data[offset] = 0;
     this.data.fill(-1, offset + 1, offset + EDGE_LIST_SIZE);
   }
@@ -148,19 +186,31 @@ export class EdgeVehicleQueue {
     return this.maxEdges;
   }
 
+  /**
+   * Check if an edge has any vehicles
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   hasVehicles(edgeIndex: number): boolean {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return false;
     }
-    return this.data[edgeIndex * EDGE_LIST_SIZE] > 0;
+    return this.data[idx * EDGE_LIST_SIZE] > 0;
   }
 
+  /**
+   * Get vehicle at a specific position on an edge
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   getVehicleAt(edgeIndex: number, position: number): number {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return -1;
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     const count = this.data[offset];
 
     if (position < 0 || position >= count) {
@@ -170,12 +220,18 @@ export class EdgeVehicleQueue {
     return this.data[offset + 1 + position];
   }
 
+  /**
+   * Sort vehicles on an edge by their edge ratio
+   * NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
+   */
   sortByEdgeRatio(edgeIndex: number, vehicleData: Float32Array): void {
-    if (edgeIndex < 0 || edgeIndex >= this.maxEdges) {
+    // Convert 1-based to 0-based for internal array access
+    const idx = edgeIndex - 1;
+    if (idx < 0 || idx >= this.maxEdges) {
       return;
     }
 
-    const offset = edgeIndex * EDGE_LIST_SIZE;
+    const offset = idx * EDGE_LIST_SIZE;
     const count = this.data[offset];
 
     if (count <= 1) return;

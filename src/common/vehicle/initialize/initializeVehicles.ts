@@ -23,11 +23,13 @@ import type {
 
 /**
  * Build edge name to index map
+ * NOTE: Index starts from 1 (1-based). 0 is reserved as invalid/sentinel value.
+ * Array access: edges[index - 1]
  */
 export function buildEdgeNameToIndex(edges: Edge[]): Map<string, number> {
   const nameToIndex = new Map<string, number>();
   for (let idx = 0; idx < edges.length; idx++) {
-    nameToIndex.set(edges[idx].edge_name, idx);
+    nameToIndex.set(edges[idx].edge_name, idx + 1); // 1-based index
   }
   return nameToIndex;
 }
@@ -96,12 +98,12 @@ export function initializeSingleVehicle(
   // Initialize Target Ratio (New)
   vehData[ptr + MovementData.TARGET_RATIO] = initialTargetRatio;
 
-  // Initialize NextEdge State (5개 모두 -1로 초기화)
-  vehData[ptr + MovementData.NEXT_EDGE_0] = -1;
-  vehData[ptr + MovementData.NEXT_EDGE_1] = -1;
-  vehData[ptr + MovementData.NEXT_EDGE_2] = -1;
-  vehData[ptr + MovementData.NEXT_EDGE_3] = -1;
-  vehData[ptr + MovementData.NEXT_EDGE_4] = -1;
+  // Initialize NextEdge State (5개 모두 0으로 초기화 - 0은 invalid sentinel)
+  vehData[ptr + MovementData.NEXT_EDGE_0] = 0;
+  vehData[ptr + MovementData.NEXT_EDGE_1] = 0;
+  vehData[ptr + MovementData.NEXT_EDGE_2] = 0;
+  vehData[ptr + MovementData.NEXT_EDGE_3] = 0;
+  vehData[ptr + MovementData.NEXT_EDGE_4] = 0;
   vehData[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
 
   // Update sensor points
@@ -165,9 +167,9 @@ export function initializeVehicleStates(
 
   for (const placement of placements) {
     const edgeIndex = nameToIndex.get(placement.edgeName);
-    if (edgeIndex === undefined) continue;
+    if (edgeIndex === undefined || edgeIndex < 1) continue; // 1-based: 0 is invalid
 
-    const edge = edgeArray[edgeIndex];
+    const edge = edgeArray[edgeIndex - 1]; // Convert to 0-based for array access
 
     const initialTargetRatio = isMqtt ? placement.edgeRatio : 1;
 
@@ -190,6 +192,7 @@ export function initializeVehicleStates(
 
 /**
  * Sort vehicles in each edge by edgeRatio (front to back)
+ * NOTE: edgeIdx is 1-based, EdgeVehicleQueue handles the conversion internally
  */
 export function sortVehiclesInEdges(
   edgeVehicleCount: Map<number, number>,
@@ -205,6 +208,7 @@ export function sortVehiclesInEdges(
 
 /**
  * Process initial lock requests for vehicles on merge edges
+ * NOTE: edgeIdx is 1-based
  */
 export function processMergeEdgeLocks(
   edgeVehicleCount: Map<number, number>,
@@ -215,7 +219,8 @@ export function processMergeEdgeLocks(
   const edgeVehicleQueue = store.getEdgeVehicleQueue();
 
   for (const [edgeIdx] of edgeVehicleCount) {
-    const edge = edgeArray[edgeIdx];
+    const edge = edgeArray[edgeIdx - 1]; // Convert to 0-based for array access
+    if (!edge) continue;
 
     if (lockMgr.isMergeNode(edge.to_node)) {
       const vehiclesOnEdge = edgeVehicleQueue.getVehicles(edgeIdx);

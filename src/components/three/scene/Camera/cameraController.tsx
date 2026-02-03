@@ -48,6 +48,9 @@ const CameraController: React.FC = () => {
     };
   } | null>(null);
 
+  // Stop following when user interacts with camera
+  const stopFollowingVehicle = useCameraStore((s) => s.stopFollowingVehicle);
+
   // Initialize camera position from store on mount
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -64,6 +67,24 @@ const CameraController: React.FC = () => {
     initializedRef.current = true;
 
   }, [camera, controls, position, target]); // Include dependencies
+
+  // Stop following vehicle when user interacts with camera (drag, zoom, etc.)
+  useEffect(() => {
+    if (!controls) return;
+    const orbitControls = controls as OrbitControls;
+
+    const handleStart = () => {
+      // User started interacting with camera - stop following
+      if (useCameraStore.getState().followingVehicleId !== null) {
+        stopFollowingVehicle();
+      }
+    };
+
+    orbitControls.addEventListener('start', handleStart);
+    return () => {
+      orbitControls.removeEventListener('start', handleStart);
+    };
+  }, [controls, stopFollowingVehicle]);
 
   // Z-up 보정 (항상 유지)
   useEffect(() => {
