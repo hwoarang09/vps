@@ -171,20 +171,7 @@ export class FabContext {
     }
 
 
-    this.lockMgr.initFromEdges(this.edges);
-
-    // config에서 lock 설정 적용
-    this.lockMgr.setLockConfig({
-      waitDistanceFromMergingStr: this.config.lockWaitDistanceFromMergingStr,
-      requestDistanceFromMergingStr: this.config.lockRequestDistanceFromMergingStr,
-      waitDistanceFromMergingCurve: this.config.lockWaitDistanceFromMergingCurve,
-      requestDistanceFromMergingCurve: this.config.lockRequestDistanceFromMergingCurve,
-    });
-
-    // config에서 lock 정책 적용
-    this.lockMgr.setLockPolicy({
-      grantStrategy: this.config.lockGrantStrategy,
-    });
+    // lockMgr 초기화는 initializeVehicles 후에 수행 (vehicleDataArray 필요)
 
     // Fab별 config 적용 로그
     devLog.info(`[FabContext:${this.fabId}] Lock policy: grantStrategy=${this.config.lockGrantStrategy}`);
@@ -207,6 +194,9 @@ export class FabContext {
     this.dispatchMgr.setVehicleDataArray(this.vehicleDataArray);
     this.dispatchMgr.setEdgeData(this.edges, this.edgeNameToIndex);
     this.dispatchMgr.setLockMgr(this.lockMgr);
+
+    // LockMgr 초기화 (vehicleDataArray, nodes, edges 참조 저장)
+    this.lockMgr.init(this.vehicleDataArray.getData(), this.nodes, this.edges);
 
     this.buildVehicleLoopMap();
 
@@ -414,7 +404,10 @@ export class FabContext {
     };
     updateMovement(movementCtx);
 
-    // 4. Write to Render Buffer (연속 레이아웃)
+    // 4. Lock 처리
+    this.lockMgr.updateAll(this.actualNumVehicles, 'FIFO');
+
+    // 5. Write to Render Buffer (연속 레이아웃)
     this.writeToRenderRegion();
   }
 
@@ -555,33 +548,10 @@ export class FabContext {
   }
 
   getLockTableData(): import("../types").LockTableData {
-    const table = this.lockMgr.getTable();
-    const nodes: Record<string, import("../types").LockNodeData> = {};
-
-    for (const [nodeName, node] of Object.entries(table)) {
-      const edgeQueueSizes: Record<string, number> = {};
-      for (const [edgeName, queue] of Object.entries(node.edgeQueues)) {
-        edgeQueueSizes[edgeName] = queue.size;
-      }
-
-      nodes[nodeName] = {
-        name: node.name,
-        requests: node.requests.map(r => ({
-          vehId: r.vehId,
-          edgeName: r.edgeName,
-          requestTime: r.requestTime,
-        })),
-        granted: node.granted.map(g => ({
-          edge: g.edge,
-          veh: g.veh,
-        })),
-        edgeQueueSizes,
-      };
-    }
-
+    // TODO: 새 락 시스템 구현 후 업데이트
     return {
       strategy: this.lockMgr.getGrantStrategy(),
-      nodes,
+      nodes: {},
     };
   }
 }
