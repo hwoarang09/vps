@@ -280,29 +280,23 @@ export class TransferMgr {
 
   /**
    * Path buffer에서 next edges 읽기
-   *
-   * Merge 대기점 처리:
-   * - merge node가 있으면 lock 상태 확인
-   * - lock 없으면 merge 직전까지만 채움
-   * - lock 있으면 merge edge까지 포함
+   * 단순화: 락 체크 제거
    */
   private fillNextEdgesFromPathBuffer(
     data: Float32Array,
     ptr: number,
     vehicleIndex: number,
     nextEdgeOffsets: number[],
-    edgeArray: Edge[],
-    lockMgr?: ILockMgrForNextEdge
+    _edgeArray: Edge[],
+    _lockMgr?: ILockMgrForNextEdge
   ): void {
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
     const len = this.pathBufferFromAutoMgr![pathPtr + PATH_LEN];
 
     const filledEdges: number[] = [];
-    let stopReason: string | null = null;
 
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       if (i >= len) {
-        // pathBuffer에 더 이상 edge가 없음
         data[ptr + nextEdgeOffsets[i]] = 0;
         filledEdges.push(0);
         continue;
@@ -315,39 +309,15 @@ export class TransferMgr {
         continue;
       }
 
-      // Merge 체크: 이 edge의 to_node가 merge node인지 확인
-      const edge = edgeArray[edgeIdx - 1]; // 1-based to 0-based
-      if (edge && lockMgr?.isMergeNode(edge.to_node)) {
-        // Merge node 발견! Lock 상태 확인
-        const hasLock = lockMgr.checkGrant(edge.to_node, vehicleIndex);
-
-        if (!hasLock) {
-          // Lock 없음 → 이 edge까지는 채우고 여기서 멈춤
-          data[ptr + nextEdgeOffsets[i]] = edgeIdx;
-          filledEdges.push(edgeIdx);
-          stopReason = `merge@${edge.to_node}(no lock)`;
-
-          // 나머지 슬롯은 0으로
-          for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
-            data[ptr + nextEdgeOffsets[j]] = 0;
-            filledEdges.push(0);
-          }
-          break;
-        }
-        // Lock 있음 → 이 edge 포함하고 계속 진행
-      }
-
-      // 일반 edge 또는 lock 있는 merge edge
       data[ptr + nextEdgeOffsets[i]] = edgeIdx;
       filledEdges.push(edgeIdx);
     }
 
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
 
-    const logMsg = stopReason
-      ? `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}] STOP:${stopReason}`
-      : `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}]`;
-    devLog.veh(vehicleIndex).debug(logMsg);
+    devLog.veh(vehicleIndex).debug(
+      `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}]`
+    );
   }
 
   /**

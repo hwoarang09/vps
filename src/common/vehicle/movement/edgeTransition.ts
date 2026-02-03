@@ -1,5 +1,5 @@
 // common/vehicle/movement/edgeTransition.ts
-// Shared edge transition logic for vehicleArrayMode and shmSimulator
+// 단순화: 락 체크 로직 제거
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
@@ -27,10 +27,11 @@ export interface IEdgeTransitionStore {
   moveVehicleToEdge(vehicleIndex: number, nextEdgeIndex: number, ratio: number): void;
 }
 
-// Interface for lock manager (only needed methods for edge transition)
+// Interface for lock manager (stub - 새 락 시스템 구현 시 교체)
 export interface IEdgeTransitionLockMgr {
   isMergeNode(nodeName: string): boolean;
   checkGrant(nodeName: string, vehId: number): boolean;
+  requestLock(nodeName: string, edgeName: string, vehId: number): void;
 }
 
 export interface EdgeTransitionResult {
@@ -39,12 +40,6 @@ export interface EdgeTransitionResult {
   activeEdge: Edge | null;
 }
 
-/**
- * Zero-GC: Handles edge transition, writes result to target object.
- * @param preserveTargetRatio - If true, don't set TARGET_RATIO=1 (for MQTT mode). 
- *        NOTE: This flag is somewhat legacy now that we support nextTargetRatio, but kept for compatibility.
- * @param nextTargetRatio - The target ratio to set for the new edge (optional).
- */
 /** UnusualMove 이벤트 데이터 */
 export interface UnusualMoveEvent {
   vehicleIndex: number;
@@ -69,90 +64,26 @@ export interface EdgeTransitionParams {
   target: EdgeTransitionResult;
   preserveTargetRatio?: boolean;
   nextTargetRatio?: number;
-  /** Path buffer for refilling next edges after shift (optional) */
   pathBufferFromAutoMgr?: Int32Array | null;
-  /** Lock manager for checking per-node lock status (optional for backward compat) */
   lockMgr?: IEdgeTransitionLockMgr;
-  /** UnusualMove 발생 시 콜백 (optional) */
   onUnusualMove?: OnUnusualMoveCallback;
 }
 
-/** Lock 상태 체크 결과 */
-interface LockCheckResult {
-  blocked: boolean;
-}
-
 /**
- * Lock 기반 전환 차단 여부 체크
- * @returns blocked=true면 전환 불가
- */
-function checkLockBlocking(
-  lockMgr: IEdgeTransitionLockMgr | undefined,
-  currentEdge: Edge,
-  nextEdgeIndex: number,
-  edgeArray: Edge[],
-  vehicleIndex: number,
-  trafficState: number
-): LockCheckResult {
-  if (!lockMgr) {
-    // 하위 호환: lockMgr 없으면 기존 WAITING 전역 체크
-    return { blocked: trafficState === TrafficState.WAITING };
-  }
-
-  // 1. 현재 edge의 to_node가 merge node이고 lock이 없으면 block
-  const isMergeNode = lockMgr.isMergeNode(currentEdge.to_node);
-  const hasGrant = lockMgr.checkGrant(currentEdge.to_node, vehicleIndex);
-  if (isMergeNode && !hasGrant) {
-    devLog.veh(vehicleIndex).debug(
-      `[EDGE_TRANSITION] blocked: to_node=${currentEdge.to_node} lock not granted`
-    );
-    return { blocked: true };
-  }
-
-  // 2. 다음 edge가 곡선이고 그 to_node가 merge node면 대기
-  // NOTE: nextEdgeIndex is 1-based. 0 is invalid sentinel.
-  if (nextEdgeIndex >= 1 && nextEdgeIndex <= edgeArray.length) {
-    const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
-    const isCurve = nextEdge?.vos_rail_type !== EdgeType.LINEAR;
-    const isNextMerge = lockMgr.isMergeNode(nextEdge.to_node);
-    const hasNextGrant = lockMgr.checkGrant(nextEdge.to_node, vehicleIndex);
-    if (isCurve && isNextMerge && !hasNextGrant) {
-      const currentType = currentEdge.vos_rail_type === EdgeType.LINEAR ? 'linear' : 'curve';
-      devLog.veh(vehicleIndex).debug(
-        `[EDGE_TRANSITION] ${currentType}→curve→merge 대기: nextEdge=${nextEdge.edge_name}`
-      );
-      return { blocked: true };
-    }
-  }
-
-  return { blocked: false };
-}
-
-/** 다음 Edge 전환 가능 여부 체크 결과 */
-interface NextEdgeCheckResult {
-  canTransition: boolean;
-  nextEdge: Edge | null;
-}
-
-/**
- * 다음 Edge로 전환 가능한지 체크 (lock, state, edge 존재 여부)
+ * 다음 Edge로 전환 가능한지 체크
+ * 단순화: 락 체크 제거, nextEdge 존재 여부만 확인
  */
 function checkCanTransitionToNextEdge(
-  lockMgr: IEdgeTransitionLockMgr | undefined,
-  currentEdge: Edge,
   nextEdgeIndex: number,
   nextState: number,
-  trafficState: number,
-  edgeArray: Edge[],
-  vehicleIndex: number
-): NextEdgeCheckResult {
-  const lockCheck = checkLockBlocking(lockMgr, currentEdge, nextEdgeIndex, edgeArray, vehicleIndex, trafficState);
+  edgeArray: Edge[]
+): { canTransition: boolean; nextEdge: Edge | null } {
   // NOTE: nextEdgeIndex is 1-based. 0 is invalid sentinel.
-  if (lockCheck.blocked || nextState !== NextEdgeState.READY || nextEdgeIndex === 0) {
+  if (nextState !== NextEdgeState.READY || nextEdgeIndex === 0) {
     return { canTransition: false, nextEdge: null };
   }
 
-  const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
+  const nextEdge = edgeArray[nextEdgeIndex - 1];
   if (!nextEdge) {
     return { canTransition: false, nextEdge: null };
   }
@@ -223,7 +154,6 @@ function logTransitionEntry(
 
 /**
  * Zero-GC: Handles edge transition, writes result to target object.
- * @param params - The input parameters for edge transition logic
  */
 export function handleEdgeTransition(params: EdgeTransitionParams): void {
   const {
@@ -237,7 +167,6 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     preserveTargetRatio = false,
     nextTargetRatio,
     pathBufferFromAutoMgr,
-    lockMgr,
     onUnusualMove
   } = params;
   let currentEdgeIdx = initialEdgeIndex;
@@ -257,7 +186,6 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
 
     const nextState = data[ptr + MovementData.NEXT_EDGE_STATE];
     const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE_0];
-    const trafficState = data[ptr + LogicData.TRAFFIC_STATE];
 
     // 루프 진입 로그
     devLog.veh(vehicleIndex).debug(
@@ -265,9 +193,9 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
       `nextEdgeIdx=${nextEdgeIndex} nextState=${nextState}`
     );
 
-    // Edge transition 가능 여부 체크
+    // Edge transition 가능 여부 체크 (단순화: 락 체크 제거)
     const { canTransition, nextEdge } = checkCanTransitionToNextEdge(
-      lockMgr, currentEdge, nextEdgeIndex, nextState, trafficState, edgeArray, vehicleIndex
+      nextEdgeIndex, nextState, edgeArray
     );
     if (!canTransition || !nextEdge) {
       currentRatio = 1;
@@ -282,10 +210,10 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     updateSensorPresetForEdge(vehicleDataArray, vehicleIndex, nextEdge);
 
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
-    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;  // Clear LOCKED bit if set
+    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
 
-    // Next Edge 배열을 한 칸씩 앞으로 당기고 마지막 슬롯 채우기 (merge 체크 포함)
-    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray, lockMgr);
+    // Next Edge 배열 shift (단순화: 락 체크 제거)
+    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray);
 
     // Set TARGET_RATIO for the new edge
     const newTargetRatio = nextTargetRatio ?? (preserveTargetRatio ? undefined : 1);
@@ -323,7 +251,6 @@ function updateSensorPresetForEdge(
   } else if (railType === EdgeType.RIGHT_CURVE || (isCurve && edge.curve_direction === "right")) {
     presetIdx = PresetIndex.CURVE_RIGHT;
   } else if (isCurve) {
-    // Other curve types without explicit direction - default to STRAIGHT
     presetIdx = PresetIndex.STRAIGHT;
   } else {
     presetIdx = PresetIndex.STRAIGHT;
@@ -354,19 +281,16 @@ function shiftPathBuffer(
     return { beforeLen, afterLen: 0, beforeEdges, afterEdges };
   }
 
-  // shift 전 상태 기록
   for (let i = 0; i < Math.min(beforeLen, 10); i++) {
     beforeEdges.push(pathBuffer[pathPtr + PATH_EDGES_START + i]);
   }
 
-  // 실제 shift
   for (let i = 0; i < beforeLen - 1; i++) {
     pathBuffer[pathPtr + PATH_EDGES_START + i] = pathBuffer[pathPtr + PATH_EDGES_START + i + 1];
   }
   pathBuffer[pathPtr + PATH_LEN] = beforeLen - 1;
   const afterLen = beforeLen - 1;
 
-  // shift 후 상태 기록
   for (let i = 0; i < Math.min(afterLen, 10); i++) {
     afterEdges.push(pathBuffer[pathPtr + PATH_EDGES_START + i]);
   }
@@ -375,16 +299,15 @@ function shiftPathBuffer(
 }
 
 /**
- * pathBuffer와 nextEdges를 동시에 shift하고, pathBuffer에서 다시 채움
- * Merge 체크: lock 없으면 merge 직전까지만 채움
+ * pathBuffer와 nextEdges를 동시에 shift
+ * 단순화: 락 체크 제거
  */
 function shiftAndRefillNextEdges(
   data: Float32Array,
   ptr: number,
   vehicleIndex: number,
   pathBufferFromAutoMgr: Int32Array | null | undefined,
-  edgeArray: Edge[],
-  lockMgr?: IEdgeTransitionLockMgr
+  _edgeArray: Edge[]
 ): void {
   const beforeNextEdges = [
     data[ptr + MovementData.NEXT_EDGE_0],
@@ -400,7 +323,7 @@ function shiftAndRefillNextEdges(
     shiftResult = shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
   }
 
-  // 2. pathBuffer에서 NEXT_EDGE_0~4 다시 채우기 (merge 체크 포함)
+  // 2. pathBuffer에서 NEXT_EDGE_0~4 다시 채우기 (락 체크 없이 단순 채움)
   const nextEdgeOffsets = [
     MovementData.NEXT_EDGE_0,
     MovementData.NEXT_EDGE_1,
@@ -408,8 +331,6 @@ function shiftAndRefillNextEdges(
     MovementData.NEXT_EDGE_3,
     MovementData.NEXT_EDGE_4,
   ];
-
-  let stopReason: string | null = null;
 
   if (pathBufferFromAutoMgr && shiftResult.afterLen > 0) {
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
@@ -421,30 +342,9 @@ function shiftAndRefillNextEdges(
       }
 
       const edgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
-      if (edgeIdx < 1) {
-        data[ptr + nextEdgeOffsets[i]] = 0;
-        continue;
-      }
-
-      // Merge 체크
-      const edge = edgeArray[edgeIdx - 1];
-      if (edge && lockMgr?.isMergeNode(edge.to_node)) {
-        const hasLock = lockMgr.checkGrant(edge.to_node, vehicleIndex);
-        if (!hasLock) {
-          // merge edge까지 채우고 멈춤
-          data[ptr + nextEdgeOffsets[i]] = edgeIdx;
-          stopReason = `merge@${edge.to_node}(no lock)`;
-          for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
-            data[ptr + nextEdgeOffsets[j]] = 0;
-          }
-          break;
-        }
-      }
-
-      data[ptr + nextEdgeOffsets[i]] = edgeIdx;
+      data[ptr + nextEdgeOffsets[i]] = edgeIdx < 1 ? 0 : edgeIdx;
     }
   } else {
-    // pathBuffer가 비었으면 0으로 채움
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       data[ptr + nextEdgeOffsets[i]] = 0;
     }
@@ -458,14 +358,12 @@ function shiftAndRefillNextEdges(
     data[ptr + MovementData.NEXT_EDGE_3],
     data[ptr + MovementData.NEXT_EDGE_4],
   ];
-  const logMsg = stopReason
-    ? `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
-      `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}] STOP:${stopReason}`
-    : `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
-      `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`;
-  devLog.veh(vehicleIndex).debug(logMsg);
+  devLog.veh(vehicleIndex).debug(
+    `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
+    `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
+  );
 
-  // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로 (0 is invalid sentinel)
+  // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
   if (data[ptr + MovementData.NEXT_EDGE_0] === 0) {
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
   }
