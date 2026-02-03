@@ -327,7 +327,7 @@ export class FabContext {
   }
 
   step(clampedDelta: number, simulationTime: number = 0): void {
-    // 1. Collision Check
+    // 1. Collision Check (충돌 감지 → 멈출지 결정)
     const collisionCtx: CollisionCheckContext = {
       vehicleArrayData: this.vehicleDataArray.getData(),
       edgeArray: this.edges,
@@ -339,18 +339,10 @@ export class FabContext {
     };
     checkCollisions(collisionCtx);
 
-    // 2. Auto Routing Trigger (경로 설정을 Movement 전에 실행)
-    this.autoMgr.update(
-      this.store.transferMode,
-      this.actualNumVehicles,
-      this.vehicleDataArray,
-      this.edges,
-      this.edgeNameToIndex,
-      this.transferMgr,
-      this.lockMgr
-    );
+    // 2. Lock 처리 (합류점에서 멈출지 결정)
+    this.lockMgr.updateAll(this.actualNumVehicles, 'FIFO');
 
-    // 3. Movement Update
+    // 3. Movement Update (1,2에서 멈추지 않은 차량만 이동)
     const tracker = this.edgeTransitTracker;
     const edges = this.edges;
     const fabId = this.fabId;
@@ -404,10 +396,18 @@ export class FabContext {
     };
     updateMovement(movementCtx);
 
-    // 4. Lock 처리
-    this.lockMgr.updateAll(this.actualNumVehicles, 'FIFO');
+    // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
+    this.autoMgr.update(
+      this.store.transferMode,
+      this.actualNumVehicles,
+      this.vehicleDataArray,
+      this.edges,
+      this.edgeNameToIndex,
+      this.transferMgr,
+      this.lockMgr
+    );
 
-    // 5. Write to Render Buffer (연속 레이아웃)
+    // 5. Write to Render Buffer (렌더링 데이터)
     this.writeToRenderRegion();
   }
 

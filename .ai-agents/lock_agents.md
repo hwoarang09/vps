@@ -2,53 +2,87 @@
 
 ## 상태: 재설계 중
 
-기존 락 시스템이 **삭제**되었습니다. 새로운 단순한 락 시스템으로 교체 예정입니다.
+## FabContext.step() 순서
 
-## 삭제된 파일/코드
-
-- `LockMgr.ts`: 복잡한 BATCH/FIFO/ARRIVAL_ORDER 전략 → **stub으로 대체**
-- `vehiclePosition.ts`: processMergeLogicInline, findAllMergeTargets 등 → **제거**
-- `mergeBraking.ts`: 합류점 사전 감속 → **비활성화**
-- `edgeTransition.ts`: checkLockBlocking → **제거**
-- `TransferMgr.ts`: fillNextEdgesFromPathBuffer의 merge 체크 → **제거**
-
-## 현재 상태
-
-- `LockMgr`는 빈 stub (항상 `checkGrant() = true` 반환)
-- 모든 차량이 합류점에서 대기 없이 통과
-- 충돌 방지는 없음 (센서 충돌만 동작)
-
-## 새 락 시스템 설계 예정
-
-### 기본 원칙
-1. **단순함**: edge 전환 시점에만 체크
-2. **한 곳에서**: 모든 lock 요청/체크를 한 곳에서
-3. **FIFO**: 먼저 요청한 차량이 먼저 통과
-
-### 예정 구조
 ```
-SimpleLockMgr:
-  - mergeNodes: Set<string>           // merge node 목록
-  - locks: Map<nodeName, vehId>       // 현재 잡고 있는 차량
-  - queues: Map<nodeName, vehId[]>    // 대기 큐 (FIFO)
+step(clampedDelta, simulationTime) {
+  // 1. Collision Check (충돌 감지)
+  //    → 센서 충돌로 멈출지 결정
 
-  request(node, vehId):
-    - locks에 없으면 즉시 grant
-    - 있으면 queue에 추가
+  // 2. Lock 관리
+  //    → 합류점에서 멈출지 결정
+  //    → 멈출 차량: velocity=0 또는 플래그 설정
 
-  release(node, vehId):
-    - locks에서 제거
-    - queue 맨 앞 차량에게 grant
+  // 3. Movement Update (움직임)
+  //    → 1,2에서 멈추지 않은 차량만 이동
+  //    → edge 전환 발생 가능
 
-  hasLock(node, vehId):
-    - locks[node] === vehId
+  // 4. Auto Routing (경로 설정)
+  //    → edge 전환 후 새 경로 필요한 차량 처리
+  //    → 다익스트라로 pathBuffer 갱신
+
+  // 5. Write to Render Buffer (렌더링 데이터)
+}
 ```
 
-### 호출 위치 (예정)
-- `edgeTransition.handleEdgeTransition`:
-  - ratio >= 1 && nextEdge.to_node가 merge
-  - → request → hasLock → 통과/대기
+## LockMgr 구조
 
----
+```typescript
+class LockMgr {
+  // 참조 (init에서 저장)
+  private vehicleDataArray: Float32Array;
+  private nodes: Node[];
+  private edges: Edge[];
 
-**TODO**: 사용자와 함께 새 락 시스템 설계
+  // 락 상태
+  private mergeNodes: Set<string>;           // merge node 목록
+  private locks: Map<string, number>;        // nodeName → vehId (현재 점유)
+  private queues: Map<string, number[]>;     // nodeName → vehId[] (대기 큐)
+
+  // 초기화
+  init(vehicleDataArray, nodes, edges): void
+
+  // 매 프레임 호출 (step 2단계)
+  updateAll(numVehicles, policy): void {
+    for (let i = 0; i < numVehicles; i++) {
+      this.processLock(i, policy);
+    }
+  }
+
+  // 개별 차량 락 처리
+  processLock(vehicleId, policy): void {
+    // TODO: 구현 예정
+  }
+}
+```
+
+## processLock 로직 (TODO)
+
+```
+processLock(vehicleId, policy):
+  1. vehicleDataArray에서 현재 상태 읽기
+     - currentEdge, ratio, nextEdge 등
+
+  2. 다음 edge의 to_node가 merge인지 확인
+     - mergeNodes.has(nextEdge.to_node)
+
+  3. merge면 락 처리
+     - locks에 다른 차량 있으면 → queue에 추가, 멈춤 처리
+     - locks에 없거나 본인이면 → 통과 허용
+
+  4. 멈춤 처리 방법
+     - velocity = 0
+     - 또는 StopReason에 LOCKED 플래그 설정
+
+  5. 통과 후 release
+     - edge 전환 완료 시 locks에서 제거
+     - queue 맨 앞 차량에게 grant
+```
+
+## 파일 위치
+
+| 파일 | 역할 |
+|------|------|
+| `src/common/vehicle/logic/LockMgr.ts` | 락 시스템 메인 |
+| `src/shmSimulator/core/FabContext.ts` | step()에서 updateAll 호출 |
+| `.ai-agents/lock_agents.md` | 이 문서 |
