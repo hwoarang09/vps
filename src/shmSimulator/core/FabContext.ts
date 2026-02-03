@@ -206,6 +206,7 @@ export class FabContext {
 
     this.dispatchMgr.setVehicleDataArray(this.vehicleDataArray);
     this.dispatchMgr.setEdgeData(this.edges, this.edgeNameToIndex);
+    this.dispatchMgr.setLockMgr(this.lockMgr);
 
     this.buildVehicleLoopMap();
 

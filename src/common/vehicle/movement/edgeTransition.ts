@@ -284,8 +284,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
     data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;  // Clear LOCKED bit if set
 
-    // Next Edge 배열을 한 칸씩 앞으로 당기고 마지막 슬롯 채우기
-    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray);
+    // Next Edge 배열을 한 칸씩 앞으로 당기고 마지막 슬롯 채우기 (merge 체크 포함)
+    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray, lockMgr);
 
     // Set TARGET_RATIO for the new edge
     const newTargetRatio = nextTargetRatio ?? (preserveTargetRatio ? undefined : 1);
@@ -374,38 +374,17 @@ function shiftPathBuffer(
   return { beforeLen, afterLen, beforeEdges, afterEdges };
 }
 
-/** 새 NEXT_EDGE_4 값 결정 */
-function getNewLastEdge(
-  pathBuffer: Int32Array | null | undefined,
-  vehicleIndex: number,
-  afterPathLen: number,
-  edgeArray: Edge[]
-): number {
-  if (!pathBuffer || afterPathLen <= 0) return 0; // 0 is invalid sentinel
-
-  const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-  const pathOffset = NEXT_EDGE_COUNT - 1; // = 4
-
-  if (pathOffset >= afterPathLen) return 0; // 0 is invalid sentinel
-
-  const candidateEdgeIdx = pathBuffer[pathPtr + PATH_EDGES_START + pathOffset];
-  // NOTE: candidateEdgeIdx is 1-based. Valid range is 1 to edgeArray.length.
-  if (candidateEdgeIdx >= 1 && candidateEdgeIdx <= edgeArray.length) {
-    return candidateEdgeIdx;
-  }
-
-  return 0; // 0 is invalid sentinel
-}
-
 /**
- * pathBuffer와 nextEdges를 동시에 shift하고, NEXT_EDGE_4를 pathBuffer에서 채움
+ * pathBuffer와 nextEdges를 동시에 shift하고, pathBuffer에서 다시 채움
+ * Merge 체크: lock 없으면 merge 직전까지만 채움
  */
 function shiftAndRefillNextEdges(
   data: Float32Array,
   ptr: number,
   vehicleIndex: number,
   pathBufferFromAutoMgr: Int32Array | null | undefined,
-  edgeArray: Edge[]
+  edgeArray: Edge[],
+  lockMgr?: IEdgeTransitionLockMgr
 ): void {
   const beforeNextEdges = [
     data[ptr + MovementData.NEXT_EDGE_0],
@@ -421,15 +400,55 @@ function shiftAndRefillNextEdges(
     shiftResult = shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
   }
 
-  // 2. nextEdges shift
-  data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
-  data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
-  data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
-  data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
+  // 2. pathBuffer에서 NEXT_EDGE_0~4 다시 채우기 (merge 체크 포함)
+  const nextEdgeOffsets = [
+    MovementData.NEXT_EDGE_0,
+    MovementData.NEXT_EDGE_1,
+    MovementData.NEXT_EDGE_2,
+    MovementData.NEXT_EDGE_3,
+    MovementData.NEXT_EDGE_4,
+  ];
 
-  // 3. NEXT_EDGE_4 채우기
-  const newLastEdge = getNewLastEdge(pathBufferFromAutoMgr, vehicleIndex, shiftResult.afterLen, edgeArray);
-  data[ptr + MovementData.NEXT_EDGE_4] = newLastEdge;
+  let stopReason: string | null = null;
+
+  if (pathBufferFromAutoMgr && shiftResult.afterLen > 0) {
+    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+
+    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+      if (i >= shiftResult.afterLen) {
+        data[ptr + nextEdgeOffsets[i]] = 0;
+        continue;
+      }
+
+      const edgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
+      if (edgeIdx < 1) {
+        data[ptr + nextEdgeOffsets[i]] = 0;
+        continue;
+      }
+
+      // Merge 체크
+      const edge = edgeArray[edgeIdx - 1];
+      if (edge && lockMgr?.isMergeNode(edge.to_node)) {
+        const hasLock = lockMgr.checkGrant(edge.to_node, vehicleIndex);
+        if (!hasLock) {
+          // merge edge까지 채우고 멈춤
+          data[ptr + nextEdgeOffsets[i]] = edgeIdx;
+          stopReason = `merge@${edge.to_node}(no lock)`;
+          for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
+            data[ptr + nextEdgeOffsets[j]] = 0;
+          }
+          break;
+        }
+      }
+
+      data[ptr + nextEdgeOffsets[i]] = edgeIdx;
+    }
+  } else {
+    // pathBuffer가 비었으면 0으로 채움
+    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+      data[ptr + nextEdgeOffsets[i]] = 0;
+    }
+  }
 
   // 로그
   const afterNextEdges = [
@@ -439,10 +458,12 @@ function shiftAndRefillNextEdges(
     data[ptr + MovementData.NEXT_EDGE_3],
     data[ptr + MovementData.NEXT_EDGE_4],
   ];
-  devLog.veh(vehicleIndex).debug(
-    `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
-    `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
-  );
+  const logMsg = stopReason
+    ? `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
+      `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}] STOP:${stopReason}`
+    : `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
+      `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`;
+  devLog.veh(vehicleIndex).debug(logMsg);
 
   // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로 (0 is invalid sentinel)
   if (data[ptr + MovementData.NEXT_EDGE_0] === 0) {

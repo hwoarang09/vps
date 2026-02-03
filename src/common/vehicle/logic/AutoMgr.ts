@@ -212,7 +212,7 @@ export class AutoMgr {
       data[ptr + LogicData.PATH_REMAINING] = pathCommand.length;
     }
 
-    transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex);
+    transferMgr.assignCommand(vehId, command, vehicleDataArray, edgeArray, edgeNameToIndex, lockMgr);
   }
 
   /**

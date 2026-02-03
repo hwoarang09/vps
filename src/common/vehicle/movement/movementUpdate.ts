@@ -93,7 +93,8 @@ export function updateMovement(ctx: MovementUpdateContext) {
     edgeArray,
     vehicleLoopMap,
     edgeNameToIndex,
-    store.transferMode
+    store.transferMode,
+    lockMgr
   );
 
   // Lock grant 결정 (BATCH 전략에서 사용)

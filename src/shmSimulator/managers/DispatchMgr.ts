@@ -1,4 +1,4 @@
-import { TransferMgr, VehicleCommand, IVehicleDataArray } from "@/common/vehicle/logic/TransferMgr";
+import { TransferMgr, VehicleCommand, IVehicleDataArray, ILockMgrForNextEdge } from "@/common/vehicle/logic/TransferMgr";
 import type { Edge } from "@/types/edge";
 
 export class DispatchMgr {
@@ -6,6 +6,7 @@ export class DispatchMgr {
   private vehicleDataArray?: IVehicleDataArray;
   private edgeArray?: Edge[];
   private edgeNameToIndex?: Map<string, number>;
+  private lockMgr?: ILockMgrForNextEdge;
 
   constructor(transferMgr: TransferMgr) {
     this.transferMgr = transferMgr;
@@ -24,6 +25,13 @@ export class DispatchMgr {
   public setEdgeData(edgeArray: Edge[], edgeNameToIndex: Map<string, number>): void {
     this.edgeArray = edgeArray;
     this.edgeNameToIndex = edgeNameToIndex;
+  }
+
+  /**
+   * Set lock manager for merge point handling
+   */
+  public setLockMgr(lockMgr: ILockMgrForNextEdge): void {
+    this.lockMgr = lockMgr;
   }
 
   /**
@@ -68,7 +76,8 @@ export class DispatchMgr {
       command,
       this.vehicleDataArray,
       this.edgeArray,
-      this.edgeNameToIndex
+      this.edgeNameToIndex,
+      this.lockMgr
     );
   }
 
@@ -79,5 +88,6 @@ export class DispatchMgr {
     this.vehicleDataArray = undefined;
     this.edgeArray = undefined;
     this.edgeNameToIndex = undefined;
+    this.lockMgr = undefined;
   }
 }
