@@ -9,6 +9,12 @@ import {
   TransferMode,
   MovingStatus,
   NEXT_EDGE_COUNT,
+  CheckpointFlags,
+  CHECKPOINT_SECTION_SIZE,
+  CHECKPOINT_FIELDS,
+  MAX_CHECKPOINTS_PER_VEHICLE,
+  LogicData,
+  type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
 import { devLog } from "@/logger/DevLogger";
 
@@ -94,6 +100,8 @@ export class TransferMgr {
   // Path buffer from autoMgr (SharedArrayBuffer - Int32Array)
   // Layout: [len, edge0, edge1, ..., edge98] per vehicle (실제 shift 방식)
   private pathBufferFromAutoMgr: Int32Array | null = null;
+  // Checkpoint buffer (SharedArrayBuffer - Float32Array)
+  private checkpointBuffer: Float32Array | null = null;
   // 곡선 감속 상태 (단순화)
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
 
@@ -109,6 +117,20 @@ export class TransferMgr {
    */
   getPathBufferFromAutoMgr(): Int32Array | null {
     return this.pathBufferFromAutoMgr;
+  }
+
+  /**
+   * Set checkpoint buffer reference (called from FabContext)
+   */
+  setCheckpointBuffer(checkpointBuffer: Float32Array): void {
+    this.checkpointBuffer = checkpointBuffer;
+  }
+
+  /**
+   * Get checkpoint buffer reference
+   */
+  getCheckpointBuffer(): Float32Array | null {
+    return this.checkpointBuffer;
   }
 
   enqueueVehicleTransfer(vehicleIndex: number) {
@@ -616,11 +638,116 @@ export class TransferMgr {
 
       // fillNextEdgesFromPathBuffer 재사용 (merge 체크 로직 포함)
       this.fillNextEdgesFromPathBuffer(data, ptr, vehId, nextEdgeOffsets, edgeArray, lockMgr);
+
+      // 🆕 Checkpoint 생성 (경로가 설정되는 시점에 한 번만)
+      if (this.checkpointBuffer && lockMgr) {
+        this.buildCheckpoints(vehId, edgeIndices, edgeArray, lockMgr, data, ptr);
+      }
     } else {
       devLog.veh(vehId).warn(`[processPathCommand] NO pathBuffer!`);
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
+  }
+
+  /**
+   * Checkpoint 생성 (경로 설정 시 한 번만 호출)
+   */
+  private buildCheckpoints(
+    vehId: number,
+    edgeIndices: number[],
+    edgeArray: Edge[],
+    lockMgr: ILockMgrForNextEdge,
+    data: Float32Array,
+    ptr: number
+  ): void {
+    if (!this.checkpointBuffer) return;
+
+    const checkpoints: Checkpoint[] = [];
+
+    // 경로를 순회하며 checkpoint 생성
+    for (let i = 0; i < edgeIndices.length; i++) {
+      const edgeIdx = edgeIndices[i];
+      if (edgeIdx < 1) continue;
+
+      const edge = edgeArray[edgeIdx - 1];
+      if (!edge) continue;
+
+      // Merge 체크
+      if (lockMgr.isMergeNode(edge.to_node)) {
+        // Lock request checkpoint (merge 전 충분한 거리)
+        const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
+        const requestRatio = isCurve ? 0.3 : 0.6;
+        checkpoints.push({
+          edge: edgeIdx,
+          ratio: requestRatio,
+          flags: CheckpointFlags.LOCK_REQUEST,
+        });
+
+        // Lock wait checkpoint (merge 직전)
+        const waitRatio = isCurve ? 0.7 : 0.85;
+        checkpoints.push({
+          edge: edgeIdx,
+          ratio: waitRatio,
+          flags: CheckpointFlags.LOCK_WAIT,
+        });
+
+        // Lock release checkpoint (다음 edge)
+        if (i + 1 < edgeIndices.length) {
+          const nextEdgeIdx = edgeIndices[i + 1];
+          checkpoints.push({
+            edge: nextEdgeIdx,
+            ratio: 0.2,
+            flags: CheckpointFlags.LOCK_RELEASE,
+          });
+        }
+      }
+
+      // 곡선 체크
+      if (edge.vos_rail_type !== EdgeType.LINEAR) {
+        checkpoints.push({
+          edge: edgeIdx,
+          ratio: 0.5,
+          flags: CheckpointFlags.MOVE_PREPARE,
+        });
+      }
+    }
+
+    // Checkpoint 배열에 저장
+    this.saveCheckpoints(vehId, checkpoints, data, ptr);
+  }
+
+  /**
+   * Checkpoint를 배열에 저장
+   */
+  private saveCheckpoints(
+    vehId: number,
+    checkpoints: Checkpoint[],
+    data: Float32Array,
+    ptr: number
+  ): void {
+    if (!this.checkpointBuffer) return;
+
+    const vehicleOffset = 1 + vehId * CHECKPOINT_SECTION_SIZE;
+    const count = Math.min(checkpoints.length, MAX_CHECKPOINTS_PER_VEHICLE);
+
+    // Count 저장
+    this.checkpointBuffer[vehicleOffset] = count;
+
+    // Checkpoint 저장
+    for (let i = 0; i < count; i++) {
+      const cpOffset = vehicleOffset + 1 + i * CHECKPOINT_FIELDS;
+      this.checkpointBuffer[cpOffset + 0] = checkpoints[i].edge;
+      this.checkpointBuffer[cpOffset + 1] = checkpoints[i].ratio;
+      this.checkpointBuffer[cpOffset + 2] = checkpoints[i].flags;
+    }
+
+    // CHECKPOINT_HEAD 초기화
+    data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
+
+    devLog.veh(vehId).debug(
+      `[checkpoint] Created ${count} checkpoints for path`
+    );
   }
 
   private processSameEdgeCommand(

@@ -19,6 +19,7 @@ import {
   SENSOR_ATTR_SIZE,
   SensorSection,
 } from "../MemoryLayoutManager";
+import { MAX_CHECKPOINTS_PER_VEHICLE } from "@/common/vehicle/initialize/constants";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, TransferMode, VehicleInitConfig, FabMemoryAssignment, SharedMapRef, FabRenderOffset, UnusualMoveData } from "../types";
@@ -29,6 +30,7 @@ export interface FabInitParams {
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
   pathBuffer: SharedArrayBuffer;
+  checkpointBuffer: SharedArrayBuffer;
   edges?: Edge[];
   nodes?: Node[];
   stationData?: StationRawData[];
@@ -51,6 +53,7 @@ export class FabContext {
   private readonly vehicleDataArray: VehicleDataArrayBase;
   private readonly sensorPointArray: SensorPointArrayBase;
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
+  private checkpointArray: Float32Array | null = null;
 
   // === Render Data (별도 버퍼, 연속 레이아웃) ===
   private vehicleRenderData: Float32Array | null = null;
@@ -123,7 +126,7 @@ export class FabContext {
 
     // Worker 버퍼 설정 (계산용)
     if (params.memoryAssignment) {
-      const { vehicleRegion, sensorRegion, pathRegion } = params.memoryAssignment;
+      const { vehicleRegion, sensorRegion, pathRegion, checkpointRegion } = params.memoryAssignment;
       this.store.setSharedBufferWithRegion(params.sharedBuffer, vehicleRegion);
       this.sensorPointArray.setBufferWithRegion(params.sensorPointBuffer, sensorRegion);
 
@@ -135,6 +138,17 @@ export class FabContext {
       );
       this.transferMgr.setPathBufferFromAutoMgr(pathBufferView);
 
+      // Checkpoint buffer 설정
+      this.checkpointArray = new Float32Array(
+        params.checkpointBuffer,
+        checkpointRegion.offset,
+        checkpointRegion.size / Float32Array.BYTES_PER_ELEMENT
+      );
+      this.transferMgr.setCheckpointBuffer(this.checkpointArray);
+
+      // Checkpoint 배열 초기화 (메타 정보)
+      this.checkpointArray[0] = MAX_CHECKPOINTS_PER_VEHICLE;
+
     } else {
       this.store.setSharedBuffer(params.sharedBuffer);
       this.sensorPointArray.setBuffer(params.sensorPointBuffer);
@@ -142,6 +156,13 @@ export class FabContext {
       // Path buffer 설정 (전체 버퍼)
       const pathBufferView = new Int32Array(params.pathBuffer);
       this.transferMgr.setPathBufferFromAutoMgr(pathBufferView);
+
+      // Checkpoint buffer 설정 (전체 버퍼)
+      this.checkpointArray = new Float32Array(params.checkpointBuffer);
+      this.transferMgr.setCheckpointBuffer(this.checkpointArray);
+
+      // Checkpoint 배열 초기화 (메타 정보)
+      this.checkpointArray[0] = MAX_CHECKPOINTS_PER_VEHICLE;
 
     }
 
@@ -195,8 +216,13 @@ export class FabContext {
     this.dispatchMgr.setEdgeData(this.edges, this.edgeNameToIndex);
     this.dispatchMgr.setLockMgr(this.lockMgr);
 
-    // LockMgr 초기화 (vehicleDataArray, nodes, edges 참조 저장)
-    this.lockMgr.init(this.vehicleDataArray.getData(), this.nodes, this.edges);
+    // LockMgr 초기화 (vehicleDataArray, nodes, edges, checkpoint 배열 참조 저장)
+    this.lockMgr.init(
+      this.vehicleDataArray.getData(),
+      this.nodes,
+      this.edges,
+      this.checkpointArray
+    );
 
     this.buildVehicleLoopMap();
 
@@ -340,7 +366,7 @@ export class FabContext {
     checkCollisions(collisionCtx);
 
     // 2. Lock 처리 (합류점에서 멈출지 결정)
-    this.lockMgr.updateAll(this.actualNumVehicles, 'FIFO');
+    this.lockMgr.updateAll(this.actualNumVehicles, { default: 'FIFO' });
 
     // 3. Movement Update (1,2에서 멈추지 않은 차량만 이동)
     const tracker = this.edgeTransitTracker;

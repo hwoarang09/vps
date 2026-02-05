@@ -2,7 +2,7 @@
 // Shared constants for vehicle data array structure
 
 /**
- * Vehicle Data Array Memory Layout (22 fields × 4 bytes = 88 bytes per vehicle)
+ * Vehicle Data Array Memory Layout (23 fields × 4 bytes = 92 bytes per vehicle)
  *
  * | Field              | Type    | Offset | Section    | Description                           |
  * |--------------------|---------|--------|------------|---------------------------------------|
@@ -28,6 +28,7 @@
  * | JOB_STATE          | Float32 | 19     | Logic      | JobState enum (0=INITIALIZING, 1=...) |
  * | DESTINATION_EDGE   | Float32 | 20     | Logic      | Target edge ID for routing            |
  * | PATH_REMAINING     | Float32 | 21     | Logic      | Remaining path length (meters)        |
+ * | CHECKPOINT_HEAD    | Float32 | 22     | Logic      | Current checkpoint index              |
  */
 
 // ============================================================================
@@ -80,7 +81,53 @@ export const StopReason = {
   NOT_INITIALIZED: 1 << 8,
   INDIVIDUAL_CONTROL: 1 << 9,
   SENSORED: 1 << 10,
+  IDLE: 1 << 11,
 } as const;
+
+// Checkpoint Flags Bitmask (for unified checkpoint system)
+export const CheckpointFlags = {
+  NONE: 0,
+  LOCK_REQUEST: 1 << 0,  // 0x01 - Request lock at merge point
+  LOCK_WAIT: 1 << 1,     // 0x02 - Wait for lock grant
+  LOCK_RELEASE: 1 << 2,  // 0x04 - Release lock after passing merge
+  MOVE_PREPARE: 1 << 3,  // 0x08 - Prepare next edge (curves)
+  MOVE_SLOW: 1 << 4,     // 0x10 - Deceleration zone
+} as const;
+
+// Checkpoint structure (stored separately from VehicleDataArray)
+export interface Checkpoint {
+  edge: number;   // Edge ID (1-based)
+  ratio: number;  // Progress on edge (0.0 ~ 1.0)
+  flags: number;  // CheckpointFlags bitmask
+}
+
+// ============================================================================
+// Checkpoint Array Constants
+// ============================================================================
+
+/**
+ * Checkpoint 배열 상수
+ * - MAX_CHECKPOINTS_PER_VEHICLE: Vehicle당 최대 checkpoint 수
+ * - CHECKPOINT_FIELDS: checkpoint당 필드 수 (edge, ratio, flags)
+ * - CHECKPOINT_SECTION_SIZE: vehicle 1대가 차지하는 크기 (count + checkpoints)
+ */
+export const MAX_CHECKPOINTS_PER_VEHICLE = 50;
+export const CHECKPOINT_FIELDS = 3;  // edge, ratio, flags
+export const CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS; // 151
+
+/**
+ * Checkpoint 배열 레이아웃 (1-based, Float32Array)
+ *
+ * [0]: MAX_CHECKPOINTS_PER_VEHICLE (meta)
+ *
+ * [1 + vehicleId * CHECKPOINT_SECTION_SIZE]: Vehicle N section
+ *   - [offset + 0]: count (실제 checkpoint 개수)
+ *   - [offset + 1]: checkpoint 0 - edge
+ *   - [offset + 2]: checkpoint 0 - ratio
+ *   - [offset + 3]: checkpoint 0 - flags
+ *   - [offset + 4]: checkpoint 1 - edge
+ *   - ...
+ */
 
 // Next Edge State for TransferMgr
 export const NextEdgeState = {
@@ -153,6 +200,7 @@ export const LogicData = {
   JOB_STATE: _lPtr++,
   DESTINATION_EDGE: _lPtr++,
   PATH_REMAINING: _lPtr++,
+  CHECKPOINT_HEAD: _lPtr++,  // Current checkpoint index in checkpoint array
 } as const;
 
 export const VEHICLE_DATA_SIZE = _lPtr;

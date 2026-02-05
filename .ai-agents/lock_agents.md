@@ -1,88 +1,784 @@
 # Lock System - AI Context
 
-## 상태: 재설계 중
+## 상태: Checkpoint 시스템으로 전환 (2026-02-06 최종 설계)
 
-## FabContext.step() 순서
+---
 
+## 1. 현재 분석 완료
+
+### step() 실제 순서
 ```
-step(clampedDelta, simulationTime) {
-  // 1. Collision Check (충돌 감지)
-  //    → 센서 충돌로 멈출지 결정
+FabContext.step():
+  1. Collision Check
+  2. Lock (lockMgr.updateAll)  ← 현재 stub
+  3. Movement
+     ├─ transferMgr.processTransferQueue()  ← NEXT_EDGE 채움
+     └─ for each vehicle:
+          └─ edge 전환 시 → shiftAndRefillNextEdges()  ← NEXT_EDGE shift
+  4. AutoRouting
+     └─ transferMgr.assignCommand()  ← pathBuffer + NEXT_EDGE 채움
+  5. Render
+```
 
-  // 2. Lock 관리
-  //    → 합류점에서 멈출지 결정
-  //    → 멈출 차량: velocity=0 또는 플래그 설정
+### NEXT_EDGE 수정하는 곳 (현재 3군데)
+| 파일 | 함수 | 언제 |
+|------|------|------|
+| `TransferMgr.ts:285` | `fillNextEdgesFromPathBuffer()` | 경로 설정 시 |
+| `TransferMgr.ts:326` | `fillNextEdgesFromLoopMap()` | LOOP 모드 |
+| `edgeTransition.ts:305` | `shiftAndRefillNextEdges()` | edge 전환 성공 시 |
 
-  // 3. Movement Update (움직임)
-  //    → 1,2에서 멈추지 않은 차량만 이동
-  //    → edge 전환 발생 가능
+### VehicleDataArray 관련 필드
+| 필드 | 오프셋 | 용도 |
+|------|--------|------|
+| `CURRENT_EDGE` | 9 | 현재 edge index (1-based) |
+| `NEXT_EDGE_0~4` | 10~14 | 다음 edge들 |
+| `NEXT_EDGE_STATE` | 15 | EMPTY/PENDING/READY |
+| `EDGE_RATIO` | 7 | edge 진행률 (0.0~1.0) |
+| `STOP_REASON` | 18 | 정지 사유 bitmask (LOCKED = 1<<3) |
 
-  // 4. Auto Routing (경로 설정)
-  //    → edge 전환 후 새 경로 필요한 차량 처리
-  //    → 다익스트라로 pathBuffer 갱신
+---
 
-  // 5. Write to Render Buffer (렌더링 데이터)
+## 2. 새 설계 방향 (합의됨)
+
+### 핵심 원칙
+**NEXT_EDGE를 수정하는 놈은 LockMgr 한 놈만!**
+
+### 역할 분리
+| 컴포넌트 | 현재 | 변경 후 |
+|----------|------|---------|
+| AutoMgr | pathBuffer + NEXT_EDGE | **pathBuffer만** |
+| TransferMgr | NEXT_EDGE 채움/shift | **pathBuffer shift만** (또는 제거) |
+| LockMgr | stub | **pathBuffer 읽고 → lock 체크 → NEXT_EDGE 설정** |
+
+### 새 step() 흐름
+```
+1. Collision
+2. Lock (lockMgr.updateAll)
+   - pathBuffer에서 경로 읽기
+   - merge node 찾기
+   - lock 요청/체크
+   - lock 없으면: merge 직전까지만 NEXT_EDGE 채움
+   - lock 있으면: merge 통과하는 NEXT_EDGE 채움
+3. Movement
+   - NEXT_EDGE 따라 이동 (읽기만)
+   - edge 전환 시 → lockMgr.onEdgeTransition() 호출
+4. AutoRouting
+   - pathBuffer만 갱신 (NEXT_EDGE 안 건드림)
+```
+
+### 장점
+- lock 없이 merge에 진입하는 버그가 구조적으로 불가능
+- NEXT_EDGE 수정 책임이 한 곳에 집중
+
+---
+
+## 3. 변경 필요한 파일
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `LockMgr.ts` | processLock() 구현 - pathBuffer 읽고 NEXT_EDGE 설정 |
+| `TransferMgr.ts` | fillNextEdgesFromPathBuffer() 제거 또는 비활성화 |
+| `edgeTransition.ts` | shiftAndRefillNextEdges()에서 NEXT_EDGE 채우는 부분 제거 |
+| `AutoMgr.ts` | assignCommand() 호출 시 NEXT_EDGE 채우는 부분 제거 |
+
+---
+
+## 4. Lock과 Movement 통신 메커니즘
+
+### 핵심 필드
+| 필드 | 오프셋 | 역할 | 누가 씀/읽음 |
+|------|--------|------|-------------|
+| `MOVING_STATUS` | 8 | 상위 상태 (PAUSED면 Movement 스킵) | Movement가 체크 |
+| `VELOCITY` | 6 | **실제 속도** (m/s) | Movement가 읽고 계산 |
+| `STOP_REASON` | 18 | 정지 이유 bitmask | Lock/Collision이 씀, 디버깅용 |
+
+### STOP_REASON 비트마스크
+```typescript
+export const StopReason = {
+  NONE: 0,
+  OBS_LIDAR: 1,
+  OBS_CAMERA: 1 << 1,
+  E_STOP: 1 << 2,
+  LOCKED: 1 << 3,              // Lock 대기
+  DESTINATION_REACHED: 1 << 4,
+  PATH_BLOCKED: 1 << 5,
+  LOAD_ON: 1 << 6,
+  LOAD_OFF: 1 << 7,
+  NOT_INITIALIZED: 1 << 8,
+  SENSORED: 1 << 9,            // 센서 충돌
+  IDLE: 1 << 10,               // 명령 대기
+} as const;
+```
+
+### Lock이 Movement를 멈추는 방법
+**Lock 요청 → 대기지점까지 이동 → TARGET_RATIO 도달 → 멈춤**
+
+1. **processLock()** (step 2):
+   - Lock grant 못 받으면:
+     - TARGET_RATIO = waitPoint (예: 0.7)
+     - NEXT_EDGE를 waitPoint까지만 채움
+
+2. **Movement** (step 3):
+   - TARGET_RATIO까지 정상 이동
+   - TARGET_RATIO 도달하면:
+     - MOVING_STATUS = STOPPED
+     - velocity = 0
+     - STOP_REASON |= LOCKED
+
+3. **다음 프레임**:
+   - shouldSkipUpdate() → STOPPED → Movement 스킵
+   - processLock()에서 grant 재확인
+     - grant 받으면: MOVING_STATUS = MOVING으로 변경
+
+---
+
+## 5. Barcode 시스템 (절대 좌표)
+
+### Barcode의 의미
+- **절대 좌표**: 맵 전체에서의 누적 거리
+- **단위**: mm (millimeter)
+- **정의**: node.map 파일에 각 node마다 정의됨
+
+### node.map 예시
+```
+node_name, barcode, editor_x, editor_y, editor_z
+NODE0001,  470,     2.325,    0.47,     3.8      ← 470mm = 0.47m
+NODE0002,  53690,   2.325,    53.691,   3.8      ← 53690mm = 53.69m
+NODE0003,  56170,   2.325,    56.171,   3.8      ← 56170mm = 56.17m
+```
+
+### Barcode 계산
+```
+NODE0001: 470mm (시작점)
+NODE0002: 470 + 53221 (EDGE0001 길이) = 53691mm ✓
+NODE0003: 53690 + 2480 (EDGE0002 길이) = 56170mm ✓
+```
+
+### 중요: Barcode는 단조증가 아님!
+**합류 시 barcode 감소 가능:**
+```
+메인 루프:
+NODE_A (barcode: 1000) → NODE_B (barcode: 5000) → NODE_C (barcode: 10000)
+                            ↑
+                            합류
+사이드 루프:                  │
+NODE_X (barcode: 50000) → NODE_Y (barcode: 52000) → NODE_B (barcode: 5000)
+                                                              ↑
+                                                    52000→5000 급감!
+```
+
+**따라서 Edge 기준 체크가 필수!**
+
+---
+
+## 6. 성능 최적화: Checkpoint 시스템
+
+### 문제점
+매 프레임 processLock()에서 복잡한 계산 → 10만대 × 60fps = 600만번!
+
+### 해결책: Barcode + Checkpoint
+```typescript
+processLock(vehicleId) {
+  const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+  const currentBarcode = data[ptr + LogicData.CURRENT_BARCODE];
+  const matchEdge = data[ptr + LogicData.MATCH_EDGE];
+  const matchBarcode = data[ptr + LogicData.MATCH_BARCODE];
+
+  // 🚀 초고속 체크 (99%의 경우)
+  if (currentEdge !== matchEdge) return;         // 다른 edge
+  if (currentBarcode < matchBarcode) return;     // 아직 미도달
+
+  // ✅ 체크포인트 도달! (1%의 경우만 실행)
+  handleCheckpoint(vehicleId);
 }
 ```
 
-## LockMgr 구조
+### 새 VehicleDataArray 필드
+```typescript
+export const LogicData = {
+  ...
+  CURRENT_BARCODE: _lPtr++,    // 현재 절대 좌표 (mm)
+  MATCH_EDGE: _lPtr++,         // 다음 체크할 edge (1-based)
+  MATCH_BARCODE: _lPtr++,      // 다음 체크할 절대 좌표 (mm)
+  MATCH_TYPE: _lPtr++,         // 체크포인트 종류
+}
+```
+
+### Checkpoint 타입
+```typescript
+export const CheckpointType = {
+  NONE: 0,
+  LOCK_REQUEST: 1,     // Lock 요청 지점 (merge 20m 전)
+  LOCK_WAIT: 2,        // Lock 대기 지점 (merge 7m 전)
+  MERGE_ENTRY: 3,      // Merge 진입 지점
+  DESTINATION: 4,      // 최종 목적지
+} as const;
+```
+
+### 직선 vs 곡선
+**직선 (LINEAR):**
+- Barcode 기준 체크
+- 길이가 김 (10m, 20m, 60m...)
+- 특정 지점에서 lock 요청/대기
+
+**곡선 (CURVE):**
+- Ratio 기준 체크 (barcode 안 씀)
+- 길이가 짧음 (1~3m)
+- ratio >= 0.5 (중간 지점)에서 다음 edge 요청
 
 ```typescript
-class LockMgr {
-  // 참조 (init에서 저장)
-  private vehicleDataArray: Float32Array;
-  private nodes: Node[];
-  private edges: Edge[];
-
-  // 락 상태
-  private mergeNodes: Set<string>;           // merge node 목록
-  private locks: Map<string, number>;        // nodeName → vehId (현재 점유)
-  private queues: Map<string, number[]>;     // nodeName → vehId[] (대기 큐)
-
-  // 초기화
-  init(vehicleDataArray, nodes, edges): void
-
-  // 매 프레임 호출 (step 2단계)
-  updateAll(numVehicles, policy): void {
-    for (let i = 0; i < numVehicles; i++) {
-      this.processLock(i, policy);
-    }
+if (edge.vos_rail_type === 'LINEAR') {
+  // Barcode 체크
+  if (currentEdge == matchEdge && currentBarcode >= matchBarcode) {
+    handleCheckpoint();
   }
-
-  // 개별 차량 락 처리
-  processLock(vehicleId, policy): void {
-    // TODO: 구현 예정
+} else {
+  // 곡선: Ratio 체크
+  if (edgeRatio >= 0.5) {
+    requestNextEdgeLock();
   }
 }
 ```
 
-## processLock 로직 (TODO)
+---
 
-```
-processLock(vehicleId, policy):
-  1. vehicleDataArray에서 현재 상태 읽기
-     - currentEdge, ratio, nextEdge 등
+## 7. 멈춤 상태 상세 설계
 
-  2. 다음 edge의 to_node가 merge인지 확인
-     - mergeNodes.has(nextEdge.to_node)
+### Movement가 멈추는 케이스
 
-  3. merge면 락 처리
-     - locks에 다른 차량 있으면 → queue에 추가, 멈춤 처리
-     - locks에 없거나 본인이면 → 통과 허용
-
-  4. 멈춤 처리 방법
-     - velocity = 0
-     - 또는 StopReason에 LOCKED 플래그 설정
-
-  5. 통과 후 release
-     - edge 전환 완료 시 locks에서 제거
-     - queue 맨 앞 차량에게 grant
+#### 1️⃣ MOVING_STATUS 체크 (shouldSkipUpdate)
+```typescript
+if (status === MovingStatus.PAUSED) {
+  return true;  // Movement 스킵
+}
+if (status === MovingStatus.STOPPED) {
+  velocity = 0;
+  return true;  // Movement 스킵
+}
 ```
 
-## 파일 위치
+#### 2️⃣ 센서 충돌 (processEmergencyStop)
+```typescript
+// hitZone === 2 (긴급 정지)
+velocity = 0;
+STOP_REASON |= SENSORED;
+// MOVING_STATUS는 MOVING 유지!
+```
+**의미**: "움직이고 싶지만 물리적으로 막힘" → 장애물 없어지면 즉시 출발
+
+#### 3️⃣ TARGET_RATIO 도달 (processSameEdgeLogic)
+```typescript
+if (ratio >= targetRatio) {
+  MOVING_STATUS = STOPPED;
+  velocity = 0;
+}
+```
+
+### 멈춤 상태 비교
+
+| 상황 | MOVING_STATUS | VELOCITY | STOP_REASON | 의미 |
+|------|---------------|----------|-------------|------|
+| **시작 전** | STOPPED | 0 | IDLE | 명령 대기 |
+| **일반 정지** | STOPPED | 0 | IDLE | 도착, 명령 대기 |
+| **Lock 대기** | STOPPED | 0 | LOCKED | Wait point 도착, grant 대기 |
+| **센서 충돌** ⭐ | MOVING | 0 | SENSORED | 장애물 감지, 일시 정지 |
+
+### Lock 대기 조건
+```typescript
+// TARGET_RATIO 도달 + 특수 조건
+if (reached && isLockRequested && !isGranted && atWaitPoint) {
+  MOVING_STATUS = STOPPED;
+  STOP_REASON |= LOCKED;
+} else {
+  MOVING_STATUS = STOPPED;
+  STOP_REASON = IDLE;
+}
+```
+
+---
+
+## 8. processLock() 상세 설계
+
+### 전체 구조
+```typescript
+processLock(vehicleId, policy) {
+  const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+  const edge = edges[currentEdge - 1];
+
+  if (edge.vos_rail_type === 'LINEAR') {
+    // 직선: Barcode 기준 체크
+    processLinearEdgeLock(vehicleId);
+  } else {
+    // 곡선: Ratio 기준 체크
+    processCurveEdgeLock(vehicleId);
+  }
+}
+```
+
+### 직선 Edge Lock 처리
+```typescript
+processLinearEdgeLock(vehicleId) {
+  const currentBarcode = data[ptr + LogicData.CURRENT_BARCODE];
+  const matchEdge = data[ptr + LogicData.MATCH_EDGE];
+  const matchBarcode = data[ptr + LogicData.MATCH_BARCODE];
+  const matchType = data[ptr + LogicData.MATCH_TYPE];
+
+  // 🚀 초고속 체크
+  if (currentEdge !== matchEdge) return;
+  if (currentBarcode < matchBarcode) return;
+
+  // ✅ 체크포인트 도달!
+  switch (matchType) {
+    case CheckpointType.LOCK_REQUEST:
+      handleLockRequest(vehicleId);
+      break;
+    case CheckpointType.LOCK_WAIT:
+      handleLockWait(vehicleId);
+      break;
+    case CheckpointType.MERGE_ENTRY:
+      handleMergeEntry(vehicleId);
+      break;
+  }
+}
+```
+
+### Lock 요청 지점
+```typescript
+handleLockRequest(vehicleId) {
+  requestLock(nodeName, vehicleId);
+
+  if (checkGrant(nodeName, vehicleId)) {
+    // Lock 받음 → merge 통과
+    fillNextEdgesThroughMerge(vehicleId);
+    setNextCheckpoint(CheckpointType.MERGE_ENTRY, ...);
+  } else {
+    // Lock 못 받음 → wait point까지만
+    const waitBarcode = calculateWaitPointBarcode();
+    fillNextEdgesUntilWaitPoint(vehicleId, waitBarcode);
+    data[ptr + MovementData.TARGET_RATIO] = waitRatio;
+    setNextCheckpoint(CheckpointType.LOCK_WAIT, waitBarcode);
+  }
+}
+```
+
+### Lock 대기 지점
+```typescript
+handleLockWait(vehicleId) {
+  const velocity = data[ptr + MovementData.VELOCITY];
+
+  // Wait point에서 실제로 멈췄는지 확인
+  if (velocity == 0) {
+    data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+  }
+
+  // 매 프레임 grant 재확인
+  if (checkGrant(nodeName, vehicleId)) {
+    // Lock 받음!
+    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+    data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    fillNextEdgesThroughMerge(vehicleId);
+    setNextCheckpoint(CheckpointType.MERGE_ENTRY, ...);
+  }
+}
+```
+
+### Merge 진입 지점
+```typescript
+handleMergeEntry(vehicleId) {
+  // Lock release
+  releaseLock(nodeName, vehicleId);
+
+  // Queue 다음 차량에 grant
+  grantNextVehicleInQueue(nodeName);
+
+  // 다음 체크포인트 계산
+  calculateNextCheckpoint(vehicleId);
+}
+```
+
+---
+
+## 9. TODO (다음 단계)
+
+### 9.1 Constants 업데이트
+- [ ] `CURRENT_BARCODE`, `MATCH_EDGE`, `MATCH_BARCODE`, `MATCH_TYPE` 필드 추가
+- [ ] `CheckpointType` enum 추가
+- [ ] `StopReason.SENSORED`, `StopReason.IDLE` 추가
+
+### 9.2 LockMgr 구현
+- [ ] `processLock()` 메인 로직
+- [ ] `handleLockRequest()` - Lock 요청 지점
+- [ ] `handleLockWait()` - Lock 대기 지점
+- [ ] `handleMergeEntry()` - Merge 진입 지점
+- [ ] Barcode 업데이트 로직 (Movement에서)
+
+### 9.3 다른 파일 수정
+- [ ] `TransferMgr.ts`: fillNextEdgesFromPathBuffer() 제거
+- [ ] `edgeTransition.ts`: shiftAndRefillNextEdges()에서 NEXT_EDGE 채우는 부분 제거
+- [ ] `AutoMgr.ts`: assignCommand() 호출 시 NEXT_EDGE 채우는 부분 제거
+
+### 9.4 TransferMgr 유용한 함수 (재사용)
+- `findDistanceToNextMerge()` - merge까지 거리 계산
+- `getFullReservedPath()` - pathBuffer에서 전체 경로 조회
+
+---
+
+## 10. 파일 위치
 
 | 파일 | 역할 |
 |------|------|
 | `src/common/vehicle/logic/LockMgr.ts` | 락 시스템 메인 |
-| `src/shmSimulator/core/FabContext.ts` | step()에서 updateAll 호출 |
+| `src/common/vehicle/logic/TransferMgr.ts` | pathBuffer 관리, 경로 조회 |
+| `src/common/vehicle/movement/edgeTransition.ts` | edge 전환 처리 |
+| `src/common/vehicle/movement/movementUpdate.ts` | Movement 메인, shouldSkipUpdate |
+| `src/common/vehicle/movement/vehiclePhysics.ts` | 센서 충돌, processEmergencyStop |
+| `src/common/vehicle/movement/vehicleTransition.ts` | TARGET_RATIO 도달 체크 |
+| `src/common/vehicle/initialize/constants.ts` | STOP_REASON, CheckpointType 정의 |
+| `src/common/vehicle/logic/AutoMgr.ts` | 자동 경로 설정 (Dijkstra) |
+| `src/shmSimulator/core/FabContext.ts` | step() 메인 루프 |
+| `public/railConfig/cop/node.map` | Node barcode 정의 |
+| `public/railConfig/cop/edge.map` | Edge 정보 |
 | `.ai-agents/lock_agents.md` | 이 문서 |
+
+---
+
+## 11. 핵심 개념 요약
+
+### Lock이 Movement를 멈추는 방법
+1. **Lock 요청은 멀리서** (merge 20m 전)
+2. **Grant 못 받으면 TARGET_RATIO를 wait point로 설정**
+3. **Movement가 wait point까지 이동**
+4. **Wait point 도달 → MOVING_STATUS = STOPPED, STOP_REASON = LOCKED**
+
+### Barcode 시스템
+- **절대 좌표** (mm 단위)
+- **Edge 기준 체크 필수** (합류 시 barcode 급증/급감)
+- **직선은 barcode, 곡선은 ratio**
+
+### 성능 최적화
+- **Checkpoint 시스템**: 매 프레임 단순 비교만
+- **도달 시에만 복잡한 로직 실행**
+
+### 멈춤 상태
+| 상태 | MOVING_STATUS | VELOCITY | STOP_REASON | 복구 방법 |
+|------|---------------|----------|-------------|-----------|
+| Lock 대기 | STOPPED | 0 | LOCKED | processLock에서 grant 받으면 MOVING으로 |
+| 센서 충돌 | MOVING | 0 | SENSORED | 장애물 없어지면 자동 복구 |
+| 일반 정지 | STOPPED | 0 | IDLE | 외부 명령 필요 |
+
+---
+
+## 12. 최종 설계: Checkpoint 시스템 (2026-02-06)
+
+### 12.1 핵심 아이디어
+
+**AutoMgr에서 pathBuffer 설정 시점 = Checkpoint 리스트 미리 생성**
+
+출발지 → 목적지 경로가 결정되는 순간, 전체 여정의 모든 checkpoint를 한 번에 계산하여 배열로 저장.
+
+```
+출발 → NODE_A → NODE_B(merge) → NODE_C → ... → 목적지
+
+이 경로가 정해지면:
+checkpoints = [
+  {edge: 3, ratio: 0.5, flags: MOVE_PREPARE},           // 곡선 준비
+  {edge: 5, ratio: 0.6, flags: LOCK_REQUEST},           // Lock 요청
+  {edge: 5, ratio: 0.85, flags: LOCK_WAIT},             // Lock 대기
+  {edge: 6, ratio: 0.2, flags: LOCK_RELEASE},           // Lock 해제
+  {edge: 12, ratio: 0.7, flags: LOCK_REQUEST},          // 다음 merge
+  {edge: 12, ratio: 0.9, flags: LOCK_WAIT},             // Lock 대기
+  {edge: 13, ratio: 0.25, flags: LOCK_RELEASE},         // Lock 해제
+]
+```
+
+### 12.2 Checkpoint 구조
+
+**최소 구조: edge + ratio + flags (type 불필요!)**
+
+```typescript
+interface Checkpoint {
+  edge: number;   // Edge ID (1-based)
+  ratio: number;  // Progress on edge (0.0 ~ 1.0)
+  flags: number;  // CheckpointFlags bitmask
+}
+```
+
+**왜 type이 필요 없는가?**
+- Flags가 bitmask이므로 여러 작업을 동시에 표현 가능
+- 같은 지점에서 Lock Release + Lock Request 가능
+
+### 12.3 CheckpointFlags (Bitmask)
+
+```typescript
+export const CheckpointFlags = {
+  NONE: 0,
+  LOCK_REQUEST: 1 << 0,  // 0x01 - Request lock at merge point
+  LOCK_WAIT: 1 << 1,     // 0x02 - Wait for lock grant
+  LOCK_RELEASE: 1 << 2,  // 0x04 - Release lock after passing merge
+  MOVE_PREPARE: 1 << 3,  // 0x08 - Prepare next edge (curves)
+  MOVE_SLOW: 1 << 4,     // 0x10 - Deceleration zone
+} as const;
+```
+
+**동시 처리 예시:**
+```typescript
+// Edge가 짧아서 Release와 Request가 같은 지점!
+{edge: 6, ratio: 0.5, flags: LOCK_RELEASE | LOCK_REQUEST}  // 0x05
+```
+
+### 12.4 Lock Checkpoint 3단계
+
+**각 Merge마다 3개 checkpoint:**
+
+1. **LOCK_REQUEST** - Merge 전 충분한 거리 (20m 전)
+2. **LOCK_WAIT** - Merge 직전 대기 지점 (7m 전)
+3. **LOCK_RELEASE** - Merge 통과 후 안전 지점 (다음 edge 20% 지점)
+
+```typescript
+// Merge A
+{edge: 5, ratio: 0.60, flags: LOCK_REQUEST},   // Request
+{edge: 5, ratio: 0.85, flags: LOCK_WAIT},      // Wait
+{edge: 6, ratio: 0.20, flags: LOCK_RELEASE},   // Release
+
+// Merge B
+{edge: 12, ratio: 0.70, flags: LOCK_REQUEST},
+{edge: 12, ratio: 0.90, flags: LOCK_WAIT},
+{edge: 13, ratio: 0.25, flags: LOCK_RELEASE},
+```
+
+### 12.5 배열 통일: 1-based Standard
+
+**모든 배열을 통일된 방식으로:**
+
+```typescript
+array[0] = 길이 또는 메타 정보
+array[1] = vehicle 1
+array[2] = vehicle 2
+...
+array[vehicleId] = vehicle vehicleId
+```
+
+**이유:**
+- Edge, Node가 이미 1-based
+- vehicleId도 1부터 시작
+- 일관성 & 직관성
+
+### 12.6 Checkpoint 배열 구조
+
+**2D 구조, 고정 크기로 미리 할당:**
+
+```typescript
+// Constants
+MAX_CHECKPOINTS_PER_VEHICLE = 50;  // Vehicle당 최대 checkpoint 수
+CHECKPOINT_FIELDS = 3;  // edge, ratio, flags
+CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS;
+
+// 배열 구조
+checkpointArray = Float32Array[
+  MAX_CHECKPOINTS_PER_VEHICLE,  // [0] 메타: 최대 크기
+
+  // Vehicle 1 section (offset: 1)
+  v1_count,       // 실제 checkpoint 개수
+  v1_cp0_edge,    // Checkpoint 0
+  v1_cp0_ratio,
+  v1_cp0_flags,
+  v1_cp1_edge,    // Checkpoint 1
+  v1_cp1_ratio,
+  v1_cp1_flags,
+  ...
+
+  // Vehicle 2 section (offset: 1 + CHECKPOINT_SECTION_SIZE)
+  v2_count,
+  v2_cp0_edge,
+  ...
+]
+```
+
+**접근 방식:**
+```typescript
+// Offset 계산
+const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
+const count = checkpointArray[vehicleOffset];
+const cpOffset = vehicleOffset + 1 + cpIdx * CHECKPOINT_FIELDS;
+
+// 읽기
+const edge = checkpointArray[cpOffset + 0];
+const ratio = checkpointArray[cpOffset + 1];
+const flags = checkpointArray[cpOffset + 2];
+
+// 쓰기 (AutoMgr에서)
+checkpointArray[vehicleOffset] = totalCheckpoints;  // count
+checkpointArray[cpOffset + 0] = edge;
+checkpointArray[cpOffset + 1] = ratio;
+checkpointArray[cpOffset + 2] = flags;
+```
+
+### 12.7 VehicleDataArray 변경
+
+**제거된 필드 (4개):**
+- ~~CURRENT_BARCODE~~
+- ~~MATCH_EDGE~~
+- ~~MATCH_BARCODE~~
+- ~~MATCH_TYPE~~
+
+**추가된 필드 (1개):**
+- `CHECKPOINT_HEAD` (offset 22): 현재 처리 중인 checkpoint 인덱스
+
+**메모리 절약:**
+- 26 fields (104 bytes) → 23 fields (92 bytes)
+
+### 12.8 processCheckpoint() 로직
+
+```typescript
+processCheckpoint(vehicleId) {
+  const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
+  const count = checkpointArray[vehicleOffset];
+  const head = data[ptr + LogicData.CHECKPOINT_HEAD];
+
+  // 끝 확인
+  if (head >= count) return;
+
+  // 다음 checkpoint 읽기
+  const cpOffset = vehicleOffset + 1 + head * CHECKPOINT_FIELDS;
+  const cpEdge = checkpointArray[cpOffset + 0];
+  const cpRatio = checkpointArray[cpOffset + 1];
+  const cpFlags = checkpointArray[cpOffset + 2];
+
+  // 🚀 초고속 체크
+  const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+  const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+
+  if (currentEdge !== cpEdge) return;
+  if (currentRatio < cpRatio) return;
+
+  // ✅ Checkpoint 도달! Flags 처리
+  if (cpFlags & CheckpointFlags.LOCK_RELEASE) {
+    releaseLock(prevMergeNode, vehicleId);
+    grantNextInQueue(prevMergeNode);
+  }
+
+  if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
+    requestLock(nextMergeNode, vehicleId);
+    if (isGranted()) {
+      // Grant 받음 → 계속 진행
+    } else {
+      // 못 받음 → Wait point에서 정지 설정
+      setTargetRatio(waitRatio);
+    }
+  }
+
+  if (cpFlags & CheckpointFlags.LOCK_WAIT) {
+    if (!isGranted()) {
+      // 아직 grant 안 받음 → 멈춤 유지
+      if (velocity === 0) {
+        data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+      }
+    } else {
+      // Grant 받음! → 출발
+      data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    }
+  }
+
+  if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
+    prepareNextEdge(vehicleId);
+  }
+
+  // 다음 checkpoint로
+  data[ptr + LogicData.CHECKPOINT_HEAD]++;
+}
+```
+
+### 12.9 AutoMgr 연동
+
+**assignCommand() 시점에 checkpoint 생성:**
+
+```typescript
+assignCommand(vehicleId, destination) {
+  // 1. Dijkstra로 경로 계산
+  const path = dijkstra(current, destination);
+
+  // 2. pathBuffer에 저장
+  fillPathBuffer(vehicleId, path);
+
+  // 3. 🆕 Checkpoint 리스트 생성
+  const checkpoints: Checkpoint[] = [];
+
+  for (let i = 0; i < path.length; i++) {
+    const edge = edges[path[i] - 1];
+
+    // Merge 발견 → Lock checkpoints 추가
+    if (isMergeEdge(edge)) {
+      const requestRatio = calculateRatioFromDistance(edge, -20000);  // 20m 전
+      const waitRatio = calculateRatioFromDistance(edge, -7000);      // 7m 전
+
+      checkpoints.push({edge: edge.id, ratio: requestRatio, flags: CheckpointFlags.LOCK_REQUEST});
+      checkpoints.push({edge: edge.id, ratio: waitRatio, flags: CheckpointFlags.LOCK_WAIT});
+
+      // Release는 다음 edge
+      const nextEdge = edges[path[i + 1] - 1];
+      checkpoints.push({edge: nextEdge.id, ratio: 0.2, flags: CheckpointFlags.LOCK_RELEASE});
+    }
+
+    // 곡선 발견 → Move checkpoint 추가
+    if (edge.vos_rail_type === 'CURVE') {
+      checkpoints.push({edge: edge.id, ratio: 0.5, flags: CheckpointFlags.MOVE_PREPARE});
+    }
+  }
+
+  // 4. Checkpoint 배열에 저장
+  saveCheckpoints(vehicleId, checkpoints);
+
+  // 5. CHECKPOINT_HEAD 초기화
+  data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
+}
+```
+
+### 12.10 완료된 작업
+
+**✅ Constants 업데이트 (2026-02-06):**
+- VehicleDataArray: 23 fields (92 bytes)
+- LogicData.CHECKPOINT_HEAD 추가
+- CheckpointFlags enum 추가
+- Checkpoint interface 정의
+- StopReason.IDLE 추가
+
+**파일:** `src/common/vehicle/initialize/constants.ts`
+
+### 12.11 다음 작업 (우선순위)
+
+1. **Checkpoint 배열 생성**
+   - [ ] MemoryLayoutManager에 checkpoint 배열 추가
+   - [ ] SharedArrayBuffer 할당
+   - [ ] Constants에 접근 헬퍼 함수 추가
+
+2. **AutoMgr 수정**
+   - [ ] assignCommand()에서 checkpoint 생성 로직
+   - [ ] Merge 탐지 함수
+   - [ ] Checkpoint 저장 함수
+
+3. **LockMgr 구현**
+   - [ ] processCheckpoint() 메인 로직
+   - [ ] Lock request/wait/release 처리
+   - [ ] NEXT_EDGE 설정 로직
+
+4. **기존 코드 정리**
+   - [ ] TransferMgr: NEXT_EDGE 채우는 부분 제거
+   - [ ] edgeTransition: NEXT_EDGE 채우는 부분 제거
+   - [ ] 다른 배열들 1-based로 전환 (선택)
+
+### 12.12 성능 이점
+
+**기존 설계 (매 프레임 복잡한 계산):**
+- 10만 대 × 60fps = 600만 번/초
+- pathBuffer 탐색, merge 찾기, 거리 계산...
+
+**새 설계 (단순 비교 2개):**
+- currentEdge === cpEdge? ✓
+- currentRatio >= cpRatio? ✓
+- **99%의 경우 여기서 끝!**
+- Checkpoint 도달 시에만 복잡한 로직 실행 (1%)
+
+**예상 성능 향상: 100배 이상**
+
+---

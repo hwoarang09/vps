@@ -83,6 +83,7 @@ export class MultiWorkerController {
   private vehicleBuffer: SharedArrayBuffer | null = null;
   private sensorBuffer: SharedArrayBuffer | null = null;
   private pathBuffer: SharedArrayBuffer | null = null;
+  private checkpointBuffer: SharedArrayBuffer | null = null;
 
   // Render 버퍼 (렌더링용 - 연속 레이아웃)
   private vehicleRenderBuffer: SharedArrayBuffer | null = null;
@@ -161,6 +162,7 @@ export class MultiWorkerController {
     this.vehicleBuffer = workerBuffers.vehicleBuffer;
     this.sensorBuffer = workerBuffers.sensorBuffer;
     this.pathBuffer = workerBuffers.pathBuffer;
+    this.checkpointBuffer = workerBuffers.checkpointBuffer;
 
 
     // 3. 워커별 Fab 분배
@@ -265,6 +267,7 @@ export class MultiWorkerController {
       sharedBuffer: this.vehicleBuffer!,
       sensorPointBuffer: this.sensorBuffer!,
       pathBuffer: this.pathBuffer!,
+      checkpointBuffer: this.checkpointBuffer!,
       edges: undefined,
       nodes: undefined,
       stationData: undefined,
@@ -289,6 +292,7 @@ export class MultiWorkerController {
       sharedBuffer: this.vehicleBuffer!,
       sensorPointBuffer: this.sensorBuffer!,
       pathBuffer: this.pathBuffer!,
+      checkpointBuffer: this.checkpointBuffer!,
       edges: fabConfig.edges,
       nodes: fabConfig.nodes,
       stationData: fabConfig.stations as StationRawData[],

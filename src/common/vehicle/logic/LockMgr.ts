@@ -3,11 +3,29 @@
 
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types/node";
+import {
+  CheckpointFlags,
+  CHECKPOINT_SECTION_SIZE,
+  CHECKPOINT_FIELDS,
+  MovementData,
+  LogicData,
+  VEHICLE_DATA_SIZE,
+  StopReason,
+  MovingStatus,
+} from "@/common/vehicle/initialize/constants";
 
 /**
- * Lock 정책
+ * Lock 정책 타입
  */
-export type LockPolicy = 'FIFO' | 'BATCH';
+export type LockPolicyType = 'FIFO' | 'BATCH';
+
+/**
+ * Lock 정책 객체 - 확장 가능한 구조
+ */
+export interface LockPolicy {
+  default: LockPolicyType;
+  // 추후 확장 가능: nodeSpecific, edgeSpecific 등
+}
 
 /**
  * LockMgr - 단순한 락 시스템
@@ -15,11 +33,14 @@ export type LockPolicy = 'FIFO' | 'BATCH';
 export class LockMgr {
   // 참조 저장
   private vehicleDataArray: Float32Array | null = null;
+  private checkpointArray: Float32Array | null = null;
   private nodes: Node[] = [];
   private edges: Edge[] = [];
 
   // merge node 목록 (빠른 조회용)
   private mergeNodes = new Set<string>();
+  // merge node -> 이름 매핑 (빠른 조회용)
+  private mergeNodeNames = new Map<string, string>();
 
   // 락 상태
   private locks = new Map<string, number>();        // nodeName -> vehId (현재 잡고 있는 차량)
@@ -30,8 +51,14 @@ export class LockMgr {
   /**
    * 초기화 - 참조 저장
    */
-  init(vehicleDataArray: Float32Array, nodes: Node[], edges: Edge[]): void {
+  init(
+    vehicleDataArray: Float32Array,
+    nodes: Node[],
+    edges: Edge[],
+    checkpointArray: Float32Array | null = null
+  ): void {
     this.vehicleDataArray = vehicleDataArray;
+    this.checkpointArray = checkpointArray;
     this.nodes = nodes;
     this.edges = edges;
 
@@ -44,6 +71,7 @@ export class LockMgr {
    */
   private buildMergeNodes(): void {
     this.mergeNodes.clear();
+    this.mergeNodeNames.clear();
     const incomingCount = new Map<string, number>();
 
     for (const edge of this.edges) {
@@ -54,6 +82,7 @@ export class LockMgr {
     for (const [nodeName, count] of incomingCount) {
       if (count >= 2) {
         this.mergeNodes.add(nodeName);
+        this.mergeNodeNames.set(nodeName, nodeName);
       }
     }
   }
@@ -61,23 +90,206 @@ export class LockMgr {
   /**
    * 매 프레임 호출 - 전체 차량 순회
    */
-  updateAll(numVehicles: number, policy: LockPolicy = 'FIFO'): void {
+  updateAll(numVehicles: number, policy: LockPolicy = { default: 'FIFO' }): void {
     for (let i = 0; i < numVehicles; i++) {
       this.processLock(i, policy);
     }
   }
 
   /**
-   * 개별 차량 락 처리
+   * 개별 차량 락 처리 (Checkpoint 시스템)
    */
-  processLock(_vehicleId: number, _policy: LockPolicy): void {
-    if (!this.vehicleDataArray || !this.nodes.length || !this.edges.length) return;
+  processLock(vehicleId: number, _policy: LockPolicy): void {
+    if (!this.vehicleDataArray || !this.checkpointArray) return;
+    if (!this.nodes.length || !this.edges.length) return;
 
-    // TODO: 실제 로직 구현
-    // 1. 현재 edge, ratio 읽기
-    // 2. 다음 edge의 to_node가 merge인지 확인
-    // 3. merge면 → grant 체크/요청
-    // 4. grant 못 받으면 → 멈춤 처리
+    this.processCheckpoint(vehicleId);
+  }
+
+  /**
+   * Checkpoint 기반 락 처리
+   */
+  private processCheckpoint(vehicleId: number): void {
+    if (!this.vehicleDataArray || !this.checkpointArray) return;
+
+    const data = this.vehicleDataArray;
+    const ptr = vehicleId * VEHICLE_DATA_SIZE;
+
+    // Checkpoint 배열에서 현재 vehicle의 checkpoint 읽기
+    const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
+    const count = this.checkpointArray[vehicleOffset];
+    const head = data[ptr + LogicData.CHECKPOINT_HEAD];
+
+    // 끝 확인
+    if (head >= count) return;
+
+    // 다음 checkpoint 읽기
+    const cpOffset = vehicleOffset + 1 + head * CHECKPOINT_FIELDS;
+    const cpEdge = this.checkpointArray[cpOffset + 0];
+    const cpRatio = this.checkpointArray[cpOffset + 1];
+    const cpFlags = this.checkpointArray[cpOffset + 2];
+
+    // 🚀 초고속 체크
+    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+
+    if (currentEdge !== cpEdge) return;
+    if (currentRatio < cpRatio) return;
+
+    // ✅ Checkpoint 도달! Flags 처리
+    if (cpFlags & CheckpointFlags.LOCK_RELEASE) {
+      this.handleLockRelease(vehicleId, data, ptr);
+    }
+
+    if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
+      this.handleLockRequest(vehicleId, data, ptr);
+    }
+
+    if (cpFlags & CheckpointFlags.LOCK_WAIT) {
+      this.handleLockWait(vehicleId, data, ptr);
+    }
+
+    if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
+      this.handleMovePrepare(vehicleId, data, ptr);
+    }
+
+    // 다음 checkpoint로
+    data[ptr + LogicData.CHECKPOINT_HEAD]++;
+  }
+
+  /**
+   * Lock 해제 처리
+   */
+  private handleLockRelease(vehicleId: number, data: Float32Array, ptr: number): void {
+    // 현재 edge의 to_node가 merge node일 것
+    const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+    if (currentEdgeIdx < 1) return;
+
+    const edge = this.edges[currentEdgeIdx - 1];
+    if (!edge) return;
+
+    const nodeName = edge.to_node;
+    if (!this.isMergeNode(nodeName)) return;
+
+    // Lock 해제
+    this.releaseLockInternal(nodeName, vehicleId);
+    this.grantNextInQueue(nodeName);
+  }
+
+  /**
+   * Lock 요청 처리
+   */
+  private handleLockRequest(vehicleId: number, data: Float32Array, ptr: number): void {
+    // pathBuffer에서 다음 merge node 찾기 (현재는 간단히 NEXT_EDGE_0 사용)
+    const nextEdgeIdx = Math.trunc(data[ptr + MovementData.NEXT_EDGE_0]);
+    if (nextEdgeIdx < 1) return;
+
+    const nextEdge = this.edges[nextEdgeIdx - 1];
+    if (!nextEdge) return;
+
+    const nodeName = nextEdge.to_node;
+    if (!this.isMergeNode(nodeName)) return;
+
+    // Lock 요청
+    this.requestLockInternal(nodeName, vehicleId);
+
+    // Grant 확인
+    if (this.checkGrantInternal(nodeName, vehicleId)) {
+      // Grant 받음 → 계속 진행 (별도 처리 불필요)
+    } else {
+      // Grant 못 받음 → 다음 LOCK_WAIT checkpoint에서 정지
+      // (LOCK_WAIT는 이미 checkpoint에 설정되어 있음)
+    }
+  }
+
+  /**
+   * Lock 대기 지점 처리
+   */
+  private handleLockWait(vehicleId: number, data: Float32Array, ptr: number): void {
+    const nextEdgeIdx = Math.trunc(data[ptr + MovementData.NEXT_EDGE_0]);
+    if (nextEdgeIdx < 1) return;
+
+    const nextEdge = this.edges[nextEdgeIdx - 1];
+    if (!nextEdge) return;
+
+    const nodeName = nextEdge.to_node;
+    if (!this.isMergeNode(nodeName)) return;
+
+    const velocity = data[ptr + MovementData.VELOCITY];
+
+    if (!this.checkGrantInternal(nodeName, vehicleId)) {
+      // 아직 grant 안 받음 → 멈춤 유지
+      if (velocity === 0) {
+        data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+      }
+    } else {
+      // Grant 받음! → 출발
+      data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    }
+  }
+
+  /**
+   * 이동 준비 처리 (곡선 등)
+   */
+  private handleMovePrepare(_vehicleId: number, _data: Float32Array, _ptr: number): void {
+    // TODO: 곡선 진입 전 처리 (필요 시)
+  }
+
+  /**
+   * Lock 요청 (내부 구현)
+   */
+  private requestLockInternal(nodeName: string, vehId: number): void {
+    if (!this.queues.has(nodeName)) {
+      this.queues.set(nodeName, []);
+    }
+
+    const queue = this.queues.get(nodeName)!;
+    if (!queue.includes(vehId)) {
+      queue.push(vehId);
+
+      // 큐가 비어있으면 즉시 grant
+      if (queue.length === 1 && !this.locks.has(nodeName)) {
+        this.locks.set(nodeName, vehId);
+      }
+    }
+  }
+
+  /**
+   * Grant 확인 (내부 구현)
+   */
+  private checkGrantInternal(nodeName: string, vehId: number): boolean {
+    return this.locks.get(nodeName) === vehId;
+  }
+
+  /**
+   * Lock 해제 (내부 구현)
+   */
+  private releaseLockInternal(nodeName: string, vehId: number): void {
+    if (this.locks.get(nodeName) === vehId) {
+      this.locks.delete(nodeName);
+
+      // 큐에서도 제거
+      const queue = this.queues.get(nodeName);
+      if (queue) {
+        const idx = queue.indexOf(vehId);
+        if (idx !== -1) {
+          queue.splice(idx, 1);
+        }
+      }
+    }
+  }
+
+  /**
+   * 큐 다음 차량에 grant
+   */
+  private grantNextInQueue(nodeName: string): void {
+    const queue = this.queues.get(nodeName);
+    if (!queue || queue.length === 0) return;
+
+    // 큐의 첫 번째 차량에 grant
+    const nextVeh = queue[0];
+    this.locks.set(nodeName, nextVeh);
   }
 
   /**
@@ -118,10 +330,6 @@ export class LockMgr {
 
   cancelLock(_nodeName: string, _vehId: number): boolean {
     return true; // stub
-  }
-
-  step(): void {
-    // stub - updateAll로 대체 예정
   }
 
   getLocksForVehicle(_vehId: number): { nodeName: string; edgeName: string; isGranted: boolean }[] {

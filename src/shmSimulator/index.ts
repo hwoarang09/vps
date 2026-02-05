@@ -13,6 +13,7 @@ import type { StationRawData } from "@/types/station";
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE } from "@/common/vehicle/memory/SensorPointArrayBase";
 import { MAX_PATH_LENGTH } from "./MemoryLayoutManager";
+import { CHECKPOINT_SECTION_SIZE } from "@/common/vehicle/initialize/constants";
 
 // Fab별 버퍼 및 데이터 관리
 interface FabBufferData {
@@ -21,6 +22,7 @@ interface FabBufferData {
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
   pathBuffer: SharedArrayBuffer;
+  checkpointBuffer: SharedArrayBuffer;
   vehicleData: Float32Array;
   sensorPointData: Float32Array;
   actualNumVehicles: number;
@@ -93,11 +95,16 @@ export class ShmSimulatorController {
     const pathBufferSize = this.config.maxVehicles * MAX_PATH_LENGTH * Int32Array.BYTES_PER_ELEMENT;
     const pathBuffer = new SharedArrayBuffer(pathBufferSize);
 
+    // Allocate SharedArrayBuffer for checkpoint data
+    const checkpointBufferSize = (1 + this.config.maxVehicles * CHECKPOINT_SECTION_SIZE) * Float32Array.BYTES_PER_ELEMENT;
+    const checkpointBuffer = new SharedArrayBuffer(checkpointBufferSize);
+
     return {
       fabId,
       sharedBuffer,
       sensorPointBuffer,
       pathBuffer,
+      checkpointBuffer,
       vehicleData,
       sensorPointData,
       actualNumVehicles: 0,
@@ -145,6 +152,7 @@ export class ShmSimulatorController {
         sharedBuffer: bufferData.sharedBuffer,
         sensorPointBuffer: bufferData.sensorPointBuffer,
         pathBuffer: bufferData.pathBuffer,
+        checkpointBuffer: bufferData.checkpointBuffer,
         edges: fabParams.edges,
         nodes: fabParams.nodes,
         vehicleConfigs: fabParams.vehicleConfigs ?? [],
@@ -201,6 +209,7 @@ export class ShmSimulatorController {
       sharedBuffer: bufferData.sharedBuffer,
       sensorPointBuffer: bufferData.sensorPointBuffer,
       pathBuffer: bufferData.pathBuffer,
+      checkpointBuffer: bufferData.checkpointBuffer,
       edges: fabParams.edges,
       nodes: fabParams.nodes,
       vehicleConfigs: fabParams.vehicleConfigs ?? [],

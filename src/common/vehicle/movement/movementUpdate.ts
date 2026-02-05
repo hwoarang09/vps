@@ -97,9 +97,6 @@ export function updateMovement(ctx: MovementUpdateContext) {
     lockMgr
   );
 
-  // Lock grant 결정 (BATCH 전략에서 사용)
-  lockMgr.step();
-
   // 각 차량에 대해 4단계 파이프라인 실행
   for (let i = 0; i < actualNumVehicles; i++) {
     const ptr = i * VEHICLE_DATA_SIZE;

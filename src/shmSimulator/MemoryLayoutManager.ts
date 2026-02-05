@@ -3,6 +3,7 @@
 
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE, SENSOR_ZONE_COUNT } from "@/common/vehicle/memory/SensorPointArrayBase";
+import { CHECKPOINT_SECTION_SIZE } from "@/common/vehicle/initialize/constants";
 import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
 
 /**
@@ -97,6 +98,8 @@ export interface MemoryLayout {
   sensorBufferSize: number;
   /** Path 버퍼 전체 크기 (bytes) - Worker 영역만 */
   pathBufferSize: number;
+  /** Checkpoint 버퍼 전체 크기 (bytes) - Worker 영역만 */
+  checkpointBufferSize: number;
   /** Fab별 메모리 할당 정보 */
   fabAssignments: Map<string, FabMemoryAssignment>;
 }
@@ -140,6 +143,7 @@ export class MemoryLayoutManager {
     let vehicleOffset = 0;
     let sensorOffset = 0;
     let pathOffset = 0;
+    let checkpointOffset = 0;
 
     const fabAssignments = new Map<string, FabMemoryAssignment>();
 
@@ -147,6 +151,8 @@ export class MemoryLayoutManager {
       const vehicleSize = fab.maxVehicles * VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
       const sensorSize = fab.maxVehicles * SENSOR_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT;
       const pathSize = fab.maxVehicles * MAX_PATH_LENGTH * Int32Array.BYTES_PER_ELEMENT;
+      // Checkpoint: 1 (meta) + maxVehicles * CHECKPOINT_SECTION_SIZE
+      const checkpointSize = (1 + fab.maxVehicles * CHECKPOINT_SECTION_SIZE) * Float32Array.BYTES_PER_ELEMENT;
 
       const assignment: FabMemoryAssignment = {
         fabId: fab.fabId,
@@ -165,6 +171,11 @@ export class MemoryLayoutManager {
           size: pathSize,
           maxVehicles: fab.maxVehicles,
         },
+        checkpointRegion: {
+          offset: checkpointOffset,
+          size: checkpointSize,
+          maxVehicles: fab.maxVehicles,
+        },
       };
 
       fabAssignments.set(fab.fabId, assignment);
@@ -172,12 +183,14 @@ export class MemoryLayoutManager {
       vehicleOffset += vehicleSize;
       sensorOffset += sensorSize;
       pathOffset += pathSize;
+      checkpointOffset += checkpointSize;
     }
 
     return {
       vehicleBufferSize: vehicleOffset,
       sensorBufferSize: sensorOffset,
       pathBufferSize: pathOffset,
+      checkpointBufferSize: checkpointOffset,
       fabAssignments,
     };
   }
@@ -260,11 +273,13 @@ export class MemoryLayoutManager {
     vehicleBuffer: SharedArrayBuffer;
     sensorBuffer: SharedArrayBuffer;
     pathBuffer: SharedArrayBuffer;
+    checkpointBuffer: SharedArrayBuffer;
   } {
     return {
       vehicleBuffer: new SharedArrayBuffer(layout.vehicleBufferSize),
       sensorBuffer: new SharedArrayBuffer(layout.sensorBufferSize),
       pathBuffer: new SharedArrayBuffer(layout.pathBufferSize),
+      checkpointBuffer: new SharedArrayBuffer(layout.checkpointBufferSize),
     };
   }
 

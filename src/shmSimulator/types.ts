@@ -38,6 +38,8 @@ export interface FabMemoryAssignment {
   sensorRegion: MemoryRegion;
   /** Path 데이터 영역 (Worker 계산용) */
   pathRegion: MemoryRegion;
+  /** Checkpoint 데이터 영역 (Worker 계산용) */
+  checkpointRegion: MemoryRegion;
 }
 
 /**
@@ -203,6 +205,7 @@ export interface FabInitData {
   sharedBuffer: SharedArrayBuffer;
   sensorPointBuffer: SharedArrayBuffer;
   pathBuffer: SharedArrayBuffer;
+  checkpointBuffer: SharedArrayBuffer;
 
   /**
    * Fab별 edges (단일 Fab 모드에서 사용)
