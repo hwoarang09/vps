@@ -14,42 +14,35 @@ export interface CheckpointBuildContext {
   edgeArray: Edge[];
   /** Merge node 확인 함수 */
   isMergeNode: (nodeName: string) => boolean;
+  /** DeadLock Merge node 확인 함수 */
+  isDeadLockMergeNode: (nodeName: string) => boolean;
 }
 
 /**
  * Merge checkpoint 생성 옵션
  */
 export interface MergeCheckpointOptions {
-  /** Lock 요청 거리 (m) - 직선 */
-  requestDistanceLinear: number;
-  /** Lock 대기 거리 (m) - 직선 */
-  waitDistanceLinear: number;
-  /** Lock 요청 거리 (m) - 곡선 */
-  requestDistanceCurve: number;
-  /** Lock 대기 거리 (m) - 곡선 */
-  waitDistanceCurve: number;
-  /** Lock 해제 ratio - 다음 edge */
+  /** Lock 요청 거리 (m) - 파라미터로 설정 (예: 5100 or 1000) */
+  requestDistance: number;
+  /** Lock 해제 ratio - 다음 edge (기본값: 0.2) */
   releaseRatio: number;
+  // 주의: Lock 대기 거리는 edge.map의 waiting_offset 사용
 }
 
 /**
- * Curve checkpoint 생성 옵션
+ * On-Curve checkpoint 생성 옵션
+ * (곡선 edge 위에 있을 때의 checkpoint)
  */
-export interface CurveCheckpointOptions {
-  /** 감속 시작 ratio */
-  slowRatio: number;
-  /** 준비 시작 ratio */
+export interface OnCurveCheckpointOptions {
+  /** 다음 edge 준비 시작 ratio (config에서 가져옴) */
   prepareRatio: number;
 }
 
 /**
  * Checkpoint 생성 결과
+ * (배열 맨 앞에 길이가 저장되므로 checkpoints만 반환)
  */
 export interface CheckpointBuildResult {
   /** 생성된 checkpoint 리스트 */
   checkpoints: Checkpoint[];
-  /** 총 개수 */
-  count: number;
-  /** 경고 메시지 (최대 개수 초과 등) */
-  warnings?: string[];
 }
