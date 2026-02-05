@@ -782,3 +782,110 @@ assignCommand(vehicleId, destination) {
 **예상 성능 향상: 100배 이상**
 
 ---
+
+## 13. Ratio 정수 변환 (성능 최적화 - 우선순위 낮음)
+
+### 13.1 개요
+
+Checkpoint ratio를 정수로 저장/비교하여 부동소수점 오차 제거 및 성능 향상.
+
+### 13.2 설계
+
+**정밀도: 소수 4자리 (0.0001 단위)**
+```
+0.8567 → 8567 (정수)
+0.1234 → 1234
+1.0000 → 10000
+```
+
+**범위: 0 ~ 10000**
+- 0.0001 = 0.01% 정밀도 (충분함)
+- Float32에 정확히 저장 가능
+
+### 13.3 구현 방침
+
+| 항목 | 타입 | 이유 |
+|------|------|------|
+| `VehicleDataArray.EDGE_RATIO` | **Float (0.0~1.0)** | Movement 계산 자연스러움 |
+| `Checkpoint.ratio` | **Int (0~10000)** | 정확한 비교, 오차 제거 |
+| 변환 시점 | **비교 시에만** | 오버헤드 최소 |
+
+### 13.4 구현 위치
+
+#### LockMgr.processCheckpoint (비교 시)
+```typescript
+private processCheckpoint(vehicleId: number): void {
+  const cpRatioInt = this.checkpointArray[cpOffset + 1];  // 0~10000 정수
+
+  const currentRatio = data[ptr + MovementData.EDGE_RATIO];  // Float: 0.8567
+  const currentRatioInt = Math.round(currentRatio * 10000);  // Int: 8567
+
+  if (currentEdge !== cpEdge) return;
+  if (currentRatioInt < cpRatioInt) return;  // 정수 비교!
+
+  // ✅ Checkpoint 도달!
+}
+```
+
+#### TransferMgr.saveCheckpoints (저장 시)
+```typescript
+private saveCheckpoints(...) {
+  for (let i = 0; i < count; i++) {
+    const cpOffset = vehicleOffset + 1 + i * CHECKPOINT_FIELDS;
+    this.checkpointBuffer[cpOffset + 0] = checkpoints[i].edge;
+    this.checkpointBuffer[cpOffset + 1] = Math.round(checkpoints[i].ratio * 10000);  // 정수 변환
+    this.checkpointBuffer[cpOffset + 2] = checkpoints[i].flags;
+  }
+}
+```
+
+#### TransferMgr.buildCheckpoints (생성 시)
+```typescript
+// ratio는 Float 그대로 전달 (저장 시 변환됨)
+checkpoints.push({
+  edge: edgeIdx,
+  ratio: 0.8567,  // Float
+  flags: CheckpointFlags.LOCK_REQUEST,
+});
+```
+
+### 13.5 Interface 주석 업데이트
+
+```typescript
+export interface Checkpoint {
+  edge: number;   // Edge ID (1-based)
+  ratio: number;  // 0~10000 정수 (소수 4자리를 10000배)
+  flags: number;  // CheckpointFlags bitmask
+}
+```
+
+### 13.6 장점
+
+1. **부동소수점 오차 제거**
+   - `0.84999999 < 0.85` 같은 문제 없음
+   - 정확한 지점 비교 가능
+
+2. **성능 향상**
+   - 정수 비교가 부동소수점보다 빠름
+   - CPU 파이프라인 최적화
+
+3. **디버깅 편의성**
+   - "ratio 8567 지점" 같은 명확한 표현
+   - 로그 가독성 향상
+
+4. **코드 변경 최소**
+   - VehicleDataArray는 Float 유지
+   - Movement 코드 수정 불필요
+
+### 13.7 적용 시기
+
+**다음 경우에 적용:**
+- Checkpoint 시스템 기본 동작 확인 후
+- 부동소수점 오차 문제 발견 시
+- 성능 프로파일링에서 비교 연산이 병목으로 확인될 때
+
+**현재는 필요 없음:**
+- Float 비교로도 99% 정상 동작
+- 우선순위: Checkpoint 시스템 실제 동작 테스트
+
+---
