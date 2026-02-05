@@ -9,7 +9,6 @@ import {
   TransferMode,
   MovingStatus,
   NEXT_EDGE_COUNT,
-  CheckpointFlags,
   CHECKPOINT_SECTION_SIZE,
   CHECKPOINT_FIELDS,
   MAX_CHECKPOINTS_PER_VEHICLE,
@@ -17,6 +16,7 @@ import {
   type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
 import { devLog } from "@/logger/DevLogger";
+import { buildCheckpointsFromPath, logCheckpoints } from "./checkpoint";
 
 /**
  * Path buffer layout constants
@@ -652,6 +652,7 @@ export class TransferMgr {
 
   /**
    * Checkpoint 생성 (경로 설정 시 한 번만 호출)
+   * 새로운 checkpoint builder 사용
    */
   private buildCheckpoints(
     vehId: number,
@@ -663,58 +664,25 @@ export class TransferMgr {
   ): void {
     if (!this.checkpointBuffer) return;
 
-    const checkpoints: Checkpoint[] = [];
+    // 🆕 checkpoint builder 사용
+    const result = buildCheckpointsFromPath({
+      edgeIndices,
+      edgeArray,
+      isMergeNode: (nodeName) => lockMgr.isMergeNode(nodeName),
+    });
 
-    // 경로를 순회하며 checkpoint 생성
-    for (let i = 0; i < edgeIndices.length; i++) {
-      const edgeIdx = edgeIndices[i];
-      if (edgeIdx < 1) continue;
-
-      const edge = edgeArray[edgeIdx - 1];
-      if (!edge) continue;
-
-      // Merge 체크
-      if (lockMgr.isMergeNode(edge.to_node)) {
-        // Lock request checkpoint (merge 전 충분한 거리)
-        const isCurve = edge.vos_rail_type !== EdgeType.LINEAR;
-        const requestRatio = isCurve ? 0.3 : 0.6;
-        checkpoints.push({
-          edge: edgeIdx,
-          ratio: requestRatio,
-          flags: CheckpointFlags.LOCK_REQUEST,
-        });
-
-        // Lock wait checkpoint (merge 직전)
-        const waitRatio = isCurve ? 0.7 : 0.85;
-        checkpoints.push({
-          edge: edgeIdx,
-          ratio: waitRatio,
-          flags: CheckpointFlags.LOCK_WAIT,
-        });
-
-        // Lock release checkpoint (다음 edge)
-        if (i + 1 < edgeIndices.length) {
-          const nextEdgeIdx = edgeIndices[i + 1];
-          checkpoints.push({
-            edge: nextEdgeIdx,
-            ratio: 0.2,
-            flags: CheckpointFlags.LOCK_RELEASE,
-          });
-        }
-      }
-
-      // 곡선 체크
-      if (edge.vos_rail_type !== EdgeType.LINEAR) {
-        checkpoints.push({
-          edge: edgeIdx,
-          ratio: 0.5,
-          flags: CheckpointFlags.MOVE_PREPARE,
-        });
+    // 경고 출력
+    if (result.warnings) {
+      for (const warning of result.warnings) {
+        devLog.veh(vehId).warn(`[checkpoint] ${warning}`);
       }
     }
 
+    // 로그 출력 (디버깅용)
+    logCheckpoints(vehId, result.checkpoints);
+
     // Checkpoint 배열에 저장
-    this.saveCheckpoints(vehId, checkpoints, data, ptr);
+    this.saveCheckpoints(vehId, result.checkpoints, data, ptr);
   }
 
   /**
