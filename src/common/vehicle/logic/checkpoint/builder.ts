@@ -1,115 +1,238 @@
 // common/vehicle/logic/checkpoint/builder.ts
 // Checkpoint 생성 핵심 로직
+//
+// 핵심 알고리즘: 역순 탐색
+// - 각 edge를 요청하려면 그 edge의 fromNode에서 requestDistance만큼 전에서 요청해야 함
+// - 역순으로 거슬러 올라가면서 거리 누적
+// - 곡선을 만나면 그 곡선의 ratio 0.5에서 요청
+// - path 시작까지 갔으면 첫 edge의 ratio 0에서 요청
 
-import type { Edge } from "@/types/edge";
 import type { Checkpoint } from "@/common/vehicle/initialize/constants";
 import {
   CheckpointFlags,
   MAX_CHECKPOINTS_PER_VEHICLE,
 } from "@/common/vehicle/initialize/constants";
+import type { Edge } from "@/types/edge";
 import type {
   CheckpointBuildContext,
   CheckpointBuildResult,
   MergeCheckpointOptions,
-  OnCurveCheckpointOptions,
 } from "./types";
-import {
-  distanceToRatio,
-  isCurveEdge,
-  deduplicateCheckpoints,
-} from "./utils";
+import { isCurveEdge, deduplicateCheckpoints } from "./utils";
 import { devLog } from "@/logger/DevLogger";
 
 /**
- * 기본 Merge checkpoint 옵션
+ * edge의 시작점(from_node)이 merge node인지 확인
  */
-const DEFAULT_MERGE_OPTIONS: MergeCheckpointOptions = {
-  requestDistance: 5100,  // Lock 요청 거리 (m) - 파라미터로 설정
-  releaseRatio: 0.01,      // 다음 edge 20% 지점
+function isStartFromMergeNode(
+  edge: Edge,
+  isMergeNode: (nodeName: string) => boolean
+): boolean {
+  return isMergeNode(edge.from_node);
+}
+
+/**
+ * 기본 옵션
+ */
+const DEFAULT_OPTIONS: MergeCheckpointOptions = {
+  requestDistance: 5.1,   // 요청 거리 (meters) - edge.distance가 meters 단위
+  releaseRatio: 0.01,     // Lock 해제 ratio
 };
 
 /**
- * 기본 On-Curve checkpoint 옵션
+ * 요청 지점 정보
  */
-const DEFAULT_ON_CURVE_OPTIONS: OnCurveCheckpointOptions = {
-  prepareRatio: 0.5,  // 곡선 50% 지점에서 다음 edge 준비 (config에서 가져올 예정)
-};
+interface RequestPoint {
+  edgeId: number;   // 1-based edge ID
+  ratio: number;    // 0.0 ~ 1.0
+}
 
 /**
- * 최상위 checkpoint 생성 함수
+ * 0-based 배열을 1-based로 감싸기
+ * edges[1] = 첫번째 edge, edges[edgeId] = edge ID에 해당하는 edge
+ */
+function toOneBasedArray<T>(arr: T[]): T[] {
+  return [null as unknown as T, ...arr];  // [0]은 dummy, [1]부터 실제 데이터
+}
+
+/**
+ * 역순 탐색으로 요청 지점 찾기 (Request Point)
+ * - Lock 요청 + 다음 edge 요청 지점
+ * - merge node에서 5100mm (5.1m) 전
+ *
+ * @param targetPathIdx - 대상 edge의 path 인덱스 (1-based, path[1]이 첫번째)
+ * @param path - path 배열 (1-based, path[0]=length, path[1]=첫번째 edge ID)
+ * @param edges - 1-based edge 배열 (edges[edgeId] = edge)
+ * @param requestDistance - 요청 거리 (meters)
+ * @returns 요청 지점 (edgeId, ratio)
+ */
+function findRequestPoint(
+  targetPathIdx: number,
+  path: number[],
+  edges: Edge[],
+  requestDistance: number
+): RequestPoint {
+  let accumulatedDist = 0;
+
+  // 역순으로 거슬러 올라감 (targetPathIdx - 1부터, 대상 edge는 제외)
+  for (let i = targetPathIdx - 1; i >= 1; i--) {
+    const cpEdgeId = path[i];        // checkpoint를 둘 edge ID
+    const cpEdge = edges[cpEdgeId];  // checkpoint를 둘 edge
+
+    // 곡선 만남 → 곡선의 ratio 0.5에서 요청
+    if (isCurveEdge(cpEdge)) {
+      return { edgeId: cpEdgeId, ratio: 0.5 };
+    }
+
+    // 직선 거리 누적
+    accumulatedDist += cpEdge.distance;
+
+    if (accumulatedDist >= requestDistance) {
+      // 충분한 거리 확보 → 이 edge 어딘가에서 요청
+      // overshoot: 초과한 거리 = 이 edge의 시작점에서 얼마나 진행한 위치
+      const overshoot = accumulatedDist - requestDistance;
+      const ratio = overshoot / cpEdge.distance;
+      return { edgeId: cpEdgeId, ratio };
+    }
+  }
+
+  // path 시작까지 갔는데도 requestDistance 안 됨 → 첫 edge의 ratio 0
+  return { edgeId: path[1], ratio: 0 };
+}
+
+/**
+ * 역순 탐색으로 대기 지점 찾기 (Wait Point)
+ * - Lock 못 받으면 대기하는 지점
+ * - merge node에서 waiting_offset 전
+ *
+ * @param targetPathIdx - 대상 edge의 path 인덱스 (1-based)
+ * @param path - path 배열 (1-based)
+ * @param edges - 1-based edge 배열
+ * @param waitDistance - 대기 거리 (meters)
+ * @returns 대기 지점 (edgeId, ratio)
+ */
+function findWaitPoint(
+  targetPathIdx: number,
+  path: number[],
+  edges: Edge[],
+  waitDistance: number
+): RequestPoint {
+  let accumulatedDist = 0;
+
+  // 역순으로 거슬러 올라감 (targetPathIdx - 1부터, 대상 edge는 제외)
+  for (let i = targetPathIdx - 1; i >= 1; i--) {
+    const cpEdgeId = path[i];        // checkpoint를 둘 edge ID
+    const cpEdge = edges[cpEdgeId];  // checkpoint를 둘 edge
+
+    // 곡선 만남 → 곡선의 fn (ratio 0)에서 대기
+    if (isCurveEdge(cpEdge)) {
+      return { edgeId: cpEdgeId, ratio: 0 };
+    }
+
+    // 직선 거리 누적
+    accumulatedDist += cpEdge.distance;
+
+    if (accumulatedDist >= waitDistance) {
+      // 충분한 거리 확보 → 이 edge 어딘가에서 대기
+      const overshoot = accumulatedDist - waitDistance;
+      const ratio = overshoot / cpEdge.distance;
+      return { edgeId: cpEdgeId, ratio };
+    }
+  }
+
+  // path 시작까지 갔는데도 waitDistance 안 됨 → 첫 edge의 ratio 0
+  return { edgeId: path[1], ratio: 0 };
+}
+
+/**
+ * Checkpoint 생성 함수
+ *
+ * 로직:
+ * - 경로의 각 edge에 대해 (두 번째 edge부터)
+ * - 역순 탐색으로 요청 지점 찾기
+ * - MOVE_PREPARE 플래그로 checkpoint 생성
+ * - 대상 edge의 fromNode가 merge면 LOCK_REQUEST 추가
  */
 export function buildCheckpoints(
   ctx: CheckpointBuildContext,
-  pathOptions: Partial<OnCurveCheckpointOptions> = {},
   lockOptions: Partial<MergeCheckpointOptions> = {}
 ): CheckpointBuildResult {
-  // 1. 경로 관련 checkpoint 생성
-  const pathCps = buildPathCheckpoints(ctx, pathOptions);
+  const opts = { ...DEFAULT_OPTIONS, ...lockOptions };
+  const checkpoints: Checkpoint[] = [];
+  const { edgeIndices, edgeArray, isMergeNode } = ctx;
 
-  // 2. Lock 관련 checkpoint 생성
-  const lockCps = buildLockCheckpoints(ctx, lockOptions);
+  // ========================================
+  // 1-based 배열로 변환
+  // ========================================
+  // edges[edgeId] = edge (edgeId는 1-based)
+  const edges = toOneBasedArray(edgeArray);
 
-  // 3. 합치고 중복 제거 및 정렬
-  const allCheckpoints = [...pathCps, ...lockCps];
-  const deduplicated = deduplicateCheckpoints(allCheckpoints);
+  // path[0] = length, path[1] = 첫번째 edge ID, ...
+  const pathLength = edgeIndices.length;
+  const path = [pathLength, ...edgeIndices];
 
-  // 4. 최대 개수 확인 (초과 시 자르기)
-  if (deduplicated.length > MAX_CHECKPOINTS_PER_VEHICLE) {
-    devLog.warn(
-      `Checkpoint count (${deduplicated.length}) exceeds maximum (${MAX_CHECKPOINTS_PER_VEHICLE}). Truncating.`
+  // ========================================
+  // 경로의 각 edge에 대해 checkpoint 생성
+  // ========================================
+  // path[1]은 첫번째 edge (이미 진입 중이므로 요청 불필요)
+  // path[2]부터 요청 지점 찾기
+  for (let targetIdx = 2; targetIdx <= pathLength; targetIdx++) {
+    const targetEdgeId = path[targetIdx];
+    const targetEdge = edges[targetEdgeId];
+    const isMerge = isStartFromMergeNode(targetEdge, isMergeNode);
+
+    // 1. Request Point (MOVE_PREPARE, merge면 LOCK_REQUEST도)
+    const requestPoint = findRequestPoint(
+      targetIdx,
+      path,
+      edges,
+      opts.requestDistance
     );
-    deduplicated.splice(MAX_CHECKPOINTS_PER_VEHICLE);
+
+    let flags = CheckpointFlags.MOVE_PREPARE;
+    if (isMerge) {
+      flags |= CheckpointFlags.LOCK_REQUEST;
+    }
+
+    checkpoints.push({
+      edge: requestPoint.edgeId,
+      ratio: requestPoint.ratio,
+      flags,
+    });
+
+    // 2. Wait Point (merge면 LOCK_WAIT)
+    if (isMerge) {
+      const waitingOffset = targetEdge.waiting_offset; // mm 단위
+      if (waitingOffset > 0) {
+        const waitPoint = findWaitPoint(
+          targetIdx,
+          path,
+          edges,
+          waitingOffset / 1000 // mm → m 변환
+        );
+
+        checkpoints.push({
+          edge: waitPoint.edgeId,
+          ratio: waitPoint.ratio,
+          flags: CheckpointFlags.LOCK_WAIT,
+        });
+      }
+    }
   }
 
-  return {
-    checkpoints: deduplicated,
-  };
+  // 중복 제거 (같은 위치면 flags OR)
+  const dedupedCheckpoints = deduplicateCheckpoints(checkpoints);
+
+  // 최대 개수 확인
+  if (dedupedCheckpoints.length > MAX_CHECKPOINTS_PER_VEHICLE) {
+    devLog.warn(
+      `Checkpoint count (${dedupedCheckpoints.length}) exceeds maximum (${MAX_CHECKPOINTS_PER_VEHICLE}). Truncating.`
+    );
+    dedupedCheckpoints.splice(MAX_CHECKPOINTS_PER_VEHICLE);
+  }
+
+  return { checkpoints: dedupedCheckpoints };
 }
-
-/**
- * 경로 관련 checkpoint 생성 (곡선, 목적지 등)
- */
-function buildPathCheckpoints(
-  ctx: CheckpointBuildContext,
-  options: Partial<OnCurveCheckpointOptions>
-): Checkpoint[] {
-  const opts = { ...DEFAULT_ON_CURVE_OPTIONS, ...options };
-  const checkpoints: Checkpoint[] = [];
-
-  // TODO: 구현
-  // 1. On-Curve checkpoint (MOVE_PREPARE)
-  //    - 곡선 edge 위에서 다음 edge 준비
-  // 2. On-Linear checkpoint? (MOVE_SLOW)
-  //    - 곡선 진입 전 감속
-  // 3. 목적지 감속 checkpoint (MOVE_SLOW)
-  //    - 마지막 edge의 80% 지점
-
-  return checkpoints;
-}
-
-/**
- * Lock 관련 checkpoint 생성 (REQUEST, WAIT, RELEASE)
- */
-function buildLockCheckpoints(
-  ctx: CheckpointBuildContext,
-  options: Partial<MergeCheckpointOptions>
-): Checkpoint[] {
-  const opts = { ...DEFAULT_MERGE_OPTIONS, ...options };
-  const checkpoints: Checkpoint[] = [];
-
-  // TODO: 구현
-  // 1. 경로를 순회하며 merge node 찾기
-  // 2. 각 merge node마다:
-  //    - REQUEST: merge에서 역으로 requestDistance(5100m) 지점 계산
-  //      → 어느 edge의 몇 % 지점인지 찾아서 checkpoint 추가
-  //    - WAIT: merge에서 역으로 edge.waiting_offset 지점 계산
-  //      → 어느 edge의 몇 % 지점인지 찾아서 checkpoint 추가
-  //    - RELEASE: merge 통과 후 다음 edge의 releaseRatio 지점
-  //      → checkpoint 추가
-
-  return checkpoints;
-}
-
 
 /**
  * Checkpoint 리스트를 로그로 출력 (디버깅용)
@@ -127,7 +250,6 @@ export function logCheckpoints(vehicleId: number, checkpoints: Checkpoint[]): vo
       if (cp.flags & CheckpointFlags.LOCK_WAIT) flags.push("WAIT");
       if (cp.flags & CheckpointFlags.LOCK_RELEASE) flags.push("REL");
       if (cp.flags & CheckpointFlags.MOVE_PREPARE) flags.push("PREP");
-      if (cp.flags & CheckpointFlags.MOVE_SLOW) flags.push("SLOW");
 
       return `E${cp.edge}@${cp.ratio.toFixed(3)}[${flags.join("|")}]`;
     })

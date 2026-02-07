@@ -745,6 +745,37 @@ assignCommand(vehicleId, destination) {
 
 **파일:** `src/common/vehicle/initialize/constants.ts`
 
+**✅ Checkpoint 모듈 구현 (2026-02-07):**
+- `src/common/vehicle/logic/checkpoint/` 폴더 생성
+- builder.ts, types.ts, utils.ts, index.ts
+
+**핵심 함수:**
+
+| 함수 | 역할 |
+|------|------|
+| `isStartFromMergeNode(edge)` | edge.from_node가 merge인지 확인 |
+| `findRequestPoint(targetPathIdx, ...)` | Request Point 위치 찾기 (5100mm 전) |
+| `findWaitPoint(targetPathIdx, ...)` | Wait Point 위치 찾기 (waiting_offset 전) |
+| `buildCheckpoints(ctx, opts)` | 전체 경로에 대해 checkpoint 생성 |
+
+**Request Point (LOCK_REQUEST + MOVE_PREPARE):**
+- merge에서 5100mm (5.1m) 전
+- 역순 탐색하며 거리 누적
+- 곡선 만나면 → ratio 0.5 (곡선 중간)
+- 직선에서 5100mm 도달 → 해당 위치
+
+**Wait Point (LOCK_WAIT):**
+- merge에서 waiting_offset (예: 1890mm) 전
+- 역순 탐색하며 거리 누적
+- 곡선 만나면 → ratio 0 (곡선의 fn에서 대기)
+- 직선에서 waiting_offset 도달 → 해당 위치
+
+**1-based / 0-based 정리:**
+- 입력 `edgeIndices`: 1-based edge ID 배열
+- 입력 `edgeArray`: 0-based 원본 배열
+- 내부에서 `toOneBasedArray()`로 변환하여 1-based 접근
+- 출력 `Checkpoint.edge`: 1-based edge ID
+
 ### 12.11 다음 작업 (우선순위)
 
 1. **Checkpoint 배열 생성**
@@ -752,10 +783,9 @@ assignCommand(vehicleId, destination) {
    - [ ] SharedArrayBuffer 할당
    - [ ] Constants에 접근 헬퍼 함수 추가
 
-2. **AutoMgr 수정**
-   - [ ] assignCommand()에서 checkpoint 생성 로직
-   - [ ] Merge 탐지 함수
-   - [ ] Checkpoint 저장 함수
+2. **TransferMgr 연동**
+   - [ ] buildCheckpointsFromPath() 호출
+   - [ ] Checkpoint 배열에 저장
 
 3. **LockMgr 구현**
    - [ ] processCheckpoint() 메인 로직
@@ -765,7 +795,6 @@ assignCommand(vehicleId, destination) {
 4. **기존 코드 정리**
    - [ ] TransferMgr: NEXT_EDGE 채우는 부분 제거
    - [ ] edgeTransition: NEXT_EDGE 채우는 부분 제거
-   - [ ] 다른 배열들 1-based로 전환 (선택)
 
 ### 12.12 성능 이점
 
