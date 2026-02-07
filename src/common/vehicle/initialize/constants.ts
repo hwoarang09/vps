@@ -2,7 +2,7 @@
 // Shared constants for vehicle data array structure
 
 /**
- * Vehicle Data Array Memory Layout (30 fields × 4 bytes = 120 bytes per vehicle)
+ * Vehicle Data Array Memory Layout (31 fields × 4 bytes = 124 bytes per vehicle)
  *
  * | Field              | Type    | Offset | Section    | Description                           |
  * |--------------------|---------|--------|------------|---------------------------------------|
@@ -32,6 +32,7 @@
  * | CURRENT_CP_EDGE    | Float32 | 27     | Logic      | Current checkpoint edge (1-based)     |
  * | CURRENT_CP_RATIO   | Float32 | 28     | Logic      | Current checkpoint ratio (0.0~1.0)    |
  * | CURRENT_CP_FLAGS   | Float32 | 29     | Logic      | Current checkpoint flags (mutable)    |
+ * | CURRENT_CP_TARGET  | Float32 | 30     | Logic      | Current checkpoint targetEdge (1-based)|
  */
 
 // ============================================================================
@@ -99,9 +100,10 @@ export const CheckpointFlags = {
 
 // Checkpoint structure (stored separately from VehicleDataArray)
 export interface Checkpoint {
-  edge: number;   // Edge ID (1-based)
-  ratio: number;  // Progress on edge (0.0 ~ 1.0)
-  flags: number;  // CheckpointFlags bitmask
+  edge: number;        // Edge ID (1-based)
+  ratio: number;       // Progress on edge (0.0 ~ 1.0)
+  flags: number;       // CheckpointFlags bitmask
+  targetEdge: number;  // Target edge for MOVE_PREPARE (1-based, 0 = none)
 }
 
 // ============================================================================
@@ -115,8 +117,8 @@ export interface Checkpoint {
  * - CHECKPOINT_SECTION_SIZE: vehicle 1대가 차지하는 크기 (count + checkpoints)
  */
 export const MAX_CHECKPOINTS_PER_VEHICLE = 100;
-export const CHECKPOINT_FIELDS = 3;  // edge, ratio, flags
-export const CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS; // 151
+export const CHECKPOINT_FIELDS = 4;  // edge, ratio, flags, targetEdge
+export const CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS; // 401
 
 /**
  * Checkpoint 배열 레이아웃 (1-based, Float32Array)
@@ -207,6 +209,7 @@ export const LogicData = {
   CURRENT_CP_EDGE: _lPtr++,     // Current checkpoint edge (1-based, 0 = none)
   CURRENT_CP_RATIO: _lPtr++,    // Current checkpoint ratio (0.0 ~ 1.0)
   CURRENT_CP_FLAGS: _lPtr++,    // Current checkpoint flags (mutable, 0 = done)
+  CURRENT_CP_TARGET: _lPtr++,   // Current checkpoint targetEdge (1-based, 0 = none)
 } as const;
 
 export const VEHICLE_DATA_SIZE = _lPtr;

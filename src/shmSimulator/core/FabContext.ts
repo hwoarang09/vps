@@ -221,7 +221,8 @@ export class FabContext {
       this.vehicleDataArray.getData(),
       this.nodes,
       this.edges,
-      this.checkpointArray
+      this.checkpointArray,
+      this.transferMgr.getPathBufferFromAutoMgr()
     );
 
     this.buildVehicleLoopMap();

@@ -239,6 +239,7 @@ export class LockMgr {
       data[ptr + LogicData.CURRENT_CP_EDGE] = 0;
       data[ptr + LogicData.CURRENT_CP_RATIO] = 0;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
+      data[ptr + LogicData.CURRENT_CP_TARGET] = 0;
       return false;
     }
 
@@ -247,11 +248,13 @@ export class LockMgr {
     const cpEdge = this.checkpointArray[cpOffset + 0];
     const cpRatio = this.checkpointArray[cpOffset + 1];
     const cpFlags = this.checkpointArray[cpOffset + 2];
+    const cpTargetEdge = this.checkpointArray[cpOffset + 3];
 
     // VehicleDataArray에 저장
     data[ptr + LogicData.CURRENT_CP_EDGE] = cpEdge;
     data[ptr + LogicData.CURRENT_CP_RATIO] = cpRatio;
     data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
+    data[ptr + LogicData.CURRENT_CP_TARGET] = cpTargetEdge;
 
     // head 증가
     data[ptr + LogicData.CHECKPOINT_HEAD] = head + 1;
@@ -345,16 +348,8 @@ export class LockMgr {
       return;
     }
 
-    // 다음 checkpoint 읽기 (CHECKPOINT_HEAD가 가리키는 위치)
-    const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
-    const count = this.checkpointArray[vehicleOffset];
-    const head = data[ptr + LogicData.CHECKPOINT_HEAD];
-
-    let targetEdge = 0;
-    if (head < count) {
-      const cpOffset = vehicleOffset + 1 + head * CHECKPOINT_FIELDS;
-      targetEdge = this.checkpointArray[cpOffset + 0];
-    }
+    // CURRENT_CP_TARGET에서 targetEdge 직접 읽기 (builder가 저장한 값)
+    const targetEdge = data[ptr + LogicData.CURRENT_CP_TARGET];
 
     // pathBuffer에서 targetEdge까지 NEXT_EDGE 채우기
     const pathPtr = vehicleId * MAX_PATH_LENGTH;
@@ -366,7 +361,7 @@ export class LockMgr {
       pathEdges.push(this.pathBuffer[pathPtr + PATH_EDGES_START + i]);
     }
     devLog.veh(vehicleId).debug(
-      `[MOVE_PREP] targetEdge=${targetEdge} pathLen=${pathLen} pathBuf=[${pathEdges.join(',')}] head=${head}/${count}`
+      `[MOVE_PREP] targetEdge=${targetEdge} pathLen=${pathLen} pathBuf=[${pathEdges.join(',')}]`
     );
 
     const nextEdgeOffsets = [

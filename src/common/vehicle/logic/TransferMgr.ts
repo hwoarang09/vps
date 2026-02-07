@@ -314,8 +314,8 @@ export class TransferMgr {
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
     const pathLen = this.pathBufferFromAutoMgr[pathPtr + PATH_LEN];
 
-    // 첫 번째 checkpoint edge 읽기
-    const firstCpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
+    // 첫 번째 checkpoint의 targetEdge 읽기 (MOVE_PREPARE가 어떤 edge를 위한 것인지)
+    const firstCpTargetEdge = data[ptr + LogicData.CURRENT_CP_TARGET];
 
     const nextEdgeOffsets = [
       MovementData.NEXT_EDGE_0,
@@ -344,8 +344,8 @@ export class TransferMgr {
       data[ptr + nextEdgeOffsets[i]] = edgeIdx;
       filledEdges.push(edgeIdx);
 
-      // 첫 번째 checkpoint edge까지만 채움
-      if (edgeIdx === firstCpEdge) {
+      // 첫 번째 checkpoint의 targetEdge까지만 채움
+      if (firstCpTargetEdge > 0 && edgeIdx === firstCpTargetEdge) {
         // 나머지는 0으로
         for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
           data[ptr + nextEdgeOffsets[j]] = 0;
@@ -357,7 +357,7 @@ export class TransferMgr {
     data[ptr + MovementData.NEXT_EDGE_STATE] = filledEdges[0] > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
 
     devLog.veh(vehicleIndex).debug(
-      `[initNextEdges] firstCpEdge=${firstCpEdge} filled=[${filledEdges.join(',')}]`
+      `[initNextEdges] firstCpTargetEdge=${firstCpTargetEdge} filled=[${filledEdges.join(',')}]`
     );
   }
 
@@ -635,10 +635,14 @@ export class TransferMgr {
         this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
       }
 
-      // 🆕 Checkpoint 생성 (경로가 설정되는 시점에 한 번만)
-      // saveCheckpoints에서 CURRENT_CP_* 설정됨
+      // Checkpoint 생성 (경로가 설정되는 시점에 한 번만)
+      // 현재 edge를 포함하여 builder가 첫 edge 진입 checkpoint도 생성하도록 함
       if (this.checkpointBuffer && lockMgr) {
-        this.buildCheckpoints(vehId, edgeIndices, edgeArray, lockMgr, data, ptr);
+        const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+        const edgeIndicesWithCurrent = currentEdgeIdx > 0
+          ? [currentEdgeIdx, ...edgeIndices]
+          : edgeIndices;
+        this.buildCheckpoints(vehId, edgeIndicesWithCurrent, edgeArray, lockMgr, data, ptr);
       }
 
       // 첫 번째 checkpoint까지 NEXT_EDGE 채움
@@ -708,6 +712,7 @@ export class TransferMgr {
       this.checkpointBuffer[cpOffset + 0] = checkpoints[i].edge;
       this.checkpointBuffer[cpOffset + 1] = checkpoints[i].ratio;
       this.checkpointBuffer[cpOffset + 2] = checkpoints[i].flags;
+      this.checkpointBuffer[cpOffset + 3] = checkpoints[i].targetEdge;
     }
 
     // 첫 번째 checkpoint를 CURRENT_CP_*에 로드
@@ -715,11 +720,13 @@ export class TransferMgr {
       data[ptr + LogicData.CURRENT_CP_EDGE] = checkpoints[0].edge;
       data[ptr + LogicData.CURRENT_CP_RATIO] = checkpoints[0].ratio;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = checkpoints[0].flags;
+      data[ptr + LogicData.CURRENT_CP_TARGET] = checkpoints[0].targetEdge;
       data[ptr + LogicData.CHECKPOINT_HEAD] = 1;  // 다음에 로드할 인덱스 = 1
     } else {
       data[ptr + LogicData.CURRENT_CP_EDGE] = 0;
       data[ptr + LogicData.CURRENT_CP_RATIO] = 0;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
+      data[ptr + LogicData.CURRENT_CP_TARGET] = 0;
       data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
     }
 

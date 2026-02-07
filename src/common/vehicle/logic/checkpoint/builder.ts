@@ -224,6 +224,7 @@ export function buildCheckpoints(
       edge: requestPoint.edgeId,
       ratio: requestPoint.ratio,
       flags,
+      targetEdge: targetEdgeId,
     });
 
     // 2. Wait Point (합류점 진입 시 LOCK_WAIT)
@@ -240,6 +241,7 @@ export function buildCheckpoints(
           edge: incomingEdgeId,
           ratio: 0,
           flags: CheckpointFlags.LOCK_WAIT,
+          targetEdge: 0,
         });
       } else {
         // 직선 합류: waiting_offset 거리 전에서 대기
@@ -255,6 +257,7 @@ export function buildCheckpoints(
             edge: waitPoint.edgeId,
             ratio: waitPoint.ratio,
             flags: CheckpointFlags.LOCK_WAIT,
+            targetEdge: 0,
           });
         }
       }
@@ -292,7 +295,8 @@ export function logCheckpoints(vehicleId: number, checkpoints: Checkpoint[]): vo
       if (cp.flags & CheckpointFlags.LOCK_RELEASE) flags.push("REL");
       if (cp.flags & CheckpointFlags.MOVE_PREPARE) flags.push("PREP");
 
-      return `E${cp.edge}@${cp.ratio.toFixed(3)}[${flags.join("|")}]`;
+      const tgt = cp.targetEdge ? `→E${cp.targetEdge}` : '';
+      return `E${cp.edge}@${cp.ratio.toFixed(3)}[${flags.join("|")}]${tgt}`;
     })
     .join(", ");
 

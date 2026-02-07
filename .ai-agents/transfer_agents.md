@@ -1,6 +1,6 @@
 # Transfer System - AI Context
 
-## 상태: Checkpoint 기반 NEXT_EDGE 관리 (2026-02-08)
+## 상태: Checkpoint targetEdge 추가 (2026-02-08)
 
 ---
 
@@ -68,17 +68,22 @@ const firstEdge = pathBuffer[pathPtr + PATH_EDGES_START];  // 1-based edge ID
 
 ```typescript
 MAX_CHECKPOINTS_PER_VEHICLE = 100;
-CHECKPOINT_FIELDS = 3;  // edge, ratio, flags
-CHECKPOINT_SECTION_SIZE = 1 + 100 * 3;  // = 301
+CHECKPOINT_FIELDS = 4;  // edge, ratio, flags, targetEdge
+CHECKPOINT_SECTION_SIZE = 1 + 100 * 4;  // = 401
 
 // 접근
 const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
 const count = checkpointBuffer[vehicleOffset];  // checkpoint 개수
 const cpOffset = vehicleOffset + 1 + cpIdx * CHECKPOINT_FIELDS;
-const edge  = checkpointBuffer[cpOffset + 0];   // 1-based edge ID
-const ratio = checkpointBuffer[cpOffset + 1];   // 0.0 ~ 1.0
-const flags = checkpointBuffer[cpOffset + 2];   // CheckpointFlags bitmask
+const edge       = checkpointBuffer[cpOffset + 0];   // 1-based edge ID
+const ratio      = checkpointBuffer[cpOffset + 1];   // 0.0 ~ 1.0
+const flags      = checkpointBuffer[cpOffset + 2];   // CheckpointFlags bitmask
+const targetEdge = checkpointBuffer[cpOffset + 3];   // MOVE_PREPARE가 위한 edge (1-based, 0=none)
 ```
+
+**targetEdge 필드:**
+- MOVE_PREPARE checkpoint: builder가 `path[targetIdx]`를 저장 (해당 MOVE_PREPARE가 어떤 edge를 준비하는지)
+- LOCK_WAIT checkpoint: 0 (targetEdge 불필요)
 
 ### 3.3 VehicleDataArray 관련 필드
 
@@ -93,6 +98,7 @@ const flags = checkpointBuffer[cpOffset + 2];   // CheckpointFlags bitmask
 | `CURRENT_CP_EDGE` | 27 | 현재 checkpoint edge | LockMgr |
 | `CURRENT_CP_RATIO` | 28 | 현재 checkpoint ratio | LockMgr |
 | `CURRENT_CP_FLAGS` | 29 | 현재 checkpoint flags (mutable) | LockMgr |
+| `CURRENT_CP_TARGET` | 30 | 현재 checkpoint targetEdge (1-based, 0=none) | LockMgr |
 
 ### 3.4 NEXT_EDGE 관리 방식
 
@@ -118,7 +124,7 @@ NEXT_EDGE가 있으면 → 마지막 edge의 TARGET_RATIO까지 (중간은 1.0)
 | `processPathCommand(vehId, path, ...)` | path 연결성 검증 → pathBuffer 기록 → buildCheckpoints → initNextEdgesForStart | assignCommand 내부 |
 | `buildCheckpoints(vehId, edgeIndices, ...)` | checkpoint builder 호출 → saveCheckpoints | processPathCommand 내부 |
 | `saveCheckpoints(vehId, checkpoints, ...)` | checkpoint 배열에 저장 + 첫 번째 CP를 CURRENT_CP_*에 로드 | buildCheckpoints 내부 |
-| `initNextEdgesForStart(data, ptr, vehId)` | 첫 번째 checkpoint edge까지만 NEXT_EDGE 채움 | processPathCommand 내부 |
+| `initNextEdgesForStart(data, ptr, vehId)` | 첫 번째 checkpoint의 **targetEdge**까지만 NEXT_EDGE 채움 | processPathCommand 내부 |
 | `processTransferQueue(...)` | 전환 큐 처리 (LOOP 모드용) | FabContext.step() |
 | `fillNextEdgesFromLoopMap(...)` | LOOP 모드에서 loopMap 기반 NEXT_EDGE 채움 | processTransferQueue 내부 |
 | `getFullReservedPath(vehId)` | pathBuffer에서 전체 잔여 경로 조회 | 곡선 감속, merge 거리 계산 |
@@ -171,7 +177,7 @@ AutoMgr.update()
                            │         ├─ checkpointBuffer에 저장
                            │         └─ 첫 CP → CURRENT_CP_* 로드
                            └─ initNextEdgesForStart()
-                                └─ 첫 checkpoint edge까지만 NEXT_EDGE 채움
+                                └─ 첫 checkpoint의 targetEdge까지만 NEXT_EDGE 채움
 ```
 
 ---
@@ -300,10 +306,68 @@ FabContext.step():
 
 ---
 
-## 13. 다음 작업
+## 13. 버그 수정 이력
+
+### [2026-02-08] LockMgr pathBuffer 미전달 → nextEdges 미채움 → 차량 stuck
+
+**증상:** 차량이 짧은 edge에서 nextEdge=unknown(0) 상태로 영구 stuck.
+
+**원인:** `FabContext.ts`에서 `lockMgr.init()` 호출 시 5번째 인자 `pathBuffer`를 전달하지 않음.
+→ `LockMgr.handleMovePrepare()`에서 `this.pathBuffer === null` → 즉시 return
+→ Checkpoint MOVE_PREPARE가 실행되어도 nextEdges가 채워지지 않음.
+
+**수정:**
+```typescript
+// FabContext.ts (before)
+this.lockMgr.init(vehicleDataArray, nodes, edges, checkpointArray);
+
+// FabContext.ts (after)
+this.lockMgr.init(vehicleDataArray, nodes, edges, checkpointArray,
+  this.transferMgr.getPathBufferFromAutoMgr());
+```
+
+**로그 분석 방법:**
+```bash
+# v268 로그 추출
+python sim_log_parser.py <log.txt> --veh 268 -o veh268.txt
+
+# 핵심 확인 포인트: SHIFT 후 nextEdges가 [0,0,0,0,0]이고 이후 채워지지 않으면 이 버그
+[SHIFT] nextEdges: [18,0,0,0,0] → [0,0,0,0,0]   ← shift 후 비워짐
+[fillNextEdges] Skipped - checkpoint based        ← checkpoint 모드라 skip
+LOOP#1 nextEdgeIdx=0 nextState=1                  ← 영구 stuck (nextState=1=unknown)
+```
+
+**잔여 이슈:** initNextEdgesForStart에서 시작 위치 이전 ratio의 checkpoint를 미리 처리하지 않음.
+짧은 edge에서 1프레임 멈칫함 발생 가능 (영구 stuck은 아님).
+
+### [2026-02-08] handleMovePrepare targetEdge 추측 실패 → NEXT_EDGE 고갈 → 차량 stuck
+
+**증상:** veh:4가 E0012 끝에서 stuck. NEXT_EDGE가 1개만 채워진 후 edge 전환하면 고갈됨.
+
+**원인:** `handleMovePrepare`가 "다음 CP의 edge"를 targetEdge로 사용 (추측).
+- 다음 CP edge가 현재 edge(pathBuffer에 없음)이면 → 5개 전부 채움 (CP#0)
+- 다음 CP edge가 pathBuffer 첫 번째이면 → 1개만 채움 (CP#1)
+- CP#1이 1개만 채운 후 edge 전환하면 NEXT_EDGE 고갈 → stuck
+
+**수정:** Checkpoint 구조에 `targetEdge` 필드 추가 (4번째 필드).
+- builder가 각 MOVE_PREPARE가 어떤 edge를 위한 것인지 명시적으로 저장
+- `handleMovePrepare`는 추측 대신 `CURRENT_CP_TARGET`에서 직접 읽음
+- `initNextEdgesForStart`도 첫 CP의 targetEdge 사용
+
+**변경 파일:**
+- `constants.ts`: Checkpoint.targetEdge, CHECKPOINT_FIELDS=4, VEHICLE_DATA_SIZE=31, LogicData.CURRENT_CP_TARGET
+- `builder.ts`: checkpoint.targetEdge = path[targetIdx]
+- `TransferMgr.ts`: saveCheckpoints 4th field, initNextEdgesForStart targetEdge 사용
+- `LockMgr.ts`: handleMovePrepare/loadNextCheckpoint에서 targetEdge 읽기
+
+---
+
+## 14. 다음 작업
 
 ### 미완료
-- [ ] FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달 확인
+- [x] FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달 (2026-02-08 수정 완료)
+- [x] Checkpoint에 targetEdge 추가 → handleMovePrepare 추측 제거 (2026-02-08 수정 완료)
+- [ ] initNextEdgesForStart에서 시작 위치 이전 checkpoint 선처리 (짧은 edge 1프레임 지연 방지)
 - [ ] LOCK_REQUEST/LOCK_WAIT에서 TARGET_RATIO 설정 (grant 못 받으면 waitRatio, 받으면 1.0)
 - [ ] 실제 동작 테스트 (단일 차량, merge 통과, 다중 차량 lock 경쟁)
 
