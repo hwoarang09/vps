@@ -16,6 +16,7 @@ import {
   NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "./TransferMgr";
+import { devLog } from "@/logger/DevLogger";
 
 /**
  * Lock 정책 타입
@@ -106,8 +107,18 @@ export class LockMgr {
    * 개별 차량 락 처리 (Checkpoint 시스템)
    */
   processLock(vehicleId: number, _policy: LockPolicy): void {
-    if (!this.vehicleDataArray || !this.checkpointArray) return;
-    if (!this.nodes.length || !this.edges.length) return;
+    if (!this.vehicleDataArray || !this.checkpointArray) {
+      devLog.veh(vehicleId).debug(
+        `[processLock] SKIP: dataArray=${!!this.vehicleDataArray} cpArray=${!!this.checkpointArray}`
+      );
+      return;
+    }
+    if (!this.nodes.length || !this.edges.length) {
+      devLog.veh(vehicleId).debug(
+        `[processLock] SKIP: nodes=${this.nodes.length} edges=${this.edges.length}`
+      );
+      return;
+    }
 
     this.processCheckpoint(vehicleId);
   }
@@ -131,8 +142,15 @@ export class LockMgr {
     let cpRatio = data[ptr + LogicData.CURRENT_CP_RATIO];
     let cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
 
+    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+    const head = data[ptr + LogicData.CHECKPOINT_HEAD];
+
     // checkpoint가 없으면 로드 시도
     if (cpEdge === 0) {
+      devLog.veh(vehicleId).debug(
+        `[processCP] cpEdge=0, trying load. curE=${currentEdge} curR=${currentRatio.toFixed(3)} head=${head}`
+      );
       if (!this.loadNextCheckpoint(vehicleId, data, ptr)) {
         return; // 더 이상 checkpoint 없음
       }
@@ -143,13 +161,23 @@ export class LockMgr {
     }
 
     // 🚀 초고속 체크: 현재 위치가 checkpoint에 도달했는지
-    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
-    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+    if (currentEdge !== cpEdge) {
+      devLog.veh(vehicleId).debug(
+        `[processCP] SKIP edge mismatch: curE=${currentEdge} !== cpE=${cpEdge} curR=${currentRatio.toFixed(3)} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+      );
+      return;
+    }
+    if (currentRatio < cpRatio) {
+      devLog.veh(vehicleId).debug(
+        `[processCP] SKIP ratio: curE=${currentEdge} curR=${currentRatio.toFixed(3)} < cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+      );
+      return;
+    }
 
-    if (currentEdge !== cpEdge) return;
-    if (currentRatio < cpRatio) return;
-
-    // ✅ Checkpoint 도달! 각 Flag 개별 처리
+    // ✅ Checkpoint 도달!
+    devLog.veh(vehicleId).debug(
+      `[processCP] HIT! curE=${currentEdge} curR=${currentRatio.toFixed(3)} cpE=${cpEdge} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+    );
 
     // MOVE_PREPARE 처리 (가장 먼저 - edge 요청)
     if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
@@ -169,26 +197,25 @@ export class LockMgr {
     if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
       const granted = this.handleLockRequest(vehicleId, data, ptr);
       if (granted) {
-        // grant 받으면 flag 제거
         cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
         data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
       }
-      // grant 못 받으면 flag 유지 → 다음 프레임에 재시도
     }
 
     // LOCK_WAIT 처리 (lock 대기)
     if (cpFlags & CheckpointFlags.LOCK_WAIT) {
       const granted = this.handleLockWait(vehicleId, data, ptr);
       if (granted) {
-        // grant 받으면 flag 제거
         cpFlags &= ~CheckpointFlags.LOCK_WAIT;
         data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
       }
-      // grant 못 받으면 flag 유지 → 다음 프레임에 재시도
     }
 
     // flags가 0이면 → 다음 checkpoint 로드
     if (cpFlags === 0) {
+      devLog.veh(vehicleId).debug(
+        `[processCP] flags=0, loading next. head=${data[ptr + LogicData.CHECKPOINT_HEAD]}`
+      );
       this.loadNextCheckpoint(vehicleId, data, ptr);
     }
   }
@@ -206,6 +233,9 @@ export class LockMgr {
 
     // 더 이상 checkpoint 없음
     if (head >= count) {
+      devLog.veh(vehicleId).debug(
+        `[loadNextCP] END: head=${head} >= count=${count}`
+      );
       data[ptr + LogicData.CURRENT_CP_EDGE] = 0;
       data[ptr + LogicData.CURRENT_CP_RATIO] = 0;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
@@ -225,6 +255,12 @@ export class LockMgr {
 
     // head 증가
     data[ptr + LogicData.CHECKPOINT_HEAD] = head + 1;
+
+    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+    devLog.veh(vehicleId).debug(
+      `[loadNextCP] head=${head}→${head + 1}/${count} loaded: cpE=${cpEdge} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} | curE=${currentEdge} curR=${currentRatio.toFixed(3)}`
+    );
 
     return true;
   }
@@ -304,7 +340,10 @@ export class LockMgr {
    * 이동 준비 처리 - 다음 checkpoint까지 NEXT_EDGE 채우기
    */
   private handleMovePrepare(vehicleId: number, data: Float32Array, ptr: number): void {
-    if (!this.pathBuffer || !this.checkpointArray) return;
+    if (!this.pathBuffer || !this.checkpointArray) {
+      devLog.veh(vehicleId).warn(`[MOVE_PREP] no pathBuffer or checkpointArray`);
+      return;
+    }
 
     // 다음 checkpoint 읽기 (CHECKPOINT_HEAD가 가리키는 위치)
     const vehicleOffset = 1 + vehicleId * CHECKPOINT_SECTION_SIZE;
@@ -313,7 +352,6 @@ export class LockMgr {
 
     let targetEdge = 0;
     if (head < count) {
-      // 다음 checkpoint의 edge
       const cpOffset = vehicleOffset + 1 + head * CHECKPOINT_FIELDS;
       targetEdge = this.checkpointArray[cpOffset + 0];
     }
@@ -321,6 +359,15 @@ export class LockMgr {
     // pathBuffer에서 targetEdge까지 NEXT_EDGE 채우기
     const pathPtr = vehicleId * MAX_PATH_LENGTH;
     const pathLen = this.pathBuffer[pathPtr + PATH_LEN];
+
+    // pathBuffer 현재 상태 로그
+    const pathEdges: number[] = [];
+    for (let i = 0; i < Math.min(pathLen, 10); i++) {
+      pathEdges.push(this.pathBuffer[pathPtr + PATH_EDGES_START + i]);
+    }
+    devLog.veh(vehicleId).debug(
+      `[MOVE_PREP] targetEdge=${targetEdge} pathLen=${pathLen} pathBuf=[${pathEdges.join(',')}] head=${head}/${count}`
+    );
 
     const nextEdgeOffsets = [
       MovementData.NEXT_EDGE_0,
@@ -330,23 +377,27 @@ export class LockMgr {
       MovementData.NEXT_EDGE_4,
     ];
 
+    const filledEdges: number[] = [];
+
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       if (i >= pathLen) {
         data[ptr + nextEdgeOffsets[i]] = 0;
+        filledEdges.push(0);
         continue;
       }
 
       const edgeIdx = this.pathBuffer[pathPtr + PATH_EDGES_START + i];
       if (edgeIdx < 1) {
         data[ptr + nextEdgeOffsets[i]] = 0;
+        filledEdges.push(0);
         continue;
       }
 
       data[ptr + nextEdgeOffsets[i]] = edgeIdx;
+      filledEdges.push(edgeIdx);
 
       // targetEdge까지만 채움
       if (targetEdge > 0 && edgeIdx === targetEdge) {
-        // 나머지는 0으로
         for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
           data[ptr + nextEdgeOffsets[j]] = 0;
         }
@@ -357,6 +408,10 @@ export class LockMgr {
     // NEXT_EDGE_STATE 설정
     const firstNext = data[ptr + MovementData.NEXT_EDGE_0];
     data[ptr + MovementData.NEXT_EDGE_STATE] = firstNext > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
+
+    devLog.veh(vehicleId).debug(
+      `[MOVE_PREP] filled=[${filledEdges.join(',')}] state=${firstNext > 0 ? 'READY' : 'EMPTY'}`
+    );
   }
 
   /**

@@ -856,16 +856,42 @@ Lock 받음:
 5. ...반복 (한 번에 하나의 merge만 처리)
 ```
 
-### 12.12 다음 작업 (우선순위)
+### 12.12 디버그 로그 추가 (2026-02-08)
 
-1. **FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달**
+**LockMgr.ts에 devLog 추가:**
+
+| 태그 | 위치 | 확인 내용 |
+|------|------|-----------|
+| `[processLock] SKIP` | processLock 진입 | checkpointArray/dataArray null 여부 |
+| `[processCP] cpEdge=0` | processCheckpoint | CP 비어서 로드 시도 |
+| `[processCP] SKIP edge mismatch` | 초고속 체크 | curE !== cpE로 스킵 |
+| `[processCP] SKIP ratio` | 초고속 체크 | curR < cpR로 스킵 |
+| `[processCP] HIT!` | checkpoint 도달 | 도달한 CP 상세 |
+| `[processCP] flags=0` | 플래그 소진 | 다음 CP 로드 시점 |
+| `[loadNextCP] END` | loadNextCheckpoint | 모든 CP 소진 |
+| `[loadNextCP] head→` | loadNextCheckpoint | 로드된 CP 내용 + 현재 위치 |
+| `[MOVE_PREP]` | handleMovePrepare | pathBuffer 상태, targetEdge, 채워진 NEXT_EDGE |
+
+**발견된 이슈 (추정):**
+- E0018 stuck: edge 전환 후 ratio>0으로 시작하는데, CP가 ratio=0.000
+- processCheckpoint가 해당 CP를 처리 못하는 원인 확인 필요
+- 가능성 1: processCheckpoint 호출 자체 안 됨 (init 문제)
+- 가능성 2: CP가 이전 edge에 걸려있어 edge mismatch로 skip
+
+### 12.13 다음 작업 (우선순위)
+
+1. **디버그 로그로 stuck 원인 확인**
+   - [ ] 로그 분석하여 processCheckpoint 동작 추적
+   - [ ] edge mismatch / ratio skip 중 어떤 케이스인지 확인
+
+2. **FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달**
    - [ ] pathBuffer 파라미터 추가된 init() 호출
 
-2. **LOCK_REQUEST/LOCK_WAIT에서 TARGET_RATIO 설정**
+3. **LOCK_REQUEST/LOCK_WAIT에서 TARGET_RATIO 설정**
    - [ ] grant 못 받으면 wait point의 ratio로 TARGET_RATIO 설정
    - [ ] grant 받으면 TARGET_RATIO = 1.0
 
-3. **실제 동작 테스트**
+4. **실제 동작 테스트**
    - [ ] 단일 차량 경로 이동 테스트
    - [ ] merge 통과 테스트
    - [ ] 여러 차량 lock 경쟁 테스트
