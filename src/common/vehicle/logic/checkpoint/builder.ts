@@ -1,11 +1,28 @@
 // common/vehicle/logic/checkpoint/builder.ts
 // Checkpoint 생성 핵심 로직
 //
-// 핵심 알고리즘: 역순 탐색
-// - 각 edge를 요청하려면 그 edge의 fromNode에서 requestDistance만큼 전에서 요청해야 함
-// - 역순으로 거슬러 올라가면서 거리 누적
-// - 곡선을 만나면 그 곡선의 ratio 0.5에서 요청
-// - path 시작까지 갔으면 첫 edge의 ratio 0에서 요청
+// ========================================
+// 1. Request Point (다음 edge 요청 지점)
+// ========================================
+// - target edge의 from_node에서 역순으로 거슬러 올라감
+// - 직선 target: 5.1m 전에서 요청
+// - 곡선 target: 1.0m 전에서 요청
+//
+// 조건 (우선순위 순):
+// 1) 누적거리 >= 요청거리 → 해당 직선 edge의 ratio에서 요청
+// 2) 누적거리 < 요청거리 상태에서 곡선 만남 → 곡선의 ratio 0.5에서 요청
+// 3) path 시작까지 가도 거리 부족 → 첫 edge의 ratio 0에서 요청
+//
+// ========================================
+// 2. Wait Point (Lock 대기 지점)
+// ========================================
+// - waiting_offset은 merge node로 들어가는 edge (incomingEdge)에 정의됨
+// - targetEdge = merge에서 나가는 edge
+// - incomingEdge = merge로 들어가는 edge = path[targetIdx - 1]
+//
+// 합류 타입별 처리:
+// - 곡선 합류: incomingEdge의 fn (ratio 0)에서 대기
+// - 직선 합류: incomingEdge.waiting_offset 거리 전에서 대기
 
 import type { Checkpoint } from "@/common/vehicle/initialize/constants";
 import {
@@ -24,7 +41,7 @@ import { devLog } from "@/logger/DevLogger";
 /**
  * edge의 시작점(from_node)이 merge node인지 확인
  */
-function isStartFromMergeNode(
+function checkEdgeStartFromMergeNode(
   edge: Edge,
   isMergeNode: (nodeName: string) => boolean
 ): boolean {
@@ -35,8 +52,9 @@ function isStartFromMergeNode(
  * 기본 옵션
  */
 const DEFAULT_OPTIONS: MergeCheckpointOptions = {
-  requestDistance: 5.1,   // 요청 거리 (meters) - edge.distance가 meters 단위
-  releaseRatio: 0.01,     // Lock 해제 ratio
+  straightRequestDistance: 5.1,  // 직선 target 요청 거리 (meters)
+  curveRequestDistance: 1.0,     // 곡선 target 요청 거리 (meters)
+  releaseRatio: 0.01,            // Lock 해제 ratio
 };
 
 /**
@@ -57,46 +75,51 @@ function toOneBasedArray<T>(arr: T[]): T[] {
 
 /**
  * 역순 탐색으로 요청 지점 찾기 (Request Point)
- * - Lock 요청 + 다음 edge 요청 지점
- * - merge node에서 5100mm (5.1m) 전
+ * - Target의 from_node에서 거리만큼 거슬러 올라감
+ * - 직선 target: 5.1m
+ * - 곡선 target: 1m
  *
  * @param targetPathIdx - 대상 edge의 path 인덱스 (1-based, path[1]이 첫번째)
  * @param path - path 배열 (1-based, path[0]=length, path[1]=첫번째 edge ID)
  * @param edges - 1-based edge 배열 (edges[edgeId] = edge)
- * @param requestDistance - 요청 거리 (meters)
+ * @param straightRequestDistance - 직선 target 요청 거리 (meters, 기본 5.1m)
+ * @param curveRequestDistance - 곡선 target 요청 거리 (meters, 기본 1m)
+ * @param isTargetCurve - target edge가 곡선인지 여부
  * @returns 요청 지점 (edgeId, ratio)
  */
 function findRequestPoint(
   targetPathIdx: number,
   path: number[],
   edges: Edge[],
-  requestDistance: number
+  straightRequestDistance: number,
+  curveRequestDistance: number,
+  isTargetCurve: boolean
 ): RequestPoint {
+  // target이 곡선이면 1m, 직선이면 5.1m
+  const distanceToFind = isTargetCurve ? curveRequestDistance : straightRequestDistance;
+
   let accumulatedDist = 0;
 
-  // 역순으로 거슬러 올라감 (targetPathIdx - 1부터, 대상 edge는 제외)
+  // target의 from_node에서 역순으로 거슬러 올라감
   for (let i = targetPathIdx - 1; i >= 1; i--) {
-    const cpEdgeId = path[i];        // checkpoint를 둘 edge ID
-    const cpEdge = edges[cpEdgeId];  // checkpoint를 둘 edge
+    const cpEdgeId = path[i];
+    const cpEdge = edges[cpEdgeId];
 
     // 곡선 만남 → 곡선의 ratio 0.5에서 요청
     if (isCurveEdge(cpEdge)) {
       return { edgeId: cpEdgeId, ratio: 0.5 };
     }
 
-    // 직선 거리 누적
     accumulatedDist += cpEdge.distance;
 
-    if (accumulatedDist >= requestDistance) {
-      // 충분한 거리 확보 → 이 edge 어딘가에서 요청
-      // overshoot: 초과한 거리 = 이 edge의 시작점에서 얼마나 진행한 위치
-      const overshoot = accumulatedDist - requestDistance;
+    if (accumulatedDist >= distanceToFind) {
+      const overshoot = accumulatedDist - distanceToFind;
       const ratio = overshoot / cpEdge.distance;
       return { edgeId: cpEdgeId, ratio };
     }
   }
 
-  // path 시작까지 갔는데도 requestDistance 안 됨 → 첫 edge의 ratio 0
+  // path 시작까지 감
   return { edgeId: path[1], ratio: 0 };
 }
 
@@ -179,18 +202,21 @@ export function buildCheckpoints(
   for (let targetIdx = 2; targetIdx <= pathLength; targetIdx++) {
     const targetEdgeId = path[targetIdx];
     const targetEdge = edges[targetEdgeId];
-    const isMerge = isStartFromMergeNode(targetEdge, isMergeNode);
+    const isStartFromMergeNode = checkEdgeStartFromMergeNode(targetEdge, isMergeNode);
+    const isTargetCurve = isCurveEdge(targetEdge);
 
-    // 1. Request Point (MOVE_PREPARE, merge면 LOCK_REQUEST도)
+    // Request Point 찾기 (target이 곡선/직선에 따라 다른 거리 적용)
     const requestPoint = findRequestPoint(
       targetIdx,
       path,
       edges,
-      opts.requestDistance
+      opts.straightRequestDistance,
+      opts.curveRequestDistance,
+      isTargetCurve
     );
 
     let flags = CheckpointFlags.MOVE_PREPARE;
-    if (isMerge) {
+    if (isStartFromMergeNode) {
       flags |= CheckpointFlags.LOCK_REQUEST;
     }
 
@@ -200,22 +226,37 @@ export function buildCheckpoints(
       flags,
     });
 
-    // 2. Wait Point (merge면 LOCK_WAIT)
-    if (isMerge) {
-      const waitingOffset = targetEdge.waiting_offset; // mm 단위
-      if (waitingOffset > 0) {
-        const waitPoint = findWaitPoint(
-          targetIdx,
-          path,
-          edges,
-          waitingOffset / 1000 // mm → m 변환
-        );
+    // 2. Wait Point (합류점 진입 시 LOCK_WAIT)
+    // - waiting_offset은 merge로 들어가는 edge (incomingEdge)에 정의됨
+    // - 곡선 합류: 곡선의 fn (ratio 0)에서 대기
+    // - 직선 합류: waiting_offset 거리 전에서 대기
+    if (isStartFromMergeNode) {
+      const incomingEdgeId = path[targetIdx - 1];
+      const incomingEdge = edges[incomingEdgeId];
 
+      if (isCurveEdge(incomingEdge)) {
+        // 곡선 합류: 곡선의 fn (ratio 0)에서 대기
         checkpoints.push({
-          edge: waitPoint.edgeId,
-          ratio: waitPoint.ratio,
+          edge: incomingEdgeId,
+          ratio: 0,
           flags: CheckpointFlags.LOCK_WAIT,
         });
+      } else {
+        // 직선 합류: waiting_offset 거리 전에서 대기
+        const waitingOffset = incomingEdge.waiting_offset ?? 0;
+        if (waitingOffset > 0) {
+          const waitPoint = findWaitPoint(
+            targetIdx,
+            path,
+            edges,
+            waitingOffset
+          );
+          checkpoints.push({
+            edge: waitPoint.edgeId,
+            ratio: waitPoint.ratio,
+            flags: CheckpointFlags.LOCK_WAIT,
+          });
+        }
       }
     }
   }

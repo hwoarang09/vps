@@ -81,6 +81,7 @@ interface EdgeRow {
   rotation?: string;
   waypoints?: string;
   axis?: string;
+  waiting_offset?: string;
 }
 
 interface VehicleRow {
@@ -236,6 +237,10 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
         waypoints
       );
 
+      // waiting_offset 파싱: CSV에서 mm 단위 → m 변환, -1은 undefined
+      const waitingOffsetRaw = row.waiting_offset ? Number.parseFloat(row.waiting_offset) : -1;
+      const waitingOffset = waitingOffsetRaw > 0 ? waitingOffsetRaw / 1000 : undefined;
+
       const edge: Edge = {
         edge_name: row.edge_name,
         from_node: row.from_node,
@@ -252,6 +257,7 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
         source: "config",
         rendering_mode: "normal",
         renderingPoints: renderingPoints,
+        waiting_offset: waitingOffset,
       };
 
       return edge;
