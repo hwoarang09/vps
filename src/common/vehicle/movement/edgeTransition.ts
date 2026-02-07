@@ -13,7 +13,6 @@ import {
   StopReason,
   SensorData,
   PresetIndex,
-  NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
 
@@ -212,8 +211,8 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
     data[ptr + LogicData.TRAFFIC_STATE] = TrafficState.FREE;
     data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
 
-    // Next Edge 배열 shift (단순화: 락 체크 제거)
-    shiftAndRefillNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr, edgeArray);
+    // Next Edge 배열 shift (refill은 checkpoint에서)
+    shiftNextEdges(data, ptr, vehicleIndex, pathBufferFromAutoMgr);
 
     // Set TARGET_RATIO for the new edge
     const newTargetRatio = nextTargetRatio ?? (preserveTargetRatio ? undefined : 1);
@@ -299,15 +298,13 @@ function shiftPathBuffer(
 }
 
 /**
- * pathBuffer와 nextEdges를 동시에 shift
- * 단순화: 락 체크 제거
+ * pathBuffer와 nextEdges를 shift (refill은 checkpoint에서 관리)
  */
-function shiftAndRefillNextEdges(
+function shiftNextEdges(
   data: Float32Array,
   ptr: number,
   vehicleIndex: number,
-  pathBufferFromAutoMgr: Int32Array | null | undefined,
-  _edgeArray: Edge[]
+  pathBufferFromAutoMgr: Int32Array | null | undefined
 ): void {
   const beforeNextEdges = [
     data[ptr + MovementData.NEXT_EDGE_0],
@@ -323,32 +320,12 @@ function shiftAndRefillNextEdges(
     shiftResult = shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
   }
 
-  // 2. pathBuffer에서 NEXT_EDGE_0~4 다시 채우기 (락 체크 없이 단순 채움)
-  const nextEdgeOffsets = [
-    MovementData.NEXT_EDGE_0,
-    MovementData.NEXT_EDGE_1,
-    MovementData.NEXT_EDGE_2,
-    MovementData.NEXT_EDGE_3,
-    MovementData.NEXT_EDGE_4,
-  ];
-
-  if (pathBufferFromAutoMgr && shiftResult.afterLen > 0) {
-    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-
-    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
-      if (i >= shiftResult.afterLen) {
-        data[ptr + nextEdgeOffsets[i]] = 0;
-        continue;
-      }
-
-      const edgeIdx = pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
-      data[ptr + nextEdgeOffsets[i]] = edgeIdx < 1 ? 0 : edgeIdx;
-    }
-  } else {
-    for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
-      data[ptr + nextEdgeOffsets[i]] = 0;
-    }
-  }
+  // 2. NEXT_EDGE를 한 칸씩 shift (refill 없음 - checkpoint에서 관리)
+  data[ptr + MovementData.NEXT_EDGE_0] = data[ptr + MovementData.NEXT_EDGE_1];
+  data[ptr + MovementData.NEXT_EDGE_1] = data[ptr + MovementData.NEXT_EDGE_2];
+  data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
+  data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
+  data[ptr + MovementData.NEXT_EDGE_4] = 0;  // 마지막은 비움
 
   // 로그
   const afterNextEdges = [

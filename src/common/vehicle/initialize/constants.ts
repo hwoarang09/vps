@@ -2,7 +2,7 @@
 // Shared constants for vehicle data array structure
 
 /**
- * Vehicle Data Array Memory Layout (23 fields × 4 bytes = 92 bytes per vehicle)
+ * Vehicle Data Array Memory Layout (30 fields × 4 bytes = 120 bytes per vehicle)
  *
  * | Field              | Type    | Offset | Section    | Description                           |
  * |--------------------|---------|--------|------------|---------------------------------------|
@@ -16,19 +16,22 @@
  * | EDGE_RATIO         | Float32 | 7      | Movement   | Progress on current edge (0.0~1.0)    |
  * | MOVING_STATUS      | Float32 | 8      | Movement   | MovingStatus enum (0=STOPPED, 1=...)  |
  * | CURRENT_EDGE       | Float32 | 9      | Movement   | Current edge ID                       |
- * | NEXT_EDGE          | Float32 | 10     | Movement   | Next edge ID                          |
- * | NEXT_EDGE_STATE    | Float32 | 11     | Movement   | NextEdgeState enum (0=EMPTY, 1=...)   |
- * | TARGET_RATIO       | Float32 | 12     | Movement   | Target ratio for smooth transition    |
- * | OFFSET             | Float32 | 13     | Movement   | Lane offset                           |
- * | PRESET_IDX         | Float32 | 14     | Sensor     | PresetIndex enum (0=STRAIGHT, 1=...)  |
- * | HIT_ZONE           | Float32 | 15     | Sensor     | HitZone enum (-1=NONE, 0=APPROACH...) |
- * | COLLISION_TARGET   | Float32 | 16     | Sensor     | Target vehicle ID for collision       |
- * | TRAFFIC_STATE      | Float32 | 17     | Logic      | TrafficState enum (0=FREE, 1=...)     |
- * | STOP_REASON        | Float32 | 18     | Logic      | StopReason bitmask                    |
- * | JOB_STATE          | Float32 | 19     | Logic      | JobState enum (0=INITIALIZING, 1=...) |
- * | DESTINATION_EDGE   | Float32 | 20     | Logic      | Target edge ID for routing            |
- * | PATH_REMAINING     | Float32 | 21     | Logic      | Remaining path length (meters)        |
- * | CHECKPOINT_HEAD    | Float32 | 22     | Logic      | Current checkpoint index              |
+ * | NEXT_EDGE_0~4      | Float32 | 10~14  | Movement   | Next edge IDs (5 slots)               |
+ * | NEXT_EDGE_STATE    | Float32 | 15     | Movement   | NextEdgeState enum (0=EMPTY, 1=...)   |
+ * | TARGET_RATIO       | Float32 | 16     | Movement   | Target ratio for smooth transition    |
+ * | OFFSET             | Float32 | 17     | Movement   | Lane offset                           |
+ * | PRESET_IDX         | Float32 | 18     | Sensor     | PresetIndex enum (0=STRAIGHT, 1=...)  |
+ * | HIT_ZONE           | Float32 | 19     | Sensor     | HitZone enum (-1=NONE, 0=APPROACH...) |
+ * | COLLISION_TARGET   | Float32 | 20     | Sensor     | Target vehicle ID for collision       |
+ * | TRAFFIC_STATE      | Float32 | 21     | Logic      | TrafficState enum (0=FREE, 1=...)     |
+ * | STOP_REASON        | Float32 | 22     | Logic      | StopReason bitmask                    |
+ * | JOB_STATE          | Float32 | 23     | Logic      | JobState enum (0=INITIALIZING, 1=...) |
+ * | DESTINATION_EDGE   | Float32 | 24     | Logic      | Target edge ID for routing            |
+ * | PATH_REMAINING     | Float32 | 25     | Logic      | Remaining path length (meters)        |
+ * | CHECKPOINT_HEAD    | Float32 | 26     | Logic      | Next checkpoint index in array        |
+ * | CURRENT_CP_EDGE    | Float32 | 27     | Logic      | Current checkpoint edge (1-based)     |
+ * | CURRENT_CP_RATIO   | Float32 | 28     | Logic      | Current checkpoint ratio (0.0~1.0)    |
+ * | CURRENT_CP_FLAGS   | Float32 | 29     | Logic      | Current checkpoint flags (mutable)    |
  */
 
 // ============================================================================
@@ -200,7 +203,10 @@ export const LogicData = {
   JOB_STATE: _lPtr++,
   DESTINATION_EDGE: _lPtr++,
   PATH_REMAINING: _lPtr++,
-  CHECKPOINT_HEAD: _lPtr++,  // Current checkpoint index in checkpoint array
+  CHECKPOINT_HEAD: _lPtr++,     // Next checkpoint index in checkpoint array
+  CURRENT_CP_EDGE: _lPtr++,     // Current checkpoint edge (1-based, 0 = none)
+  CURRENT_CP_RATIO: _lPtr++,    // Current checkpoint ratio (0.0 ~ 1.0)
+  CURRENT_CP_FLAGS: _lPtr++,    // Current checkpoint flags (mutable, 0 = done)
 } as const;
 
 export const VEHICLE_DATA_SIZE = _lPtr;

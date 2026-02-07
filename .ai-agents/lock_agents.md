@@ -794,25 +794,81 @@ assignCommand(vehicleId, destination) {
 | 100개 랜덤 경로 | ✅ 97/97 통과 |
 | 500개 스트레스 테스트 | ✅ 497/497 통과 |
 
-### 12.11 다음 작업 (우선순위)
+**✅ Constants 확장 (2026-02-07):**
+- VehicleDataArray: **30 fields (120 bytes)**
+- 새 필드 추가:
+  - `LogicData.CURRENT_CP_EDGE` (27): 현재 checkpoint edge (1-based, 0=none)
+  - `LogicData.CURRENT_CP_RATIO` (28): 현재 checkpoint ratio (0.0~1.0)
+  - `LogicData.CURRENT_CP_FLAGS` (29): 현재 checkpoint flags (mutable)
 
-1. **Checkpoint 배열 생성**
-   - [ ] MemoryLayoutManager에 checkpoint 배열 추가
-   - [ ] SharedArrayBuffer 할당
-   - [ ] Constants에 접근 헬퍼 함수 추가
+**✅ LockMgr.processCheckpoint() 새 설계 구현 (2026-02-07):**
+- VehicleDataArray의 CURRENT_CP_* 필드 사용
+- 각 flag 개별 처리 후 해당 flag 제거
+- flags == 0이면 다음 checkpoint 로드 (loadNextCheckpoint)
 
-2. **TransferMgr 연동**
-   - [ ] buildCheckpointsFromPath() 호출
-   - [ ] Checkpoint 배열에 저장
+**✅ TransferMgr 함수 정리 (2026-02-07):**
 
-3. **LockMgr 구현**
-   - [ ] processCheckpoint() 메인 로직
-   - [ ] Lock request/wait/release 처리
-   - [ ] NEXT_EDGE 설정 로직
+| 기존 함수명 | 새 함수명 | 역할 변경 |
+|-------------|-----------|-----------|
+| `fillNextEdgesFromPathBuffer` | `initNextEdgesForStart` | 경로 시작 시 첫 checkpoint까지만 NEXT_EDGE 채움 |
+| `shiftAndRefillNextEdges` | `shiftNextEdges` | edge 전환 시 shift만 (refill 제거) |
 
-4. **기존 코드 정리**
-   - [ ] TransferMgr: NEXT_EDGE 채우는 부분 제거
-   - [ ] edgeTransition: NEXT_EDGE 채우는 부분 제거
+**✅ LockMgr.handleMovePrepare() 구현 (2026-02-07):**
+- 다음 checkpoint까지 NEXT_EDGE 채우기
+- pathBuffer에서 targetEdge까지만 채움
+- NEXT_EDGE_STATE 설정
+
+**✅ TransferMgr.saveCheckpoints() 수정 (2026-02-07):**
+- 첫 번째 checkpoint를 CURRENT_CP_*에 로드
+- CHECKPOINT_HEAD = 1 (다음에 로드할 인덱스)
+
+### 12.11 NEXT_EDGE 관리 흐름
+
+**targetRatio 동작 원리:**
+```
+NEXT_EDGE가 없으면 → 현재 edge의 targetRatio까지
+NEXT_EDGE가 있으면 → 마지막 edge의 targetRatio까지 (중간은 1.0)
+
+예시: curNode + nextN0 + nextN1, targetRatio=0.7
+  → curNode: 1.0까지 쭉
+  → nextN0: 1.0까지 쭉
+  → nextN1: 0.7까지
+```
+
+**Lock 제어 방식:**
+```
+Lock 못 받음:
+  → NEXT_EDGE를 wait point edge까지만 채움
+  → targetRatio = waitRatio
+  → 차량이 wait point에서 멈춤
+
+Lock 받음:
+  → NEXT_EDGE 더 채움 (다음 구간까지)
+  → targetRatio = 1.0
+```
+
+**여러 merge 연속 처리:**
+```
+1. A wait point까지 → 멈춤, Lock A 요청
+2. Lock A 받음 → B wait point까지 NEXT_EDGE 채움
+3. B wait point 도달 → 멈춤, Lock B 요청
+4. Lock B 받음 → C wait point까지 NEXT_EDGE 채움
+5. ...반복 (한 번에 하나의 merge만 처리)
+```
+
+### 12.12 다음 작업 (우선순위)
+
+1. **FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달**
+   - [ ] pathBuffer 파라미터 추가된 init() 호출
+
+2. **LOCK_REQUEST/LOCK_WAIT에서 TARGET_RATIO 설정**
+   - [ ] grant 못 받으면 wait point의 ratio로 TARGET_RATIO 설정
+   - [ ] grant 받으면 TARGET_RATIO = 1.0
+
+3. **실제 동작 테스트**
+   - [ ] 단일 차량 경로 이동 테스트
+   - [ ] merge 통과 테스트
+   - [ ] 여러 차량 lock 경쟁 테스트
 
 ### 12.12 성능 이점
 

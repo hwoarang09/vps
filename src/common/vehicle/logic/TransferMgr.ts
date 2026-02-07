@@ -301,30 +301,40 @@ export class TransferMgr {
   }
 
   /**
-   * Path buffer에서 next edges 읽기
-   * 단순화: 락 체크 제거
+   * 경로 시작 시 NEXT_EDGE 초기화
+   * 첫 번째 checkpoint가 있는 edge까지만 채움
    */
-  private fillNextEdgesFromPathBuffer(
+  private initNextEdgesForStart(
     data: Float32Array,
     ptr: number,
-    vehicleIndex: number,
-    nextEdgeOffsets: number[],
-    _edgeArray: Edge[],
-    _lockMgr?: ILockMgrForNextEdge
+    vehicleIndex: number
   ): void {
+    if (!this.pathBufferFromAutoMgr) return;
+
     const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    const len = this.pathBufferFromAutoMgr![pathPtr + PATH_LEN];
+    const pathLen = this.pathBufferFromAutoMgr[pathPtr + PATH_LEN];
+
+    // 첫 번째 checkpoint edge 읽기
+    const firstCpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
+
+    const nextEdgeOffsets = [
+      MovementData.NEXT_EDGE_0,
+      MovementData.NEXT_EDGE_1,
+      MovementData.NEXT_EDGE_2,
+      MovementData.NEXT_EDGE_3,
+      MovementData.NEXT_EDGE_4,
+    ];
 
     const filledEdges: number[] = [];
 
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
-      if (i >= len) {
+      if (i >= pathLen) {
         data[ptr + nextEdgeOffsets[i]] = 0;
         filledEdges.push(0);
         continue;
       }
 
-      const edgeIdx = this.pathBufferFromAutoMgr![pathPtr + PATH_EDGES_START + i];
+      const edgeIdx = this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i];
       if (edgeIdx < 1) {
         data[ptr + nextEdgeOffsets[i]] = 0;
         filledEdges.push(0);
@@ -333,12 +343,21 @@ export class TransferMgr {
 
       data[ptr + nextEdgeOffsets[i]] = edgeIdx;
       filledEdges.push(edgeIdx);
+
+      // 첫 번째 checkpoint edge까지만 채움
+      if (edgeIdx === firstCpEdge) {
+        // 나머지는 0으로
+        for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
+          data[ptr + nextEdgeOffsets[j]] = 0;
+        }
+        break;
+      }
     }
 
-    data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.READY;
+    data[ptr + MovementData.NEXT_EDGE_STATE] = filledEdges[0] > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
 
     devLog.veh(vehicleIndex).debug(
-      `[next_edge_memory] fillNextEdges FROM_PATH len=${len} filled=[${filledEdges.join(',')}]`
+      `[initNextEdges] firstCpEdge=${firstCpEdge} filled=[${filledEdges.join(',')}]`
     );
   }
 
@@ -394,7 +413,7 @@ export class TransferMgr {
    * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
    */
   private fillNextEdges(ctx: FillNextEdgesContext): void {
-    const { data, ptr, mode, vehicleIndex, edgeArray, lockMgr } = ctx;
+    const { mode, vehicleIndex } = ctx;
     const nextEdgeOffsets = [
       MovementData.NEXT_EDGE_0,
       MovementData.NEXT_EDGE_1,
@@ -407,7 +426,10 @@ export class TransferMgr {
       (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE);
 
     if (usePathBuffer) {
-      this.fillNextEdgesFromPathBuffer(data, ptr, vehicleIndex, nextEdgeOffsets, edgeArray, lockMgr);
+      // 새 설계: checkpoint 기반으로 NEXT_EDGE 관리
+      // initNextEdgesForStart는 processPathCommand에서 이미 호출됨
+      // 여기서는 아무것도 안 함 (checkpoint에서 관리)
+      devLog.veh(vehicleIndex).debug(`[fillNextEdges] Skipped - checkpoint based`);
     } else {
       this.fillNextEdgesFromLoopMap(ctx, nextEdgeOffsets);
     }
@@ -613,36 +635,14 @@ export class TransferMgr {
         this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i] = edgeIndices[i];
       }
 
-      // path 설정 후 next edges도 바로 채움 (merge 체크 포함)
-      const nextEdgeOffsets = [
-        MovementData.NEXT_EDGE_0,
-        MovementData.NEXT_EDGE_1,
-        MovementData.NEXT_EDGE_2,
-        MovementData.NEXT_EDGE_3,
-        MovementData.NEXT_EDGE_4,
-      ];
-
-      // 덮어쓰기 전 기존 상태 로그
-      const beforeNextEdges = [
-        data[ptr + MovementData.NEXT_EDGE_0],
-        data[ptr + MovementData.NEXT_EDGE_1],
-        data[ptr + MovementData.NEXT_EDGE_2],
-        data[ptr + MovementData.NEXT_EDGE_3],
-        data[ptr + MovementData.NEXT_EDGE_4],
-      ];
-      const beforeState = data[ptr + MovementData.NEXT_EDGE_STATE];
-      devLog.veh(vehId).debug(
-        `[pathBuff] BEFORE_OVERWRITE nextEdges=[${beforeNextEdges.join(',')}] state=${beforeState} ` +
-        `currentEdge=${currentEdge.edge_name}`
-      );
-
-      // fillNextEdgesFromPathBuffer 재사용 (merge 체크 로직 포함)
-      this.fillNextEdgesFromPathBuffer(data, ptr, vehId, nextEdgeOffsets, edgeArray, lockMgr);
-
       // 🆕 Checkpoint 생성 (경로가 설정되는 시점에 한 번만)
+      // saveCheckpoints에서 CURRENT_CP_* 설정됨
       if (this.checkpointBuffer && lockMgr) {
         this.buildCheckpoints(vehId, edgeIndices, edgeArray, lockMgr, data, ptr);
       }
+
+      // 첫 번째 checkpoint까지 NEXT_EDGE 채움
+      this.initNextEdgesForStart(data, ptr, vehId);
     } else {
       devLog.veh(vehId).warn(`[processPathCommand] NO pathBuffer!`);
     }
@@ -686,7 +686,7 @@ export class TransferMgr {
   }
 
   /**
-   * Checkpoint를 배열에 저장
+   * Checkpoint를 배열에 저장하고 첫 번째 checkpoint를 VehicleDataArray에 로드
    */
   private saveCheckpoints(
     vehId: number,
@@ -710,11 +710,21 @@ export class TransferMgr {
       this.checkpointBuffer[cpOffset + 2] = checkpoints[i].flags;
     }
 
-    // CHECKPOINT_HEAD 초기화
-    data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
+    // 첫 번째 checkpoint를 CURRENT_CP_*에 로드
+    if (count > 0) {
+      data[ptr + LogicData.CURRENT_CP_EDGE] = checkpoints[0].edge;
+      data[ptr + LogicData.CURRENT_CP_RATIO] = checkpoints[0].ratio;
+      data[ptr + LogicData.CURRENT_CP_FLAGS] = checkpoints[0].flags;
+      data[ptr + LogicData.CHECKPOINT_HEAD] = 1;  // 다음에 로드할 인덱스 = 1
+    } else {
+      data[ptr + LogicData.CURRENT_CP_EDGE] = 0;
+      data[ptr + LogicData.CURRENT_CP_RATIO] = 0;
+      data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
+      data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
+    }
 
     devLog.veh(vehId).debug(
-      `[checkpoint] Created ${count} checkpoints for path`
+      `[checkpoint] Created ${count} checkpoints, first: edge=${checkpoints[0]?.edge ?? 0} ratio=${checkpoints[0]?.ratio?.toFixed(3) ?? 0} flags=${checkpoints[0]?.flags ?? 0}`
     );
   }
 
