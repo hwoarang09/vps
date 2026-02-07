@@ -776,6 +776,24 @@ assignCommand(vehicleId, destination) {
 - 내부에서 `toOneBasedArray()`로 변환하여 1-based 접근
 - 출력 `Checkpoint.edge`: 1-based edge ID
 
+**✅ Checkpoint 테스트 완료 (2026-02-07):**
+- `builder.test.ts` 단순화 및 검증 로직 정리
+- y_short 맵 기반 테스트 (874 edges, 4349 stations, 216 merge nodes)
+
+**테스트 검증 항목:**
+1. 모든 checkpoint의 edge가 path에 있는지 (유효성)
+2. 경로 내 2번째 edge부터 각 edge에 대해:
+   - `MOVE_PREPARE` checkpoint 존재 여부
+   - merge node면 `LOCK_REQUEST` checkpoint 존재 여부
+   - incomingEdge가 곡선이거나 waiting_offset 있으면 `LOCK_WAIT` 존재 여부
+
+**테스트 결과:**
+| 테스트 | 결과 |
+|--------|------|
+| 단일 경로 검증 | ✅ 통과 |
+| 100개 랜덤 경로 | ✅ 97/97 통과 |
+| 500개 스트레스 테스트 | ✅ 497/497 통과 |
+
 ### 12.11 다음 작업 (우선순위)
 
 1. **Checkpoint 배열 생성**

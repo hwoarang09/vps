@@ -54,62 +54,37 @@ export function normalizeRatio(ratio: number): number {
 }
 
 /**
- * 두 checkpoint가 같은 위치인지 확인 (edge + ratio)
- * @param edge1 - Edge ID 1
- * @param ratio1 - Ratio 1
- * @param edge2 - Edge ID 2
- * @param ratio2 - Ratio 2
- * @param tolerance - 허용 오차 (기본 0.0001 = 소수 4자리)
- * @returns 같은 위치면 true
+ * 같은 edge 내에서만 ratio 정렬
+ * - 다른 edge 간에는 순서 유지 (path 순서대로 push되었으므로)
+ * - 같은 edge가 연속으로 나오면 ratio 오름차순 정렬
+ *
+ * 예: [E2@0.5, E2@0.0, E3@0.8] → [E2@0.0, E2@0.5, E3@0.8]
  */
-export function isSamePosition(
-  edge1: number,
-  ratio1: number,
-  edge2: number,
-  ratio2: number,
-  tolerance: number = 0.0001
-): boolean {
-  if (edge1 !== edge2) return false;
-  return Math.abs(ratio1 - ratio2) < tolerance;
-}
-
-/**
- * Checkpoint 리스트를 edge + ratio 순으로 정렬
- */
-export function sortCheckpoints(checkpoints: Array<{ edge: number; ratio: number; flags: number }>): void {
-  checkpoints.sort((a, b) => {
-    if (a.edge !== b.edge) return a.edge - b.edge;
-    return a.ratio - b.ratio;
-  });
-}
-
-/**
- * Checkpoint 중복 제거 (같은 edge + ratio)
- * 같은 위치면 flags를 OR로 합침
- */
-export function deduplicateCheckpoints(
+export function sortCheckpointsByRatioWithinEdge(
   checkpoints: Array<{ edge: number; ratio: number; flags: number }>
-): Array<{ edge: number; ratio: number; flags: number }> {
-  if (checkpoints.length === 0) return [];
+): void {
+  if (checkpoints.length <= 1) return;
 
-  sortCheckpoints(checkpoints);
+  let i = 0;
+  while (i < checkpoints.length) {
+    const currentEdge = checkpoints[i].edge;
+    let j = i + 1;
 
-  const result: Array<{ edge: number; ratio: number; flags: number }> = [];
-  let current = { ...checkpoints[0] };
-
-  for (let i = 1; i < checkpoints.length; i++) {
-    const cp = checkpoints[i];
-
-    if (isSamePosition(current.edge, current.ratio, cp.edge, cp.ratio)) {
-      // 같은 위치 → flags 합치기
-      current.flags |= cp.flags;
-    } else {
-      // 다른 위치 → 현재 저장하고 새로 시작
-      result.push(current);
-      current = { ...cp };
+    // 같은 edge 구간 찾기
+    while (j < checkpoints.length && checkpoints[j].edge === currentEdge) {
+      j++;
     }
-  }
 
-  result.push(current);
-  return result;
+    // 같은 edge 구간이 2개 이상이면 ratio 정렬
+    if (j - i > 1) {
+      const segment = checkpoints.slice(i, j);
+      segment.sort((a, b) => a.ratio - b.ratio);
+      for (let k = 0; k < segment.length; k++) {
+        checkpoints[i + k] = segment[k];
+      }
+    }
+
+    i = j;
+  }
 }
+

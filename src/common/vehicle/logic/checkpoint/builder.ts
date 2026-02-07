@@ -35,7 +35,7 @@ import type {
   CheckpointBuildResult,
   MergeCheckpointOptions,
 } from "./types";
-import { isCurveEdge, deduplicateCheckpoints } from "./utils";
+import { isCurveEdge, sortCheckpointsByRatioWithinEdge } from "./utils";
 import { devLog } from "@/logger/DevLogger";
 
 /**
@@ -261,18 +261,18 @@ export function buildCheckpoints(
     }
   }
 
-  // 중복 제거 (같은 위치면 flags OR)
-  const dedupedCheckpoints = deduplicateCheckpoints(checkpoints);
+  // 같은 edge 내에서 ratio 정렬
+  sortCheckpointsByRatioWithinEdge(checkpoints);
 
   // 최대 개수 확인
-  if (dedupedCheckpoints.length > MAX_CHECKPOINTS_PER_VEHICLE) {
+  if (checkpoints.length > MAX_CHECKPOINTS_PER_VEHICLE) {
     devLog.warn(
-      `Checkpoint count (${dedupedCheckpoints.length}) exceeds maximum (${MAX_CHECKPOINTS_PER_VEHICLE}). Truncating.`
+      `Checkpoint count (${checkpoints.length}) exceeds maximum (${MAX_CHECKPOINTS_PER_VEHICLE}). Truncating.`
     );
-    dedupedCheckpoints.splice(MAX_CHECKPOINTS_PER_VEHICLE);
+    checkpoints.splice(MAX_CHECKPOINTS_PER_VEHICLE);
   }
 
-  return { checkpoints: dedupedCheckpoints };
+  return { checkpoints };
 }
 
 /**
