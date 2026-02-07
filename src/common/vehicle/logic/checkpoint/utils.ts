@@ -54,11 +54,7 @@ export function normalizeRatio(ratio: number): number {
 }
 
 /**
- * 같은 edge 내에서만 ratio 정렬
- * - 다른 edge 간에는 순서 유지 (path 순서대로 push되었으므로)
- * - 같은 edge가 연속으로 나오면 ratio 오름차순 정렬
- *
- * 예: [E2@0.5, E2@0.0, E3@0.8] → [E2@0.0, E2@0.5, E3@0.8]
+ * 같은 edge 내에서만 ratio 정렬 (legacy, sortCheckpointsByPathOrder 사용 권장)
  */
 export function sortCheckpointsByRatioWithinEdge(
   checkpoints: Array<{ edge: number; ratio: number; flags: number }>
@@ -70,12 +66,10 @@ export function sortCheckpointsByRatioWithinEdge(
     const currentEdge = checkpoints[i].edge;
     let j = i + 1;
 
-    // 같은 edge 구간 찾기
     while (j < checkpoints.length && checkpoints[j].edge === currentEdge) {
       j++;
     }
 
-    // 같은 edge 구간이 2개 이상이면 ratio 정렬
     if (j - i > 1) {
       const segment = checkpoints.slice(i, j);
       segment.sort((a, b) => a.ratio - b.ratio);
@@ -86,5 +80,35 @@ export function sortCheckpointsByRatioWithinEdge(
 
     i = j;
   }
+}
+
+/**
+ * 경로 순서 기반 전체 정렬
+ * - 1차: edge의 경로 내 위치 (path에서 먼저 나오는 edge가 앞)
+ * - 2차: 같은 edge 내에서 ratio 오름차순
+ *
+ * @param checkpoints - 정렬할 checkpoint 배열 (in-place)
+ * @param edgeIndices - 경로 edge ID 배열 (1-based edge IDs)
+ */
+export function sortCheckpointsByPathOrder(
+  checkpoints: Array<{ edge: number; ratio: number; flags: number }>,
+  edgeIndices: number[]
+): void {
+  if (checkpoints.length <= 1) return;
+
+  // edgeId → 경로 내 첫 번째 출현 인덱스
+  const edgePathIndex = new Map<number, number>();
+  for (let i = 0; i < edgeIndices.length; i++) {
+    if (!edgePathIndex.has(edgeIndices[i])) {
+      edgePathIndex.set(edgeIndices[i], i);
+    }
+  }
+
+  checkpoints.sort((a, b) => {
+    const aIdx = edgePathIndex.get(a.edge) ?? 999999;
+    const bIdx = edgePathIndex.get(b.edge) ?? 999999;
+    if (aIdx !== bIdx) return aIdx - bIdx;
+    return a.ratio - b.ratio;
+  });
 }
 

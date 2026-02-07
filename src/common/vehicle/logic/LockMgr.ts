@@ -51,7 +51,17 @@ export class LockMgr {
   private locks = new Map<string, number>();        // nodeName -> vehId (현재 잡고 있는 차량)
   private queues = new Map<string, number[]>();     // nodeName -> vehId[] (대기 큐)
 
+  // 자동 해제: 차량이 releaseEdge에 도달하면 lock release
+  private pendingReleases = new Map<number, Array<{ nodeName: string; releaseEdgeIdx: number }>>();
+
   constructor() {}
+
+  /** 1-based edge index → edge name (e.g. "E_29") */
+  private eName(idx: number): string {
+    if (idx < 1) return '?';
+    const edge = this.edges[idx - 1];
+    return edge ? edge.edge_name : `?${idx}`;
+  }
 
   /**
    * 초기화 - 참조 저장
@@ -98,6 +108,9 @@ export class LockMgr {
    * 매 프레임 호출 - 전체 차량 순회
    */
   updateAll(numVehicles: number, policy: LockPolicy = { default: 'FIFO' }): void {
+    // 자동 해제 체크 (checkpoint 처리 전에)
+    this.checkAutoRelease();
+
     for (let i = 0; i < numVehicles; i++) {
       this.processLock(i, policy);
     }
@@ -149,7 +162,7 @@ export class LockMgr {
     // checkpoint가 없으면 로드 시도
     if (cpEdge === 0) {
       devLog.veh(vehicleId).debug(
-        `[processCP] cpEdge=0, trying load. curE=${currentEdge} curR=${currentRatio.toFixed(3)} head=${head}`
+        `[processCP] cpEdge=0, trying load. curE=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} head=${head}`
       );
       if (!this.loadNextCheckpoint(vehicleId, data, ptr)) {
         return; // 더 이상 checkpoint 없음
@@ -163,20 +176,20 @@ export class LockMgr {
     // 🚀 초고속 체크: 현재 위치가 checkpoint에 도달했는지
     if (currentEdge !== cpEdge) {
       devLog.veh(vehicleId).debug(
-        `[processCP] SKIP edge mismatch: curE=${currentEdge} !== cpE=${cpEdge} curR=${currentRatio.toFixed(3)} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+        `[processCP] SKIP edge mismatch: cur=${this.eName(currentEdge)} !== cp=${this.eName(cpEdge)} curR=${currentRatio.toFixed(3)} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
       );
       return;
     }
     if (currentRatio < cpRatio) {
       devLog.veh(vehicleId).debug(
-        `[processCP] SKIP ratio: curE=${currentEdge} curR=${currentRatio.toFixed(3)} < cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+        `[processCP] SKIP ratio: cur=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} < cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
       );
       return;
     }
 
     // ✅ Checkpoint 도달!
     devLog.veh(vehicleId).debug(
-      `[processCP] HIT! curE=${currentEdge} curR=${currentRatio.toFixed(3)} cpE=${cpEdge} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+      `[processCP] HIT! cur=${this.eName(currentEdge)}@${currentRatio.toFixed(3)} cp=${this.eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
     );
 
     // MOVE_PREPARE 처리 (가장 먼저 - edge 요청)
@@ -193,13 +206,11 @@ export class LockMgr {
       data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
     }
 
-    // LOCK_REQUEST 처리 (lock 요청)
+    // LOCK_REQUEST 처리 (lock 요청 - 요청 후 무조건 flag 해제)
     if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
-      const granted = this.handleLockRequest(vehicleId, data, ptr);
-      if (granted) {
-        cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
-        data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
-      }
+      this.handleLockRequest(vehicleId, data, ptr);
+      cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
+      data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
     }
 
     // LOCK_WAIT 처리 (lock 대기)
@@ -214,7 +225,7 @@ export class LockMgr {
     // flags가 0이면 → 다음 checkpoint 로드
     if (cpFlags === 0) {
       devLog.veh(vehicleId).debug(
-        `[processCP] flags=0, loading next. head=${data[ptr + LogicData.CHECKPOINT_HEAD]}`
+        `[processCP] flags=0, loading next. cur=${this.eName(currentEdge)} head=${data[ptr + LogicData.CHECKPOINT_HEAD]}`
       );
       this.loadNextCheckpoint(vehicleId, data, ptr);
     }
@@ -262,7 +273,7 @@ export class LockMgr {
     const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
     const currentRatio = data[ptr + MovementData.EDGE_RATIO];
     devLog.veh(vehicleId).debug(
-      `[loadNextCP] head=${head}→${head + 1}/${count} loaded: cpE=${cpEdge} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} | curE=${currentEdge} curR=${currentRatio.toFixed(3)}`
+      `[loadNextCP] head=${head}→${head + 1}/${count} loaded: cp=${this.eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} tgt=${this.eName(cpTargetEdge)} | cur=${this.eName(currentEdge)}@${currentRatio.toFixed(3)}`
     );
 
     return true;
@@ -292,18 +303,32 @@ export class LockMgr {
    * @returns granted 여부
    */
   private handleLockRequest(vehicleId: number, data: Float32Array, ptr: number): boolean {
-    // pathBuffer에서 다음 merge node 찾기 (현재는 간단히 NEXT_EDGE_0 사용)
-    const nextEdgeIdx = Math.trunc(data[ptr + MovementData.NEXT_EDGE_0]);
-    if (nextEdgeIdx < 1) return true; // edge 없으면 그냥 통과
+    // checkpoint의 targetEdge = merge node에서 나가는 edge
+    const targetEdgeIdx = Math.trunc(data[ptr + LogicData.CURRENT_CP_TARGET]);
+    if (targetEdgeIdx < 1) return true;
 
-    const nextEdge = this.edges[nextEdgeIdx - 1];
-    if (!nextEdge) return true;
+    const targetEdge = this.edges[targetEdgeIdx - 1];
+    if (!targetEdge) return true;
 
-    const nodeName = nextEdge.to_node;
-    if (!this.isMergeNode(nodeName)) return true; // merge가 아니면 통과
+    // merge node = targetEdge의 from_node
+    const nodeName = targetEdge.from_node;
+    if (!this.isMergeNode(nodeName)) return true;
 
     // Lock 요청
     this.requestLockInternal(nodeName, vehicleId);
+
+    // 자동 해제 등록: targetEdge 도달 시 release
+    if (!this.pendingReleases.has(vehicleId)) {
+      this.pendingReleases.set(vehicleId, []);
+    }
+    const releases = this.pendingReleases.get(vehicleId)!;
+    // 중복 등록 방지
+    if (!releases.some(r => r.nodeName === nodeName)) {
+      releases.push({ nodeName, releaseEdgeIdx: targetEdgeIdx });
+      devLog.veh(vehicleId).debug(
+        `[LOCK_REQ] node=${nodeName} target=${this.eName(targetEdgeIdx)} → auto-release registered`
+      );
+    }
 
     // Grant 확인
     return this.checkGrantInternal(nodeName, vehicleId);
@@ -314,25 +339,40 @@ export class LockMgr {
    * @returns granted 여부
    */
   private handleLockWait(vehicleId: number, data: Float32Array, ptr: number): boolean {
-    const nextEdgeIdx = Math.trunc(data[ptr + MovementData.NEXT_EDGE_0]);
-    if (nextEdgeIdx < 1) return true; // edge 없으면 그냥 통과
+    // CURRENT_CP_TARGET = merge node에서 나가는 edge (builder가 세팅)
+    const targetEdgeIdx = Math.trunc(data[ptr + LogicData.CURRENT_CP_TARGET]);
+    if (targetEdgeIdx < 1) return true; // target 없으면 그냥 통과
 
-    const nextEdge = this.edges[nextEdgeIdx - 1];
-    if (!nextEdge) return true;
+    const targetEdge = this.edges[targetEdgeIdx - 1];
+    if (!targetEdge) return true;
 
-    const nodeName = nextEdge.to_node;
+    const nodeName = targetEdge.from_node;
     if (!this.isMergeNode(nodeName)) return true; // merge가 아니면 통과
 
     const velocity = data[ptr + MovementData.VELOCITY];
 
-    if (!this.checkGrantInternal(nodeName, vehicleId)) {
-      // 아직 grant 안 받음 → 멈춤 유지
-      if (velocity === 0) {
-        data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
-      }
+    // lock holder 확인: 다른 차량이 잡고 있으면 대기, 비어있거나 내가 잡고 있으면 통과
+    const holder = this.locks.get(nodeName);
+    const blocked = holder !== undefined && holder !== vehicleId;
+
+    if (blocked) {
+      // 다른 차량이 lock 보유 → 강제 정지
+      const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+      const curRatio = data[ptr + MovementData.EDGE_RATIO];
+      devLog.veh(vehicleId).debug(
+        `[LOCK_WAIT] BLOCKED node=${nodeName} holder=veh:${holder} next=${this.eName(targetEdgeIdx)} vel=${velocity.toFixed(1)} → FORCE STOP at ${this.eName(curEdge)}@${curRatio.toFixed(3)}`
+      );
+      data[ptr + MovementData.VELOCITY] = 0;
+      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+      data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
       return false;
     } else {
-      // Grant 받음! → 출발
+      // lock 비어있거나 내가 보유 → 통과
+      const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+      const curRatio = data[ptr + MovementData.EDGE_RATIO];
+      devLog.veh(vehicleId).debug(
+        `[LOCK_WAIT] PASS node=${nodeName} next=${this.eName(targetEdgeIdx)} → MOVING at ${this.eName(curEdge)}@${curRatio.toFixed(3)}`
+      );
       data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
       data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
       return true;
@@ -361,7 +401,7 @@ export class LockMgr {
       pathEdges.push(this.pathBuffer[pathPtr + PATH_EDGES_START + i]);
     }
     devLog.veh(vehicleId).debug(
-      `[MOVE_PREP] targetEdge=${targetEdge} pathLen=${pathLen} pathBuf=[${pathEdges.join(',')}]`
+      `[MOVE_PREP] target=${this.eName(targetEdge)} pathLen=${pathLen} pathBuf=[${pathEdges.map(e => this.eName(e)).join(',')}]`
     );
 
     const nextEdgeOffsets = [
@@ -405,7 +445,7 @@ export class LockMgr {
     data[ptr + MovementData.NEXT_EDGE_STATE] = firstNext > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
 
     devLog.veh(vehicleId).debug(
-      `[MOVE_PREP] filled=[${filledEdges.join(',')}] state=${firstNext > 0 ? 'READY' : 'EMPTY'}`
+      `[MOVE_PREP] filled=[${filledEdges.map(e => this.eName(e)).join(',')}] state=${firstNext > 0 ? 'READY' : 'EMPTY'}`
     );
   }
 
@@ -454,6 +494,19 @@ export class LockMgr {
   }
 
   /**
+   * 큐에서만 제거 (lock 미보유 상태에서 auto-release 도달 시)
+   */
+  private cancelFromQueue(nodeName: string, vehId: number): void {
+    const queue = this.queues.get(nodeName);
+    if (queue) {
+      const idx = queue.indexOf(vehId);
+      if (idx !== -1) {
+        queue.splice(idx, 1);
+      }
+    }
+  }
+
+  /**
    * 큐 다음 차량에 grant
    */
   private grantNextInQueue(nodeName: string): void {
@@ -463,6 +516,49 @@ export class LockMgr {
     // 큐의 첫 번째 차량에 grant
     const nextVeh = queue[0];
     this.locks.set(nodeName, nextVeh);
+    devLog.veh(nextVeh).debug(
+      `[LOCK_GRANT] node=${nodeName} granted from queue`
+    );
+  }
+
+  /**
+   * 자동 해제 체크
+   * - 차량이 releaseEdge에 도달하면 lock 해제
+   */
+  private checkAutoRelease(): void {
+    if (!this.vehicleDataArray) return;
+    const data = this.vehicleDataArray;
+
+    for (const [vehId, releases] of this.pendingReleases) {
+      const ptr = vehId * VEHICLE_DATA_SIZE;
+      const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+
+      for (let i = releases.length - 1; i >= 0; i--) {
+        const info = releases[i];
+        if (currentEdge === info.releaseEdgeIdx) {
+          const holder = this.locks.get(info.nodeName);
+          if (holder === vehId) {
+            // 정상 release: lock 보유 중 → 해제 + 다음 차량에 grant
+            this.releaseLockInternal(info.nodeName, vehId);
+            this.grantNextInQueue(info.nodeName);
+            devLog.veh(vehId).debug(
+              `[AUTO_RELEASE] node=${info.nodeName} at ${this.eName(currentEdge)}`
+            );
+          } else {
+            // lock 안 잡고 있음 → 큐에서만 제거 (cancel)
+            this.cancelFromQueue(info.nodeName, vehId);
+            devLog.veh(vehId).debug(
+              `[AUTO_RELEASE] CANCEL node=${info.nodeName} at ${this.eName(currentEdge)} (not holder, holder=${holder})`
+            );
+          }
+          releases.splice(i, 1);
+        }
+      }
+
+      if (releases.length === 0) {
+        this.pendingReleases.delete(vehId);
+      }
+    }
   }
 
   /**
@@ -478,6 +574,7 @@ export class LockMgr {
   reset(): void {
     this.locks.clear();
     this.queues.clear();
+    this.pendingReleases.clear();
   }
 
   // ============================================================================

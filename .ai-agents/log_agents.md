@@ -366,6 +366,143 @@ Examples:
 [00:12:00.981] [DEBUG] [veh:24] [LockMgr.ts:496] [requestLock] 상세: ...
 ```
 
+## 차량 정지 원인 분석 (Vehicle Stuck Analysis)
+
+사용자가 "로그 분석해줘", "왜 멈췄는지 확인해줘" 등 요청 시 아래 절차를 따른다.
+
+### 로그 파일 위치
+
+- **기본 경로**: `/mnt/c/dev/` (Windows 공유 폴더)
+- `ls /mnt/c/dev/*.txt` 로 파일 확인
+
+### 분석 절차
+
+#### Step 1: 대상 차량 로그 추출
+
+```bash
+# python3 사용 (python 아님!)
+python3 tools/log_parser/sim_log_parser.py <파일> --veh <N> --no-global --limit 5000
+```
+
+#### Step 2: 핵심 이벤트 추출 (Python 인라인 스크립트)
+
+반복되는 프레임 로그를 제거하고 **상태 변화만** 추출한다. 아래 패턴의 python3 인라인 스크립트를 사용:
+
+```python
+python3 -c "
+import re
+
+LOG_PATTERN = re.compile(
+    r'\[(\d{2}:\d{2}:\d{2}\.\d{3})\]\s*'
+    r'\[(\w+)\s*\]\s*'
+    r'\[([^\]]+)\]\s*'
+    r'\[([^\]]+)\]\s*'
+    r'\[([^\]]+)\]\s*'
+    r'(.*)'
+)
+
+# processCP 상태 변화만 추출 (ratio 변화 무시하여 중복 제거)
+last_msg = None
+with open('<파일>', 'r') as f:
+    for line in f:
+        if 'veh:<N>' not in line:
+            continue
+        m = LOG_PATTERN.match(line.strip())
+        if not m:
+            continue
+        tag = m.group(5)
+        if tag != 'processCP':
+            continue
+        msg = m.group(6)
+        ts = m.group(1)
+        key = re.sub(r'curR=[\d.]+', 'curR=X', msg)
+        if key != last_msg:
+            print(f'[{ts}] {msg}')
+            last_msg = key
+"
+```
+
+#### Step 3: 시점별 상태 정밀 추출
+
+문제 시점 전후의 **모든** veh 로그를 시간 범위로 추출:
+
+```python
+python3 -c "
+import re
+# ... LOG_PATTERN ...
+with open('<파일>', 'r') as f:
+    for line in f:
+        if 'veh:<N>' not in line:
+            continue
+        m = LOG_PATTERN.match(line.strip())
+        if not m:
+            continue
+        ts = m.group(1)
+        if '<시작시간>' <= ts <= '<끝시간>':
+            print(f'[{ts}] [{m.group(5)}] [{m.group(4)}] {m.group(6)}')
+"
+```
+
+#### Step 4: 분석 보고서 작성
+
+아래 항목을 **시점별로** 정리:
+
+| 항목 | 설명 |
+|------|------|
+| **currentEdge** | 차량이 현재 어느 Edge 위에 있는지 |
+| **ratio** | Edge 위의 위치 (0.0=시작, 1.0=끝) |
+| **nextEdges** | `[N1, N2, N3, N4, N5]` - 앞으로 갈 Edge 목록 |
+| **pathBuf** | 전체 경로 버퍼 (남은 경로) |
+| **checkpoint** | 현재 CP의 edge, ratio, flags, head |
+| **CP flags 의미** | PREP=다음 edge 채우기, REQ=lock 요청, WAIT=lock 대기 |
+| **CP target** | PREP의 목표 edge (여기까지 nextEdges를 채움) |
+| **처리 결과** | HIT 후 어떻게 됐는지 (flags→0? 다음 CP 로드?) |
+
+#### 보고서 포맷 예시
+
+```
+### 시점 N: CP#X HIT (HH:MM:SS.mmm) - E???@ratio FLAGS→TARGET
+
+  currentEdge = EXXX, ratio = X.XXX
+  nextEdges   = [N1, N2, N3, N4, N5]
+  pathBuf     = [...] len=XX
+  checkpoint  = head=X, cpE=XXX, cpR=X.XXX, flags=X(의미)
+
+  처리: (무슨 flag가 어떻게 처리됐는지)
+  결과: (nextEdges 변화, flags 변화, 다음 CP 로드 여부)
+```
+
+### 핵심 로그 태그 해석
+
+| 태그 | 의미 |
+|------|------|
+| `[processCP]` | Checkpoint 처리 (HIT/SKIP ratio/SKIP edge mismatch) |
+| `[loadNextCP]` | 다음 Checkpoint 로드 (head 증가) |
+| `[MOVE_PREP]` | PREP flag 처리 - nextEdges에 edge 채우기 |
+| `[next_edge_memory] ENTER` | Edge 끝 도달, 전환 시도 |
+| `[next_edge_memory] LOOP` | nextEdgeIdx로 다음 edge 전환 |
+| `[SHIFT]` | pathBuf/nextEdges 이동 (edge 전환 완료) |
+| `[fillNextEdges]` | checkpoint 외 방식으로 nextEdges 채우기 시도 |
+| `[checkpoint] Created` | 경로에 대한 checkpoint 목록 생성 |
+| `[pathBuff] DIJKSTRA` | 경로 탐색 결과 |
+
+### Checkpoint Flags 값
+
+| 값 | 이름 | 의미 |
+|----|------|------|
+| 1 | LOCK_REQUEST | Lock 요청 |
+| 2 | LOCK_WAIT | Lock 대기 (멈춰야 함) |
+| 4 | LOCK_RELEASE | Lock 해제 |
+| 8 | MOVE_PREPARE (PREP) | nextEdges에 targetEdge까지 채우기 |
+| 9 | REQ\|PREP | Lock 요청 + nextEdges 채우기 |
+
+### 흔한 정지 패턴
+
+1. **WAIT 미처리 → edge mismatch**: WAIT CP에서 lock 못 받았는데 차량이 안 멈추고 다음 edge로 넘어감 → CP head가 stuck → 이후 PREP가 실행 안 돼서 nextEdges 비어서 정지
+2. **nextEdges 고갈**: PREP가 제때 실행되지 않아 nextEdges=[0,0,0,0,0] 상태로 edge 끝 도달
+3. **pathBuf 비어있음**: 경로가 할당 안 됨
+4. **checkpoint 없음**: count=0, 경로 할당 전
+
 ## Log Throttling
 
 반복 로그 방지를 위한 throttle 적용 (2초):

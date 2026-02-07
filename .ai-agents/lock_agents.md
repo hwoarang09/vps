@@ -878,11 +878,166 @@ Lock 받음:
 - 가능성 1: processCheckpoint 호출 자체 안 됨 (init 문제)
 - 가능성 2: CP가 이전 edge에 걸려있어 edge mismatch로 skip
 
-### 12.13 다음 작업 (우선순위)
+### 12.13 버그 수정 기록 (2026-02-08)
 
-1. **디버그 로그로 stuck 원인 확인**
-   - [ ] 로그 분석하여 processCheckpoint 동작 추적
-   - [ ] edge mismatch / ratio skip 중 어떤 케이스인지 확인
+#### Bug #1: 곡선 합류 시 LOCK_REQUEST가 곡선 위에 생김 (veh:17 stuck)
+
+**증상:** veh:17이 E_24@0.002에서 LOCK_WAIT BLOCKED 상태로 멈춤. N_20 lock을 veh:5가 영구 보유.
+
+**원인:**
+```
+경로: ... → E_22(직선) → E_24(곡선) → E_26(target, fn=N_20 merge)
+
+findRequestPoint()가 곡선 E_24를 만나면 → E_24@0.5 반환
+→ LOCK_REQUEST + MOVE_PREPARE 모두 E_24@0.5에 배치
+
+그런데 LOCK_WAIT는 곡선 fn에서 대기 → E_24@0.0
+
+정렬 결과: WAIT@0.0 → REQ@0.5
+→ 차량이 WAIT를 먼저 만남 (아직 REQ 안 했으니 lock 없음 → PASS)
+→ REQ에서 요청하지만 이미 WAIT 지점 지남 → 대기 불가
+```
+
+**핵심 개념:**
+- MOVE_PREPARE (다음 edge 진행 준비) ≠ LOCK_REQUEST (merge lock 요청)
+- 곡선 합류 시 이 둘은 **분리**되어야 함
+  - MOVE_PREPARE: 곡선@0.5 (다음 edge 데이터 준비)
+  - LOCK_REQUEST: 곡선의 fn 1m 전 (직전 직선 edge에서)
+
+**수정 (builder.ts):**
+- `findLockRequestBeforeCurve()` 함수 추가
+- 곡선 합류 시: incoming 곡선을 건너뛰고, 직전 직선 edge에서 1m 전 지점에 LOCK_REQUEST 배치
+- MOVE_PREPARE와 LOCK_REQUEST를 별도 checkpoint로 생성
+
+```
+수정 후:
+E_22@0.xxx [REQ] → E_24@0.0 [WAIT] → E_24@0.5 [PREP]
+```
+
+---
+
+#### Bug #2: Checkpoint 정렬이 edge 간 순서를 보장 못함 (veh:9 stuck)
+
+**증상:** veh:9가 E_44에서 stuck. nextEdges=[0,0,0,0,0], pathBuf len=10.
+
+**원인:**
+- Bug #1 수정 후, LOCK_REQUEST(E_40)가 MOVE_PREPARE(E_42) 뒤에 push됨
+- `sortCheckpointsByRatioWithinEdge()`는 같은 edge의 연속 CP만 정렬
+- 다른 edge에 있는 CP의 순서는 보장하지 않음
+- 결과: head=3에서 E_40@0.500[REQ]를 만나지만 차량은 이미 E_42 → edge mismatch → 영구 skip
+
+**수정 (utils.ts):**
+- `sortCheckpointsByPathOrder()` 함수 추가
+- 1차 정렬: edge의 경로 내 위치 (path에서 먼저 나오는 edge가 앞)
+- 2차 정렬: 같은 edge 내에서 ratio 오름차순
+- builder.ts에서 기존 `sortCheckpointsByRatioWithinEdge` → `sortCheckpointsByPathOrder` 교체
+
+---
+
+#### Bug #3: 직선 합류 시 LOCK_WAIT 누락 (veh:36 stuck)
+
+**증상:** veh:36이 E_51@0.004에서 LOCK_WAIT BLOCKED. veh:35가 N_41 lock 영구 보유.
+
+**원인:**
+- veh:35의 checkpoint: `E53@0.667[REQ|PREP]→E54` — LOCK_WAIT 없음!
+- incoming edge E_52의 `waiting_offset`이 undefined
+- 기존 코드: `if (waitingOffset > 0)` → undefined면 WAIT 생성 skip
+- WAIT 없이 merge 통과 → auto-release가 lock 보유 전에 도달
+
+**수정 (builder.ts):**
+```typescript
+const DEFAULT_WAITING_OFFSET = 1.89;
+const waitingOffset = incomingEdge.waiting_offset ?? DEFAULT_WAITING_OFFSET;
+```
+- waiting_offset이 없으면 기본 1.89m 사용
+- merge node면 항상 LOCK_WAIT 생성
+
+---
+
+#### Bug #4: Auto-release가 lock 미보유 상태에서도 grantNext 호출
+
+**증상:** 모든 stuck 사례의 공통 원인 — lock 영구 보유
+
+**원인:**
+```
+1. veh:A가 merge 접근 → requestLock(N_X)
+2. lock은 이미 veh:B가 보유 → veh:A 큐에 들어감
+3. WAIT 없이/WAIT 지나치고 merge 진입
+4. auto-release 발동: releaseEdge 도달
+5. releaseLockInternal(N_X, veh:A) → veh:A가 holder 아님 → no-op
+6. grantNextInQueue(N_X) → 큐의 다음 차량(veh:A 자신)에 grant!
+7. veh:A가 grant 받음 → 이미 지나갔으므로 release 안 함 → 영구 보유
+```
+
+**수정 (LockMgr.ts):**
+```typescript
+// checkAutoRelease에서:
+if (holder === vehId) {
+  // 정상: lock 보유 중 → release + grantNext
+  this.releaseLockInternal(info.nodeName, vehId);
+  this.grantNextInQueue(info.nodeName);
+} else {
+  // 비정상: lock 안 잡고 있음 → 큐에서만 제거
+  this.cancelFromQueue(info.nodeName, vehId);
+}
+```
+- `cancelFromQueue()` 메서드 추가: 큐에서 해당 vehId만 제거
+
+---
+
+### 12.14 수정된 파일 요약 (2026-02-08)
+
+| 파일 | 변경 | 관련 버그 |
+|------|------|-----------|
+| `checkpoint/builder.ts` | `findLockRequestBeforeCurve()` 추가, 곡선 합류 시 REQ/PREP 분리, 기본 waiting_offset | #1, #3 |
+| `checkpoint/utils.ts` | `sortCheckpointsByPathOrder()` 추가 | #2 |
+| `LockMgr.ts` | `checkAutoRelease()` holder 체크, `cancelFromQueue()` 추가, `pendingReleases` 맵, `eName()` 헬퍼 | #4 |
+| `LockMgr.ts` | LOCK_REQUEST: `targetEdge.from_node`으로 merge 판단 (기존 `to_node` 제거) | 전체 |
+| `LockMgr.ts` | LOCK_WAIT: `holder !== vehId` 체크로 BLOCKED 판단 | 전체 |
+| `LockMgr.ts` | 디버그 로그에 `eName()` 적용 (E_29 형태로 출력) | 가독성 |
+
+### 12.15 핵심 개념 정리
+
+#### Checkpoint 구조 (수정 후)
+```
+Checkpoint = { edge, ratio, flags, targetEdge }
+```
+- `targetEdge`: builder가 설정. 이 checkpoint가 "누구를 위한" 건지 표시
+  - MOVE_PREPARE의 targetEdge = 다음 이동할 edge
+  - LOCK_REQUEST의 targetEdge = merge node에서 나가는 edge
+  - LOCK_WAIT의 targetEdge = merge node에서 나가는 edge
+
+#### Merge Node 판단
+```
+targetEdge.from_node = merge node
+(기존에 nextEdge.to_node을 사용했던 것은 잘못됨)
+```
+
+#### 곡선 합류 vs 직선 합류
+
+| | 곡선 합류 | 직선 합류 |
+|---|---|---|
+| incoming edge | 곡선 (CURVE) | 직선 (LINEAR) |
+| LOCK_REQUEST 위치 | 곡선 fn 1m 전 (직전 직선) | MOVE_PREPARE와 합쳐서 (REQ\|PREP) |
+| LOCK_WAIT 위치 | 곡선 fn (ratio 0) | waiting_offset 전 (기본 1.89m) |
+| MOVE_PREPARE 위치 | 곡선@0.5 | 5.1m 전 (역순 탐색) |
+
+#### Auto-release 흐름
+```
+LOCK_REQUEST → pendingReleases에 등록 { nodeName, releaseEdgeIdx=targetEdge }
+↓
+매 프레임 checkAutoRelease():
+  currentEdge === releaseEdgeIdx?
+    → holder === vehId → release + grantNext (정상)
+    → holder !== vehId → cancelFromQueue (비정상, 큐에서 제거만)
+```
+
+### 12.16 다음 작업 (우선순위)
+
+1. **실제 동작 테스트 (진행 중)**
+   - [x] 단일 차량 경로 이동 테스트
+   - [x] merge 통과 테스트 (곡선/직선)
+   - [ ] 여러 차량 lock 경쟁 테스트 (진행 중 - 반복 분석)
 
 2. **FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달**
    - [ ] pathBuffer 파라미터 추가된 init() 호출
@@ -891,12 +1046,7 @@ Lock 받음:
    - [ ] grant 못 받으면 wait point의 ratio로 TARGET_RATIO 설정
    - [ ] grant 받으면 TARGET_RATIO = 1.0
 
-4. **실제 동작 테스트**
-   - [ ] 단일 차량 경로 이동 테스트
-   - [ ] merge 통과 테스트
-   - [ ] 여러 차량 lock 경쟁 테스트
-
-### 12.12 성능 이점
+### 12.17 성능 이점
 
 **기존 설계 (매 프레임 복잡한 계산):**
 - 10만 대 × 60fps = 600만 번/초
