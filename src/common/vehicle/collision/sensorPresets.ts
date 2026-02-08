@@ -65,12 +65,12 @@ export const DEFAULT_SENSOR_PRESETS: SensorPreset[] = [
   // 3: U-TURN (180)
   {
     zones: {
-      approach: { leftAngle: 55, rightAngle: -55, leftLength: 1, rightLength: 1, dec: -1 },
-      brake: { leftAngle: 55, rightAngle: -55, leftLength: 0.5, rightLength: 0.5, dec: -3 },
-      stop: { leftAngle: 55, rightAngle: -55, leftLength: 0.3, rightLength: 0.3, dec: -Infinity },
+      approach: { leftAngle: 45, rightAngle: -45, leftLength: 1, rightLength: 1, dec: -1 },
+      brake: { leftAngle: 45, rightAngle: -45, leftLength: 0.5, rightLength: 0.5, dec: -3 },
+      stop: { leftAngle: 45, rightAngle: -45, leftLength: 0.3, rightLength: 0.3, dec: -Infinity },
     },
-    leftAngle: 55,
-    rightAngle: -55,
+    leftAngle: 45,
+    rightAngle: -45,
     leftLength: 1,
     rightLength: 1,
   },

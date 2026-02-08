@@ -7,6 +7,20 @@ import { VEHICLE_RENDER_SIZE, SENSOR_ATTR_SIZE } from "../../MemoryLayoutManager
 import type { SensorSectionOffsets } from "./types";
 
 /**
+ * writeToRenderRegion 컨텍스트
+ */
+export interface WriteToRenderRegionContext {
+  vehicleRenderData: Float32Array | null;
+  sensorRenderData: Float32Array | null;
+  workerVehicleData: Float32Array;
+  workerSensorData: Float32Array;
+  actualNumVehicles: number;
+  fabOffsetX: number;
+  fabOffsetY: number;
+  sectionOffsets: SensorSectionOffsets | null;
+}
+
+/**
  * Write vehicle and sensor data to render buffer with fab offset applied
  *
  * 센서 렌더 버퍼 레이아웃 (섹션별 연속 - set() 최적화 가능):
@@ -23,16 +37,18 @@ import type { SensorSectionOffsets } from "./types";
  *
  * 멀티 Fab 환경에서 각 Fab은 전체 버퍼에서 자기 vehicle 위치에 복사
  */
-export function writeToRenderRegion(
-  vehicleRenderData: Float32Array | null,
-  sensorRenderData: Float32Array | null,
-  workerVehicleData: Float32Array,
-  workerSensorData: Float32Array,
-  actualNumVehicles: number,
-  fabOffsetX: number,
-  fabOffsetY: number,
-  sectionOffsets: SensorSectionOffsets | null
-): void {
+export function writeToRenderRegion(ctx: WriteToRenderRegionContext): void {
+  // 구조 분해
+  const {
+    vehicleRenderData,
+    sensorRenderData,
+    workerVehicleData,
+    workerSensorData,
+    actualNumVehicles,
+    fabOffsetX,
+    fabOffsetY,
+    sectionOffsets,
+  } = ctx;
   if (!vehicleRenderData || !sensorRenderData) {
     return;
   }

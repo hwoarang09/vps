@@ -14,6 +14,41 @@ import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { EdgeTransitTracker } from "@/logger";
 
 /**
+ * 시뮬레이션 스텝 실행 컨텍스트
+ */
+export interface SimulationStepContext {
+  // Timing
+  clampedDelta: number;
+  simulationTime: number;
+  // Data Arrays
+  vehicleDataArray: VehicleDataArrayBase;
+  sensorPointArray: SensorPointArrayBase;
+  edgeVehicleQueue: EdgeVehicleQueue;
+  // Map Data
+  edges: Edge[];
+  edgeNameToIndex: Map<string, number>;
+  vehicleLoopMap: Map<number, VehicleLoop>;
+  // Counts & Config
+  actualNumVehicles: number;
+  config: SimulationConfig;
+  fabId: string;
+  // Managers
+  lockMgr: LockMgr;
+  transferMgr: TransferMgr;
+  autoMgr: AutoMgr;
+  // Store
+  store: {
+    moveVehicleToEdge: (vehId: number, edgeIndex: number) => void;
+    transferMode: TransferMode;
+  };
+  // Logger
+  edgeTransitTracker: EdgeTransitTracker | null;
+  // Timers
+  collisionCheckTimers: Map<number, number>;
+  curveBrakeCheckTimers: Map<number, number>;
+}
+
+/**
  * 시뮬레이션 스텝 실행 - 핵심 로직
  *
  * 동작:
@@ -22,34 +57,28 @@ import type { EdgeTransitTracker } from "@/logger";
  * 3. Movement Update - 1,2에서 멈추지 않은 차량만 이동
  * 4. Auto Routing - edge 전환 후 새 경로 필요한 차량 처리
  */
-export function executeSimulationStep(
-  clampedDelta: number,
-  simulationTime: number,
-  // Context
-  vehicleDataArray: VehicleDataArrayBase,
-  sensorPointArray: SensorPointArrayBase,
-  edgeVehicleQueue: EdgeVehicleQueue,
-  edges: Edge[],
-  edgeNameToIndex: Map<string, number>,
-  vehicleLoopMap: Map<number, VehicleLoop>,
-  actualNumVehicles: number,
-  config: SimulationConfig,
-  fabId: string,
-  // Managers
-  lockMgr: LockMgr,
-  transferMgr: TransferMgr,
-  autoMgr: AutoMgr,
-  // Store
-  store: {
-    moveVehicleToEdge: (vehId: number, edgeIndex: number) => void;
-    transferMode: TransferMode;
-  },
-  // Logger
-  edgeTransitTracker: EdgeTransitTracker | null,
-  // Timers
-  collisionCheckTimers: Map<number, number>,
-  curveBrakeCheckTimers: Map<number, number>
-): void {
+export function executeSimulationStep(ctx: SimulationStepContext): void {
+  // 구조 분해
+  const {
+    clampedDelta,
+    simulationTime,
+    vehicleDataArray,
+    sensorPointArray,
+    edgeVehicleQueue,
+    edges,
+    edgeNameToIndex,
+    vehicleLoopMap,
+    actualNumVehicles,
+    config,
+    fabId,
+    lockMgr,
+    transferMgr,
+    autoMgr,
+    store,
+    edgeTransitTracker,
+    collisionCheckTimers,
+    curveBrakeCheckTimers,
+  } = ctx;
   // 1. Collision Check (충돌 감지 → 멈출지 결정)
   const collisionCtx: CollisionCheckContext = {
     vehicleArrayData: vehicleDataArray.getData(),

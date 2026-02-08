@@ -140,6 +140,228 @@ function loadYShortMap(): MapData {
 }
 
 // ============================================================
+// 헬퍼 함수 (테스트 검증용)
+// ============================================================
+
+/**
+ * 검증 1: 모든 checkpoint의 edge가 path에 있는지 확인
+ */
+function validateCheckpointsInPath(
+  checkpoints: Array<{ edge: number; flags: number; ratio: number }>,
+  pathSet: Set<number>,
+  errors: string[]
+): boolean {
+  let allValid = true;
+  for (const cp of checkpoints) {
+    if (!pathSet.has(cp.edge)) {
+      allValid = false;
+      errors.push(`Checkpoint edge ${cp.edge} is NOT in path`);
+    }
+  }
+  return allValid;
+}
+
+/**
+ * Merge node의 lock checkpoint 검증
+ */
+function validateMergeLockCheckpoints(
+  mapData: MapData,
+  pathIndices: number[],
+  targetIndex: number,
+  targetEdge: Edge,
+  targetPrecedingEdges: Set<number>,
+  checkpoints: Array<{ edge: number; flags: number; ratio: number }>,
+  errors: string[]
+): boolean {
+  let allValid = true;
+
+  const hasLockReq = checkpoints.some(
+    (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.LOCK_REQUEST)
+  );
+
+  if (!hasLockReq) {
+    allValid = false;
+    errors.push(`[${targetIndex}] ${targetEdge.edge_name}: Missing LOCK_REQUEST checkpoint (merge node: ${targetEdge.from_node})`);
+  }
+
+  // LOCK_WAIT 체크
+  const incomingEdgeIdx = pathIndices[targetIndex - 1];
+  const incomingEdge = mapData.edges[incomingEdgeIdx - 1];
+  const needsWait = isCurveEdge(incomingEdge) || (incomingEdge.waiting_offset && incomingEdge.waiting_offset > 0);
+
+  if (needsWait) {
+    const hasLockWait = checkpoints.some(
+      (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.LOCK_WAIT)
+    );
+
+    if (!hasLockWait) {
+      allValid = false;
+      errors.push(`[${targetIndex}] ${targetEdge.edge_name}: Missing LOCK_WAIT checkpoint`);
+    }
+  }
+
+  return allValid;
+}
+
+/**
+ * 검증 2: 경로 내 각 edge에 필요한 checkpoint들이 있는지 확인
+ */
+function validateEdgeCoverage(
+  mapData: MapData,
+  pathIndices: number[],
+  checkpoints: Array<{ edge: number; flags: number; ratio: number }>,
+  errors: string[]
+): boolean {
+  let allCovered = true;
+
+  for (let i = 1; i < pathIndices.length; i++) {
+    const targetEdgeIdx = pathIndices[i];
+    const targetEdge = mapData.edges[targetEdgeIdx - 1];
+    const isMerge = mapData.mergeNodes.has(targetEdge.from_node);
+    const targetPrecedingEdges = new Set(pathIndices.slice(0, i));
+
+    // MOVE_PREPARE 체크
+    const hasMovePrep = checkpoints.some(
+      (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.MOVE_PREPARE)
+    );
+
+    if (!hasMovePrep) {
+      allCovered = false;
+      errors.push(`[${i}] ${targetEdge.edge_name}: Missing MOVE_PREPARE checkpoint`);
+    }
+
+    // Merge인 경우 lock checkpoint 체크
+    if (isMerge) {
+      allCovered = validateMergeLockCheckpoints(
+        mapData,
+        pathIndices,
+        i,
+        targetEdge,
+        targetPrecedingEdges,
+        checkpoints,
+        errors
+      ) && allCovered;
+    }
+  }
+
+  return allCovered;
+}
+
+/**
+ * 핵심 검증 함수
+ * @param mapData - 맵 데이터
+ * @param pathIndices - 경로 (1-based edge indices)
+ * @returns 검증 결과
+ */
+function validateCheckpoints(
+  mapData: MapData,
+  pathIndices: number[]
+): {
+  allCheckpointsValid: boolean;
+  allEdgesCovered: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  // Checkpoint 생성
+  const result = buildCheckpointsFromPath({
+    edgeIndices: pathIndices,
+    edgeArray: mapData.edges,
+    isMergeNode: (nodeName) => mapData.mergeNodes.has(nodeName),
+  });
+
+  const checkpoints = result.checkpoints;
+  const pathSet = new Set(pathIndices);
+
+  // 검증 1: 모든 checkpoint의 edge가 path에 있는지
+  const allCheckpointsValid = validateCheckpointsInPath(checkpoints, pathSet, errors);
+
+  // 검증 2: 경로 내 각 edge에 필요한 checkpoint들이 있는지
+  const allEdgesCovered = validateEdgeCoverage(mapData, pathIndices, checkpoints, errors);
+
+  return { allCheckpointsValid, allEdgesCovered, errors };
+}
+
+/**
+ * 랜덤으로 두 개의 서로 다른 station을 선택
+ */
+function selectRandomStationPair(mapData: MapData): [number, number] {
+  const startIdx = Math.floor(Math.random() * mapData.stations.length);
+  let endIdx = Math.floor(Math.random() * mapData.stations.length);
+  while (endIdx === startIdx) {
+    endIdx = Math.floor(Math.random() * mapData.stations.length);
+  }
+  return [startIdx, endIdx];
+}
+
+/**
+ * 단일 랜덤 경로 검증 실행
+ */
+function runSingleRandomPathValidation(
+  mapData: MapData,
+  iter: number,
+  allErrors: string[],
+  maxErrorsToCollect: number
+): 'passed' | 'failed' | 'skipped' {
+  const [startIdx, endIdx] = selectRandomStationPair(mapData);
+  const startStation = mapData.stations[startIdx];
+  const endStation = mapData.stations[endIdx];
+
+  const pathIndices = findShortestPath(startStation.edgeIndex, endStation.edgeIndex, mapData.edges);
+
+  if (!pathIndices || pathIndices.length < 2) return 'skipped';
+
+  const validation = validateCheckpoints(mapData, pathIndices);
+
+  if (validation.allCheckpointsValid && validation.allEdgesCovered) {
+    return 'passed';
+  }
+
+  // 실패한 경우 에러 수집
+  if (allErrors.length < maxErrorsToCollect) {
+    allErrors.push(`[${iter}] ${startStation.name} → ${endStation.name}:`);
+    for (const e of validation.errors.slice(0, 3)) {
+      allErrors.push(`  ${e}`);
+    }
+  }
+
+  return 'failed';
+}
+
+/**
+ * 여러 랜덤 경로 검증 실행 (에러 수집 없음)
+ */
+function runMultipleRandomPathValidations(
+  mapData: MapData,
+  iterations: number
+): { passedCount: number; failedCount: number } {
+  let passedCount = 0;
+  let failedCount = 0;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const [startIdx, endIdx] = selectRandomStationPair(mapData);
+
+    const pathIndices = findShortestPath(
+      mapData.stations[startIdx].edgeIndex,
+      mapData.stations[endIdx].edgeIndex,
+      mapData.edges
+    );
+
+    if (!pathIndices || pathIndices.length < 2) continue;
+
+    const validation = validateCheckpoints(mapData, pathIndices);
+
+    if (validation.allCheckpointsValid && validation.allEdgesCovered) {
+      passedCount++;
+    } else {
+      failedCount++;
+    }
+  }
+
+  return { passedCount, failedCount };
+}
+
+// ============================================================
 // 메인 테스트
 // ============================================================
 
@@ -156,98 +378,6 @@ describe('Checkpoint Builder - Simple Validation', () => {
     expect(mapData.stations.length).toBeGreaterThan(0);
     console.log(`Loaded ${mapData.edges.length} edges, ${mapData.stations.length} stations, ${mapData.mergeNodes.size} merge nodes`);
   });
-
-  /**
-   * 핵심 검증 함수
-   * @param pathIndices - 경로 (1-based edge indices)
-   * @returns 검증 결과
-   */
-  function validateCheckpoints(pathIndices: number[]): {
-    allCheckpointsValid: boolean;
-    allEdgesCovered: boolean;
-    errors: string[];
-  } {
-    const errors: string[] = [];
-
-    // Checkpoint 생성
-    const result = buildCheckpointsFromPath({
-      edgeIndices: pathIndices,
-      edgeArray: mapData.edges,
-      isMergeNode: (nodeName) => mapData.mergeNodes.has(nodeName),
-    });
-
-    const checkpoints = result.checkpoints;
-    const pathSet = new Set(pathIndices);
-
-    // ============================================================
-    // 검증 1: 모든 checkpoint의 edge가 path에 있는지
-    // ============================================================
-    let allCheckpointsValid = true;
-    for (const cp of checkpoints) {
-      if (!pathSet.has(cp.edge)) {
-        allCheckpointsValid = false;
-        errors.push(`Checkpoint edge ${cp.edge} is NOT in path`);
-      }
-    }
-
-    // ============================================================
-    // 검증 2: 경로 내 2번째 edge부터 각 edge에 대해 checkpoint 확인
-    // ============================================================
-    // 각 target edge에 대해:
-    // - MOVE_PREPARE checkpoint가 있어야 함
-    // - target edge의 from_node가 merge면 LOCK_REQUEST, LOCK_WAIT도 있어야 함
-    let allEdgesCovered = true;
-
-    for (let i = 1; i < pathIndices.length; i++) {
-      const targetEdgeIdx = pathIndices[i];
-      const targetEdge = mapData.edges[targetEdgeIdx - 1];
-      const isMerge = mapData.mergeNodes.has(targetEdge.from_node);
-
-      // target edge를 위한 checkpoint 찾기
-      // checkpoint는 target 이전 edge들에 있어야 함
-      const targetPrecedingEdges = new Set(pathIndices.slice(0, i));
-
-      // MOVE_PREPARE 체크
-      const hasMovePrep = checkpoints.some(
-        (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.MOVE_PREPARE)
-      );
-
-      if (!hasMovePrep) {
-        allEdgesCovered = false;
-        errors.push(`[${i}] ${targetEdge.edge_name}: Missing MOVE_PREPARE checkpoint`);
-      }
-
-      // Merge인 경우 LOCK_REQUEST, LOCK_WAIT 체크
-      if (isMerge) {
-        const hasLockReq = checkpoints.some(
-          (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.LOCK_REQUEST)
-        );
-
-        if (!hasLockReq) {
-          allEdgesCovered = false;
-          errors.push(`[${i}] ${targetEdge.edge_name}: Missing LOCK_REQUEST checkpoint (merge node: ${targetEdge.from_node})`);
-        }
-
-        // LOCK_WAIT는 incomingEdge에 waiting_offset이 있거나 곡선인 경우만
-        const incomingEdgeIdx = pathIndices[i - 1];
-        const incomingEdge = mapData.edges[incomingEdgeIdx - 1];
-        const needsWait = isCurveEdge(incomingEdge) || (incomingEdge.waiting_offset && incomingEdge.waiting_offset > 0);
-
-        if (needsWait) {
-          const hasLockWait = checkpoints.some(
-            (cp) => targetPrecedingEdges.has(cp.edge) && (cp.flags & CheckpointFlags.LOCK_WAIT)
-          );
-
-          if (!hasLockWait) {
-            allEdgesCovered = false;
-            errors.push(`[${i}] ${targetEdge.edge_name}: Missing LOCK_WAIT checkpoint`);
-          }
-        }
-      }
-    }
-
-    return { allCheckpointsValid, allEdgesCovered, errors };
-  }
 
   it('should validate single path', () => {
     // 임의의 두 station 선택
@@ -290,7 +420,7 @@ describe('Checkpoint Builder - Simple Validation', () => {
     }
 
     // 검증
-    const validation = validateCheckpoints(pathIndices!);
+    const validation = validateCheckpoints(mapData, pathIndices!);
 
     console.log('\nValidation:');
     console.log(`  All checkpoints valid: ${validation.allCheckpointsValid}`);
@@ -314,34 +444,11 @@ describe('Checkpoint Builder - Simple Validation', () => {
     const allErrors: string[] = [];
 
     for (let iter = 0; iter < ITERATIONS; iter++) {
-      // 임의의 두 station 선택
-      const startIdx = Math.floor(Math.random() * mapData.stations.length);
-      let endIdx = Math.floor(Math.random() * mapData.stations.length);
-      while (endIdx === startIdx) {
-        endIdx = Math.floor(Math.random() * mapData.stations.length);
-      }
-
-      const startStation = mapData.stations[startIdx];
-      const endStation = mapData.stations[endIdx];
-
-      // Dijkstra로 경로 생성
-      const pathIndices = findShortestPath(startStation.edgeIndex, endStation.edgeIndex, mapData.edges);
-
-      if (!pathIndices || pathIndices.length < 2) continue;
-
-      // 검증
-      const validation = validateCheckpoints(pathIndices);
-
-      if (validation.allCheckpointsValid && validation.allEdgesCovered) {
+      const result = runSingleRandomPathValidation(mapData, iter, allErrors, 10);
+      if (result === 'passed') {
         passedCount++;
-      } else {
+      } else if (result === 'failed') {
         failedCount++;
-        if (allErrors.length < 10) {
-          allErrors.push(`[${iter}] ${startStation.name} → ${endStation.name}:`);
-          for (const e of validation.errors.slice(0, 3)) {
-            allErrors.push(`  ${e}`);
-          }
-        }
       }
     }
 
@@ -350,7 +457,9 @@ describe('Checkpoint Builder - Simple Validation', () => {
 
     if (allErrors.length > 0) {
       console.log('\nFirst errors:');
-      allErrors.forEach((e) => console.log(e));
+      for (const e of allErrors) {
+        console.log(e);
+      }
     }
 
     expect(failedCount).toBe(0);
@@ -358,32 +467,7 @@ describe('Checkpoint Builder - Simple Validation', () => {
 
   it('should validate 500 random paths (stress test)', () => {
     const ITERATIONS = 500;
-    let passedCount = 0;
-    let failedCount = 0;
-
-    for (let iter = 0; iter < ITERATIONS; iter++) {
-      const startIdx = Math.floor(Math.random() * mapData.stations.length);
-      let endIdx = Math.floor(Math.random() * mapData.stations.length);
-      while (endIdx === startIdx) {
-        endIdx = Math.floor(Math.random() * mapData.stations.length);
-      }
-
-      const pathIndices = findShortestPath(
-        mapData.stations[startIdx].edgeIndex,
-        mapData.stations[endIdx].edgeIndex,
-        mapData.edges
-      );
-
-      if (!pathIndices || pathIndices.length < 2) continue;
-
-      const validation = validateCheckpoints(pathIndices);
-
-      if (validation.allCheckpointsValid && validation.allEdgesCovered) {
-        passedCount++;
-      } else {
-        failedCount++;
-      }
-    }
+    const { passedCount, failedCount } = runMultipleRandomPathValidations(mapData, ITERATIONS);
 
     console.log(`\n=== Stress Test (${ITERATIONS} paths) ===`);
     console.log(`Passed: ${passedCount}, Failed: ${failedCount}`);

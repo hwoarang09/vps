@@ -98,18 +98,18 @@ export class FabContext {
    * Fab 초기화 (메모리, 맵 데이터, 차량 초기화)
    */
   private init(params: FabInitParams): void {
-    const result = initializeFab(
+    const result = initializeFab({
       params,
-      this.store,
-      this.sensorPointArray,
-      this.vehicleDataArray,
-      this.lockMgr,
-      this.transferMgr,
-      this.dispatchMgr,
-      this.autoMgr,
-      this.edgeNameToIndex,
-      this.nodeNameToIndex
-    );
+      store: this.store,
+      sensorPointArray: this.sensorPointArray,
+      vehicleDataArray: this.vehicleDataArray,
+      lockMgr: this.lockMgr,
+      transferMgr: this.transferMgr,
+      dispatchMgr: this.dispatchMgr,
+      autoMgr: this.autoMgr,
+      edgeNameToIndexMap: this.edgeNameToIndex,
+      nodeNameToIndexMap: this.nodeNameToIndex,
+    });
 
     this.edges = result.edges;
     this.nodes = result.nodes;
@@ -188,34 +188,29 @@ export class FabContext {
    * 5. Write to Render Buffer - 렌더링 데이터
    */
   step(clampedDelta: number, simulationTime: number = 0): void {
-    executeSimulationStep(
+    executeSimulationStep({
       clampedDelta,
       simulationTime,
-      // Context
-      this.vehicleDataArray,
-      this.sensorPointArray,
-      this.edgeVehicleQueue,
-      this.edges,
-      this.edgeNameToIndex,
-      this.vehicleLoopMap,
-      this.actualNumVehicles,
-      this.config,
-      this.fabId,
-      // Managers
-      this.lockMgr,
-      this.transferMgr,
-      this.autoMgr,
-      // Store
-      {
+      vehicleDataArray: this.vehicleDataArray,
+      sensorPointArray: this.sensorPointArray,
+      edgeVehicleQueue: this.edgeVehicleQueue,
+      edges: this.edges,
+      edgeNameToIndex: this.edgeNameToIndex,
+      vehicleLoopMap: this.vehicleLoopMap,
+      actualNumVehicles: this.actualNumVehicles,
+      config: this.config,
+      fabId: this.fabId,
+      lockMgr: this.lockMgr,
+      transferMgr: this.transferMgr,
+      autoMgr: this.autoMgr,
+      store: {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
         transferMode: this.store.transferMode,
       },
-      // Logger
-      this.edgeTransitTracker,
-      // Timers
-      this.collisionCheckTimers,
-      this.curveBrakeCheckTimers
-    );
+      edgeTransitTracker: this.edgeTransitTracker,
+      collisionCheckTimers: this.collisionCheckTimers,
+      curveBrakeCheckTimers: this.curveBrakeCheckTimers,
+    });
 
     // 5. Write to Render Buffer (렌더링 데이터)
     this.writeToRenderRegion();
@@ -225,16 +220,16 @@ export class FabContext {
    * Render buffer에 vehicle, sensor 데이터 쓰기 (fab offset 적용)
    */
   private writeToRenderRegion(): void {
-    writeToRenderRegion(
-      this.vehicleRenderData,
-      this.sensorRenderData,
-      this.vehicleDataArray.getData(),
-      this.sensorPointArray.getData(),
-      this.actualNumVehicles,
-      this.fabOffset.x,
-      this.fabOffset.y,
-      this.sectionOffsets
-    );
+    writeToRenderRegion({
+      vehicleRenderData: this.vehicleRenderData,
+      sensorRenderData: this.sensorRenderData,
+      workerVehicleData: this.vehicleDataArray.getData(),
+      workerSensorData: this.sensorPointArray.getData(),
+      actualNumVehicles: this.actualNumVehicles,
+      fabOffsetX: this.fabOffset.x,
+      fabOffsetY: this.fabOffset.y,
+      sectionOffsets: this.sectionOffsets,
+    });
   }
 
   handleCommand(command: unknown): void {

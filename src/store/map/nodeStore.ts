@@ -69,6 +69,30 @@ function findMergeNodes(incomingCount: Map<string, number>): Set<string> {
 }
 
 /**
+ * A와 D의 공통 toNode 찾기
+ * @returns 두 노드 집합의 교집합 배열
+ */
+function findCommonToNodes(toNodesA: Set<string>, toNodesD: Set<string>): string[] {
+  const commonToNodes: string[] = [];
+  for (const toNode of toNodesA) {
+    if (toNodesD.has(toNode)) {
+      commonToNodes.push(toNode);
+    }
+  }
+  return commonToNodes;
+}
+
+/**
+ * 데드락 존 유효성 검증
+ * @returns 공통 toNode가 정확히 2개이고, 둘 다 합류점이면 true
+ */
+function isValidDeadlockZone(commonToNodes: string[], mergeNodeSet: Set<string>): boolean {
+  if (commonToNodes.length !== 2) return false;
+  const [nodeB, nodeC] = commonToNodes;
+  return mergeNodeSet.has(nodeB) && mergeNodeSet.has(nodeC);
+}
+
+/**
  * 데드락 존 쌍 찾기 (분기점 A, D → 합류점 B, C)
  *
  * 조건:
@@ -97,26 +121,17 @@ function findDeadlockZonePairs(
 
       const toNodesD = divergeToNodes.get(nodeD)!;
 
-      // A와 D의 공통 toNode 찾기
-      const commonToNodes: string[] = [];
-      for (const toNode of toNodesA) {
-        if (toNodesD.has(toNode)) {
-          commonToNodes.push(toNode);
-        }
-      }
+      const commonToNodes = findCommonToNodes(toNodesA, toNodesD);
 
-      // 공통 toNode가 정확히 2개이고, 둘 다 합류점이면 데드락 존
-      if (commonToNodes.length === 2) {
+      if (isValidDeadlockZone(commonToNodes, mergeNodeSet)) {
         const [nodeB, nodeC] = commonToNodes;
-        if (mergeNodeSet.has(nodeB) && mergeNodeSet.has(nodeC)) {
-          zones.push({
-            divergeNodes: [nodeA, nodeD],
-            mergeNodes: [nodeB, nodeC],
-          });
-          usedDiverge.add(nodeA);
-          usedDiverge.add(nodeD);
-          break;
-        }
+        zones.push({
+          divergeNodes: [nodeA, nodeD],
+          mergeNodes: [nodeB, nodeC],
+        });
+        usedDiverge.add(nodeA);
+        usedDiverge.add(nodeD);
+        break;
       }
     }
   }

@@ -20,6 +20,28 @@ import type { FabInitParams, SensorSectionOffsets } from "./types";
 import type { StationRawData } from "@/types/station";
 
 /**
+ * initializeFab 컨텍스트
+ */
+export interface InitializeFabContext {
+  params: FabInitParams;
+  store: EngineStore;
+  sensorPointArray: SensorPointArrayBase;
+  vehicleDataArray: VehicleDataArrayBase;
+  lockMgr: LockMgr;
+  transferMgr: TransferMgr;
+  dispatchMgr: {
+    setVehicleDataArray: (v: VehicleDataArrayBase) => void;
+    setEdgeData: (e: Edge[], m: Map<string, number>) => void;
+    setLockMgr: (l: LockMgr) => void;
+  };
+  autoMgr: {
+    initStations: (s: StationRawData[], m: Map<string, number>) => void;
+  };
+  edgeNameToIndexMap: Map<string, number>;
+  nodeNameToIndexMap: Map<string, number>;
+}
+
+/**
  * Fab 초기화 (메모리, 맵 데이터, 차량 초기화)
  *
  * 동작:
@@ -28,24 +50,27 @@ import type { StationRawData } from "@/types/station";
  * 3. 차량 초기화 (initializeVehicles)
  * 4. 매니저 초기화 (lockMgr, dispatchMgr, autoMgr)
  */
-export function initializeFab(
-  params: FabInitParams,
-  store: EngineStore,
-  sensorPointArray: SensorPointArrayBase,
-  vehicleDataArray: VehicleDataArrayBase,
-  lockMgr: LockMgr,
-  transferMgr: TransferMgr,
-  dispatchMgr: { setVehicleDataArray: (v: VehicleDataArrayBase) => void; setEdgeData: (e: Edge[], m: Map<string, number>) => void; setLockMgr: (l: LockMgr) => void },
-  autoMgr: { initStations: (s: StationRawData[], m: Map<string, number>) => void },
-  edgeNameToIndexMap: Map<string, number>,
-  nodeNameToIndexMap: Map<string, number>
-): {
+export function initializeFab(ctx: InitializeFabContext): {
   edges: Edge[];
   nodes: Node[];
   edgeNameToIndex: Map<string, number>;
   actualNumVehicles: number;
   checkpointArray: Float32Array | null;
 } {
+  // 구조 분해
+  const {
+    params,
+    store,
+    sensorPointArray,
+    vehicleDataArray,
+    lockMgr,
+    transferMgr,
+    dispatchMgr,
+    autoMgr,
+    edgeNameToIndexMap,
+    nodeNameToIndexMap,
+  } = ctx;
+
   let checkpointArray: Float32Array | null = null;
 
   // Worker 버퍼 설정 (계산용)

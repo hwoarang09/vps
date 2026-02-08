@@ -48,3 +48,25 @@ export interface CheckpointBuildResult {
   /** 생성된 checkpoint 리스트 */
   checkpoints: Checkpoint[];
 }
+
+/**
+ * LOCK_WAIT checkpoint 생성 파라미터
+ */
+export interface LockWaitCheckpointParams {
+  /** checkpoint 배열 (mutable) */
+  checkpoints: Checkpoint[];
+  /** 목표 edge ID (1-based) */
+  targetEdgeId: number;
+  /** 진입 edge ID (1-based) */
+  incomingEdgeId: number;
+  /** 진입 edge 객체 */
+  incomingEdge: Edge;
+  /** 진입 edge가 곡선인지 여부 */
+  isCurveIncoming: boolean;
+  /** path 배열에서 target의 인덱스 (1-based) */
+  targetIdx: number;
+  /** path 배열 (1-based, path[0]=length) */
+  path: number[];
+  /** edge 배열 (1-based, edges[0]=dummy) */
+  edges: Edge[];
+}

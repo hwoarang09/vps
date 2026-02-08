@@ -1,4 +1,4 @@
-// common/vehicle/logic/TransferMgr.ts
+// TransferMgr/index.ts
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
@@ -16,82 +16,26 @@ import {
   type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
 import { devLog } from "@/logger/DevLogger";
-import { buildCheckpointsFromPath, logCheckpoints } from "./checkpoint";
+import { buildCheckpointsFromPath, logCheckpoints } from "../checkpoint";
+import type {
+  VehicleLoop,
+  ProcessPathCommandContext,
+  ILockMgrForNextEdge,
+  FillNextEdgesContext,
+  IVehicleDataArray,
+  VehicleCommand,
+  ReservedEdge,
+  CurveBrakeState,
+} from "./types";
+import {
+  MAX_PATH_LENGTH,
+  PATH_LEN,
+  PATH_EDGES_START,
+  getNextEdgeInLoop,
+} from "./types";
+import { fillFirstNextEdge, fillSubsequentNextEdge } from "./next-edge-handlers";
 
-/**
- * Path buffer layout constants
- * Layout: [len, edge0, edge1, ..., edge98]
- * - len: 남은 경로 길이 (0 = no path)
- * - edge0~: edge indices (앞에서부터 순서대로)
- *
- * Edge 통과 시 pathBuffer를 실제로 shift (맨 앞 제거)
- */
-export const MAX_PATH_LENGTH = 100;
-export const PATH_LEN = 0;              // len 위치
-export const PATH_EDGES_START = 1;      // edge indices 시작 위치
-
-export type VehicleLoop = {
-  edgeSequence: string[];
-};
-
-/** LockMgr interface for merge check */
-export interface ILockMgrForNextEdge {
-  isMergeNode(nodeName: string): boolean;
-  checkGrant(nodeName: string, vehId: number): boolean;
-}
-
-/** fillNextEdges Context */
-interface FillNextEdgesContext {
-  data: Float32Array;
-  ptr: number;
-  firstNextEdgeIndex: number;
-  edgeArray: Edge[];
-  vehicleLoopMap: Map<number, VehicleLoop>;
-  edgeNameToIndex: Map<string, number>;
-  mode: TransferMode;
-  vehicleIndex: number;
-  lockMgr?: ILockMgrForNextEdge;
-}
-
-export interface IVehicleDataArray {
-  getData(): Float32Array;
-}
-
-/**
- * Vehicle command structure for MQTT control
- */
-export interface VehicleCommand {
-  /** Target position on current edge (0~1) */
-  targetRatio?: number;
-  /** Next edge ID to transition to */
-  nextEdgeId?: string;
-  /** Path array for multi-edge reservation (for speed control optimization) */
-  path?: Array<{edgeId: string; targetRatio?: number}>;
-}
-
-export function getNextEdgeInLoop(
-  currentEdgeName: string,
-  sequence: string[]
-): string {
-  const idx = sequence.indexOf(currentEdgeName);
-  if (idx === -1) return sequence[0];
-  return sequence[(idx + 1) % sequence.length];
-}
-
-interface ReservedEdge {
-  edgeId: string;
-  targetRatio?: number;
-}
-
-/**
- * 곡선 사전 감속 상태
- */
-export interface CurveBrakeState {
-  /** 감속 시작했는지 */
-  isBraking: boolean;
-  /** 목표 곡선 Edge 이름 */
-  targetCurveEdge: string | null;
-}
+// Types imported from ./types.ts
 
 export class TransferMgr {
   private transferQueue: number[] = [];
@@ -216,7 +160,16 @@ export class TransferMgr {
     const { targetRatio, nextEdgeId, path } = command;
 
     if (path && path.length > 0) {
-      this.processPathCommand(vehId, path, currentEdge, edgeArray!, edgeNameToIndex!, data, ptr, lockMgr);
+      this.processPathCommand({
+        vehId,
+        path,
+        currentEdge,
+        edgeArray: edgeArray!,
+        edgeNameToIndex: edgeNameToIndex!,
+        data,
+        ptr,
+        lockMgr,
+      });
     }
 
     if (!nextEdgeId || nextEdgeId === currentEdge.edge_name) {
@@ -361,6 +314,8 @@ export class TransferMgr {
     );
   }
 
+  // fillFirstNextEdge and fillSubsequentNextEdge moved to next-edge-handlers.ts
+
   /**
    * Loop map에서 next edges 결정
    */
@@ -368,41 +323,21 @@ export class TransferMgr {
     ctx: FillNextEdgesContext,
     nextEdgeOffsets: number[]
   ): void {
-    const { data, ptr, firstNextEdgeIndex, edgeArray, vehicleLoopMap, edgeNameToIndex, mode, vehicleIndex } = ctx;
+    const { data, ptr, firstNextEdgeIndex } = ctx;
     let currentEdgeIdx = firstNextEdgeIndex;
 
     for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
       if (i === 0) {
-        data[ptr + nextEdgeOffsets[i]] = firstNextEdgeIndex;
+        fillFirstNextEdge(data, ptr, firstNextEdgeIndex, nextEdgeOffsets[i]);
       } else {
-        if (currentEdgeIdx < 1) { // 1-based: 0 is invalid
-          data[ptr + nextEdgeOffsets[i]] = 0;
-          continue;
-        }
-        const prevEdge = edgeArray[currentEdgeIdx - 1]; // Convert to 0-based for array access
-        if (!prevEdge) {
-          data[ptr + nextEdgeOffsets[i]] = 0; // 0 is invalid sentinel
-          continue;
-        }
-
-        const nextIdx = this.determineNextEdge(
-          prevEdge,
-          vehicleIndex,
-          vehicleLoopMap,
-          edgeNameToIndex,
-          mode
+        currentEdgeIdx = fillSubsequentNextEdge(
+          i,
+          currentEdgeIdx,
+          ctx,
+          nextEdgeOffsets,
+          this.determineNextEdge.bind(this)
         );
-
-        data[ptr + nextEdgeOffsets[i]] = nextIdx;
-
-        if (nextIdx === 0) { // 0 is invalid sentinel
-          for (let j = i + 1; j < NEXT_EDGE_COUNT; j++) {
-            data[ptr + nextEdgeOffsets[j]] = 0;
-          }
-          break;
-        }
-
-        currentEdgeIdx = nextIdx;
+        if (currentEdgeIdx === 0) break;
       }
     }
 
@@ -607,16 +542,10 @@ export class TransferMgr {
     return true;
   }
 
-  private processPathCommand(
-    vehId: number,
-    path: Array<{ edgeId: string; targetRatio?: number }>,
-    currentEdge: Edge,
-    edgeArray: Edge[],
-    edgeNameToIndex: Map<string, number>,
-    data: Float32Array,
-    ptr: number,
-    lockMgr?: ILockMgrForNextEdge
-  ) {
+  private processPathCommand(ctx: ProcessPathCommandContext) {
+    // 구조 분해
+    const { vehId, path, currentEdge, edgeArray, edgeNameToIndex, data, ptr, lockMgr } = ctx;
+
     // Clear existing reservations when a new path is processed
     this.reservedNextEdges.delete(vehId);
 
@@ -956,6 +885,51 @@ export class TransferMgr {
   }
 
   /**
+   * 다음 edge 검증 및 가져오기
+   * @returns nextEdge 또는 null (중단 조건)
+   */
+  private validateAndGetNextEdge(
+    edge: Edge,
+    edgeArray: Edge[],
+    visited: Set<string>
+  ): Edge | null {
+    if (!edge.nextEdgeIndices || edge.nextEdgeIndices.length === 0) {
+      return null;
+    }
+
+    const nextEdgeIndex = edge.nextEdgeIndices[0];
+    if (nextEdgeIndex < 1) return null;
+
+    const nextEdge = edgeArray[nextEdgeIndex - 1];
+    if (!nextEdge) return null;
+
+    if (visited.has(nextEdge.edge_name)) {
+      return null;
+    }
+
+    return nextEdge;
+  }
+
+  /**
+   * Merge node 체크 및 거리 계산
+   * @returns merge 정보 또는 null
+   */
+  private checkMergeAndCalculateDistance(
+    nextEdge: Edge,
+    accumulatedDistance: number,
+    isMergeNode: (nodeName: string) => boolean
+  ): { distance: number; mergeEdge: Edge } | null {
+    if (isMergeNode(nextEdge.to_node)) {
+      const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
+      return {
+        distance: isCurve ? accumulatedDistance : accumulatedDistance + nextEdge.distance,
+        mergeEdge: nextEdge
+      };
+    }
+    return null;
+  }
+
+  /**
    * 다음 merge point까지의 거리 찾기
    * lockMgr를 사용해서 merge node 확인
    */
@@ -989,29 +963,13 @@ export class TransferMgr {
     visited.add(edge.edge_name);
 
     for (let i = 0; i < MAX_LOOKAHEAD; i++) {
-      if (!edge.nextEdgeIndices || edge.nextEdgeIndices.length === 0) {
-        break;
-      }
-
-      const nextEdgeIndex = edge.nextEdgeIndices[0];
-      if (nextEdgeIndex < 1) break; // 1-based: 0 is invalid
-      const nextEdge = edgeArray[nextEdgeIndex - 1]; // Convert to 0-based for array access
+      const nextEdge = this.validateAndGetNextEdge(edge, edgeArray, visited);
       if (!nextEdge) break;
 
-      if (visited.has(nextEdge.edge_name)) {
-        break;
-      }
       visited.add(nextEdge.edge_name);
 
-      // merge node 체크
-      if (isMergeNode(nextEdge.to_node)) {
-        // 곡선 merge edge는 fn(시작점)까지, 직선 merge edge는 tn(끝점)까지의 거리
-        const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
-        return {
-          distance: isCurve ? accumulatedDistance : accumulatedDistance + nextEdge.distance,
-          mergeEdge: nextEdge
-        };
-      }
+      const mergeResult = this.checkMergeAndCalculateDistance(nextEdge, accumulatedDistance, isMergeNode);
+      if (mergeResult) return mergeResult;
 
       accumulatedDistance += nextEdge.distance;
       edge = nextEdge;
@@ -1099,3 +1057,25 @@ export class TransferMgr {
     // Path buffer는 consumeNextEdgeReservationFromPathBuffer에서 자동으로 currentIdx 증가
   }
 }
+
+// ============================================================================
+// Re-exports
+// ============================================================================
+
+export type {
+  VehicleLoop,
+  ProcessPathCommandContext,
+  ILockMgrForNextEdge,
+  FillNextEdgesContext,
+  IVehicleDataArray,
+  VehicleCommand,
+  ReservedEdge,
+  CurveBrakeState,
+} from "./types";
+
+export {
+  MAX_PATH_LENGTH,
+  PATH_LEN,
+  PATH_EDGES_START,
+  getNextEdgeInLoop,
+} from "./types";
