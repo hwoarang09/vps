@@ -12,7 +12,7 @@ import { TransferMode } from "@/shmSimulator/types";
 import { devLog } from "@/logger/DevLogger";
 import type { VehiclePhysicsResult } from "./vehiclePhysics";
 import type { MovementUpdateContext } from "./movementUpdate";
-import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 
 // ============================================================================

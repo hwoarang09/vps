@@ -2,7 +2,7 @@
 
 import type { Edge } from "@/types/edge";
 import type { MovementConfig } from "./movementUpdate";
-import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 
 export interface MergeBrakeCheckResult {
   shouldBrake: boolean;

@@ -14,7 +14,7 @@ import {
 } from "../../MemoryLayoutManager";
 import type { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import type { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
-import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import type { StationRawData } from "@/types/station";

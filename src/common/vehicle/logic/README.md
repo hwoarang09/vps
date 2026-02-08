@@ -672,7 +672,7 @@ Round-Robin 선택 순서:
 
 ```typescript
 // FabContext.ts
-import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 
 class FabContext {
   private readonly lockMgr: LockMgr;
@@ -691,7 +691,7 @@ class FabContext {
 
 ```typescript
 // movementUpdate.ts
-import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { TrafficState, StopReason } from "@/common/vehicle/initialize/constants";
 
 function updateVehicle(

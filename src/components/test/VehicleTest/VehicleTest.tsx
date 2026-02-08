@@ -11,7 +11,7 @@ import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
 import SimulationParamsModal from "./SimulationParamsModal";
 import TopControlBar from "./TopControlBar";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
-import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr";
+import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useStationStore } from "@/store/map/stationStore";

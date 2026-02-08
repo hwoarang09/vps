@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Search, ChevronDown, Circle, Car } from "lucide-react";
-import { getLockMgr, type MergeLockNode } from "@/common/vehicle/logic/LockMgr";
+import { getLockMgr, type MergeLockNode } from "@/common/vehicle/logic/LockMgr/index";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import type { LockNodeData, LockTableData } from "@/shmSimulator/types";

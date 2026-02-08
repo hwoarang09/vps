@@ -13,7 +13,7 @@ import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { VehicleConfig } from "@/types";
-import { getLockMgr } from "@/common/vehicle/logic/LockMgr";
+import { getLockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import {
   initializeVehicles as initializeVehiclesCommon,
   buildEdgeNameToIndex,

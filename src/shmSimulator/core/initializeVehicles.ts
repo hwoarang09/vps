@@ -2,7 +2,7 @@
 // Uses shared initialization logic from common module
 
 import { EngineStore } from "./EngineStore";
-import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
 import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import type { Edge } from "@/types/edge";

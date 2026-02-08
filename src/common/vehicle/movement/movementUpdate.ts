@@ -9,7 +9,7 @@ import {
 import type { SpeedConfig } from "@/common/vehicle/physics/speedCalculator";
 import type { IEdgeTransitionStore, OnUnusualMoveCallback } from "./edgeTransition";
 import type { SensorPointsConfig } from "@/common/vehicle/helpers/sensorPoints";
-import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
 import { TransferMode } from "@/shmSimulator/types";
 import type { ISensorPointArray } from "@/common/vehicle/collision/sensorCollision";

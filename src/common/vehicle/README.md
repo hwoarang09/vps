@@ -373,7 +373,7 @@ function simulationStep(delta: number) {
 ### 교차로 관리
 
 ```typescript
-import { LockMgr } from "@/common/vehicle/logic/LockMgr";
+import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 
 const lockMgr = new LockMgr();
 lockMgr.init(nodes);

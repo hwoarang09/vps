@@ -24,7 +24,7 @@ import {
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";
-import { getLockMgr } from "@/common/vehicle/logic/LockMgr";
+import { getLockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { VehicleLoop } from "@/utils/vehicle/loopMaker";
