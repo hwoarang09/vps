@@ -8,6 +8,7 @@ import {
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 import { devLog } from "@/logger/DevLogger";
+import { getFbLog } from "@/logger";
 import type { CheckpointState, LockMgrState } from "./types";
 import {
   ensureCheckpointLoaded,
@@ -91,6 +92,22 @@ export function processCheckpoint(
       devLog.veh(vehicleId).debug(
         `[processCP] flags=0, loading next. cur=${eName(currentEdge)} head=${head}`
       );
+
+      // FbLogger: Checkpoint 로그 (구조화된 필드만 사용)
+      const fbLog = getFbLog();
+      if (fbLog) {
+        const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+        fbLog.checkpoint({
+          vehId: vehicleId,
+          cpIndex: head,
+          edgeId: currentEdge,
+          ratio: currentRatio,
+          flags: 0,
+          action: "LOAD_NEXT",
+          // details 생략 - 모든 정보가 이미 개별 필드에 있음
+        });
+      }
+
       loadNextCheckpoint(vehicleId, state, eName);
     }
 

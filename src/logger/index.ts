@@ -42,3 +42,36 @@ export {
   type DevLogFileInfo,
   type DeleteResult,
 } from "./devLogUtils";
+
+// FlatBuffers Logger
+export { FbLogger, readLogBatch, type FbLoggerConfig } from "./fb/FbLogger";
+export {
+  FbLoggerController,
+  listFbLogFiles,
+  downloadFbLogFile,
+  deleteFbLogFile,
+  type FbLoggerControllerConfig,
+} from "./fb/FbLoggerController";
+
+// Global FbLogger instance (for Worker Thread)
+import { FbLogger } from "./fb/FbLogger";
+
+let globalFbLogger: FbLogger | null = null;
+
+/**
+ * Initialize global FbLogger (for Worker Thread)
+ */
+export function initFbLog(config: { sessionId: string; workerId: number; loggerPort?: MessagePort }): FbLogger {
+  globalFbLogger = new FbLogger(config);
+  if (config.loggerPort) {
+    globalFbLogger.setLoggerPort(config.loggerPort);
+  }
+  return globalFbLogger;
+}
+
+/**
+ * Get global FbLogger instance
+ */
+export function getFbLog(): FbLogger | null {
+  return globalFbLogger;
+}

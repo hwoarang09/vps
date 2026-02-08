@@ -1,0 +1,116 @@
+// dev_log.fbs
+// FlatBuffers schema for VPS development logs
+
+namespace VpsDevLog;
+
+// ============================================================================
+// Log Content Types (Union members)
+// ============================================================================
+
+/// General debug/info log
+table DebugLog {
+  veh_id: uint;           // Vehicle ID (0 = global)
+  tag: string;            // Log tag (e.g., "LockMgr", "processCP")
+  message: string;        // Log message
+}
+
+/// Checkpoint processing log (most frequent)
+///
+/// Flags 해석:
+///   1 (0x01) = LOCK_REQUEST  - Lock 요청
+///   2 (0x02) = LOCK_WAIT     - Lock 대기 (차량 정지)
+///   4 (0x04) = LOCK_RELEASE  - Lock 해제
+///   8 (0x08) = MOVE_PREPARE  - nextEdges 채우기 (PREP)
+///   9 (0x09) = REQ|PREP      - Lock 요청 + nextEdges 채우기
+///
+/// Action 해석:
+///   "HIT"       - Checkpoint 도달, 처리 완료
+///   "SKIP"      - Edge 불일치로 스킵
+///   "LOAD_NEXT" - flags=0, 다음 CP 로드
+///   "MISSED"    - Checkpoint를 놓침 (빠른 통과)
+table CheckpointLog {
+  veh_id: uint;
+  cp_index: uint;         // Checkpoint index (0부터 시작)
+  edge_id: uint;          // Current edge ID (1-based, 예: 722 = "E722")
+  ratio: float;           // Position ratio on edge (0.0 = 시작, 1.0 = 끝)
+  flags: ubyte;           // Checkpoint flags (비트 마스크, 위 참조)
+  action: string;         // "HIT", "SKIP", "LOAD_NEXT", "MISSED"
+  details: string;        // Additional details (optional)
+}
+
+/// Edge transition log
+table EdgeTransitionLog {
+  veh_id: uint;
+  from_edge: uint;
+  to_edge: uint;
+  next_edges: [uint];     // nextEdges array
+  path_buf_len: uint;     // pathBuf length
+}
+
+/// Lock event log
+table LockEventLog {
+  veh_id: uint;
+  lock_id: uint;
+  event_type: string;     // "REQUEST", "GRANT", "WAIT", "RELEASE"
+  edge_id: uint;
+  wait_time_ms: uint;     // Wait duration
+}
+
+/// Error/Warning log
+table ErrorLog {
+  veh_id: uint;           // 0 = system-wide
+  error_code: string;     // "ERR_001", "WARN_DEADLOCK"
+  message: string;
+  stack_trace: string;    // Stack trace (if available)
+}
+
+/// Performance metrics log
+table PerfLog {
+  fps: float;
+  memory_mb: float;
+  active_vehicles: uint;
+  lock_queue_size: uint;
+}
+
+// ============================================================================
+// Union: All log content types
+// ============================================================================
+
+union LogContent {
+  DebugLog,
+  CheckpointLog,
+  EdgeTransitionLog,
+  LockEventLog,
+  ErrorLog,
+  PerfLog
+}
+
+// ============================================================================
+// Log Entry (Header + Content)
+// ============================================================================
+
+enum LogLevel: byte {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3
+}
+
+table LogEntry {
+  timestamp: double;      // Simulation time (ms)
+  level: LogLevel;        // Log level
+  location: string;       // Call site (file:line)
+  content: LogContent;    // Actual log content (union)
+}
+
+// ============================================================================
+// Log Batch (One file = One LogBatch)
+// ============================================================================
+
+table LogBatch {
+  session_id: string;     // Session ID
+  worker_id: uint;        // Worker ID
+  logs: [LogEntry];       // Log entries
+}
+
+root_type LogBatch;

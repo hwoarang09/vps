@@ -18,6 +18,7 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import type { StationRawData } from "@/types/station";
+import { getFbLog } from "@/logger";
 
 /**
  * initializeFab 컨텍스트
@@ -148,6 +149,14 @@ export function initializeFab(ctx: InitializeFabContext): {
 
   // Fab별 config 적용 로그
   devLog.info(`[FabContext:${params.fabId}] Lock policy: grantStrategy=${params.config.lockGrantStrategy}`);
+
+  // FbLogger: Fab 초기화 로그
+  const fbLog = getFbLog();
+  if (fbLog) {
+    fbLog.info(`Fab ${params.fabId} initialized: lockStrategy=${params.config.lockGrantStrategy}`, {
+      tag: "FabContext",
+    });
+  }
 
   // 차량 초기화
   const result: InitializationResult = initializeVehicles({

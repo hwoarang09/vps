@@ -3,14 +3,25 @@
 
 import { SimulationEngine } from "./core/SimulationEngine";
 import { DevLogger } from "@/logger/DevLogger";
+import { initFbLog } from "@/logger";
 import type { WorkerMessage, MainMessage, InitPayload, FabInitData, SimulationConfig, FabRenderAssignment } from "./types";
 
 let engine: SimulationEngine | null = null;
 
-function handleInit(payload: InitPayload): void {
+async function handleInit(payload: InitPayload): Promise<void> {
   try {
     // DevLogger 초기화 (Worker 환경)
-    DevLogger.init();
+    await DevLogger.init();
+
+    // FbLogger 초기화 (Worker 환경 - OPFS 직접 접근)
+    const fbLog = initFbLog({ sessionId: `sim_${Date.now()}`, workerId: 0 });
+    await fbLog.init();
+    console.log("[Worker] FbLogger initialized");
+
+    // 초기화 테스트 로그
+    fbLog.info("SimWorker initialized", { tag: "Worker" });
+    fbLog.perf({ fps: 0, memoryMb: 0, activeVehicles: 0, lockQueueSize: 0 });
+    fbLog.flush(); // 즉시 flush
 
     engine = new SimulationEngine();
     const fabVehicleCounts = engine.init(payload);
@@ -144,12 +155,12 @@ function handleGetLockTable(fabId: string, requestId: string): void {
 }
 
 // Handle messages from main thread
-globalThis.onmessage = (e: MessageEvent<WorkerMessage>) => {
+globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
 
   switch (message.type) {
     case "INIT":
-      handleInit(message.payload);
+      await handleInit(message.payload);
       break;
     case "START":
       handleStart();
