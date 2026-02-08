@@ -285,8 +285,33 @@ export function buildCheckpoints(
         flags: CheckpointFlags.LOCK_REQUEST,
         targetEdge: targetEdgeId,
       });
+    } else if (isStartFromMergeNode && isTargetCurve) {
+      // 직선 합류 + 곡선 target: LOCK_REQUEST와 MOVE_PREPARE 분리
+      // PREP는 1.0m 전 (곡선 target 기준, requestPoint 그대로)
+      checkpoints.push({
+        edge: requestPoint.edgeId,
+        ratio: requestPoint.ratio,
+        flags: CheckpointFlags.MOVE_PREPARE,
+        targetEdge: targetEdgeId,
+      });
+
+      // REQ는 5.1m 전 (lock 요청은 항상 straightRequestDistance)
+      const lockReqPoint = findRequestPoint(
+        targetIdx,
+        path,
+        edges,
+        opts.straightRequestDistance,
+        opts.curveRequestDistance,
+        false // 직선 거리(5.1m) 강제 사용
+      );
+      checkpoints.push({
+        edge: lockReqPoint.edgeId,
+        ratio: lockReqPoint.ratio,
+        flags: CheckpointFlags.LOCK_REQUEST,
+        targetEdge: targetEdgeId,
+      });
     } else {
-      // 직선 합류 또는 비합류: 기존 방식 (REQ|PREP 또는 PREP만)
+      // 직선 합류(직선 target) 또는 비합류: 기존 방식 (REQ|PREP 또는 PREP만)
       let flags = CheckpointFlags.MOVE_PREPARE;
       if (isStartFromMergeNode) {
         flags |= CheckpointFlags.LOCK_REQUEST;

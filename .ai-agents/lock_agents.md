@@ -985,11 +985,44 @@ if (holder === vehId) {
 
 ---
 
+#### Bug #5: 직선 합류 + 곡선 target에서 WAIT가 REQ보다 앞에 배치 (veh:107, veh:126 deadlock)
+
+**증상:** veh:107이 E0317@0.456에서 LOCK_WAIT BLOCKED (N0261). veh:126이 N0261 lock 영구 보유하며 E0317@0.191에서 veh:107에 물리적 차단.
+
+**원인:**
+```
+경로: ... → E316 → E317(직선, ~3.5m) → E562(곡선, merge N0261)
+
+builder가 생성한 checkpoint:
+  head=13: E317@0.456[WAIT]→E562    ← 1.89m 전 (waiting_offset)
+  head=14: E317@0.759[REQ|PREP]→E562 ← 1.0m 전 (곡선 target 기준)
+
+WAIT가 REQ보다 먼저! → 차량이 lock 요청 없이 WAIT에서 영구 대기
+```
+
+**근본 원인:**
+- 직선 합류에서 REQ|PREP를 하나로 합쳤는데, target이 곡선이면 `findRequestPoint`가 1.0m(곡선 기준)을 사용
+- LOCK_REQUEST는 5.1m 전이어야 하는데, MOVE_PREPARE의 1.0m에 끌려옴
+- 1.0m < 1.89m(waitingOffset) → REQ ratio > WAIT ratio → WAIT가 먼저 배치
+
+**수정 (builder.ts):**
+- 직선 합류 + 곡선 target 케이스를 별도 분기로 분리
+- MOVE_PREPARE: 기존대로 1.0m 전 (곡선 target 기준)
+- LOCK_REQUEST: 5.1m 전 강제 (`findRequestPoint`에 `isTargetCurve=false` 전달)
+
+```
+수정 후:
+E316 or early E317[REQ] → E317@0.456[WAIT] → E317@0.759[PREP]
+```
+
+---
+
 ### 12.14 수정된 파일 요약 (2026-02-08)
 
 | 파일 | 변경 | 관련 버그 |
 |------|------|-----------|
 | `checkpoint/builder.ts` | `findLockRequestBeforeCurve()` 추가, 곡선 합류 시 REQ/PREP 분리, 기본 waiting_offset | #1, #3 |
+| `checkpoint/builder.ts` | 직선 합류 + 곡선 target 시 REQ/PREP 분리 (REQ=5.1m, PREP=1.0m) | #5 |
 | `checkpoint/utils.ts` | `sortCheckpointsByPathOrder()` 추가 | #2 |
 | `LockMgr.ts` | `checkAutoRelease()` holder 체크, `cancelFromQueue()` 추가, `pendingReleases` 맵, `eName()` 헬퍼 | #4 |
 | `LockMgr.ts` | LOCK_REQUEST: `targetEdge.from_node`으로 merge 판단 (기존 `to_node` 제거) | 전체 |
@@ -1015,12 +1048,12 @@ targetEdge.from_node = merge node
 
 #### 곡선 합류 vs 직선 합류
 
-| | 곡선 합류 | 직선 합류 |
-|---|---|---|
-| incoming edge | 곡선 (CURVE) | 직선 (LINEAR) |
-| LOCK_REQUEST 위치 | 곡선 fn 1m 전 (직전 직선) | MOVE_PREPARE와 합쳐서 (REQ\|PREP) |
-| LOCK_WAIT 위치 | 곡선 fn (ratio 0) | waiting_offset 전 (기본 1.89m) |
-| MOVE_PREPARE 위치 | 곡선@0.5 | 5.1m 전 (역순 탐색) |
+| | 곡선 합류 | 직선 합류 (직선 target) | 직선 합류 (곡선 target) |
+|---|---|---|---|
+| incoming edge | 곡선 (CURVE) | 직선 (LINEAR) | 직선 (LINEAR) |
+| LOCK_REQUEST 위치 | 곡선 fn 1m 전 (직전 직선) | MOVE_PREPARE와 합쳐서 (REQ\|PREP) 5.1m 전 | **분리**: 5.1m 전 |
+| LOCK_WAIT 위치 | 곡선 fn (ratio 0) | waiting_offset 전 (기본 1.89m) | waiting_offset 전 (기본 1.89m) |
+| MOVE_PREPARE 위치 | 곡선@0.5 | 5.1m 전 (REQ와 합쳐짐) | **분리**: 1.0m 전 |
 
 #### Auto-release 흐름
 ```
