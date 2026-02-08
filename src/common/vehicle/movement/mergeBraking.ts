@@ -1,5 +1,4 @@
 // common/vehicle/movement/mergeBraking.ts
-// TODO: 새로운 락 시스템 구현 후 필요시 다시 구현
 
 import type { Edge } from "@/types/edge";
 import type { MovementConfig } from "./movementUpdate";
