@@ -575,10 +575,26 @@ export class FabContext {
   }
 
   getLockTableData(): import("../types").LockTableData {
-    // TODO: 새 락 시스템 구현 후 업데이트
+    const snapshot = this.lockMgr.getLockSnapshot();
+    const nodes: Record<string, import("../types").LockNodeData> = {};
+
+    for (const { nodeName, holderVehId, holderEdge, waiters } of snapshot) {
+      const granted: { edge: string; veh: number }[] = [];
+      if (holderVehId !== undefined) {
+        granted.push({ edge: holderEdge, veh: holderVehId });
+      }
+
+      const requests: { vehId: number; edgeName: string; requestTime: number }[] = [];
+      for (const w of waiters) {
+        requests.push({ vehId: w.vehId, edgeName: w.edgeName, requestTime: 0 });
+      }
+
+      nodes[nodeName] = { name: nodeName, requests, granted, edgeQueueSizes: {} };
+    }
+
     return {
       strategy: this.lockMgr.getGrantStrategy(),
-      nodes: {},
+      nodes,
     };
   }
 }

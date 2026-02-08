@@ -139,10 +139,11 @@ export class LockMgr {
   /**
    * Checkpoint 기반 락 처리
    *
-   * 새 설계:
+   * 설계:
    * 1. VehicleDataArray의 CURRENT_CP_* 필드 사용
    * 2. 각 flag 개별 처리 후 해당 flag 제거
    * 3. flags == 0이면 다음 checkpoint 로드
+   * 4. edge mismatch 시 놓친 CP 감지 → catch-up 처리
    */
   private processCheckpoint(vehicleId: number): void {
     if (!this.vehicleDataArray || !this.checkpointArray) return;
@@ -150,84 +151,139 @@ export class LockMgr {
     const data = this.vehicleDataArray;
     const ptr = vehicleId * VEHICLE_DATA_SIZE;
 
-    // 현재 checkpoint 읽기 (VehicleDataArray에서)
-    let cpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
-    let cpRatio = data[ptr + LogicData.CURRENT_CP_RATIO];
-    let cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
+    // Catch-up loop: 놓친 CP를 연속 처리 (최대 10개)
+    const MAX_CATCHUP = 10;
+    for (let attempt = 0; attempt < MAX_CATCHUP; attempt++) {
+      // 현재 checkpoint 읽기 (VehicleDataArray에서)
+      let cpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
+      let cpRatio = data[ptr + LogicData.CURRENT_CP_RATIO];
+      let cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
 
-    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
-    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-    const head = data[ptr + LogicData.CHECKPOINT_HEAD];
+      const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+      const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+      const head = data[ptr + LogicData.CHECKPOINT_HEAD];
 
-    // checkpoint가 없으면 로드 시도
-    if (cpEdge === 0) {
-      devLog.veh(vehicleId).debug(
-        `[processCP] cpEdge=0, trying load. curE=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} head=${head}`
-      );
-      if (!this.loadNextCheckpoint(vehicleId, data, ptr)) {
-        return; // 더 이상 checkpoint 없음
+      // checkpoint가 없으면 로드 시도
+      if (cpEdge === 0) {
+        devLog.veh(vehicleId).debug(
+          `[processCP] cpEdge=0, trying load. curE=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} head=${head}`
+        );
+        if (!this.loadNextCheckpoint(vehicleId, data, ptr)) {
+          return; // 더 이상 checkpoint 없음
+        }
+        cpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
+        cpRatio = data[ptr + LogicData.CURRENT_CP_RATIO];
+        cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
       }
-      // 새로 로드된 checkpoint 읽기
-      cpEdge = data[ptr + LogicData.CURRENT_CP_EDGE];
-      cpRatio = data[ptr + LogicData.CURRENT_CP_RATIO];
-      cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
-    }
 
-    // 🚀 초고속 체크: 현재 위치가 checkpoint에 도달했는지
-    if (currentEdge !== cpEdge) {
+      // 🚀 초고속 체크: 현재 위치가 checkpoint에 도달했는지
+      if (currentEdge !== cpEdge) {
+        // 놓친 CP 감지: cpEdge가 pathBuffer에 없으면 이미 지나간 것
+        if (this.isCpEdgeBehind(vehicleId, cpEdge)) {
+          devLog.veh(vehicleId).debug(
+            `[processCP] MISSED! cur=${this.eName(currentEdge)}@${currentRatio.toFixed(3)} passed cp=${this.eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+          );
+          this.handleMissedCheckpoint(vehicleId, data, ptr, cpFlags);
+          data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
+          this.loadNextCheckpoint(vehicleId, data, ptr);
+          continue; // 다음 CP도 놓쳤을 수 있음
+        }
+        devLog.veh(vehicleId).debug(
+          `[processCP] SKIP edge mismatch: cur=${this.eName(currentEdge)} !== cp=${this.eName(cpEdge)} curR=${currentRatio.toFixed(3)} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+        );
+        return;
+      }
+      if (currentRatio < cpRatio) {
+        devLog.veh(vehicleId).debug(
+          `[processCP] SKIP ratio: cur=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} < cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+        );
+        return;
+      }
+
+      // ✅ Checkpoint 도달!
       devLog.veh(vehicleId).debug(
-        `[processCP] SKIP edge mismatch: cur=${this.eName(currentEdge)} !== cp=${this.eName(cpEdge)} curR=${currentRatio.toFixed(3)} cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
+        `[processCP] HIT! cur=${this.eName(currentEdge)}@${currentRatio.toFixed(3)} cp=${this.eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
       );
-      return;
-    }
-    if (currentRatio < cpRatio) {
-      devLog.veh(vehicleId).debug(
-        `[processCP] SKIP ratio: cur=${this.eName(currentEdge)} curR=${currentRatio.toFixed(3)} < cpR=${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
-      );
-      return;
-    }
 
-    // ✅ Checkpoint 도달!
-    devLog.veh(vehicleId).debug(
-      `[processCP] HIT! cur=${this.eName(currentEdge)}@${currentRatio.toFixed(3)} cp=${this.eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} head=${head}`
-    );
-
-    // MOVE_PREPARE 처리 (가장 먼저 - edge 요청)
-    if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
-      this.handleMovePrepare(vehicleId, data, ptr);
-      cpFlags &= ~CheckpointFlags.MOVE_PREPARE;
-      data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
-    }
-
-    // LOCK_RELEASE 처리 (lock 해제)
-    if (cpFlags & CheckpointFlags.LOCK_RELEASE) {
-      this.handleLockRelease(vehicleId, data, ptr);
-      cpFlags &= ~CheckpointFlags.LOCK_RELEASE;
-      data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
-    }
-
-    // LOCK_REQUEST 처리 (lock 요청 - 요청 후 무조건 flag 해제)
-    if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
-      this.handleLockRequest(vehicleId, data, ptr);
-      cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
-      data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
-    }
-
-    // LOCK_WAIT 처리 (lock 대기)
-    if (cpFlags & CheckpointFlags.LOCK_WAIT) {
-      const granted = this.handleLockWait(vehicleId, data, ptr);
-      if (granted) {
-        cpFlags &= ~CheckpointFlags.LOCK_WAIT;
+      // MOVE_PREPARE 처리 (가장 먼저 - edge 요청)
+      if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
+        this.handleMovePrepare(vehicleId, data, ptr);
+        cpFlags &= ~CheckpointFlags.MOVE_PREPARE;
         data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
       }
-    }
 
-    // flags가 0이면 → 다음 checkpoint 로드
-    if (cpFlags === 0) {
+      // LOCK_RELEASE 처리 (lock 해제)
+      if (cpFlags & CheckpointFlags.LOCK_RELEASE) {
+        this.handleLockRelease(vehicleId, data, ptr);
+        cpFlags &= ~CheckpointFlags.LOCK_RELEASE;
+        data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
+      }
+
+      // LOCK_REQUEST 처리 (lock 요청 - 요청 후 무조건 flag 해제)
+      if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
+        this.handleLockRequest(vehicleId, data, ptr);
+        cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
+        data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
+      }
+
+      // LOCK_WAIT 처리 (lock 대기)
+      if (cpFlags & CheckpointFlags.LOCK_WAIT) {
+        const granted = this.handleLockWait(vehicleId, data, ptr);
+        if (granted) {
+          cpFlags &= ~CheckpointFlags.LOCK_WAIT;
+          data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
+        }
+      }
+
+      // flags가 0이면 → 다음 checkpoint 로드
+      if (cpFlags === 0) {
+        devLog.veh(vehicleId).debug(
+          `[processCP] flags=0, loading next. cur=${this.eName(currentEdge)} head=${data[ptr + LogicData.CHECKPOINT_HEAD]}`
+        );
+        this.loadNextCheckpoint(vehicleId, data, ptr);
+      }
+      return; // 정상 HIT 처리 완료
+    }
+  }
+
+  /**
+   * CP의 edge가 이미 지나간 edge인지 확인
+   * - cpEdge가 currentEdge도 아니고 pathBuffer에도 없으면 → 이미 지나감
+   */
+  private isCpEdgeBehind(vehicleId: number, cpEdge: number): boolean {
+    if (!this.pathBuffer) return false;
+    const pathPtr = vehicleId * MAX_PATH_LENGTH;
+    const pathLen = this.pathBuffer[pathPtr + PATH_LEN];
+
+    for (let i = 0; i < pathLen; i++) {
+      if (this.pathBuffer[pathPtr + PATH_EDGES_START + i] === cpEdge) {
+        return false; // cpEdge가 아직 경로에 있음 → 지나가지 않음
+      }
+    }
+    return true; // pathBuffer에 없음 → 이미 지나감
+  }
+
+  /**
+   * 놓친 CP 처리 (짧은 edge를 한 프레임에 통과하여 CP를 놓친 경우)
+   * - PREP: 실행 (nextEdges 채우기 - 필수!)
+   * - REQ: 실행 (lock 요청)
+   * - RELEASE: 실행 (lock 해제)
+   * - WAIT: 스킵 (이미 지나간 지점, 대기 불가)
+   */
+  private handleMissedCheckpoint(vehicleId: number, data: Float32Array, ptr: number, cpFlags: number): void {
+    if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
+      this.handleMovePrepare(vehicleId, data, ptr);
+    }
+    if (cpFlags & CheckpointFlags.LOCK_RELEASE) {
+      this.handleLockRelease(vehicleId, data, ptr);
+    }
+    if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
+      this.handleLockRequest(vehicleId, data, ptr);
+    }
+    if (cpFlags & CheckpointFlags.LOCK_WAIT) {
       devLog.veh(vehicleId).debug(
-        `[processCP] flags=0, loading next. cur=${this.eName(currentEdge)} head=${data[ptr + LogicData.CHECKPOINT_HEAD]}`
+        `[processCP] MISSED WAIT - skipped (already passed wait point)`
       );
-      this.loadNextCheckpoint(vehicleId, data, ptr);
     }
   }
 
@@ -575,6 +631,59 @@ export class LockMgr {
     this.locks.clear();
     this.queues.clear();
     this.pendingReleases.clear();
+  }
+
+  /**
+   * Lock 상태 스냅샷 반환 (Lock Info Panel용)
+   * - 현재 활성 lock/queue가 있는 노드만 반환
+   */
+  getLockSnapshot(): Array<{
+    nodeName: string;
+    holderVehId: number | undefined;
+    holderEdge: string;
+    waiters: Array<{ vehId: number; edgeName: string }>;
+  }> {
+    const result: Array<{
+      nodeName: string;
+      holderVehId: number | undefined;
+      holderEdge: string;
+      waiters: Array<{ vehId: number; edgeName: string }>;
+    }> = [];
+
+    // 활성 노드 수집 (lock 또는 queue가 있는 노드)
+    const activeNodes = new Set<string>();
+    for (const nodeName of this.locks.keys()) activeNodes.add(nodeName);
+    for (const [nodeName, queue] of this.queues) {
+      if (queue.length > 0) activeNodes.add(nodeName);
+    }
+
+    for (const nodeName of activeNodes) {
+      const holder = this.locks.get(nodeName);
+      const queue = this.queues.get(nodeName) ?? [];
+
+      const waiters: Array<{ vehId: number; edgeName: string }> = [];
+      for (const vehId of queue) {
+        if (vehId === holder) continue; // holder는 granted에 표시
+        waiters.push({ vehId, edgeName: this.getVehicleEdgeName(vehId) });
+      }
+
+      result.push({
+        nodeName,
+        holderVehId: holder,
+        holderEdge: holder !== undefined ? this.getVehicleEdgeName(holder) : '',
+        waiters,
+      });
+    }
+
+    return result;
+  }
+
+  /** Vehicle의 현재 edge name 조회 */
+  private getVehicleEdgeName(vehId: number): string {
+    if (!this.vehicleDataArray) return '?';
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+    const edgeIdx = Math.trunc(this.vehicleDataArray[ptr + MovementData.CURRENT_EDGE]);
+    return this.eName(edgeIdx);
   }
 
   // ============================================================================

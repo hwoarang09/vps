@@ -1017,12 +1017,54 @@ E316 or early E317[REQ] → E317@0.456[WAIT] → E317@0.759[PREP]
 
 ---
 
+#### Bug #6: 짧은 edge에서 CP 미스 → nextEdges 고갈 (veh:125 stuck)
+
+**증상:** veh:125가 E0355@1.000에서 nextEdges=[0,0,0,0,0]로 영구 정지. head=4가 E0354@0.980을 기다리지만 차량은 이미 E0355.
+
+**원인:**
+```
+step() 순서: Lock(processCP) → Movement → EdgeTransition
+
+프레임 N:
+  Lock phase:  E0354@0.946 < 0.980 → SKIP
+  Move phase:  0.946 + Δ = 1.014 (한 프레임에 0.980을 건너뜀!)
+  Edge trans:  E0354 → E0355 전환
+
+프레임 N+1:
+  Lock phase:  E0355 !== E0354 → edge mismatch → SKIP (영구 반복)
+```
+
+E0354가 짧은 edge (~1.5m)라서 velocity 5m/s 기준 한 프레임에 ratio가 ~0.07 증가. 0.946에서 0.980을 건너뛰고 1.014에 도달.
+
+**근본 원인:**
+- processCheckpoint의 edge mismatch에서 "아직 안 도달"과 "이미 지나침"을 구분하지 않음
+- 둘 다 SKIP 처리 → 놓친 CP의 PREP가 실행 안 됨 → nextEdges 고갈
+
+**수정 (LockMgr.ts):**
+- `isCpEdgeBehind()`: cpEdge가 pathBuffer에 없으면 이미 지나간 것으로 판단
+- `handleMissedCheckpoint()`: 놓친 CP의 flag별 처리
+  - PREP: 실행 (nextEdges 채우기 - 필수!)
+  - REQ: 실행 (lock 요청)
+  - RELEASE: 실행 (lock 해제)
+  - WAIT: 스킵 (이미 지나간 지점, 대기 불가)
+- processCheckpoint에 catch-up loop 추가 (최대 10개 연속 처리)
+
+```
+수정 후:
+edge mismatch 시:
+  cpEdge가 pathBuffer에 있음 → 정상 SKIP (아직 안 도달)
+  cpEdge가 pathBuffer에 없음 → MISSED! → catch-up 처리 → 다음 CP 확인
+```
+
+---
+
 ### 12.14 수정된 파일 요약 (2026-02-08)
 
 | 파일 | 변경 | 관련 버그 |
 |------|------|-----------|
 | `checkpoint/builder.ts` | `findLockRequestBeforeCurve()` 추가, 곡선 합류 시 REQ/PREP 분리, 기본 waiting_offset | #1, #3 |
 | `checkpoint/builder.ts` | 직선 합류 + 곡선 target 시 REQ/PREP 분리 (REQ=5.1m, PREP=1.0m) | #5 |
+| `LockMgr.ts` | `isCpEdgeBehind()` + `handleMissedCheckpoint()` + catch-up loop 추가 | #6 |
 | `checkpoint/utils.ts` | `sortCheckpointsByPathOrder()` 추가 | #2 |
 | `LockMgr.ts` | `checkAutoRelease()` holder 체크, `cancelFromQueue()` 추가, `pendingReleases` 맵, `eName()` 헬퍼 | #4 |
 | `LockMgr.ts` | LOCK_REQUEST: `targetEdge.from_node`으로 merge 판단 (기존 `to_node` 제거) | 전체 |
