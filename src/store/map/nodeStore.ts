@@ -17,19 +17,15 @@ interface DeadlockZone {
 }
 
 /**
- * 데드락 존 감지
- *
- * 조건:
- * 1. 분기점 A에서 나가는 edge 2개의 toNode가 B, C
- * 2. B, C 둘 다 합류점 (incoming >= 2)
- * 3. 다른 분기점 D도 B, C 둘 다로 분기
- *
- * → A, D가 분기점, B, C가 합류점인 데드락 존
+ * Node topology 집계 (outgoing/incoming)
  */
-function detectDeadlockZones(edges: Edge[]): DeadlockZone[] {
-  // 분기점별 toNode 집합 계산
+interface NodeTopology {
+  divergeToNodes: Map<string, Set<string>>;  // 각 노드에서 나가는 toNode 집합
+  incomingCount: Map<string, number>;        // 각 노드로 들어오는 edge 개수
+}
+
+function collectNodeTopology(edges: Edge[]): NodeTopology {
   const divergeToNodes = new Map<string, Set<string>>();
-  // 합류점별 incoming count
   const incomingCount = new Map<string, number>();
 
   for (const edge of edges) {
@@ -43,22 +39,48 @@ function detectDeadlockZones(edges: Edge[]): DeadlockZone[] {
     incomingCount.set(edge.to_node, (incomingCount.get(edge.to_node) || 0) + 1);
   }
 
-  // 분기점 목록 (outgoing >= 2)
+  return { divergeToNodes, incomingCount };
+}
+
+/**
+ * 분기점 찾기 (outgoing >= 2)
+ */
+function findDivergeNodes(divergeToNodes: Map<string, Set<string>>): string[] {
   const divergeNodes: string[] = [];
   for (const [node, toNodes] of divergeToNodes) {
     if (toNodes.size >= 2) {
       divergeNodes.push(node);
     }
   }
+  return divergeNodes;
+}
 
-  // 합류점 집합 (incoming >= 2)
+/**
+ * 합류점 찾기 (incoming >= 2)
+ */
+function findMergeNodes(incomingCount: Map<string, number>): Set<string> {
   const mergeNodeSet = new Set<string>();
   for (const [node, count] of incomingCount) {
     if (count >= 2) {
       mergeNodeSet.add(node);
     }
   }
+  return mergeNodeSet;
+}
 
+/**
+ * 데드락 존 쌍 찾기 (분기점 A, D → 합류점 B, C)
+ *
+ * 조건:
+ * - A, D 둘 다 분기점 (outgoing >= 2)
+ * - B, C 둘 다 합류점 (incoming >= 2)
+ * - A와 D가 정확히 같은 2개의 노드(B, C)로 분기
+ */
+function findDeadlockZonePairs(
+  divergeNodes: string[],
+  divergeToNodes: Map<string, Set<string>>,
+  mergeNodeSet: Set<string>
+): DeadlockZone[] {
   const zones: DeadlockZone[] = [];
   const usedDiverge = new Set<string>();
 
@@ -100,6 +122,30 @@ function detectDeadlockZones(edges: Edge[]): DeadlockZone[] {
   }
 
   return zones;
+}
+
+/**
+ * 데드락 존 감지 (메인 함수)
+ *
+ * 조건:
+ * 1. 분기점 A에서 나가는 edge 2개의 toNode가 B, C
+ * 2. B, C 둘 다 합류점 (incoming >= 2)
+ * 3. 다른 분기점 D도 B, C 둘 다로 분기
+ *
+ * → A, D가 분기점, B, C가 합류점인 데드락 존
+ */
+function detectDeadlockZones(edges: Edge[]): DeadlockZone[] {
+  // 1. Node topology 집계
+  const { divergeToNodes, incomingCount } = collectNodeTopology(edges);
+
+  // 2. 분기점 찾기
+  const divergeNodes = findDivergeNodes(divergeToNodes);
+
+  // 3. 합류점 찾기
+  const mergeNodeSet = findMergeNodes(incomingCount);
+
+  // 4. 데드락 존 쌍 찾기
+  return findDeadlockZonePairs(divergeNodes, divergeToNodes, mergeNodeSet);
 }
 
 /**
