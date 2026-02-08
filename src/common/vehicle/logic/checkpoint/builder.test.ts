@@ -9,13 +9,13 @@
 // 5. 경로 내 2번째 edge부터 각 edge에 대해 checkpoint가 잘 설정되었는지 확인
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import Papa from 'papaparse';
 import { Edge, EdgeType } from '@/types/edge';
 import { findShortestPath, clearPathCache } from '../Dijkstra';
 import { buildCheckpointsFromPath } from './index';
-import { CheckpointFlags, Checkpoint } from '@/common/vehicle/initialize/constants';
+import { CheckpointFlags } from '@/common/vehicle/initialize/constants';
 import { isCurveEdge } from './utils';
 
 // ============================================================
@@ -74,16 +74,16 @@ function loadYShortMap(): MapData {
   const edges: Edge[] = edgeRows
     .filter((row) => row.edge_name && row.from_node && row.to_node)
     .map((row) => {
-      const waitingOffsetRaw = row.waiting_offset ? parseFloat(row.waiting_offset) : -1;
+      const waitingOffsetRaw = row.waiting_offset ? Number.parseFloat(row.waiting_offset) : -1;
       const waitingOffset = waitingOffsetRaw > 0 ? waitingOffsetRaw / 1000 : undefined;
 
       return {
         edge_name: row.edge_name,
         from_node: row.from_node,
         to_node: row.to_node,
-        distance: parseFloat(row.distance) || 0,
+        distance: Number.parseFloat(row.distance) || 0,
         vos_rail_type: row.vos_rail_type as EdgeType,
-        radius: row.radius ? parseFloat(row.radius) : undefined,
+        radius: row.radius ? Number.parseFloat(row.radius) : undefined,
         waypoints: [],
         waiting_offset: waitingOffset,
       };
@@ -91,15 +91,15 @@ function loadYShortMap(): MapData {
 
   // 2. edgeNameToIndex 맵 생성 (1-based)
   const edgeNameToIndex = new Map<string, number>();
-  edges.forEach((edge, idx) => {
+  for (const [idx, edge] of edges.entries()) {
     edgeNameToIndex.set(edge.edge_name, idx + 1); // 1-based
-  });
+  }
 
   // 3. topology 계산 (nextEdgeIndices, merge nodes)
   const nodeOutgoingEdges = new Map<string, number[]>();
   const nodeIncomingEdges = new Map<string, number[]>();
 
-  edges.forEach((edge, idx) => {
+  for (const [idx, edge] of edges.entries()) {
     const edgeIdx = idx + 1;
 
     const outgoing = nodeOutgoingEdges.get(edge.from_node) || [];
@@ -109,11 +109,11 @@ function loadYShortMap(): MapData {
     const incoming = nodeIncomingEdges.get(edge.to_node) || [];
     incoming.push(edgeIdx);
     nodeIncomingEdges.set(edge.to_node, incoming);
-  });
+  }
 
-  edges.forEach((edge) => {
+  for (const edge of edges) {
     edge.nextEdgeIndices = nodeOutgoingEdges.get(edge.to_node) || [];
-  });
+  }
 
   const mergeNodes = new Set<string>();
   for (const [nodeName, incoming] of nodeIncomingEdges) {
@@ -264,12 +264,11 @@ describe('Checkpoint Builder - Simple Validation', () => {
 
     // 경로 출력
     console.log('Path edges:');
-    pathIndices!.forEach((edgeIdx, i) => {
+    for (const [i, edgeIdx] of pathIndices!.entries()) {
       const edge = mapData.edges[edgeIdx - 1];
       const isMerge = mapData.mergeNodes.has(edge.from_node);
-      const isCurve = isCurveEdge(edge);
       console.log(`  [${i}] ${edge.edge_name}: ${edge.from_node}→${edge.to_node} | dist=${edge.distance.toFixed(2)}m | type=${edge.vos_rail_type} | merge=${isMerge} | offset=${edge.waiting_offset?.toFixed(2) || '-'}`);
-    });
+    }
 
     // Checkpoint 생성 및 출력
     const result = buildCheckpointsFromPath({
@@ -279,7 +278,7 @@ describe('Checkpoint Builder - Simple Validation', () => {
     });
 
     console.log('\nCheckpoints:');
-    result.checkpoints.forEach((cp, idx) => {
+    for (const [idx, cp] of result.checkpoints.entries()) {
       const flags: string[] = [];
       if (cp.flags & CheckpointFlags.MOVE_PREPARE) flags.push('PREP');
       if (cp.flags & CheckpointFlags.LOCK_REQUEST) flags.push('REQ');
@@ -288,7 +287,7 @@ describe('Checkpoint Builder - Simple Validation', () => {
 
       const edge = mapData.edges[cp.edge - 1];
       console.log(`  [${idx}] ${edge.edge_name}@${cp.ratio.toFixed(3)} [${flags.join('|')}]`);
-    });
+    }
 
     // 검증
     const validation = validateCheckpoints(pathIndices!);
@@ -299,7 +298,9 @@ describe('Checkpoint Builder - Simple Validation', () => {
 
     if (validation.errors.length > 0) {
       console.log('Errors:');
-      validation.errors.forEach((e) => console.log(`  ${e}`));
+      for (const e of validation.errors) {
+        console.log(`  ${e}`);
+      }
     }
 
     expect(validation.allCheckpointsValid).toBe(true);
@@ -337,7 +338,9 @@ describe('Checkpoint Builder - Simple Validation', () => {
         failedCount++;
         if (allErrors.length < 10) {
           allErrors.push(`[${iter}] ${startStation.name} → ${endStation.name}:`);
-          validation.errors.slice(0, 3).forEach((e) => allErrors.push(`  ${e}`));
+          for (const e of validation.errors.slice(0, 3)) {
+            allErrors.push(`  ${e}`);
+          }
         }
       }
     }

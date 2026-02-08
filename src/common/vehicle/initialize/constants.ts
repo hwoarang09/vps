@@ -74,24 +74,24 @@ export const JobState = {
 // Stop Reason Bitmask
 export const StopReason = {
   NONE: 0,
-  OBS_LIDAR: 1,
-  OBS_CAMERA: 1 << 1,
-  E_STOP: 1 << 2,
-  LOCKED: 1 << 3,
-  DESTINATION_REACHED: 1 << 4,
-  PATH_BLOCKED: 1 << 5,
-  LOAD_ON: 1 << 6,
-  LOAD_OFF: 1 << 7,
-  NOT_INITIALIZED: 1 << 8,
-  INDIVIDUAL_CONTROL: 1 << 9,
-  SENSORED: 1 << 10,
-  IDLE: 1 << 11,
+  OBS_LIDAR: 1,          // 0x001
+  OBS_CAMERA: 1 << 1,    // 0x002
+  E_STOP: 1 << 2,        // 0x004
+  LOCKED: 1 << 3,        // 0x008
+  DESTINATION_REACHED: 1 << 4,      // 0x010
+  PATH_BLOCKED: 1 << 5,             // 0x020
+  LOAD_ON: 1 << 6,                  // 0x040
+  LOAD_OFF: 1 << 7,                 // 0x080
+  NOT_INITIALIZED: 1 << 8,          // 0x100
+  INDIVIDUAL_CONTROL: 1 << 9,       // 0x200
+  SENSORED: 1 << 10,                // 0x400
+  IDLE: 1 << 11,                    // 0x800
 } as const;
 
 // Checkpoint Flags Bitmask (for unified checkpoint system)
 export const CheckpointFlags = {
   NONE: 0,
-  LOCK_REQUEST: 1 << 0,  // 0x01 - Request lock at merge point
+  LOCK_REQUEST: 1,       // 0x01 - Request lock at merge point
   LOCK_WAIT: 1 << 1,     // 0x02 - Wait for lock grant
   LOCK_RELEASE: 1 << 2,  // 0x04 - Release lock after passing merge
   MOVE_PREPARE: 1 << 3,  // 0x08 - Prepare next edge (curves)

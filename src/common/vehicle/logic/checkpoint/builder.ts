@@ -53,7 +53,7 @@ function checkEdgeStartFromMergeNode(
  */
 const DEFAULT_OPTIONS: MergeCheckpointOptions = {
   straightRequestDistance: 5.1,  // 직선 target 요청 거리 (meters)
-  curveRequestDistance: 1.0,     // 곡선 target 요청 거리 (meters)
+  curveRequestDistance: 1,       // 곡선 target 요청 거리 (meters)
   releaseRatio: 0.01,            // Lock 해제 ratio
 };
 
