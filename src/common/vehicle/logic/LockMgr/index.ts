@@ -94,7 +94,19 @@ export class LockMgr {
   }
 
   /**
-   * 개별 차량 락 처리 (Checkpoint 시스템)
+   * 개별 차량 락 처리 - 핵심 엔트리 포인트 (Checkpoint 시스템)
+   *
+   * 매 프레임마다 각 차량에 대해 호출되며, 다음 작업을 수행합니다:
+   * 1. Checkpoint 로드 및 검증 (checkpoint-loader)
+   * 2. Checkpoint 도달 체크 (edge/ratio 일치 확인)
+   * 3. Flag 처리 (checkpoint-processor)
+   *    - MOVE_PREPARE: 다음 edge 준비 (NEXT_EDGE 채우기)
+   *    - LOCK_REQUEST: Lock 요청 + auto-release 등록
+   *    - LOCK_WAIT: Lock 대기 또는 통과 (deadlock zone 우선순위 적용)
+   *    - LOCK_RELEASE: Lock 해제 + 다음 차량에 grant
+   * 4. 다음 Checkpoint 로드 (flags === 0일 때)
+   *
+   * 내부적으로 checkpoint-processor.processCheckpoint()를 호출합니다.
    */
   processLock(vehicleId: number, _policy: LockPolicy): void {
     if (!this.state.vehicleDataArray || !this.state.checkpointArray) {

@@ -23,13 +23,30 @@ import {
 } from "./lock-handlers";
 
 /**
- * Checkpoint 기반 락 처리 (메인 로직)
+ * Checkpoint 기반 락 처리 - 핵심 알고리즘
  *
- * 설계:
- * 1. VehicleDataArray의 CURRENT_CP_* 필드 사용
- * 2. 각 flag 개별 처리 후 해당 flag 제거
- * 3. flags == 0이면 다음 checkpoint 로드
- * 4. edge mismatch 시 놓친 CP 감지 → catch-up 처리
+ * 이 함수는 LockMgr의 핵심 로직으로, Checkpoint 시스템의 모든 처리를 담당합니다.
+ *
+ * 동작 흐름:
+ * 1. Checkpoint 로드 (ensureCheckpointLoaded)
+ *    - CURRENT_CP_EDGE가 0이면 checkpointArray에서 다음 CP 로드
+ *    - VehicleDataArray의 CURRENT_CP_* 필드에 저장
+ *
+ * 2. 도달 체크 (checkCheckpointReached)
+ *    - Edge 일치: currentEdge === cpEdge
+ *    - Ratio 일치: currentRatio >= cpRatio
+ *    - 놓친 CP 감지: cpEdge가 pathBuffer에 없으면 → 이미 지나감
+ *
+ * 3. Flag 처리 (processCheckpointFlags)
+ *    - 각 flag 처리 후 해당 flag 제거 (비트 연산)
+ *    - MOVE_PREPARE → LOCK_RELEASE → LOCK_REQUEST → LOCK_WAIT 순서
+ *
+ * 4. 다음 Checkpoint 로드 (shouldLoadNextCheckpoint)
+ *    - flags === 0이면 loadNextCheckpoint 호출
+ *
+ * Catch-up 처리:
+ * - 짧은 edge를 한 프레임에 통과하여 CP를 놓친 경우
+ * - 최대 10개까지 연속 처리 (MAX_CATCHUP)
  */
 export function processCheckpoint(
   vehicleId: number,
