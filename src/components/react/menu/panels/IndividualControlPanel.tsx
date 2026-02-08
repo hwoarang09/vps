@@ -123,12 +123,11 @@ const findNearestMergeWait = (
 
     if (currentEdge.toNodeIsMerge) {
         const isCurve = currentEdge.vos_rail_type !== EdgeType.LINEAR;
-        const waitNode = isCurve ? currentEdge.from_node : currentEdge.to_node;
         const distanceToWait = isCurve
             ? Math.max(0, -waitDistanceCurve)
             : Math.max(0, accumulatedDistance - waitDistanceStr);
         return {
-            waitNodeName: waitNode,
+            waitNodeName: currentEdge.to_node,
             mergeEdgeName: currentEdge.edge_name,
             distanceToWait,
             edgeHops: 0,
@@ -138,19 +137,18 @@ const findNearestMergeWait = (
 
     for (let i = 0; i < nextEdges.length; i++) {
         const nextEdgeIdx = nextEdges[i];
-        if (nextEdgeIdx < 0 || nextEdgeIdx >= edges.length) break;
+        if (nextEdgeIdx < 1 || nextEdgeIdx > edges.length) break;
 
-        const nextEdge = edges[nextEdgeIdx];
+        const nextEdge = edges[nextEdgeIdx - 1];
         if (!nextEdge) break;
 
         if (nextEdge.toNodeIsMerge) {
             const isCurve = nextEdge.vos_rail_type !== EdgeType.LINEAR;
-            const waitNode = isCurve ? nextEdge.from_node : nextEdge.to_node;
             const distanceToWait = isCurve
                 ? accumulatedDistance - waitDistanceCurve
                 : accumulatedDistance + nextEdge.distance - waitDistanceStr;
             return {
-                waitNodeName: waitNode,
+                waitNodeName: nextEdge.to_node,
                 mergeEdgeName: nextEdge.edge_name,
                 distanceToWait: Math.max(0, distanceToWait),
                 edgeHops: i + 1,
@@ -320,14 +318,14 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     }));
 
     const edges = useEdgeStore.getState().edges as FullEdge[];
-    const currentEdge = edges[currentEdgeIdx];
+    const currentEdge = currentEdgeIdx >= 1 ? edges[currentEdgeIdx - 1] : undefined;
     const mergeWaitInfo = currentEdge && nextEdges.length > 0
         ? findNearestMergeWait(currentEdge, currentEdgeRatio, nextEdges, edges)
         : null;
 
     const nextEdgesInfo = nextEdges.map((edgeIdx, i) => {
-        if (edgeIdx < 0) return null;
-        const edge = edges[edgeIdx];
+        if (edgeIdx < 1) return null;
+        const edge = edges[edgeIdx - 1];
         return edge ? { index: i, edgeIdx, name: edge.edge_name, toNode: edge.to_node, isMerge: edge.toNodeIsMerge ?? false } : null;
     }).filter(Boolean);
 

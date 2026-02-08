@@ -10,7 +10,7 @@
 |------|------|
 | [시스템 아키텍처](./SYSTEM_ARCHITECTURE.md) | 전체 시스템 설계 |
 | [코딩 규칙](./rule/coding_rule.md) | 코드 작성 규칙 |
-| [Lock 정리](./spec/Lock정리.md) | Lock 메커니즘 스펙 |
+| [Lock 정리](./spec/Lock정리.md) | Checkpoint 기반 Lock 시스템 (합류 제어, Deadlock Zone) |
 | [MQTT 명령 전달](./spec/mqtt_명령전달_구현현황.md) | MQTT 통신 구현 현황 |
 
 ---

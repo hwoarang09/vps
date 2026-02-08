@@ -412,6 +412,27 @@ export class LockMgr {
     const blocked = holder !== undefined && holder !== vehicleId;
 
     if (blocked) {
+      // Deadlock zone preemption: 나=zone-internal, holder=zone-external → 선점
+      const iAmInZone = this.isVehicleInDeadlockZone(vehicleId);
+      const holderInZone = this.isVehicleInDeadlockZone(holder!);
+
+      if (iAmInZone && !holderInZone) {
+        // holder의 lock 회수 → 나에게 grant (holder는 큐에 잔류)
+        devLog.veh(vehicleId).debug(
+          `[LOCK_WAIT] PREEMPT node=${nodeName} took lock from veh:${holder} (zone-external)`
+        );
+        this.locks.set(nodeName, vehicleId);
+        // 통과 처리 (아래 else 블록과 동일)
+        const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+        const curRatio = data[ptr + MovementData.EDGE_RATIO];
+        devLog.veh(vehicleId).debug(
+          `[LOCK_WAIT] PASS (preempted) node=${nodeName} next=${this.eName(targetEdgeIdx)} → MOVING at ${this.eName(curEdge)}@${curRatio.toFixed(3)}`
+        );
+        data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+        data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+        return true;
+      }
+
       // 다른 차량이 lock 보유 → 강제 정지
       const curEdge = data[ptr + MovementData.CURRENT_EDGE];
       const curRatio = data[ptr + MovementData.EDGE_RATIO];
@@ -569,8 +590,20 @@ export class LockMgr {
     const queue = this.queues.get(nodeName);
     if (!queue || queue.length === 0) return;
 
-    // 큐의 첫 번째 차량에 grant
-    const nextVeh = queue[0];
+    // Deadlock zone priority: zone-internal 차량 우선 grant
+    let nextVeh = queue[0];
+    for (let i = 0; i < queue.length; i++) {
+      if (this.isVehicleInDeadlockZone(queue[i])) {
+        nextVeh = queue[i];
+        if (i > 0) {
+          devLog.veh(nextVeh).debug(
+            `[LOCK_GRANT] ZONE_PRIORITY node=${nodeName} veh:${nextVeh} promoted over veh:${queue[0]}`
+          );
+        }
+        break;
+      }
+    }
+
     this.locks.set(nodeName, nextVeh);
     devLog.veh(nextVeh).debug(
       `[LOCK_GRANT] node=${nodeName} granted from queue`
@@ -684,6 +717,19 @@ export class LockMgr {
     const ptr = vehId * VEHICLE_DATA_SIZE;
     const edgeIdx = Math.trunc(this.vehicleDataArray[ptr + MovementData.CURRENT_EDGE]);
     return this.eName(edgeIdx);
+  }
+
+  /**
+   * 차량이 deadlock zone 내부 edge에 있는지 확인
+   * (분기점→합류점 edge, e.g. E286, E549, E397, E722)
+   */
+  private isVehicleInDeadlockZone(vehId: number): boolean {
+    if (!this.vehicleDataArray) return false;
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+    const curEdgeIdx = this.vehicleDataArray[ptr + MovementData.CURRENT_EDGE];
+    if (curEdgeIdx < 1) return false;
+    const edge = this.edges[curEdgeIdx - 1];
+    return edge?.isDeadlockZoneInside === true;
   }
 
   // ============================================================================
