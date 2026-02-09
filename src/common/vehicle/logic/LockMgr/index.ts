@@ -3,7 +3,6 @@
 
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types/node";
-import { devLog } from "@/logger/DevLogger";
 import type {
   LockPolicy,
   LockMgrState,
@@ -15,7 +14,10 @@ import { processCheckpoint } from "./checkpoint-processor";
 import { checkAutoRelease, requestLockInternal } from "./lock-handlers";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
-import { MovementData, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
+import { LogicData, MovementData, MovingStatus, StopReason, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
+
+/** merge 근처 비holder 차량 정지 거리 (m) */
+const PRELOCK_STOP_DISTANCE = 5.1;
 
 /**
  * LockMgr - 단순한 락 시스템
@@ -185,14 +187,14 @@ export class LockMgr {
 
     // 2. 각 mergeNode에 대해 차량 수집 → ratio 내림차순 정렬 → lock 등록
     for (const [nodeName, edgeIndices] of mergeNodeEdges) {
-      const vehicles: { vehId: number; ratio: number }[] = [];
+      const vehicles: { vehId: number; ratio: number; edgeIdx: number }[] = [];
 
       for (const edgeIdx of edgeIndices) {
         const vehIds = edgeVehicleQueue.getVehicles(edgeIdx);
         for (const vehId of vehIds) {
           const ptr = vehId * VEHICLE_DATA_SIZE;
           const ratio = data[ptr + MovementData.EDGE_RATIO];
-          vehicles.push({ vehId, ratio });
+          vehicles.push({ vehId, ratio, edgeIdx });
         }
       }
 
@@ -201,27 +203,23 @@ export class LockMgr {
       // ratio 내림차순 (merge node에 가까운 순)
       vehicles.sort((a, b) => b.ratio - a.ratio);
 
-      // n292 디버그 로그
-      if (nodeName === 'n292') {
-        const edgeNames = edgeIndices.map(idx => this.eName(idx));
-        devLog.info(
-          `[preLockMergeNodes] node=${nodeName} edges=[${edgeNames.join(',')}] ` +
-          `order=[${vehicles.map(v => `veh:${v.vehId}@${v.ratio.toFixed(3)}`).join(', ')}]`
-        );
-      }
-
       // 정렬된 순서로 lock 등록 → 첫 번째 차량이 자동으로 lock 획득
       for (const { vehId } of vehicles) {
         requestLockInternal(nodeName, vehId, this.state);
       }
 
-      // n292 lock 결과 로그
-      if (nodeName === 'n292') {
-        const holder = this.state.locks.get(nodeName);
-        const queue = this.state.queues.get(nodeName);
-        devLog.info(
-          `[preLockMergeNodes] node=${nodeName} → holder=veh:${holder} queue=[${queue?.join(',')}]`
-        );
+      // 비holder 차량 중 merge 가까운(≤5.1m) 차량 정지
+      const holder = this.state.locks.get(nodeName);
+      for (const { vehId, ratio, edgeIdx } of vehicles) {
+        if (vehId === holder) continue;
+        const edge = edges[edgeIdx - 1];
+        const distToMerge = (1 - ratio) * edge.distance;
+        if (distToMerge <= PRELOCK_STOP_DISTANCE) {
+          const ptr = vehId * VEHICLE_DATA_SIZE;
+          data[ptr + MovementData.VELOCITY] = 0;
+          data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+          data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+        }
       }
     }
   }
