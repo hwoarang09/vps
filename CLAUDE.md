@@ -78,6 +78,7 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
 | `/multi-fab` | `.ai-agents/multi_fab.md` | Multi-fab 작업 |
 | `/sensor-collision` | `.ai-agents/sensor_collision.md` | Sensor collision 작업 |
 | `/shm-simulator` | `.ai-agents/shmSimulator_agents.md` | ShmSimulator 작업 |
+| `/threejs-agents` | `.ai-agents/threejs_agents.md` | Three.js 렌더링 작업 |
 | `/transfer-agents` | `.ai-agents/transfer_agents.md` | Transfer 시스템 작업 |
 | `/visualization` | `.ai-agents/visualization.md` | Visualization 작업 |
 
