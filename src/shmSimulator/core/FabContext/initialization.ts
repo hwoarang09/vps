@@ -187,6 +187,9 @@ export function initializeFab(ctx: InitializeFabContext): {
     transferMgr.getPathBufferFromAutoMgr()
   );
 
+  // 초기 배치 거리 기반 lock 선점 (lockMgr.init() 이후 호출 필수)
+  lockMgr.preLockMergeNodes(actualNumVehicles, store.getEdgeVehicleQueue());
+
   // Station 데이터 초기화
   const stationData = params.sharedMapRef?.stations ?? params.stationData;
   if (stationData) {

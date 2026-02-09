@@ -60,6 +60,7 @@ export interface IEdgeVehicleQueue {
 export interface ILockMgr {
   isMergeNode(nodeName: string): boolean;
   requestLock(nodeName: string, edgeName: string, vehicleId: number): void;
+  preLockMergeNodes(numVehicles: number, edgeVehicleQueue: IEdgeVehicleQueue): void;
 }
 
 /**

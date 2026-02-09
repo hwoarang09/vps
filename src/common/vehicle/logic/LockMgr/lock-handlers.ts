@@ -277,7 +277,7 @@ export function handleMissedCheckpoint(
 /**
  * Lock 요청 (내부 구현)
  */
-function requestLockInternal(
+export function requestLockInternal(
   nodeName: string,
   vehId: number,
   state: LockMgrState

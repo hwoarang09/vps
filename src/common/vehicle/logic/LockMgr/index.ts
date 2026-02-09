@@ -12,8 +12,10 @@ import type {
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
-import { checkAutoRelease } from "./lock-handlers";
+import { checkAutoRelease, requestLockInternal } from "./lock-handlers";
 import { getLockSnapshot } from "./snapshot";
+import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
+import { MovementData, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
 
 /**
  * LockMgr - 단순한 락 시스템
@@ -151,6 +153,77 @@ export class LockMgr {
     waiters: Array<{ vehId: number; edgeName: string }>;
   }> {
     return getLockSnapshot(this.state, this.eName);
+  }
+
+  /**
+   * 초기 배치 시 거리 기반 Lock 선점
+   * merge node로 향하는 edge의 차량들을 ratio 내림차순(merge node에 가까운 순)으로 lock 등록
+   */
+  preLockMergeNodes(
+    _numVehicles: number,
+    edgeVehicleQueue: IEdgeVehicleQueue
+  ): void {
+    const { edges, mergeNodes } = this.state;
+    if (!this.state.vehicleDataArray) return;
+
+    const data = this.state.vehicleDataArray;
+
+    // 1. mergeNode별 해당 node로 향하는 edge index 그룹핑
+    const mergeNodeEdges = new Map<string, number[]>();
+    for (let i = 0; i < edges.length; i++) {
+      const edge = edges[i];
+      const edgeIdx = i + 1; // 1-based
+      if (mergeNodes.has(edge.to_node)) {
+        let arr = mergeNodeEdges.get(edge.to_node);
+        if (!arr) {
+          arr = [];
+          mergeNodeEdges.set(edge.to_node, arr);
+        }
+        arr.push(edgeIdx);
+      }
+    }
+
+    // 2. 각 mergeNode에 대해 차량 수집 → ratio 내림차순 정렬 → lock 등록
+    for (const [nodeName, edgeIndices] of mergeNodeEdges) {
+      const vehicles: { vehId: number; ratio: number }[] = [];
+
+      for (const edgeIdx of edgeIndices) {
+        const vehIds = edgeVehicleQueue.getVehicles(edgeIdx);
+        for (const vehId of vehIds) {
+          const ptr = vehId * VEHICLE_DATA_SIZE;
+          const ratio = data[ptr + MovementData.EDGE_RATIO];
+          vehicles.push({ vehId, ratio });
+        }
+      }
+
+      if (vehicles.length === 0) continue;
+
+      // ratio 내림차순 (merge node에 가까운 순)
+      vehicles.sort((a, b) => b.ratio - a.ratio);
+
+      // n292 디버그 로그
+      if (nodeName === 'n292') {
+        const edgeNames = edgeIndices.map(idx => this.eName(idx));
+        devLog.info(
+          `[preLockMergeNodes] node=${nodeName} edges=[${edgeNames.join(',')}] ` +
+          `order=[${vehicles.map(v => `veh:${v.vehId}@${v.ratio.toFixed(3)}`).join(', ')}]`
+        );
+      }
+
+      // 정렬된 순서로 lock 등록 → 첫 번째 차량이 자동으로 lock 획득
+      for (const { vehId } of vehicles) {
+        requestLockInternal(nodeName, vehId, this.state);
+      }
+
+      // n292 lock 결과 로그
+      if (nodeName === 'n292') {
+        const holder = this.state.locks.get(nodeName);
+        const queue = this.state.queues.get(nodeName);
+        devLog.info(
+          `[preLockMergeNodes] node=${nodeName} → holder=veh:${holder} queue=[${queue?.join(',')}]`
+        );
+      }
+    }
   }
 
   // ============================================================================

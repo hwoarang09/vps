@@ -38,6 +38,7 @@ function createLockMgrAdapter(lockMgr: LockMgr): ILockMgr {
   return {
     isMergeNode: lockMgr.isMergeNode.bind(lockMgr),
     requestLock: lockMgr.requestLock.bind(lockMgr),
+    preLockMergeNodes: lockMgr.preLockMergeNodes.bind(lockMgr),
   };
 }
 

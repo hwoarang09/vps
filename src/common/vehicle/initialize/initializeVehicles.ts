@@ -269,8 +269,8 @@ export function initializeVehicles(
   // Sort vehicles in each edge
   sortVehiclesInEdges(edgeVehicleCount, store);
 
-  // Process merge edge locks
-  processMergeEdgeLocks(edgeVehicleCount, edgeArray, store, lockMgr);
+  // NOTE: preLockMergeNodes()는 lockMgr.init() 이후에 호출해야 함
+  // → initialization.ts에서 lockMgr.init() 직후 호출
 
   // Set actual number of vehicles
   store.setActualNumVehicles(placements.length);
