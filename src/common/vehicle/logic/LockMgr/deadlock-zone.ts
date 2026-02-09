@@ -41,16 +41,16 @@ export function grantNextInQueue(
     if (isVehicleInDeadlockZone(queue[i], state)) {
       nextVeh = queue[i];
       if (i > 0) {
-        devLog.veh(nextVeh).debug(
-          `[LOCK_GRANT] ZONE_PRIORITY node=${nodeName} veh:${nextVeh} promoted over veh:${queue[0]}`
-        );
+        // devLog.veh(nextVeh).debug(
+        //   `[LOCK_GRANT] ZONE_PRIORITY node=${nodeName} veh:${nextVeh} promoted over veh:${queue[0]}`
+        // );
       }
       break;
     }
   }
 
   state.locks.set(nodeName, nextVeh);
-  devLog.veh(nextVeh).debug(
-    `[LOCK_GRANT] node=${nodeName} granted from queue`
-  );
+  // devLog.veh(nextVeh).debug(
+  //   `[LOCK_GRANT] node=${nodeName} granted from queue`
+  // );
 }

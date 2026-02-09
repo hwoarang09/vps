@@ -87,26 +87,25 @@ export function processCheckpoint(
 
     // 4. 다음 checkpoint 로드
     if (shouldLoadNextCheckpoint(vehicleId, state)) {
-      const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
-      const head = data[ptr + LogicData.CHECKPOINT_HEAD];
-      devLog.veh(vehicleId).debug(
-        `[processCP] flags=0, loading next. cur=${eName(currentEdge)} head=${head}`
-      );
+      // const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+      // const head = data[ptr + LogicData.CHECKPOINT_HEAD];
+      // devLog.veh(vehicleId).debug(
+      //   `[processCP] flags=0, loading next. cur=${eName(currentEdge)} head=${head}`
+      // );
 
-      // FbLogger: Checkpoint 로그 (구조화된 필드만 사용)
-      const fbLog = getFbLog();
-      if (fbLog) {
-        const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-        fbLog.checkpoint({
-          vehId: vehicleId,
-          cpIndex: head,
-          edgeId: currentEdge,
-          ratio: currentRatio,
-          flags: 0,
-          action: "LOAD_NEXT",
-          // details 생략 - 모든 정보가 이미 개별 필드에 있음
-        });
-      }
+      // // FbLogger: Checkpoint 로그 (구조화된 필드만 사용)
+      // const fbLog = getFbLog();
+      // if (fbLog) {
+      //   const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+      //   fbLog.checkpoint({
+      //     vehId: vehicleId,
+      //     cpIndex: head,
+      //     edgeId: currentEdge,
+      //     ratio: currentRatio,
+      //     flags: 0,
+      //     action: "LOAD_NEXT",
+      //   });
+      // }
 
       loadNextCheckpoint(vehicleId, state, eName);
     }

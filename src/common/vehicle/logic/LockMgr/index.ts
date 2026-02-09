@@ -110,15 +110,15 @@ export class LockMgr {
    */
   processLock(vehicleId: number, _policy: LockPolicy): void {
     if (!this.state.vehicleDataArray || !this.state.checkpointArray) {
-      devLog.veh(vehicleId).debug(
-        `[processLock] SKIP: dataArray=${!!this.state.vehicleDataArray} cpArray=${!!this.state.checkpointArray}`
-      );
+      // devLog.veh(vehicleId).debug(
+      //   `[processLock] SKIP: dataArray=${!!this.state.vehicleDataArray} cpArray=${!!this.state.checkpointArray}`
+      // );
       return;
     }
     if (!this.state.nodes.length || !this.state.edges.length) {
-      devLog.veh(vehicleId).debug(
-        `[processLock] SKIP: nodes=${this.state.nodes.length} edges=${this.state.edges.length}`
-      );
+      // devLog.veh(vehicleId).debug(
+      //   `[processLock] SKIP: nodes=${this.state.nodes.length} edges=${this.state.edges.length}`
+      // );
       return;
     }
 

@@ -80,9 +80,9 @@ export function handleLockRequest(
   // 중복 등록 방지
   if (!releases.some(r => r.nodeName === nodeName)) {
     releases.push({ nodeName, releaseEdgeIdx: targetEdgeIdx });
-    devLog.veh(vehicleId).debug(
-      `[LOCK_REQ] node=${nodeName} target=${eName(targetEdgeIdx)} → auto-release registered`
-    );
+    // devLog.veh(vehicleId).debug(
+    //   `[LOCK_REQ] node=${nodeName} target=${eName(targetEdgeIdx)} → auto-release registered`
+    // );
   }
 
   // Grant 확인
@@ -126,27 +126,27 @@ export function handleLockWait(
 
     if (iAmInZone && !holderInZone) {
       // holder의 lock 회수 → 나에게 grant (holder는 큐에 잔류)
-      devLog.veh(vehicleId).debug(
-        `[LOCK_WAIT] PREEMPT node=${nodeName} took lock from veh:${holder} (zone-external)`
-      );
+      // devLog.veh(vehicleId).debug(
+      //   `[LOCK_WAIT] PREEMPT node=${nodeName} took lock from veh:${holder} (zone-external)`
+      // );
       state.locks.set(nodeName, vehicleId);
       // 통과 처리
-      const curEdge = data[ptr + MovementData.CURRENT_EDGE];
-      const curRatio = data[ptr + MovementData.EDGE_RATIO];
-      devLog.veh(vehicleId).debug(
-        `[LOCK_WAIT] PASS (preempted) node=${nodeName} next=${eName(targetEdgeIdx)} → MOVING at ${eName(curEdge)}@${curRatio.toFixed(3)}`
-      );
+      // const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+      // const curRatio = data[ptr + MovementData.EDGE_RATIO];
+      // devLog.veh(vehicleId).debug(
+      //   `[LOCK_WAIT] PASS (preempted) node=${nodeName} next=${eName(targetEdgeIdx)} → MOVING at ${eName(curEdge)}@${curRatio.toFixed(3)}`
+      // );
       data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
       data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
       return true;
     }
 
     // 다른 차량이 lock 보유 → 강제 정지
-    const curEdge = data[ptr + MovementData.CURRENT_EDGE];
-    const curRatio = data[ptr + MovementData.EDGE_RATIO];
-    devLog.veh(vehicleId).debug(
-      `[LOCK_WAIT] BLOCKED node=${nodeName} holder=veh:${holder} next=${eName(targetEdgeIdx)} vel=${velocity.toFixed(1)} → FORCE STOP at ${eName(curEdge)}@${curRatio.toFixed(3)}`
-    );
+    // const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+    // const curRatio = data[ptr + MovementData.EDGE_RATIO];
+    // devLog.veh(vehicleId).debug(
+    //   `[LOCK_WAIT] BLOCKED node=${nodeName} holder=veh:${holder} next=${eName(targetEdgeIdx)} vel=${velocity.toFixed(1)} → FORCE STOP at ${eName(curEdge)}@${curRatio.toFixed(3)}`
+    // );
     data[ptr + MovementData.VELOCITY] = 0;
     data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
     data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
@@ -154,11 +154,11 @@ export function handleLockWait(
   }
 
   // lock 비어있거나 내가 보유 → 통과
-  const curEdge = data[ptr + MovementData.CURRENT_EDGE];
-  const curRatio = data[ptr + MovementData.EDGE_RATIO];
-  devLog.veh(vehicleId).debug(
-    `[LOCK_WAIT] PASS node=${nodeName} next=${eName(targetEdgeIdx)} → MOVING at ${eName(curEdge)}@${curRatio.toFixed(3)}`
-  );
+  // const curEdge = data[ptr + MovementData.CURRENT_EDGE];
+  // const curRatio = data[ptr + MovementData.EDGE_RATIO];
+  // devLog.veh(vehicleId).debug(
+  //   `[LOCK_WAIT] PASS node=${nodeName} next=${eName(targetEdgeIdx)} → MOVING at ${eName(curEdge)}@${curRatio.toFixed(3)}`
+  // );
   data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
   data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
   return true;
@@ -173,7 +173,7 @@ export function handleMovePrepare(
   eName: (idx: number) => string
 ): void {
   if (!state.pathBuffer || !state.checkpointArray || !state.vehicleDataArray) {
-    devLog.veh(vehicleId).warn(`[MOVE_PREP] no pathBuffer or checkpointArray`);
+    // devLog.veh(vehicleId).warn(`[MOVE_PREP] no pathBuffer or checkpointArray`);
     return;
   }
 
@@ -188,13 +188,13 @@ export function handleMovePrepare(
   const pathLen = state.pathBuffer[pathPtr + PATH_LEN];
 
   // pathBuffer 현재 상태 로그
-  const pathEdges: number[] = [];
-  for (let i = 0; i < Math.min(pathLen, 10); i++) {
-    pathEdges.push(state.pathBuffer[pathPtr + PATH_EDGES_START + i]);
-  }
-  devLog.veh(vehicleId).debug(
-    `[MOVE_PREP] target=${eName(targetEdge)} pathLen=${pathLen} pathBuf=[${pathEdges.map(e => eName(e)).join(',')}]`
-  );
+  // const pathEdges: number[] = [];
+  // for (let i = 0; i < Math.min(pathLen, 10); i++) {
+  //   pathEdges.push(state.pathBuffer[pathPtr + PATH_EDGES_START + i]);
+  // }
+  // devLog.veh(vehicleId).debug(
+  //   `[MOVE_PREP] target=${eName(targetEdge)} pathLen=${pathLen} pathBuf=[${pathEdges.map(e => eName(e)).join(',')}]`
+  // );
 
   const nextEdgeOffsets = [
     MovementData.NEXT_EDGE_0,
@@ -236,9 +236,9 @@ export function handleMovePrepare(
   const firstNext = data[ptr + MovementData.NEXT_EDGE_0];
   data[ptr + MovementData.NEXT_EDGE_STATE] = firstNext > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
 
-  devLog.veh(vehicleId).debug(
-    `[MOVE_PREP] filled=[${filledEdges.map(e => eName(e)).join(',')}] state=${firstNext > 0 ? 'READY' : 'EMPTY'}`
-  );
+  // devLog.veh(vehicleId).debug(
+  //   `[MOVE_PREP] filled=[${filledEdges.map(e => eName(e)).join(',')}] state=${firstNext > 0 ? 'READY' : 'EMPTY'}`
+  // );
 }
 
 /**
@@ -264,9 +264,9 @@ export function handleMissedCheckpoint(
     handleLockRequest(vehicleId, state, eName);
   }
   if (cpFlags & CheckpointFlags.LOCK_WAIT) {
-    devLog.veh(vehicleId).debug(
-      `[processCP] MISSED WAIT - skipped (already passed wait point)`
-    );
+    // devLog.veh(vehicleId).debug(
+    //   `[processCP] MISSED WAIT - skipped (already passed wait point)`
+    // );
   }
 }
 
@@ -370,15 +370,15 @@ export function checkAutoRelease(
           // 정상 release: lock 보유 중 → 해제 + 다음 차량에 grant
           releaseLockInternal(info.nodeName, vehId, state);
           grantNextInQueue(info.nodeName, state, eName);
-          devLog.veh(vehId).debug(
-            `[AUTO_RELEASE] node=${info.nodeName} at ${eName(currentEdge)}`
-          );
+          // devLog.veh(vehId).debug(
+          //   `[AUTO_RELEASE] node=${info.nodeName} at ${eName(currentEdge)}`
+          // );
         } else {
           // lock 안 잡고 있음 → 큐에서만 제거 (cancel)
           cancelFromQueue(info.nodeName, vehId, state);
-          devLog.veh(vehId).debug(
-            `[AUTO_RELEASE] CANCEL node=${info.nodeName} at ${eName(currentEdge)} (not holder, holder=${holder})`
-          );
+          // devLog.veh(vehId).debug(
+          //   `[AUTO_RELEASE] CANCEL node=${info.nodeName} at ${eName(currentEdge)} (not holder, holder=${holder})`
+          // );
         }
         releases.splice(i, 1);
       }

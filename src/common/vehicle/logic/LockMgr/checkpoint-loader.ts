@@ -7,10 +7,14 @@ import {
   MovementData,
   LogicData,
   VEHICLE_DATA_SIZE,
+  NEXT_EDGE_COUNT,
 } from "@/common/vehicle/initialize/constants";
-import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "../TransferMgr";
 import { devLog } from "@/logger/DevLogger";
 import type { CheckpointState, ReachCheckResult, LockMgrState } from "./types";
+
+// Scratch objects - 매 프레임 재사용 (GC 방지)
+const _cpState: CheckpointState = { edge: 0, ratio: 0, flags: 0, target: 0 };
+const _reachResult: ReachCheckResult = { reached: false, missed: false, waiting: true };
 
 /**
  * Checkpoint가 로드되어 있는지 확인하고, 없으면 로드
@@ -37,9 +41,9 @@ export function ensureCheckpointLoaded(
     const currentRatio = data[ptr + MovementData.EDGE_RATIO];
     const head = data[ptr + LogicData.CHECKPOINT_HEAD];
 
-    devLog.veh(vehicleId).debug(
-      `[ensureCP] cpEdge=0, trying load. curE=${eName(currentEdge)} curR=${currentRatio.toFixed(3)} head=${head}`
-    );
+    // devLog.veh(vehicleId).debug(
+    //   `[ensureCP] cpEdge=0, trying load. curE=${eName(currentEdge)} curR=${currentRatio.toFixed(3)} head=${head}`
+    // );
 
     if (!loadNextCheckpoint(vehicleId, state, eName)) {
       return null; // 더 이상 checkpoint 없음
@@ -50,12 +54,11 @@ export function ensureCheckpointLoaded(
     cpFlags = data[ptr + LogicData.CURRENT_CP_FLAGS];
   }
 
-  return {
-    edge: cpEdge,
-    ratio: cpRatio,
-    flags: cpFlags,
-    target: cpTarget,
-  };
+  _cpState.edge = cpEdge;
+  _cpState.ratio = cpRatio;
+  _cpState.flags = cpFlags;
+  _cpState.target = cpTarget;
+  return _cpState;
 }
 
 /**
@@ -68,7 +71,8 @@ export function checkCheckpointReached(
   eName: (idx: number) => string
 ): ReachCheckResult {
   if (!state.vehicleDataArray) {
-    return { reached: false, missed: false, waiting: true };
+    _reachResult.reached = false; _reachResult.missed = false; _reachResult.waiting = true;
+    return _reachResult;
   }
 
   const data = state.vehicleDataArray;
@@ -82,51 +86,62 @@ export function checkCheckpointReached(
   if (currentEdge !== cpState.edge) {
     // 놓친 CP 감지: cpEdge가 pathBuffer에 없으면 이미 지나간 것
     if (isCpEdgeBehind(vehicleId, cpState.edge, state)) {
-      devLog.veh(vehicleId).debug(
-        `[checkCP] MISSED! cur=${eName(currentEdge)}@${currentRatio.toFixed(3)} passed cp=${eName(cpState.edge)}@${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
-      );
-      return { reached: false, missed: true, waiting: false };
+      // devLog.veh(vehicleId).debug(
+      //   `[checkCP] MISSED! cur=${eName(currentEdge)}@${currentRatio.toFixed(3)} passed cp=${eName(cpState.edge)}@${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
+      // );
+      _reachResult.reached = false; _reachResult.missed = true; _reachResult.waiting = false;
+      return _reachResult;
     }
 
-    devLog.veh(vehicleId).debug(
-      `[checkCP] SKIP edge mismatch: cur=${eName(currentEdge)} !== cp=${eName(cpState.edge)} curR=${currentRatio.toFixed(3)} cpR=${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
-    );
-    return { reached: false, missed: false, waiting: true };
+    // devLog.veh(vehicleId).debug(
+    //   `[checkCP] SKIP edge mismatch: cur=${eName(currentEdge)} !== cp=${eName(cpState.edge)} curR=${currentRatio.toFixed(3)} cpR=${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
+    // );
+    _reachResult.reached = false; _reachResult.missed = false; _reachResult.waiting = true;
+    return _reachResult;
   }
 
   // Ratio 체크
   if (currentRatio < cpState.ratio) {
-    devLog.veh(vehicleId).debug(
-      `[checkCP] SKIP ratio: cur=${eName(currentEdge)} curR=${currentRatio.toFixed(3)} < cpR=${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
-    );
-    return { reached: false, missed: false, waiting: true };
+    // devLog.veh(vehicleId).debug(
+    //   `[checkCP] SKIP ratio: cur=${eName(currentEdge)} curR=${currentRatio.toFixed(3)} < cpR=${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
+    // );
+    _reachResult.reached = false; _reachResult.missed = false; _reachResult.waiting = true;
+    return _reachResult;
   }
 
   // ✅ Checkpoint 도달!
-  devLog.veh(vehicleId).debug(
-    `[checkCP] HIT! cur=${eName(currentEdge)}@${currentRatio.toFixed(3)} cp=${eName(cpState.edge)}@${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
-  );
-  return { reached: true, missed: false, waiting: false };
+  // devLog.veh(vehicleId).debug(
+  //   `[checkCP] HIT! cur=${eName(currentEdge)}@${currentRatio.toFixed(3)} cp=${eName(cpState.edge)}@${cpState.ratio.toFixed(3)} flags=${cpState.flags} head=${head}`
+  // );
+  _reachResult.reached = true; _reachResult.missed = false; _reachResult.waiting = false;
+  return _reachResult;
 }
 
 /**
  * CP의 edge가 이미 지나간 edge인지 확인
+ *
+ * NEXT_EDGE_0~4를 확인하여 cpEdge가 있으면 아직 도달하지 않은 것,
+ * 없으면 이미 지나간 것으로 판단 (O(5) 고정 - pathBuffer 순회 제거로 성능 개선)
  */
 function isCpEdgeBehind(
   vehicleId: number,
   cpEdge: number,
   state: LockMgrState
 ): boolean {
-  if (!state.pathBuffer) return false;
-  const pathPtr = vehicleId * MAX_PATH_LENGTH;
-  const pathLen = state.pathBuffer[pathPtr + PATH_LEN];
+  if (!state.vehicleDataArray) return false;
 
-  for (let i = 0; i < pathLen; i++) {
-    if (state.pathBuffer[pathPtr + PATH_EDGES_START + i] === cpEdge) {
-      return false; // cpEdge가 아직 경로에 있음
+  const data = state.vehicleDataArray;
+  const ptr = vehicleId * VEHICLE_DATA_SIZE;
+
+  // NEXT_EDGE_0~4에 cpEdge가 있으면 아직 앞에 있음 (도달하지 않음)
+  for (let i = 0; i < NEXT_EDGE_COUNT; i++) {
+    if (data[ptr + MovementData.NEXT_EDGE_0 + i] === cpEdge) {
+      return false; // cpEdge가 앞으로 갈 경로에 있음
     }
   }
-  return true; // pathBuffer에 없음 → 이미 지나감
+
+  // NEXT_EDGE에 없음 → 이미 지나감
+  return true;
 }
 
 /**
@@ -149,9 +164,9 @@ export function loadNextCheckpoint(
 
   // 더 이상 checkpoint 없음
   if (head >= count) {
-    devLog.veh(vehicleId).debug(
-      `[loadNextCP] END: head=${head} >= count=${count}`
-    );
+    // devLog.veh(vehicleId).debug(
+    //   `[loadNextCP] END: head=${head} >= count=${count}`
+    // );
     data[ptr + LogicData.CURRENT_CP_EDGE] = 0;
     data[ptr + LogicData.CURRENT_CP_RATIO] = 0;
     data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
@@ -175,11 +190,11 @@ export function loadNextCheckpoint(
   // head 증가
   data[ptr + LogicData.CHECKPOINT_HEAD] = head + 1;
 
-  const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
-  const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-  devLog.veh(vehicleId).debug(
-    `[loadNextCP] head=${head}→${head + 1}/${count} loaded: cp=${eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} tgt=${eName(cpTargetEdge)} | cur=${eName(currentEdge)}@${currentRatio.toFixed(3)}`
-  );
+  // const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+  // const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+  // devLog.veh(vehicleId).debug(
+  //   `[loadNextCP] head=${head}→${head + 1}/${count} loaded: cp=${eName(cpEdge)}@${cpRatio.toFixed(3)} flags=${cpFlags} tgt=${eName(cpTargetEdge)} | cur=${eName(currentEdge)}@${currentRatio.toFixed(3)}`
+  // );
 
   return true;
 }
