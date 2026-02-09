@@ -50,7 +50,11 @@ export {
   listFbLogFiles,
   downloadFbLogFile,
   deleteFbLogFile,
+  deleteFbLogFiles,
+  clearAllFbLogs,
   type FbLoggerControllerConfig,
+  type FbLogFileInfo,
+  type FbDeleteResult,
 } from "./fb/FbLoggerController";
 
 // Global FbLogger instance (for Worker Thread)

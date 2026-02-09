@@ -173,22 +173,43 @@ export class FbLoggerController {
   }
 }
 
+export interface FbLogFileInfo {
+  fileName: string;
+  size: number;
+  createdAt: number;
+}
+
 /**
- * OPFS에서 파일 목록 조회
+ * OPFS에서 FbLog 파일 목록 조회 (파일 크기, 생성 시간 포함)
  */
-export async function listFbLogFiles(): Promise<string[]> {
+export async function listFbLogFiles(): Promise<FbLogFileInfo[]> {
   try {
     const root = await navigator.storage.getDirectory();
     const dir = await root.getDirectoryHandle("dev_logs", { create: false });
 
-    const files: string[] = [];
-    for await (const [name] of dir.entries()) {
-      if (name.startsWith("fb_") && name.endsWith(".bin")) {
-        files.push(name);
+    const files: FbLogFileInfo[] = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind === "file" && name.startsWith("fb_") && name.endsWith(".bin")) {
+        const file = await (handle as FileSystemFileHandle).getFile();
+        // 파일명에서 타임스탬프 추출 (fb_YYYYMMDD_HHmmss.bin)
+        const match = name.match(/fb_(\d{8}_\d{6})/);
+        let createdAt = file.lastModified;
+        if (match) {
+          const dateStr = match[1]; // YYYYMMDD_HHmmss
+          const parsed = new Date(
+            `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}T${dateStr.slice(9, 11)}:${dateStr.slice(11, 13)}:${dateStr.slice(13, 15)}`
+          );
+          if (!isNaN(parsed.getTime())) {
+            createdAt = parsed.getTime();
+          }
+        }
+        files.push({ fileName: name, size: file.size, createdAt });
       }
     }
 
-    return files.sort();
+    // 최신 파일 먼저
+    files.sort((a, b) => b.createdAt - a.createdAt);
+    return files;
   } catch {
     return [];
   }
@@ -207,9 +228,72 @@ export async function downloadFbLogFile(fileName: string): Promise<ArrayBuffer> 
 
 /**
  * OPFS 파일 삭제
+ * @returns true if deleted, false if failed
  */
-export async function deleteFbLogFile(fileName: string): Promise<void> {
-  const root = await navigator.storage.getDirectory();
-  const dir = await root.getDirectoryHandle("dev_logs", { create: false });
-  await dir.removeEntry(fileName);
+export async function deleteFbLogFile(fileName: string): Promise<boolean> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("dev_logs", { create: false });
+    await dir.removeEntry(fileName);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface FbDeleteResult {
+  deleted: string[];
+  failed: string[];
+}
+
+/**
+ * 여러 FbLog 파일 삭제
+ */
+export async function deleteFbLogFiles(fileNames: string[]): Promise<FbDeleteResult> {
+  const deleted: string[] = [];
+  const failed: string[] = [];
+
+  for (const fileName of fileNames) {
+    const success = await deleteFbLogFile(fileName);
+    if (success) {
+      deleted.push(fileName);
+    } else {
+      failed.push(fileName);
+    }
+  }
+
+  return { deleted, failed };
+}
+
+/**
+ * 모든 FbLog 파일 삭제
+ */
+export async function clearAllFbLogs(): Promise<FbDeleteResult> {
+  const deleted: string[] = [];
+  const failed: string[] = [];
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("dev_logs", { create: false });
+
+    const files: string[] = [];
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind === "file" && name.startsWith("fb_") && name.endsWith(".bin")) {
+        files.push(name);
+      }
+    }
+
+    for (const name of files) {
+      try {
+        await dir.removeEntry(name);
+        deleted.push(name);
+      } catch {
+        failed.push(name);
+      }
+    }
+  } catch {
+    // 디렉토리가 없음
+  }
+
+  return { deleted, failed };
 }

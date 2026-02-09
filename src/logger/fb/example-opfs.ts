@@ -95,14 +95,14 @@ export async function runFbLoggerExample() {
   // 6. List files
   console.log("📂 OPFS files:");
   const files = await listFbLogFiles();
-  files.forEach((f) => console.log(`  - ${f}`));
+  files.forEach((f) => console.log(`  - ${f.fileName} (${f.size} bytes)`));
   console.log();
 
   // 7. Download and verify
   if (files.length > 0) {
     const latestFile = files[files.length - 1];
-    console.log(`📥 Downloading: ${latestFile}`);
-    const downloaded = await downloadFbLogFile(latestFile);
+    console.log(`📥 Downloading: ${latestFile.fileName}`);
+    const downloaded = await downloadFbLogFile(latestFile.fileName);
     console.log(`✓ Downloaded: ${downloaded.byteLength.toLocaleString()} bytes\n`);
   }
 

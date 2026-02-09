@@ -2,16 +2,17 @@
 // HUD Status Indicator - Shows log file management buttons in top-right corner
 
 import React, { useState } from "react";
-import { FileText, FileCode } from "lucide-react";
+import { FileText, FileCode, Binary } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { menuButtonVariants } from "@/components/react/menu/shared/menuStyles";
 import { twMerge } from "tailwind-merge";
 import LogFileManager from "@/components/test/VehicleTest/LogFileManager";
 import DevLogFileManager from "@/components/test/VehicleTest/DevLogFileManager";
+import FbLogFileManager from "@/components/test/VehicleTest/FbLogFileManager";
 
 const LogIndicator: React.FC = () => {
   const { showTooltip, hideTooltip } = useMenuStore();
-  const [activeLogDropdown, setActiveLogDropdown] = useState<'logs' | 'devlogs' | null>(null);
+  const [activeLogDropdown, setActiveLogDropdown] = useState<'logs' | 'devlogs' | 'fblogs' | null>(null);
 
   const handleMouseEnter = (
     e: React.MouseEvent,
@@ -92,6 +93,34 @@ const LogIndicator: React.FC = () => {
           {activeLogDropdown === 'devlogs' && (
             <div className="absolute top-12 right-0">
               <DevLogFileManager
+                isOpen={true}
+                onToggle={() => setActiveLogDropdown(null)}
+                hideButton={true}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* FbLogs Button */}
+        <div className="relative">
+          <button
+            onClick={() => setActiveLogDropdown(activeLogDropdown === 'fblogs' ? null : 'fblogs')}
+            onMouseEnter={(e) => handleMouseEnter(e, "fblogs", "FlatBuffers Log Files")}
+            onMouseLeave={handleMouseLeave}
+            className={twMerge(
+              menuButtonVariants({ active: activeLogDropdown === 'fblogs', size: "small" }),
+              "w-10 h-10"
+            )}
+          >
+            <Binary
+              size={18}
+              className={activeLogDropdown === 'fblogs' ? "text-white" : "text-purple-400"}
+            />
+          </button>
+          {/* Dropdown positioned below */}
+          {activeLogDropdown === 'fblogs' && (
+            <div className="absolute top-12 right-0">
+              <FbLogFileManager
                 isOpen={true}
                 onToggle={() => setActiveLogDropdown(null)}
                 hideButton={true}
