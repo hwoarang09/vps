@@ -29,6 +29,12 @@ export async function setupLoggerPort(
     mode: 'ml',
   });
 
-  await logger.init();
-  return logger;
+  try {
+    await logger.init();
+    console.log(`[SimLogger] initialized: session=${sessionId}, mode=ml, fabId=${fabId}`);
+    return logger;
+  } catch (err) {
+    console.error(`[SimLogger] init failed:`, err);
+    return null;
+  }
 }

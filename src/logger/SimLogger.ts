@@ -51,13 +51,10 @@ export class SimLogger {
       const bufferBytes = FLUSH_THRESHOLD * recordSize;
       const buffer = new ArrayBuffer(bufferBytes);
 
-      // ML_PICKUP와 ML_DROPOFF는 같은 파일(job.bin) 공유
       const fileName = getFileName(this.config.sessionId, eventType);
       const fileHandle = await root.getFileHandle(fileName, { create: true });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const handle = await (fileHandle as any).createSyncAccessHandle();
-
-      // 파일 기존 크기 확인 (이어쓰기 지원)
       const fileSize = (handle as { getSize(): number }).getSize();
 
       this.eventBuffers.set(eventType, {

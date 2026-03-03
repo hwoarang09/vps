@@ -95,7 +95,8 @@ src/logger/index.ts
 {sessionId}_{suffix}.bin
 
 suffixes:
-  job         → ML_PICKUP + ML_DROPOFF (같은 파일)
+  pickup       → ML_PICKUP
+  dropoff      → ML_DROPOFF
   edge_transit → ML_EDGE_TRANSIT
   lock         → ML_LOCK
   veh_state    → DEV_VEH_STATE
@@ -135,7 +136,7 @@ python scripts/log_parser/log_parser.py /path/to/ --session session_xxx --export
 
 1. **SimLogger는 Worker에서만 사용** (FileSystemSyncAccessHandle은 Worker 전용 API)
 2. **Main Thread에서는 simLogUtils 사용** (비동기 File API)
-3. **ML_PICKUP과 ML_DROPOFF는 같은 job.bin 파일** 공유
+3. **각 EventType은 별도 .bin 파일** (pickup.bin, dropoff.bin 등 - SyncAccessHandle 충돌 방지)
 4. **512 레코드마다 자동 flush** (FLUSH_THRESHOLD)
 
 ## Impact Map

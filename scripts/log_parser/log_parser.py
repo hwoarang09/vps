@@ -45,7 +45,8 @@ EVENT_TYPES = {
 }
 
 FILE_SUFFIX_TO_TYPES = {
-    'job':          [1, 2],
+    'pickup':       [1],
+    'dropoff':      [2],
     'edge_transit': [3],
     'lock':         [4],
     'veh_state':    [10],

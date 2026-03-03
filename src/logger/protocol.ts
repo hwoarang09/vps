@@ -79,8 +79,8 @@ export const ALL_EVENT_TYPES: EventType[] = [
 // ============================================================================
 
 const EVENT_FILE_SUFFIX: Record<EventType, string> = {
-  [EventType.ML_PICKUP]: 'job',
-  [EventType.ML_DROPOFF]: 'job',
+  [EventType.ML_PICKUP]: 'pickup',
+  [EventType.ML_DROPOFF]: 'dropoff',
   [EventType.ML_EDGE_TRANSIT]: 'edge_transit',
   [EventType.ML_LOCK]: 'lock',
   [EventType.DEV_VEH_STATE]: 'veh_state',
