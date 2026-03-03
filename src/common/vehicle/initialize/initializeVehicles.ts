@@ -243,7 +243,6 @@ export function initializeVehicles(
     edges,
     placements,
     store,
-    lockMgr,
     config,
     transferMode,
     updateSensorPoints,

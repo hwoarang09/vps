@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { JobState } from "@/common/vehicle/initialize/constants";
 
-export type { JobState };
+export type { JobState } from "@/common/vehicle/initialize/constants";
 
 // Vehicle general data (metadata and non-physics data)
 interface VehicleData {

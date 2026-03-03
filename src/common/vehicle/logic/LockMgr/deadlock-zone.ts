@@ -5,7 +5,6 @@ import {
   MovementData,
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
-import { devLog } from "@/logger/DevLogger";
 import type { LockMgrState } from "./types";
 
 /**
@@ -37,20 +36,12 @@ export function grantNextInQueue(
 
   // Deadlock zone priority: zone-internal 차량 우선 grant
   let nextVeh = queue[0];
-  for (let i = 0; i < queue.length; i++) {
-    if (isVehicleInDeadlockZone(queue[i], state)) {
-      nextVeh = queue[i];
-      if (i > 0) {
-        // devLog.veh(nextVeh).debug(
-        //   `[LOCK_GRANT] ZONE_PRIORITY node=${nodeName} veh:${nextVeh} promoted over veh:${queue[0]}`
-        // );
-      }
+  for (const veh of queue) {
+    if (isVehicleInDeadlockZone(veh, state)) {
+      nextVeh = veh;
       break;
     }
   }
 
   state.locks.set(nodeName, nextVeh);
-  // devLog.veh(nextVeh).debug(
-  //   `[LOCK_GRANT] node=${nodeName} granted from queue`
-  // );
 }

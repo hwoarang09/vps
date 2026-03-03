@@ -27,10 +27,11 @@
     * *Bad*: `if (controller && controller.state.currentBatchEdge === grantedEdge)`
     * *Fix*: `if (controller?.state.currentBatchEdge === grantedEdge)`
     * *Note*: 깊은 중첩 접근도 동일하게 적용 (`a && a.b && a.b.c` → `a?.b?.c`)
-3.  **Loop Preference**: `.forEach()` 대신 **`for...of`**를 사용하십시오.
+3.  **Loop Preference**: `.forEach()` 또는 단순 인덱스 `for` 루프 대신 **`for...of`**를 사용하십시오.
     * *Reason*: 디버깅 용이성, `break/continue` 제어 가능, 성능 이점.
-    * *Bad*: `items.forEach(item => ...)`
+    * *Bad*: `items.forEach(item => ...)` 또는 `for (let i = 0; i < items.length; i++) { items[i] }`
     * *Fix*: `for (const item of items) { ... }`
+    * *Note*: 인덱스가 필요한 경우 `for (const [i, item] of items.entries())` 사용
     * *Example (Bad)*:
     ```typescript
     edges.forEach((edge, originalIndex) => {

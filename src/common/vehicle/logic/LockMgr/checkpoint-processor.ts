@@ -4,11 +4,8 @@
 import {
   CheckpointFlags,
   LogicData,
-  MovementData,
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
-import { devLog } from "@/logger/DevLogger";
-import { getFbLog } from "@/logger";
 import type { CheckpointState, LockMgrState } from "./types";
 import {
   ensureCheckpointLoaded,
@@ -63,17 +60,17 @@ export function processCheckpoint(
   const MAX_CATCHUP = 10;
   for (let attempt = 0; attempt < MAX_CATCHUP; attempt++) {
     // 1. Checkpoint 로드
-    const cpState = ensureCheckpointLoaded(vehicleId, state, eName);
+    const cpState = ensureCheckpointLoaded(vehicleId, state);
     if (!cpState) return; // 더 이상 checkpoint 없음
 
     // 2. 도달 체크
-    const reachResult = checkCheckpointReached(vehicleId, cpState, state, eName);
+    const reachResult = checkCheckpointReached(vehicleId, cpState, state);
 
     if (reachResult.missed) {
       // 놓친 CP 처리
       handleMissedCheckpoint(vehicleId, state, cpState.flags, eName);
       data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
-      loadNextCheckpoint(vehicleId, state, eName);
+      loadNextCheckpoint(vehicleId, state);
       continue; // 다음 CP도 놓쳤을 수 있음
     }
 
@@ -87,27 +84,7 @@ export function processCheckpoint(
 
     // 4. 다음 checkpoint 로드
     if (shouldLoadNextCheckpoint(vehicleId, state)) {
-      // const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
-      // const head = data[ptr + LogicData.CHECKPOINT_HEAD];
-      // devLog.veh(vehicleId).debug(
-      //   `[processCP] flags=0, loading next. cur=${eName(currentEdge)} head=${head}`
-      // );
-
-      // // FbLogger: Checkpoint 로그 (구조화된 필드만 사용)
-      // const fbLog = getFbLog();
-      // if (fbLog) {
-      //   const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-      //   fbLog.checkpoint({
-      //     vehId: vehicleId,
-      //     cpIndex: head,
-      //     edgeId: currentEdge,
-      //     ratio: currentRatio,
-      //     flags: 0,
-      //     action: "LOAD_NEXT",
-      //   });
-      // }
-
-      loadNextCheckpoint(vehicleId, state, eName);
+      loadNextCheckpoint(vehicleId, state);
     }
 
     return; // 정상 HIT 처리 완료
@@ -131,7 +108,7 @@ function processCheckpointFlags(
 
   // MOVE_PREPARE 처리 (가장 먼저 - edge 요청)
   if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
-    handleMovePrepare(vehicleId, state, eName);
+    handleMovePrepare(vehicleId, state);
     cpFlags &= ~CheckpointFlags.MOVE_PREPARE;
     data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
   }
@@ -145,14 +122,14 @@ function processCheckpointFlags(
 
   // LOCK_REQUEST 처리 (lock 요청 - 요청 후 무조건 flag 해제)
   if (cpFlags & CheckpointFlags.LOCK_REQUEST) {
-    handleLockRequest(vehicleId, state, eName);
+    handleLockRequest(vehicleId, state);
     cpFlags &= ~CheckpointFlags.LOCK_REQUEST;
     data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
   }
 
   // LOCK_WAIT 처리 (lock 대기)
   if (cpFlags & CheckpointFlags.LOCK_WAIT) {
-    const granted = handleLockWait(vehicleId, state, eName);
+    const granted = handleLockWait(vehicleId, state);
     if (granted) {
       cpFlags &= ~CheckpointFlags.LOCK_WAIT;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;

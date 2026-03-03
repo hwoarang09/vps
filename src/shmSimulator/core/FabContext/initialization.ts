@@ -5,7 +5,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types/node";
 import type { EngineStore } from "../EngineStore";
 import { initializeVehicles, InitializationResult } from "../initializeVehicles";
-import { devLog } from "@/logger";
+import { devLog, getFbLog } from "@/logger";
 import { MAX_CHECKPOINTS_PER_VEHICLE } from "@/common/vehicle/initialize/constants";
 import {
   VEHICLE_RENDER_SIZE,
@@ -18,7 +18,7 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr } from "@/common/vehicle/logic/TransferMgr";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import type { StationRawData } from "@/types/station";
-import { getFbLog } from "@/logger";
+
 
 /**
  * initializeFab 컨텍스트
