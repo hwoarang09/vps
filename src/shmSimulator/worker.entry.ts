@@ -114,13 +114,11 @@ function handleSetRenderBuffer(
   engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments, totalVehicles);
 }
 
-function handleSetLoggerPort(port: MessagePort, workerId: number): void {
-  console.log("[worker.entry] handleSetLoggerPort called, workerId:", workerId, "engine:", !!engine);
+async function handleSetLoggerPort(port: MessagePort, workerId: number): Promise<void> {
   if (!engine) {
     return;
   }
-  engine.setLoggerPort(port, workerId);
-  console.log("[worker.entry] setLoggerPort done");
+  await engine.setLoggerPort(port, workerId);
 }
 
 function handleGetLockTable(fabId: string, requestId: string): void {
@@ -178,7 +176,7 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
       break;
     case "SET_LOGGER_PORT":
-      handleSetLoggerPort(message.port, message.workerId);
+      await handleSetLoggerPort(message.port, message.workerId);
       break;
     case "GET_LOCK_TABLE":
       handleGetLockTable(message.fabId, message.requestId);
