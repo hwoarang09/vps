@@ -1,4 +1,7 @@
 import { create } from "zustand";
+import { JobState } from "@/common/vehicle/initialize/constants";
+
+export type { JobState };
 
 // Vehicle general data (metadata and non-physics data)
 interface VehicleData {
@@ -10,7 +13,7 @@ interface VehicleData {
   // General data (not in SharedMemory)
   battery: number; // 0~100
   vehicleType: number; // 0=small, 1=medium, 2=large
-  taskType: number; // 0=none, 1=pickup, 2=dropoff
+  jobState: number; // JobState enum: IDLE, MOVE_TO_LOAD, LOADING, MOVE_TO_UNLOAD, UNLOADING, ERROR
 }
 
 interface VehicleGeneralStore {
@@ -29,7 +32,7 @@ interface VehicleGeneralStore {
 
   // Specific updates
   setVehicleBattery: (vehicleIndex: number, battery: number) => void;
-  setVehicleTaskType: (vehicleIndex: number, taskType: number) => void;
+  setVehicleJobState: (vehicleIndex: number, jobState: number) => void;
 }
 
 export const useVehicleGeneralStore = create<VehicleGeneralStore>(
@@ -90,13 +93,13 @@ export const useVehicleGeneralStore = create<VehicleGeneralStore>(
         return { vehicles: newMap };
       }),
 
-    // Set task type
-    setVehicleTaskType: (vehicleIndex, taskType) =>
+    // Set job state
+    setVehicleJobState: (vehicleIndex, jobState) =>
       set((state) => {
         const newMap = new Map(state.vehicles);
         const existing = newMap.get(vehicleIndex);
         if (existing) {
-          newMap.set(vehicleIndex, { ...existing, taskType });
+          newMap.set(vehicleIndex, { ...existing, jobState });
         }
         return { vehicles: newMap };
       }),

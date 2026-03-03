@@ -67,7 +67,7 @@ export const DEFAULT_SENSOR_PRESETS: SensorPreset[] = [
     zones: {
       approach: { leftAngle: 45, rightAngle: -45, leftLength: 1, rightLength: 1, dec: -1 },
       brake: { leftAngle: 45, rightAngle: -45, leftLength: 0.5, rightLength: 0.5, dec: -3 },
-      stop: { leftAngle: 45, rightAngle: -45, leftLength: 0.3, rightLength: 0.3, dec: -Infinity },
+      stop: { leftAngle: 45, rightAngle: -45, leftLength: 0.1, rightLength: 0.1, dec: -Infinity },
     },
     leftAngle: 45,
     rightAngle: -45,

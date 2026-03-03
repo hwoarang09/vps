@@ -10,6 +10,7 @@ import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
+import { JobState } from "@/common/vehicle/initialize/constants";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { VehicleConfig } from "@/types";
@@ -128,7 +129,7 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
       color: "#ffffff",
       battery: 100,
       vehicleType: 0,
-      taskType: 0,
+      jobState: JobState.IDLE,
     });
   }
 
