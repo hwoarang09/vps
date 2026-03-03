@@ -115,10 +115,13 @@ function handleSetRenderBuffer(
 }
 
 async function handleSetLoggerPort(port: MessagePort, workerId: number): Promise<void> {
+  console.log(`[worker.entry] SET_LOGGER_PORT received: workerId=${workerId}, engine=${!!engine}`);
   if (!engine) {
+    console.log(`[worker.entry] SET_LOGGER_PORT SKIPPED: no engine`);
     return;
   }
   await engine.setLoggerPort(port, workerId);
+  console.log(`[worker.entry] SET_LOGGER_PORT done`);
 }
 
 function handleGetLockTable(fabId: string, requestId: string): void {

@@ -18,7 +18,9 @@ export async function setupLoggerPort(
   config: SimulationConfig,
   workerId: number,
 ): Promise<SimLogger | null> {
+  console.log(`[SimLogger] setupLoggerPort called: fabId=${fabId}, edgeTransitLogEnabled=${config.edgeTransitLogEnabled}`);
   if (config.edgeTransitLogEnabled === false) {
+    console.log(`[SimLogger] SKIPPED: edgeTransitLogEnabled is false`);
     return null;
   }
 

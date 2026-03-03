@@ -170,11 +170,13 @@ export class FabContext {
    * 이후 edge transit 로그가 자동으로 전송됨
    */
   async setLoggerPort(_port: MessagePort, workerId: number = 0): Promise<void> {
+    console.log(`[FabContext] setLoggerPort called: fabId=${this.fabId}, workerId=${workerId}`);
     this.simLogger = await setupLoggerPort(
       this.fabId,
       this.config,
       workerId,
     );
+    console.log(`[FabContext] setLoggerPort result: simLogger=${this.simLogger ? 'OK' : 'null'}`);
   }
 
   /**
