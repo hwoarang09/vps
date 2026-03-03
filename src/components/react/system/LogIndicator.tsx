@@ -1,43 +1,24 @@
 // components/react/system/LogIndicator.tsx
-// HUD Status Indicator - Shows log file management buttons in top-right corner
+// HUD Status Indicator - Shows SimLog file management button in top-right corner
 
 import React, { useState } from "react";
-import { FileText, FileCode, Binary } from "lucide-react";
+import { Binary } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { menuButtonVariants } from "@/components/react/menu/shared/menuStyles";
 import { twMerge } from "tailwind-merge";
-import LogFileManager from "@/components/test/VehicleTest/LogFileManager";
-import DevLogFileManager from "@/components/test/VehicleTest/DevLogFileManager";
-import FbLogFileManager from "@/components/test/VehicleTest/FbLogFileManager";
+import SimLogFileManager from "@/components/test/VehicleTest/SimLogFileManager";
 
 const LogIndicator: React.FC = () => {
   const { showTooltip, hideTooltip } = useMenuStore();
-  const [activeLogDropdown, setActiveLogDropdown] = useState<'logs' | 'devlogs' | 'fblogs' | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
-  const handleMouseEnter = (
-    e: React.MouseEvent,
-    menuId: string,
-    message: string
-  ) => {
+  const handleMouseEnter = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(
-      menuId,
-      message,
-      {
-        x: rect.left + rect.width / 2,
-        y: rect.bottom,
-      },
-      2 // level 2 = tooltip appears below
-    );
-  };
-
-  const handleMouseLeave = () => {
-    hideTooltip();
+    showTooltip("simlogs", "SimLogger Files", { x: rect.left + rect.width / 2, y: rect.bottom }, 2);
   };
 
   return (
     <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-      {/* Container with menu style */}
       <div
         className={twMerge(
           "flex items-center gap-1 p-1 rounded-xl border-2",
@@ -45,86 +26,21 @@ const LogIndicator: React.FC = () => {
           "shadow-menu-container-glow opacity-[0.98]"
         )}
       >
-        {/* Logs Button */}
         <div className="relative">
           <button
-            onClick={() => setActiveLogDropdown(activeLogDropdown === 'logs' ? null : 'logs')}
-            onMouseEnter={(e) => handleMouseEnter(e, "logs", "OPFS Log Files")}
-            onMouseLeave={handleMouseLeave}
+            onClick={() => setIsOpen(!isOpen)}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={hideTooltip}
             className={twMerge(
-              menuButtonVariants({ active: activeLogDropdown === 'logs', size: "small" }),
+              menuButtonVariants({ active: isOpen, size: "small" }),
               "w-10 h-10"
             )}
           >
-            <FileText
-              size={18}
-              className={activeLogDropdown === 'logs' ? "text-white" : "text-purple-400"}
-            />
+            <Binary size={18} className={isOpen ? "text-white" : "text-purple-400"} />
           </button>
-          {/* Dropdown positioned below */}
-          {activeLogDropdown === 'logs' && (
+          {isOpen && (
             <div className="absolute top-12 right-0">
-              <LogFileManager
-                isOpen={true}
-                onToggle={() => setActiveLogDropdown(null)}
-                hideButton={true}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* DevLogs Button */}
-        <div className="relative">
-          <button
-            onClick={() => setActiveLogDropdown(activeLogDropdown === 'devlogs' ? null : 'devlogs')}
-            onMouseEnter={(e) => handleMouseEnter(e, "devlogs", "Dev Log Files")}
-            onMouseLeave={handleMouseLeave}
-            className={twMerge(
-              menuButtonVariants({ active: activeLogDropdown === 'devlogs', size: "small" }),
-              "w-10 h-10"
-            )}
-          >
-            <FileCode
-              size={18}
-              className={activeLogDropdown === 'devlogs' ? "text-white" : "text-green-400"}
-            />
-          </button>
-          {/* Dropdown positioned below */}
-          {activeLogDropdown === 'devlogs' && (
-            <div className="absolute top-12 right-0">
-              <DevLogFileManager
-                isOpen={true}
-                onToggle={() => setActiveLogDropdown(null)}
-                hideButton={true}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* FbLogs Button */}
-        <div className="relative">
-          <button
-            onClick={() => setActiveLogDropdown(activeLogDropdown === 'fblogs' ? null : 'fblogs')}
-            onMouseEnter={(e) => handleMouseEnter(e, "fblogs", "FlatBuffers Log Files")}
-            onMouseLeave={handleMouseLeave}
-            className={twMerge(
-              menuButtonVariants({ active: activeLogDropdown === 'fblogs', size: "small" }),
-              "w-10 h-10"
-            )}
-          >
-            <Binary
-              size={18}
-              className={activeLogDropdown === 'fblogs' ? "text-white" : "text-purple-400"}
-            />
-          </button>
-          {/* Dropdown positioned below */}
-          {activeLogDropdown === 'fblogs' && (
-            <div className="absolute top-12 right-0">
-              <FbLogFileManager
-                isOpen={true}
-                onToggle={() => setActiveLogDropdown(null)}
-                hideButton={true}
-              />
+              <SimLogFileManager isOpen={true} onToggle={() => setIsOpen(false)} hideButton={true} />
             </div>
           )}
         </div>

@@ -20,7 +20,6 @@ import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/stationConfig";
-import { DevLogger } from "@/logger";
 
 /**
  * VehicleTest
@@ -121,11 +120,6 @@ const VehicleTest: React.FC = () => {
     } catch (error) {
     }
   };
-
-  // Initialize DevLogger for main thread (enables veh-separated log files)
-  useEffect(() => {
-    DevLogger.init();
-  }, []);
 
   // Initial load effect
   useEffect(() => {

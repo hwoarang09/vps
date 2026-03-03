@@ -37,7 +37,6 @@ import type {
   LockWaitCheckpointParams,
 } from "./types";
 import { isCurveEdge, sortCheckpointsByPathOrder } from "./utils";
-import { devLog } from "@/logger/DevLogger";
 
 /**
  * edge의 시작점(from_node)이 merge node인지 확인
@@ -429,9 +428,6 @@ export function buildCheckpoints(
 
   // 최대 개수 확인
   if (checkpoints.length > MAX_CHECKPOINTS_PER_VEHICLE) {
-    devLog.warn(
-      `Checkpoint count (${checkpoints.length}) exceeds maximum (${MAX_CHECKPOINTS_PER_VEHICLE}). Truncating.`
-    );
     checkpoints.splice(MAX_CHECKPOINTS_PER_VEHICLE);
   }
 
@@ -440,27 +436,8 @@ export function buildCheckpoints(
 
 /**
  * Checkpoint 리스트를 로그로 출력 (디버깅용)
+ * TODO: SimLogger의 DEV 이벤트로 전환 예정
  */
-export function logCheckpoints(vehicleId: number, checkpoints: Checkpoint[]): void {
-  if (checkpoints.length === 0) {
-    devLog.veh(vehicleId).debug(`[checkpoint] No checkpoints`);
-    return;
-  }
-
-  const summary = checkpoints
-    .map((cp) => {
-      const flags: string[] = [];
-      if (cp.flags & CheckpointFlags.LOCK_REQUEST) flags.push("REQ");
-      if (cp.flags & CheckpointFlags.LOCK_WAIT) flags.push("WAIT");
-      if (cp.flags & CheckpointFlags.LOCK_RELEASE) flags.push("REL");
-      if (cp.flags & CheckpointFlags.MOVE_PREPARE) flags.push("PREP");
-
-      const tgt = cp.targetEdge ? `→E${cp.targetEdge}` : '';
-      return `E${cp.edge}@${cp.ratio.toFixed(3)}[${flags.join("|")}]${tgt}`;
-    })
-    .join(", ");
-
-  devLog.veh(vehicleId).debug(
-    `[checkpoint] Created ${checkpoints.length} checkpoints: ${summary}`
-  );
+export function logCheckpoints(_vehicleId: number, _checkpoints: Checkpoint[]): void {
+  // no-op: SimLogger checkpoint logging not yet implemented
 }

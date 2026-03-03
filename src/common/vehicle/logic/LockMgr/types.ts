@@ -42,6 +42,28 @@ export interface ReachCheckResult {
 }
 
 /**
+ * Lock 이벤트 콜백 타입
+ * @param vehId - Vehicle ID
+ * @param nodeIdx - Node index (0-based)
+ * @param eventType - 0=REQUEST, 1=GRANT, 2=RELEASE, 3=WAIT
+ * @param waitMs - 대기 시간 (ms), WAIT 이벤트에서만 유효
+ */
+export type OnLockEventCallback = (
+  vehId: number,
+  nodeIdx: number,
+  eventType: number,
+  waitMs: number
+) => void;
+
+/** Lock event type constants */
+export const LockEventType = {
+  REQUEST: 0,
+  GRANT: 1,
+  RELEASE: 2,
+  WAIT: 3,
+} as const;
+
+/**
  * LockMgr 내부 상태
  */
 export interface LockMgrState {
@@ -55,6 +77,10 @@ export interface LockMgrState {
   locks: Map<string, number>;
   queues: Map<string, number[]>;
   pendingReleases: Map<number, Array<{ nodeName: string; releaseEdgeIdx: number }>>;
+  /** Lock 이벤트 콜백 (SimLogger 연결용) */
+  onLockEvent?: OnLockEventCallback;
+  /** Node name → index (0-based) 맵 */
+  nodeNameToIndex?: Map<string, number>;
 }
 
 // ============================================================================

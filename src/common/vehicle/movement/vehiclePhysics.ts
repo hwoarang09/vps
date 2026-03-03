@@ -11,7 +11,6 @@ import {
 import { calculateNextSpeed } from "@/common/vehicle/physics/speedCalculator";
 import { checkCurvePreBraking } from "./curveBraking";
 import { checkMergePreBraking } from "./mergeBraking";
-import { devLog } from "@/logger/DevLogger";
 import type { MovementUpdateContext, MovementConfig } from "./movementUpdate";
 
 // ============================================================================
@@ -139,16 +138,6 @@ export function calculateVehiclePhysics(
     config
   );
 
-  // DEBUG: 곡선 진입 시 속도 0 문제 디버깅
-  const debugInfo = decision.debugInfo;
-  if (currentEdge.vos_rail_type !== EdgeType.LINEAR && newVelocity === 0 && velocity > 0) {
-    devLog.veh(vehicleIndex).error(`[CURVE_STOP] 곡선에서 속도 0! edge=${currentEdge.edge_name}, ` +
-      `prevVel=${velocity.toFixed(2)}, newVel=${newVelocity.toFixed(2)}, ` +
-      `accel=${finalAccel}, decel=${finalDecel}, ` +
-      `sensorDecel=${debugInfo.sensorDecel}, curveDecel=${debugInfo.curveDecel}, mergeDecel=${debugInfo.mergeDecel}, ` +
-      `maxDecel=${debugInfo.maxDecel}, hitZone=${hitZone}`);
-  }
-
   // 목표 비율 및 새 Edge 비율 계산
   const targetRatio = clampTargetRatio(data[ptr + MovementData.TARGET_RATIO]);
   const rawNewRatio = edgeRatio + (newVelocity * clampedDelta) / currentEdge.distance;
@@ -191,7 +180,7 @@ function processEmergencyStop(
   hitZone: number,
   data: Float32Array,
   ptr: number,
-  vehicleIndex: number
+  _vehicleIndex: number
 ): boolean {
   if (hitZone !== 2) {
     // SENSORED 플래그 제거
@@ -203,14 +192,6 @@ function processEmergencyStop(
   }
 
   // hitZone === 2: 긴급 정지
-  const prevVel = data[ptr + MovementData.VELOCITY];
-
-  // DEBUG: 센서 충돌로 정지
-  if (prevVel > 0) {
-    const edgeIdx = data[ptr + MovementData.CURRENT_EDGE];
-    devLog.veh(vehicleIndex).warn(`[SENSOR_STOP] 센서 충돌로 정지: hitZone=2, edgeIdx=${edgeIdx}, prevVel=${prevVel.toFixed(2)}`);
-  }
-
   // 속도 0으로 설정
   data[ptr + MovementData.VELOCITY] = 0;
   data[ptr + MovementData.DECELERATION] = 0;

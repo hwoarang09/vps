@@ -9,7 +9,6 @@ import { TransferMgr, VehicleCommand, IVehicleDataArray } from "./TransferMgr";
 import { findShortestPath } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
-import { devLog } from "@/logger/DevLogger";
 import { LockMgr } from "./LockMgr";
 
 interface StationTarget {
@@ -32,6 +31,18 @@ interface ApplyPathContext {
   lockMgr?: LockMgr;
 }
 
+/**
+ * Path 발견 이벤트 콜백
+ * @param vehId - Vehicle ID
+ * @param destEdge - 목적지 edge index
+ * @param pathLen - 경로 길이
+ */
+export type OnPathFoundCallback = (
+  vehId: number,
+  destEdge: number,
+  pathLen: number
+) => void;
+
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
@@ -40,6 +51,8 @@ export class AutoMgr {
   private nextVehicleIndex = 0;
   // Path finding count in current frame
   private pathFindCountThisFrame = 0;
+  /** Path 발견 콜백 (SimLogger 연결용) */
+  onPathFound?: OnPathFoundCallback;
 
   /**
    * Initializes available stations for routing.
@@ -166,8 +179,6 @@ export class AutoMgr {
       const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
 
       if (pathIndices && pathIndices.length > 0) {
-        devLog.veh(vehId).debug(`[pathBuff] DIJKSTRA from=${currentEdgeIdx} to=${candidate.edgeIndex} result=[${pathIndices.slice(0, 10).join(',')}${pathIndices.length > 10 ? '...' : ''}] len=${pathIndices.length}`);
-
         this.applyPathToVehicle({
           vehId,
           pathIndices,
@@ -203,6 +214,9 @@ export class AutoMgr {
     const command: VehicleCommand = { path: pathCommand };
 
     this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
+
+    // Path 발견 로그
+    this.onPathFound?.(vehId, candidate.edgeIndex, pathIndices.length);
 
     // Update Shared Memory for UI
     const ptr = vehId * VEHICLE_DATA_SIZE;
@@ -280,7 +294,6 @@ export class AutoMgr {
     for (const lock of currentLocks) {
       if (!newPathNodes.has(lock.nodeName)) {
         locksToCancel.push(lock.nodeName);
-        devLog.veh(vehId).debug(`[findLocksToCancel] node=${lock.nodeName} not in new path, will cancel (wasGranted=${lock.isGranted})`);
       }
     }
 
@@ -297,10 +310,6 @@ export class AutoMgr {
     lockMgr: LockMgr
   ): void {
     const locksToCancel = this.findLocksToCancel(vehId, newPathIndices, edgeArray, lockMgr);
-
-    if (locksToCancel.length > 0) {
-      devLog.veh(vehId).debug(`[cancelObsoleteLocks] cancelling ${locksToCancel.length} locks: [${locksToCancel.join(', ')}]`);
-    }
 
     for (const nodeName of locksToCancel) {
       lockMgr.cancelLock(nodeName, vehId);

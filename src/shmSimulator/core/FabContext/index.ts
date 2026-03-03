@@ -10,7 +10,7 @@ import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
 import { EngineStore } from "../EngineStore";
-import { EdgeTransitTracker } from "@/logger";
+import { SimLogger } from "@/logger";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, FabRenderOffset } from "../../types";
@@ -67,12 +67,15 @@ export class FabContext {
   private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
 
-  // === Edge Transit Logging ===
-  private edgeTransitTracker: EdgeTransitTracker | null = null;
+  // === SimLogger ===
+  private simLogger: SimLogger | null = null;
 
   // === Collision & Curve Brake Check Timers ===
   private readonly collisionCheckTimers: Map<number, number> = new Map();
   private readonly curveBrakeCheckTimers: Map<number, number> = new Map();
+
+  // === Edge Enter Time Tracking (vehId → simulationTime) ===
+  private readonly edgeEnterTimes: Map<number, number> = new Map();
 
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
@@ -166,14 +169,11 @@ export class FabContext {
    * Logger Worker와 연결된 MessagePort 설정
    * 이후 edge transit 로그가 자동으로 전송됨
    */
-  setLoggerPort(port: MessagePort, workerId: number = 0): void {
-    this.edgeTransitTracker = setupLoggerPort(
+  async setLoggerPort(_port: MessagePort, workerId: number = 0): Promise<void> {
+    this.simLogger = await setupLoggerPort(
       this.fabId,
       this.config,
-      port,
       workerId,
-      this.actualNumVehicles,
-      this.store
     );
   }
 
@@ -207,7 +207,8 @@ export class FabContext {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
         transferMode: this.store.transferMode,
       },
-      edgeTransitTracker: this.edgeTransitTracker,
+      simLogger: this.simLogger,
+      edgeEnterTimes: this.edgeEnterTimes,
       collisionCheckTimers: this.collisionCheckTimers,
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
     });
@@ -237,10 +238,10 @@ export class FabContext {
   }
 
   dispose(): void {
-    // Edge transit tracker 정리
-    if (this.edgeTransitTracker) {
-      this.edgeTransitTracker.dispose();
-      this.edgeTransitTracker = null;
+    // SimLogger 정리
+    if (this.simLogger) {
+      this.simLogger.dispose();
+      this.simLogger = null;
     }
 
     this.store.dispose();
@@ -259,6 +260,7 @@ export class FabContext {
     this.edgeNameToIndex.clear();
     this.nodeNameToIndex.clear();
     this.vehicleLoopMap.clear();
+    this.edgeEnterTimes.clear();
 
     this.fabOffset = { x: 0, y: 0 };
     this.actualNumVehicles = 0;

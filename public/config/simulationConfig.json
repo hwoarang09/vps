@@ -8,7 +8,7 @@
   },
   "log": {
     "devLogEnabled": true,
-    "edgeTransitLogEnabled": false
+    "edgeTransitLogEnabled": true
   },
   "lock": {
     "waitDistanceFromMergingStr": 2.9,

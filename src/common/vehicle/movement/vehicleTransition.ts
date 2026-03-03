@@ -9,7 +9,6 @@ import {
 } from "@/common/vehicle/initialize/constants";
 import { handleEdgeTransition, type EdgeTransitionResult } from "./edgeTransition";
 import { TransferMode } from "@/shmSimulator/types";
-import { devLog } from "@/logger/DevLogger";
 import type { VehiclePhysicsResult } from "./vehiclePhysics";
 import type { MovementUpdateContext } from "./movementUpdate";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
@@ -141,7 +140,6 @@ function checkAndTriggerTransfer(
 ) {
   const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
   if (ratio >= 0 && nextEdgeState === NextEdgeState.EMPTY) {
-    devLog.veh(vehIdx).debug(`[TRANSFER] ratio=${ratio.toFixed(3)} state=EMPTY → PENDING, enqueue`);
     data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.PENDING;
     transferMgr.enqueueVehicleTransfer(vehIdx);
   }
@@ -239,10 +237,6 @@ function checkTargetReached(
     out.finalVelocity = 0;
     out.reached = true;
 
-    // DEBUG: targetRatio 도달로 속도 0
-    if (currentVelocity > 0 && targetRatio < 1) {
-      devLog.warn(`[TARGET_STOP] TARGET_RATIO 도달로 정지: ratio=${rawNewRatio.toFixed(3)}, target=${targetRatio.toFixed(3)}, vel=${currentVelocity.toFixed(2)}`);
-    }
   } else {
     out.finalRatio = rawNewRatio;
     out.finalVelocity = currentVelocity;

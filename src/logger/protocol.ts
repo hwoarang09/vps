@@ -1,179 +1,112 @@
 // logger/protocol.ts
-// Edge Transit Log 바이너리 프로토콜 정의
+// SimLogger 멀티 이벤트 바이너리 프로토콜
+
+// ============================================================================
+// Event Types
+// ============================================================================
+
+export enum EventType {
+  // ML 이벤트 (통계용)
+  ML_PICKUP = 1,
+  ML_DROPOFF = 2,
+  ML_EDGE_TRANSIT = 3,
+  ML_LOCK = 4,
+  // Dev 이벤트 (디버그용)
+  DEV_VEH_STATE = 10,
+  DEV_PATH = 11,
+  DEV_LOCK_DETAIL = 12,
+  DEV_TRANSFER = 13,
+  DEV_EDGE_QUEUE = 14,
+}
+
+// ============================================================================
+// Record Sizes (bytes)
+// ============================================================================
 
 /**
- * Edge Transit Log Record (28 bytes)
- *
- * | Field       | Type    | Size    | Offset | Description                    |
- * |-------------|---------|---------|--------|--------------------------------|
- * | timestamp   | Uint32  | 4 bytes | 0      | 기록 시점 (시뮬 tick, ms)       |
- * | workerId    | Uint8   | 1 byte  | 4      | 워커 ID (0~255)                |
- * | fabId       | Uint8   | 1 byte  | 5      | Fab ID (0~255)                 |
- * | edgeId      | Uint16  | 2 bytes | 6      | Edge Index (0~65535)           |
- * | vehId       | Uint32  | 4 bytes | 8      | Vehicle ID (0~4B)              |
- * | enterTime   | Uint32  | 4 bytes | 12     | Edge 진입 시점 (ms)            |
- * | exitTime    | Uint32  | 4 bytes | 16     | Edge 통과 시점 (ms)            |
- * | edgeLength  | Float32 | 4 bytes | 20     | Edge 길이 (meters)             |
- * | edgeType    | Uint8   | 1 byte  | 24     | EdgeType enum index            |
- * | padding     | Uint8x3 | 3 bytes | 25     | 4-byte alignment               |
+ * ML_PICKUP (16B): ts(4) vehId(4) nodeEdgeId(4) stationIdx(2) bayIdx(1) pad(1)
+ * ML_DROPOFF (16B): 동일
+ * ML_EDGE_TRANSIT (24B): ts(4) vehId(4) edgeId(4) enterTs(4) exitTs(4) edgeLen(f32,4)
+ * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) pad(1) waitMs(4)
+ * DEV_VEH_STATE (44B): ts(4) vehId(4) x(f4) y(f4) z(f4) edge(f4) ratio(f4) speed(f4) movingStatus(f4) trafficState(f4) jobState(f4)
+ * DEV_PATH (16B): ts(4) vehId(4) destEdge(4) pathLen(4)
+ * DEV_LOCK_DETAIL (20B): ts(4) vehId(4) nodeIdx(2) type(1) pad(1) holderVehId(4) waitMs(4)
+ * DEV_TRANSFER (16B): ts(4) vehId(4) fromEdge(4) toEdge(4)
+ * DEV_EDGE_QUEUE (16B): ts(4) edgeId(4) vehId(4) count(2) type(1) pad(1)
  */
+export const RECORD_SIZE: Record<EventType, number> = {
+  [EventType.ML_PICKUP]: 16,
+  [EventType.ML_DROPOFF]: 16,
+  [EventType.ML_EDGE_TRANSIT]: 24,
+  [EventType.ML_LOCK]: 16,
+  [EventType.DEV_VEH_STATE]: 44,
+  [EventType.DEV_PATH]: 16,
+  [EventType.DEV_LOCK_DETAIL]: 20,
+  [EventType.DEV_TRANSFER]: 16,
+  [EventType.DEV_EDGE_QUEUE]: 16,
+};
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/** 레코드 하나의 크기 (bytes) */
-export const LOG_RECORD_SIZE = 28;
+/** 버퍼 flush 트리거 레코드 수 */
+export const FLUSH_THRESHOLD = 512;
 
-/** 버퍼 크기 (4KB = ~146 records) */
-export const LOG_BUFFER_SIZE = 4096;
+/** ML 이벤트 타입 목록 */
+export const ML_EVENT_TYPES: EventType[] = [
+  EventType.ML_PICKUP,
+  EventType.ML_DROPOFF,
+  EventType.ML_EDGE_TRANSIT,
+  EventType.ML_LOCK,
+];
 
-/** 버퍼당 최대 레코드 수 */
-export const MAX_RECORDS_PER_BUFFER = Math.floor(LOG_BUFFER_SIZE / LOG_RECORD_SIZE);
-
-/** Cloud 모드에서 업로드 트리거 크기 (5MB) */
-export const CLOUD_UPLOAD_THRESHOLD = 5 * 1024 * 1024;
-
-// Field offsets
-export const OFFSET = {
-  TIMESTAMP: 0,
-  WORKER_ID: 4,
-  FAB_ID: 5,
-  EDGE_ID: 6,
-  VEH_ID: 8,
-  ENTER_TIME: 12,
-  EXIT_TIME: 16,
-  EDGE_LENGTH: 20,
-  EDGE_TYPE: 24,
-} as const;
+/** 전체 이벤트 타입 목록 (ML + Dev) */
+export const ALL_EVENT_TYPES: EventType[] = [
+  EventType.ML_PICKUP,
+  EventType.ML_DROPOFF,
+  EventType.ML_EDGE_TRANSIT,
+  EventType.ML_LOCK,
+  EventType.DEV_VEH_STATE,
+  EventType.DEV_PATH,
+  EventType.DEV_LOCK_DETAIL,
+  EventType.DEV_TRANSFER,
+  EventType.DEV_EDGE_QUEUE,
+];
 
 // ============================================================================
-// EdgeType -> Uint8 매핑
+// File Naming
 // ============================================================================
 
-export const EDGE_TYPE_MAP: Record<string, number> = {
-  LINEAR: 0,
-  CURVE_90: 1,
-  CURVE_180: 2,
-  CURVE_CSC: 3,
-  S_CURVE: 4,
-  LEFT_CURVE: 5,
-  RIGHT_CURVE: 6,
-} as const;
+const EVENT_FILE_SUFFIX: Record<EventType, string> = {
+  [EventType.ML_PICKUP]: 'job',
+  [EventType.ML_DROPOFF]: 'job',
+  [EventType.ML_EDGE_TRANSIT]: 'edge_transit',
+  [EventType.ML_LOCK]: 'lock',
+  [EventType.DEV_VEH_STATE]: 'veh_state',
+  [EventType.DEV_PATH]: 'path',
+  [EventType.DEV_LOCK_DETAIL]: 'lock_detail',
+  [EventType.DEV_TRANSFER]: 'transfer',
+  [EventType.DEV_EDGE_QUEUE]: 'edge_queue',
+};
 
-export const EDGE_TYPE_REVERSE: Record<number, string> = {
-  0: "LINEAR",
-  1: "CURVE_90",
-  2: "CURVE_180",
-  3: "CURVE_CSC",
-  4: "S_CURVE",
-  5: "LEFT_CURVE",
-  6: "RIGHT_CURVE",
-} as const;
+/** 이벤트 타입별 파일명 생성 */
+export function getFileName(sessionId: string, eventType: EventType): string {
+  return `${sessionId}_${EVENT_FILE_SUFFIX[eventType]}.bin`;
+}
+
+/** 파일명에서 이벤트 타입 suffix 추출 */
+export function getFileSuffix(eventType: EventType): string {
+  return EVENT_FILE_SUFFIX[eventType];
+}
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export interface EdgeTransitRecord {
-  timestamp: number;
-  workerId: number;
-  fabId: number;
-  edgeId: number;
-  vehId: number;
-  enterTime: number;
-  exitTime: number;
-  edgeLength: number;
-  edgeType: number;
-}
-
-export interface LogFileInfo {
+export interface SimLogFileInfo {
   fileName: string;
   size: number;
   recordCount: number;
-  createdAt: number; // timestamp
-}
-
-export type LoggerMode = "OPFS" | "CLOUD";
-
-// ============================================================================
-// Logger Worker Messages
-// ============================================================================
-
-export type LoggerWorkerMessage =
-  | { type: "INIT"; mode: LoggerMode; sessionId?: string }
-  | { type: "LOG"; buffer: ArrayBuffer }
-  | { type: "LOG_BY_VEH"; vehId: number; buffer: ArrayBuffer }
-  | { type: "FLUSH" }
-  | { type: "CLOSE" }
-  | { type: "DOWNLOAD" }
-  | { type: "DOWNLOAD_BY_VEH"; vehId: number }
-  | { type: "LIST_FILES" }
-  | { type: "LIST_VEH_IDS" }
-  | { type: "DOWNLOAD_FILE"; fileName: string }
-  | { type: "DELETE_FILE"; fileName: string }
-  | { type: "DELETE_ALL_FILES" };
-
-export type LoggerMainMessage =
-  | { type: "READY" }
-  | { type: "FLUSHED"; recordCount: number }
-  | { type: "UPLOADED"; url: string; recordCount: number }
-  | { type: "CLOSED"; totalRecords: number }
-  | { type: "DOWNLOADED"; buffer: ArrayBuffer; fileName: string; recordCount: number }
-  | { type: "FILE_LIST"; files: LogFileInfo[] }
-  | { type: "VEH_ID_LIST"; vehIds: number[] }
-  | { type: "FILE_DELETED"; fileName: string }
-  | { type: "ALL_FILES_DELETED"; deletedCount: number }
-  | { type: "ERROR"; error: string };
-
-// ============================================================================
-// Packing / Unpacking Utilities
-// ============================================================================
-
-/**
- * EdgeTransitRecord를 ArrayBuffer의 특정 offset에 기록
- */
-export function packRecord(
-  view: DataView,
-  offset: number,
-  record: EdgeTransitRecord
-): void {
-  view.setUint32(offset + OFFSET.TIMESTAMP, record.timestamp, true);
-  view.setUint8(offset + OFFSET.WORKER_ID, record.workerId);
-  view.setUint8(offset + OFFSET.FAB_ID, record.fabId);
-  view.setUint16(offset + OFFSET.EDGE_ID, record.edgeId, true);
-  view.setUint32(offset + OFFSET.VEH_ID, record.vehId, true);
-  view.setUint32(offset + OFFSET.ENTER_TIME, record.enterTime, true);
-  view.setUint32(offset + OFFSET.EXIT_TIME, record.exitTime, true);
-  view.setFloat32(offset + OFFSET.EDGE_LENGTH, record.edgeLength, true);
-  view.setUint8(offset + OFFSET.EDGE_TYPE, record.edgeType);
-}
-
-/**
- * ArrayBuffer에서 EdgeTransitRecord를 읽기
- */
-export function unpackRecord(view: DataView, offset: number): EdgeTransitRecord {
-  return {
-    timestamp: view.getUint32(offset + OFFSET.TIMESTAMP, true),
-    workerId: view.getUint8(offset + OFFSET.WORKER_ID),
-    fabId: view.getUint8(offset + OFFSET.FAB_ID),
-    edgeId: view.getUint16(offset + OFFSET.EDGE_ID, true),
-    vehId: view.getUint32(offset + OFFSET.VEH_ID, true),
-    enterTime: view.getUint32(offset + OFFSET.ENTER_TIME, true),
-    exitTime: view.getUint32(offset + OFFSET.EXIT_TIME, true),
-    edgeLength: view.getFloat32(offset + OFFSET.EDGE_LENGTH, true),
-    edgeType: view.getUint8(offset + OFFSET.EDGE_TYPE),
-  };
-}
-
-/**
- * 전체 버퍼에서 모든 레코드 읽기
- */
-export function unpackAllRecords(buffer: ArrayBuffer, recordCount: number): EdgeTransitRecord[] {
-  const view = new DataView(buffer);
-  const records: EdgeTransitRecord[] = [];
-  for (let i = 0; i < recordCount; i++) {
-    records.push(unpackRecord(view, i * LOG_RECORD_SIZE));
-  }
-  return records;
+  eventType: string;
 }

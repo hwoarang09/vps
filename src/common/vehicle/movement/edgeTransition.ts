@@ -3,7 +3,6 @@
 
 import type { Edge } from "@/types/edge";
 import { EdgeType } from "@/types";
-import { devLog } from "@/logger";
 import {
   VEHICLE_DATA_SIZE,
   MovementData,
@@ -105,12 +104,6 @@ function checkAndReportUnusualMove(
 
   const prevX = data[ptr + MovementData.X];
   const prevY = data[ptr + MovementData.Y];
-  devLog.veh(vehicleIndex).error(
-    `[UnusualMove] 연결되지 않은 edge로 이동! ` +
-    `prevEdge=${currentEdge.edge_name}(to:${currentEdge.to_node}) → nextEdge=${nextEdge.edge_name}(from:${nextEdge.from_node}), ` +
-    `pos: (${prevX.toFixed(2)},${prevY.toFixed(2)})`
-  );
-
   onUnusualMove?.({
     vehicleIndex,
     prevEdgeName: currentEdge.edge_name,
@@ -120,35 +113,6 @@ function checkAndReportUnusualMove(
     posX: prevX,
     posY: prevY,
   });
-}
-
-/**
- * 진입 시점 상태 로그 출력
- */
-function logTransitionEntry(
-  vehicleIndex: number,
-  currentEdge: Edge | undefined,
-  currentRatio: number,
-  data: Float32Array,
-  ptr: number,
-  pathBufferFromAutoMgr?: Int32Array | null
-): void {
-  const initialNextEdges = [
-    data[ptr + MovementData.NEXT_EDGE_0],
-    data[ptr + MovementData.NEXT_EDGE_1],
-    data[ptr + MovementData.NEXT_EDGE_2],
-    data[ptr + MovementData.NEXT_EDGE_3],
-    data[ptr + MovementData.NEXT_EDGE_4],
-  ];
-  let pathLen = -1;
-  if (pathBufferFromAutoMgr) {
-    const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-    pathLen = pathBufferFromAutoMgr[pathPtr + PATH_LEN];
-  }
-  devLog.veh(vehicleIndex).debug(
-    `[next_edge_memory] ENTER handleEdgeTransition edge=${currentEdge?.edge_name} ratio=${currentRatio.toFixed(3)} ` +
-    `nextEdges=[${initialNextEdges.join(',')}] pathBuf: len=${pathLen}`
-  );
 }
 
 /**
@@ -176,8 +140,6 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
   const data = vehicleDataArray.getData();
   const ptr = vehicleIndex * VEHICLE_DATA_SIZE;
 
-  logTransitionEntry(vehicleIndex, currentEdge, currentRatio, data, ptr, pathBufferFromAutoMgr);
-
   let loopCount = 0;
   while (currentEdge && currentRatio >= 1) {
     loopCount++;
@@ -185,12 +147,6 @@ export function handleEdgeTransition(params: EdgeTransitionParams): void {
 
     const nextState = data[ptr + MovementData.NEXT_EDGE_STATE];
     const nextEdgeIndex = data[ptr + MovementData.NEXT_EDGE_0];
-
-    // 루프 진입 로그
-    devLog.veh(vehicleIndex).debug(
-      `[next_edge_memory] LOOP#${loopCount} currentEdge=${currentEdge.edge_name} ratio=${currentRatio.toFixed(3)} ` +
-      `nextEdgeIdx=${nextEdgeIndex} nextState=${nextState}`
-    );
 
     // Edge transition 가능 여부 체크 (단순화: 락 체크 제거)
     const { canTransition, nextEdge } = checkCanTransitionToNextEdge(
@@ -306,18 +262,9 @@ function shiftNextEdges(
   vehicleIndex: number,
   pathBufferFromAutoMgr: Int32Array | null | undefined
 ): void {
-  const beforeNextEdges = [
-    data[ptr + MovementData.NEXT_EDGE_0],
-    data[ptr + MovementData.NEXT_EDGE_1],
-    data[ptr + MovementData.NEXT_EDGE_2],
-    data[ptr + MovementData.NEXT_EDGE_3],
-    data[ptr + MovementData.NEXT_EDGE_4],
-  ];
-
   // 1. pathBuffer shift
-  let shiftResult: PathBufferShiftResult = { beforeLen: -1, afterLen: -1, beforeEdges: [], afterEdges: [] };
   if (pathBufferFromAutoMgr) {
-    shiftResult = shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
+    shiftPathBuffer(pathBufferFromAutoMgr, vehicleIndex);
   }
 
   // 2. NEXT_EDGE를 한 칸씩 shift (refill 없음 - checkpoint에서 관리)
@@ -326,19 +273,6 @@ function shiftNextEdges(
   data[ptr + MovementData.NEXT_EDGE_2] = data[ptr + MovementData.NEXT_EDGE_3];
   data[ptr + MovementData.NEXT_EDGE_3] = data[ptr + MovementData.NEXT_EDGE_4];
   data[ptr + MovementData.NEXT_EDGE_4] = 0;  // 마지막은 비움
-
-  // 로그
-  const afterNextEdges = [
-    data[ptr + MovementData.NEXT_EDGE_0],
-    data[ptr + MovementData.NEXT_EDGE_1],
-    data[ptr + MovementData.NEXT_EDGE_2],
-    data[ptr + MovementData.NEXT_EDGE_3],
-    data[ptr + MovementData.NEXT_EDGE_4],
-  ];
-  devLog.veh(vehicleIndex).debug(
-    `[SHIFT] pathBuf: [${shiftResult.beforeEdges.join(',')}](len=${shiftResult.beforeLen}) → [${shiftResult.afterEdges.join(',')}](len=${shiftResult.afterLen}) | ` +
-    `nextEdges: [${beforeNextEdges.join(',')}] → [${afterNextEdges.join(',')}]`
-  );
 
   // NEXT_EDGE_0이 비어있으면 STATE도 EMPTY로
   if (data[ptr + MovementData.NEXT_EDGE_0] === 0) {

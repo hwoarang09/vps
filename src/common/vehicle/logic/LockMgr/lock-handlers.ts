@@ -13,7 +13,21 @@ import {
 } from "@/common/vehicle/initialize/constants";
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "../TransferMgr";
 import type { LockMgrState } from "./types";
+import { LockEventType } from "./types";
 import { isVehicleInDeadlockZone, grantNextInQueue } from "./deadlock-zone";
+
+/** Lock 이벤트를 콜백에 전달 */
+function emitLockEvent(
+  state: LockMgrState,
+  vehId: number,
+  nodeName: string,
+  eventType: number,
+  waitMs: number = 0
+): void {
+  if (!state.onLockEvent || !state.nodeNameToIndex) return;
+  const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
+  state.onLockEvent(vehId, nodeIdx, eventType, waitMs);
+}
 
 /**
  * Lock 해제 처리
@@ -40,6 +54,7 @@ export function handleLockRelease(
 
   // Lock 해제
   releaseLockInternal(nodeName, vehicleId, state);
+  emitLockEvent(state, vehicleId, nodeName, LockEventType.RELEASE);
   grantNextInQueue(nodeName, state, eName);
 }
 
@@ -69,6 +84,7 @@ export function handleLockRequest(
 
   // Lock 요청
   requestLockInternal(nodeName, vehicleId, state);
+  emitLockEvent(state, vehicleId, nodeName, LockEventType.REQUEST);
 
   // 자동 해제 등록: targetEdge 도달 시 release
   if (!state.pendingReleases.has(vehicleId)) {
@@ -128,6 +144,7 @@ export function handleLockWait(
     data[ptr + MovementData.VELOCITY] = 0;
     data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
     data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+    emitLockEvent(state, vehicleId, nodeName, LockEventType.WAIT);
     return false;
   }
 
@@ -244,6 +261,7 @@ export function requestLockInternal(
     // 큐가 비어있으면 즉시 grant
     if (queue.length === 1 && !state.locks.has(nodeName)) {
       state.locks.set(nodeName, vehId);
+      emitLockEvent(state, vehId, nodeName, LockEventType.GRANT);
     }
   }
 }
@@ -320,6 +338,7 @@ export function checkAutoRelease(
         if (holder === vehId) {
           // 정상 release: lock 보유 중 → 해제 + 다음 차량에 grant
           releaseLockInternal(info.nodeName, vehId, state);
+          emitLockEvent(state, vehId, info.nodeName, LockEventType.RELEASE);
           grantNextInQueue(info.nodeName, state, eName);
         } else {
           // lock 안 잡고 있음 → 큐에서만 제거 (cancel)

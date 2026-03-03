@@ -11,7 +11,7 @@ import type { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue"
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
-import type { EdgeTransitTracker } from "@/logger";
+import type { SimLogger } from "@/logger";
 
 /**
  * 시뮬레이션 스텝 실행 컨텍스트
@@ -42,7 +42,9 @@ export interface SimulationStepContext {
     transferMode: TransferMode;
   };
   // Logger
-  edgeTransitTracker: EdgeTransitTracker | null;
+  simLogger: SimLogger | null;
+  // Edge enter time tracking (vehId → simulationTime when vehicle entered current edge)
+  edgeEnterTimes: Map<number, number>;
   // Timers
   collisionCheckTimers: Map<number, number>;
   curveBrakeCheckTimers: Map<number, number>;
@@ -75,10 +77,18 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     transferMgr,
     autoMgr,
     store,
-    edgeTransitTracker,
+    simLogger,
+    edgeEnterTimes,
     collisionCheckTimers,
     curveBrakeCheckTimers,
   } = ctx;
+  // 0. Lock 이벤트 콜백 설정 (SimLogger 연결)
+  if (simLogger) {
+    lockMgr.setOnLockEvent((vehId, nodeIdx, eventType, waitMs) => {
+      simLogger.logLock(simulationTime, vehId, nodeIdx, eventType, waitMs);
+    });
+  }
+
   // 1. Collision Check (충돌 감지 → 멈출지 결정)
   const collisionCtx: CollisionCheckContext = {
     vehicleArrayData: vehicleDataArray.getData(),
@@ -95,7 +105,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   lockMgr.updateAll(actualNumVehicles, { default: 'FIFO' });
 
   // 3. Movement Update (1,2에서 멈추지 않은 차량만 이동)
-  const tracker = edgeTransitTracker;
+  const logger = simLogger;
 
   const movementCtx: MovementUpdateContext = {
     vehicleDataArray,
@@ -110,15 +120,27 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     clampedDelta,
     config,
     simulationTime,
-    onEdgeTransit: tracker
+    onEdgeTransit: logger
       ? (vehId, fromEdgeIndex, toEdgeIndex, timestamp) => {
-          // 이전 edge 통과 로그 (fromEdgeIndex is 1-based)
+          // edge transit 로그 기록
           const fromEdge = fromEdgeIndex >= 1 ? edges[fromEdgeIndex - 1] : undefined;
           if (fromEdge) {
-            tracker.onEdgeExit(vehId, fromEdgeIndex, timestamp, fromEdge);
+            const enterTs = edgeEnterTimes.get(vehId) ?? 0;
+            logger.logEdgeTransit(
+              timestamp,
+              vehId,
+              fromEdgeIndex,
+              enterTs,
+              timestamp,
+              fromEdge.distance
+            );
           }
-          // 새 edge 진입 기록
-          tracker.onEdgeEnter(vehId, toEdgeIndex, timestamp);
+          // DEV_TRANSFER 로그 기록
+          if (logger.isDevMode()) {
+            logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
+          }
+          // 새 edge 진입 시간 기록
+          edgeEnterTimes.set(vehId, timestamp);
         }
       : undefined,
     onUnusualMove: (event) => {
@@ -144,6 +166,11 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   updateMovement(movementCtx);
 
   // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
+  if (simLogger && simLogger.isDevMode()) {
+    autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
+      simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
+    };
+  }
   autoMgr.update(
     store.transferMode,
     actualNumVehicles,

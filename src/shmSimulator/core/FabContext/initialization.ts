@@ -5,7 +5,6 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types/node";
 import type { EngineStore } from "../EngineStore";
 import { initializeVehicles, InitializationResult } from "../initializeVehicles";
-import { devLog, getFbLog } from "@/logger";
 import { MAX_CHECKPOINTS_PER_VEHICLE } from "@/common/vehicle/initialize/constants";
 import {
   VEHICLE_RENDER_SIZE,
@@ -145,17 +144,6 @@ export function initializeFab(ctx: InitializeFabContext): {
     for (let idx = 0; idx < nodes.length; idx++) {
       nodeNameToIndexMap.set(nodes[idx].node_name, idx + 1); // 1-based
     }
-  }
-
-  // Fab별 config 적용 로그
-  devLog.info(`[FabContext:${params.fabId}] Lock policy: grantStrategy=${params.config.lockGrantStrategy}`);
-
-  // FbLogger: Fab 초기화 로그
-  const fbLog = getFbLog();
-  if (fbLog) {
-    fbLog.info(`Fab ${params.fabId} initialized: lockStrategy=${params.config.lockGrantStrategy}`, {
-      tag: "FabContext",
-    });
   }
 
   // 차량 초기화

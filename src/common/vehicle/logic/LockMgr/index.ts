@@ -8,6 +8,7 @@ import type {
   LockMgrState,
   MergeLockNode,
   GrantStrategy,
+  OnLockEventCallback,
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
@@ -60,8 +61,22 @@ export class LockMgr {
     this.state.nodes = nodes;
     this.state.edges = edges;
 
+    // nodeNameToIndex 맵 구축
+    const nodeNameToIndex = new Map<string, number>();
+    for (let i = 0; i < nodes.length; i++) {
+      nodeNameToIndex.set(nodes[i].node_name, i);
+    }
+    this.state.nodeNameToIndex = nodeNameToIndex;
+
     // merge node 목록 구축
     this.buildMergeNodes();
+  }
+
+  /**
+   * Lock 이벤트 콜백 설정 (SimLogger 연결용)
+   */
+  setOnLockEvent(callback: OnLockEventCallback): void {
+    this.state.onLockEvent = callback;
   }
 
   /**

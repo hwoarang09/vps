@@ -7,7 +7,6 @@ import {
 import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import type { VehiclePositionResult } from "./vehiclePosition";
 import type { MovementUpdateContext } from "./movementUpdate";
-import { devLog } from "@/logger/DevLogger";
 
 // 차량별 마지막 위치 로그 정보
 const vehicleLastPositionLog = new Map<number, { simTime: number; edgeIndex: number }>();
@@ -88,18 +87,12 @@ interface LogPositionContext {
 }
 
 function logPositionIfNeeded(ctx: LogPositionContext): void {
-  const { vehId, edgeIndex, prevEdgeIndex, ratio, x, y, velocity, simTime, edgeArray } = ctx;
+  const { vehId, edgeIndex, prevEdgeIndex, simTime } = ctx;
   const lastLog = vehicleLastPositionLog.get(vehId);
   const edgeChanged = edgeIndex !== prevEdgeIndex;
   const intervalPassed = !lastLog || (simTime - lastLog.simTime >= POSITION_LOG_INTERVAL_MS);
 
   if (edgeChanged || intervalPassed) {
-    // NOTE: edgeIndex is 1-based. 0 is invalid sentinel.
-    const edgeName = edgeIndex >= 1 ? (edgeArray[edgeIndex - 1]?.edge_name ?? `idx:${edgeIndex}`) : `idx:${edgeIndex}`;
-    const reason = edgeChanged ? "edge_change" : "interval";
-    devLog.veh(vehId).debug(
-      `[POS] ${reason} edge=${edgeName} ratio=${ratio.toFixed(3)} pos=(${x.toFixed(2)},${y.toFixed(2)}) vel=${velocity.toFixed(2)}`
-    );
     vehicleLastPositionLog.set(vehId, { simTime, edgeIndex });
   }
 }

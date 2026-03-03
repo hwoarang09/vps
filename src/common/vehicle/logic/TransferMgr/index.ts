@@ -15,7 +15,6 @@ import {
   LogicData,
   type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
-import { devLog } from "@/logger/DevLogger";
 import { buildCheckpointsFromPath, logCheckpoints } from "../checkpoint";
 import type {
   VehicleLoop,
@@ -309,9 +308,6 @@ export class TransferMgr {
 
     data[ptr + MovementData.NEXT_EDGE_STATE] = filledEdges[0] > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
 
-    devLog.veh(vehicleIndex).debug(
-      `[initNextEdges] firstCpTargetEdge=${firstCpTargetEdge} filled=[${filledEdges.join(',')}]`
-    );
   }
 
   // fillFirstNextEdge and fillSubsequentNextEdge moved to next-edge-handlers.ts
@@ -348,7 +344,7 @@ export class TransferMgr {
    * NEXT_EDGE_0 ~ NEXT_EDGE_4를 채움
    */
   private fillNextEdges(ctx: FillNextEdgesContext): void {
-    const { mode, vehicleIndex } = ctx;
+    const { mode } = ctx;
     const nextEdgeOffsets = [
       MovementData.NEXT_EDGE_0,
       MovementData.NEXT_EDGE_1,
@@ -364,7 +360,7 @@ export class TransferMgr {
       // 새 설계: checkpoint 기반으로 NEXT_EDGE 관리
       // initNextEdgesForStart는 processPathCommand에서 이미 호출됨
       // 여기서는 아무것도 안 함 (checkpoint에서 관리)
-      devLog.veh(vehicleIndex).debug(`[fillNextEdges] Skipped - checkpoint based`);
+      // checkpoint based - no-op
     } else {
       this.fillNextEdgesFromLoopMap(ctx, nextEdgeOffsets);
     }
@@ -577,7 +573,7 @@ export class TransferMgr {
       // 첫 번째 checkpoint까지 NEXT_EDGE 채움
       this.initNextEdgesForStart(data, ptr, vehId);
     } else {
-      devLog.veh(vehId).warn(`[processPathCommand] NO pathBuffer!`);
+      // no pathBuffer available
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
@@ -604,14 +600,6 @@ export class TransferMgr {
       isMergeNode: (nodeName) => lockMgr.isMergeNode(nodeName),
     });
 
-    // 경고 출력
-    if (result.warnings) {
-      for (const warning of result.warnings) {
-        devLog.veh(vehId).warn(`[checkpoint] ${warning}`);
-      }
-    }
-
-    // 로그 출력 (디버깅용)
     logCheckpoints(vehId, result.checkpoints);
 
     // Checkpoint 배열에 저장
@@ -659,9 +647,6 @@ export class TransferMgr {
       data[ptr + LogicData.CHECKPOINT_HEAD] = 0;
     }
 
-    devLog.veh(vehId).debug(
-      `[checkpoint] Created ${count} checkpoints, first: edge=${checkpoints[0]?.edge ?? 0} ratio=${checkpoints[0]?.ratio?.toFixed(3) ?? 0} flags=${checkpoints[0]?.flags ?? 0}`
-    );
   }
 
   private processSameEdgeCommand(

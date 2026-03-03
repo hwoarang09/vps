@@ -74,9 +74,8 @@ interface ShmSimulatorState {
 
   sendCommand: (payload: unknown, fabId?: string) => void;
   flushLogs: () => void;
-  downloadLogs: () => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
-  listLogFiles: () => Promise<import("@/logger/protocol").LogFileInfo[] | null>;
-  downloadLogFile: (fileName: string) => Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null>;
+  listLogFiles: () => Promise<import("@/logger/protocol").SimLogFileInfo[]>;
+  downloadLogFile: (fileName: string) => Promise<void>;
   deleteLogFile: (fileName: string) => Promise<void>;
   deleteAllLogFiles: () => Promise<number>;
   getLockTableData: (fabId: string) => Promise<import("@/shmSimulator/types").LockTableData | null>;
@@ -220,13 +219,11 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (controller && get().isInitialized) {
 
-      // Enable logging if not already enabled
-      if (!controller.isLoggingEnabled()) {
-        try {
-          await controller.enableLogging("OPFS");
-        } catch {
-          // OPFS logging not available - continue without logging
-        }
+      // Enable SimLogger (Worker 내부 OPFS 직접 쓰기)
+      try {
+        await controller.enableLogging();
+      } catch {
+        // OPFS logging not available - continue without logging
       }
 
       controller.start();
@@ -253,15 +250,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   resume: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
-
-      // Enable logging if not already enabled
-      if (!controller.isLoggingEnabled()) {
-        try {
-          await controller.enableLogging("OPFS");
-        } catch {
-          // OPFS logging not available - continue without logging
-        }
-      }
 
       controller.resume();
       set({ isRunning: true });
@@ -356,21 +344,15 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     }
   },
 
-  downloadLogs: async () => {
-    const { controller } = get();
-    if (!controller) return null;
-    return controller.downloadLogs();
-  },
-
   listLogFiles: async () => {
     const { controller } = get();
-    if (!controller) return null;
+    if (!controller) return [];
     return controller.listLogFiles();
   },
 
   downloadLogFile: async (fileName: string) => {
     const { controller } = get();
-    if (!controller) return null;
+    if (!controller) return;
     return controller.downloadLogFile(fileName);
   },
 

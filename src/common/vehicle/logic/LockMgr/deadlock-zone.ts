@@ -6,6 +6,7 @@ import {
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 import type { LockMgrState } from "./types";
+import { LockEventType } from "./types";
 
 /**
  * 차량이 deadlock zone 내부 edge에 있는지 확인
@@ -44,4 +45,10 @@ export function grantNextInQueue(
   }
 
   state.locks.set(nodeName, nextVeh);
+
+  // GRANT 이벤트 emit
+  if (state.onLockEvent && state.nodeNameToIndex) {
+    const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
+    state.onLockEvent(nextVeh, nodeIdx, LockEventType.GRANT, 0);
+  }
 }

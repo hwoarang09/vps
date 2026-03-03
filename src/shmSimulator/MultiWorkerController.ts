@@ -17,7 +17,7 @@ import { MemoryLayoutManager, FabMemoryConfig, MemoryLayout, WorkerAssignment, R
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
-import { LoggerController, type LoggerMode } from "@/logger";
+import { listSimLogFiles, downloadSimLogFile, deleteSimLogFile, clearAllSimLogs, type SimLogFileInfo } from "@/logger";
 
 /**
  * Fab 초기화 파라미터 (MultiWorkerController용)
@@ -101,8 +101,7 @@ export class MultiWorkerController {
   private isInitialized: boolean = false;
   private isRunning: boolean = false;
 
-  // Logger
-  private loggerController: LoggerController | null = null;
+  // SimLogger는 Worker 내부에서 OPFS 직접 쓰기 (Main→Worker MessagePort 불필요)
 
   // 콜백
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
@@ -460,13 +459,6 @@ export class MultiWorkerController {
   }
 
   async dispose(): Promise<void> {
-    // Logger 정리
-    if (this.loggerController) {
-      // Rule A.1: Remove useless assignment - totalRecords not used
-      await this.loggerController.close();
-      this.loggerController = null;
-    }
-
     if (this.workers.length === 0) {
       return;
     }
@@ -625,116 +617,61 @@ export class MultiWorkerController {
   }
 
   // =========================================================================
-  // Edge Transit Logging
+  // SimLogger (OPFS 직접 쓰기 - Worker에서 관리)
   // =========================================================================
 
   /**
-   * Enable edge transit logging
-   *
-   * @param mode - "OPFS" for local disk, "CLOUD" for remote upload
-   * @param sessionId - Optional session identifier for log files
+   * Enable logging - Worker에 Logger Port 전달
+   * SimLogger는 Worker 내부에서 OPFS에 직접 쓰기
    */
-  async enableLogging(mode: LoggerMode = "OPFS", sessionId?: string): Promise<void> {
-    if (this.loggerController) {
-      return;
-    }
-
-    this.loggerController = new LoggerController({
-      mode,
-      sessionId: sessionId ?? `sim_${Date.now()}`,
-      onReady: () => {},
-      onFlushed: (_count) => {},
-      onUploaded: (_url, _count) => {},
-      onClosed: (_total) => {},
-      onError: (_error) => {},
-    });
-
-    await this.loggerController.init();
-
-    // 각 워커에게 Logger port 전달
+  async enableLogging(): Promise<void> {
+    // 각 워커에게 Logger port 전달 (SimLogger 초기화 트리거)
     for (const workerInfo of this.workers) {
-      const port = this.loggerController.createPortForWorker();
+      const { port1, port2 } = new MessageChannel();
       const message: WorkerMessage = {
         type: "SET_LOGGER_PORT",
-        port,
+        port: port1,
         workerId: workerInfo.workerIndex,
       };
-      workerInfo.worker.postMessage(message, [port]);
+      workerInfo.worker.postMessage(message, [port1]);
+      port2.close();
     }
-
   }
 
   /**
-   * Flush all buffered logs
+   * Flush: SimLogger는 Worker dispose 시 자동 flush
    */
   flushLogs(): void {
-    if (!this.loggerController) {
-      return;
-    }
-    this.loggerController.flush();
+    // no-op: SimLogger flushes on dispose
   }
 
   /**
-   * Check if logging is enabled
+   * List all SimLogger .bin files from OPFS
    */
-  isLoggingEnabled(): boolean {
-    return this.loggerController !== null;
+  async listLogFiles(): Promise<SimLogFileInfo[]> {
+    return listSimLogFiles();
   }
 
   /**
-   * Download current log file
-   * Returns the log data directly from Logger Worker
+   * Download specific SimLogger .bin file
    */
-  async downloadLogs(): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
-    if (!this.loggerController) {
-      return null;
-    }
-
-    return this.loggerController.download();
+  async downloadLogFile(fileName: string): Promise<void> {
+    await downloadSimLogFile(fileName);
   }
 
   /**
-   * List all log files in OPFS
-   */
-  async listLogFiles(): Promise<import("@/logger/protocol").LogFileInfo[] | null> {
-    if (!this.loggerController) {
-      return null;
-    }
-
-    return this.loggerController.listFiles();
-  }
-
-  /**
-   * Download specific log file by name
-   */
-  async downloadLogFile(fileName: string): Promise<{ buffer: ArrayBuffer; fileName: string; recordCount: number } | null> {
-    if (!this.loggerController) {
-      return null;
-    }
-
-    return this.loggerController.downloadFile(fileName);
-  }
-
-  /**
-   * Delete specific log file by name
+   * Delete specific SimLogger .bin file
    */
   async deleteLogFile(fileName: string): Promise<void> {
-    if (!this.loggerController) {
-      return;
-    }
-
-    return this.loggerController.deleteFile(fileName);
+    await deleteSimLogFile(fileName);
   }
 
   /**
-   * Delete all log files
+   * Delete all SimLogger .bin files
    */
   async deleteAllLogFiles(): Promise<number> {
-    if (!this.loggerController) {
-      return 0;
-    }
-
-    return this.loggerController.deleteAllFiles();
+    const result = await clearAllSimLogs();
+    return result.deleted.length;
   }
 
   // =========================================================================
