@@ -10,6 +10,7 @@ const MenuLevel2: React.FC = () => {
   const {
     activeMainMenu, // Level 1 menu state
     activeSubMenu, // Level 2 menu state
+    activeMainMenuCenterX, // Lv1 button center X
     setActiveSubMenu, // Level 2 menu setter
     setActiveThirdMenu, // Level 3 menu setter
     setRightPanelOpen,
@@ -54,8 +55,19 @@ const MenuLevel2: React.FC = () => {
     }
   };
 
+  // Compute left position: center on Lv1 button, clamped to viewport
+  const positionStyle: React.CSSProperties = activeMainMenuCenterX != null
+    ? {
+        left: `clamp(120px, ${activeMainMenuCenterX}px, calc(100vw - 120px))`,
+        transform: "translateX(-50%)",
+      }
+    : {
+        left: "50%",
+        transform: "translateX(-50%)",
+      };
+
   return (
-    <div className="fixed bottom-[80px] left-0 right-0 z-50 flex justify-center">
+    <div className="fixed bottom-[80px] z-50" style={positionStyle}>
       <div className={menuContainerVariants({ level: 2 })}>
         {menuItems.map((item, index) => (
           <MenuButton

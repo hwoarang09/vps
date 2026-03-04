@@ -10,8 +10,11 @@ const MenuLevel1: React.FC = () => {
   const { activeMainMenu, setActiveMainMenu } = useMenuStore();
 
   const handleMenuClick = (menuId: MainMenuType) => {
+    // Calculate button center X for Lv2 positioning
+    const btn = document.querySelector(`[data-menu-id="${menuId}"]`);
+    const centerX = btn ? btn.getBoundingClientRect().left + btn.getBoundingClientRect().width / 2 : undefined;
     // Toggle menu if same menu is clicked, otherwise activate the clicked menu
-    setActiveMainMenu(activeMainMenu === menuId ? null : menuId);
+    setActiveMainMenu(activeMainMenu === menuId ? null : menuId, centerX);
   };
 
   // Calculate shortcut numbers for all menu items across groups

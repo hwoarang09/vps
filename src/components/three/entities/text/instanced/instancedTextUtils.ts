@@ -17,6 +17,13 @@ const _unitX = new THREE.Vector3(1, 0, 0);
 const _lodCheckPos = { x: 0, y: 0, z: 0 }; // LOD 체크용
 const _defaultVehicleLODMap = new Map<number, boolean>(); // Zero-GC: 기본 LOD 캐시
 
+// ============================================================================
+// Two-phase optimization state (module-level, zero-GC)
+// ============================================================================
+let _vehicleHiddenState: Uint8Array | null = null; // 0=unknown, 1=visible, 2=hidden
+let _visibleVehicles: Int32Array | null = null;
+let _dirtyMeshSet: Set<number> | null = null; // mesh indices that need GPU upload
+
 // Billboard rotation cache (차량 수만큼 미리 할당하지 않고, 프레임별로 재사용)
 let _cachedBillboardQuat: THREE.Quaternion | null = null;
 let _cachedBillboardRight: THREE.Vector3 | null = null;
@@ -533,4 +540,145 @@ export function updateVehicleTextTransforms(
   for (const msh of meshes) {
     if (msh) msh.instanceMatrix.needsUpdate = true;
   }
+}
+
+/**
+ * Two-phase optimized vehicle text transform update.
+ *
+ * Phase 1: Vehicle-level LOD check (numVehicles iterations, lightweight)
+ *   - Tracks hidden state per vehicle via Uint8Array
+ *   - Only applies HIDE_MATRIX for newly-culled vehicles (skip already-hidden)
+ *   - Collects visible vehicles into a compact array
+ *
+ * Phase 2: Character-level update (visible vehicles only)
+ *   - Only iterates characters of visible vehicles (~500-2000 × 8 = 4k-16k)
+ *
+ * Returns the set of dirty mesh indices (for selective needsUpdate).
+ */
+export function updateVehicleTextTransformsOptimized(
+  data: {
+    totalCharacters: number;
+    slotDigit: Int8Array;
+    slotIndex: Int32Array;
+    slotVehicle: Int32Array;
+    slotPosition: Int32Array;
+  },
+  vehicleData: Float32Array,
+  camera: THREE.Camera,
+  meshes: (THREE.InstancedMesh | null)[],
+  params: {
+    scale: number;
+    charSpacing: number;
+    halfLen: number;
+    zOffset: number;
+    lodDistSq: number;
+    numVehicles: number;
+    labelLength: number;
+  },
+  constants: {
+    VEHICLE_DATA_SIZE: number;
+    MovementData_X: number;
+    MovementData_Y: number;
+    MovementData_Z: number;
+  }
+): Set<number> {
+  const { totalCharacters, slotDigit, slotIndex, slotVehicle, slotPosition } = data;
+  const { scale, charSpacing, halfLen, zOffset, lodDistSq, numVehicles, labelLength } = params;
+  const { VEHICLE_DATA_SIZE, MovementData_X, MovementData_Y, MovementData_Z } = constants;
+  const lodDist = Math.sqrt(lodDistSq);
+
+  // Lazy-init module-level buffers (resize if numVehicles changed)
+  if (!_vehicleHiddenState || _vehicleHiddenState.length < numVehicles) {
+    _vehicleHiddenState = new Uint8Array(numVehicles); // 0 = unknown (first frame)
+  }
+  if (!_visibleVehicles || _visibleVehicles.length < numVehicles) {
+    _visibleVehicles = new Int32Array(numVehicles);
+  }
+  if (!_dirtyMeshSet) {
+    _dirtyMeshSet = new Set<number>();
+  }
+  _dirtyMeshSet.clear();
+
+  // Billboard rotation (once per frame)
+  _tempScale.set(scale, scale, 1);
+  updateBillboardRotation(camera.quaternion);
+  const billboardQuat = getBillboardQuaternion();
+  const billboardRight = getBillboardRight();
+
+  const camPos = camera.position;
+  let visibleCount = 0;
+
+  // ======== Phase 1: Vehicle-level LOD (numVehicles iterations) ========
+  for (let v = 0; v < numVehicles; v++) {
+    const off = v * VEHICLE_DATA_SIZE;
+    const vx = vehicleData[off + MovementData_X];
+    const vy = vehicleData[off + MovementData_Y];
+    const vz = vehicleData[off + MovementData_Z] + zOffset;
+
+    _lodCheckPos.x = vx;
+    _lodCheckPos.y = vy;
+    _lodCheckPos.z = vz;
+    const culled = checkLODCulling(_lodCheckPos, camPos, lodDist, lodDistSq);
+
+    const prevState = _vehicleHiddenState[v]; // 0=unknown, 1=visible, 2=hidden
+
+    if (culled) {
+      if (prevState !== 2) {
+        // Newly culled (or first frame) → apply HIDE_MATRIX for this vehicle's characters
+        const charStart = v * labelLength;
+        const charEnd = charStart + labelLength;
+        for (let i = charStart; i < charEnd && i < totalCharacters; i++) {
+          const d = slotDigit[i];
+          const slot = slotIndex[i];
+          const mesh = meshes[d];
+          if (mesh) {
+            mesh.setMatrixAt(slot, HIDE_MATRIX);
+            _dirtyMeshSet.add(d);
+          }
+        }
+        _vehicleHiddenState[v] = 2; // hidden
+      }
+      // Already hidden → skip (no matrix copy needed)
+    } else {
+      _visibleVehicles[visibleCount++] = v;
+      _vehicleHiddenState[v] = 1; // visible
+    }
+  }
+
+  // ======== Phase 2: Character-level update (visible vehicles only) ========
+  for (let vi = 0; vi < visibleCount; vi++) {
+    const v = _visibleVehicles[vi];
+    const off = v * VEHICLE_DATA_SIZE;
+    const vx = vehicleData[off + MovementData_X];
+    const vy = vehicleData[off + MovementData_Y];
+    const vz = vehicleData[off + MovementData_Z] + zOffset;
+
+    const charStart = v * labelLength;
+    const charEnd = charStart + labelLength;
+
+    for (let i = charStart; i < charEnd && i < totalCharacters; i++) {
+      const d = slotDigit[i];
+      const slot = slotIndex[i];
+      const posIdx = slotPosition[i];
+      const mesh = meshes[d];
+      if (!mesh) continue;
+
+      const offsetX = (posIdx - halfLen) * charSpacing;
+      _tempOffset.copy(billboardRight).multiplyScalar(offsetX);
+      _tempPos.set(vx, vy, vz).add(_tempOffset);
+      _tempMatrix.compose(_tempPos, billboardQuat, _tempScale);
+      mesh.setMatrixAt(slot, _tempMatrix);
+      _dirtyMeshSet.add(d);
+    }
+  }
+
+  return _dirtyMeshSet;
+}
+
+/**
+ * Reset vehicle hidden state tracking (call when numVehicles changes or on re-init)
+ */
+export function resetVehicleHiddenState(): void {
+  _vehicleHiddenState = null;
+  _visibleVehicles = null;
 }

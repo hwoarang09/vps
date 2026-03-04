@@ -8,6 +8,7 @@ export interface MenuState {
   activeSubMenu: string | null; // Level 2 menu (appears when lv1 is clicked)
   activeThirdMenu: string | null; // Level 3 menu (if needed)
   rightPanelOpen: boolean;
+  activeMainMenuCenterX: number | null; // Lv1 button center X for Lv2 positioning
 
   // Remember last selected lv2 menu for each lv1 menu
   lastSubMenuByMainMenu: Partial<Record<MainMenuType, string>>;
@@ -20,7 +21,7 @@ export interface MenuState {
 
   // Methods
   getCurrentTopLevel: () => number;
-  setActiveMainMenu: (menu: MainMenuType | null) => void;
+  setActiveMainMenu: (menu: MainMenuType | null, centerX?: number) => void;
   setActiveSubMenu: (menu: string | null) => void;
   setActiveThirdMenu: (menu: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
@@ -41,6 +42,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   activeSubMenu: null,
   activeThirdMenu: null,
   rightPanelOpen: false,
+  activeMainMenuCenterX: null,
 
   // Remember last selected lv2 menu for each lv1 menu
   lastSubMenuByMainMenu: {},
@@ -61,7 +63,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
 
   // Set main menu (bottom menu)
-  setActiveMainMenu: (menu: MainMenuType | null) => {
+  setActiveMainMenu: (menu: MainMenuType | null, centerX?: number) => {
     const { activeMainMenu, activeSubMenu, lastSubMenuByMainMenu } = get();
 
     // Save current lv2 selection before switching
@@ -72,6 +74,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
 
     set({
       activeMainMenu: menu,
+      activeMainMenuCenterX: centerX ?? null,
       // Reset sub menus when main menu changes
       activeSubMenu: null,
       activeThirdMenu: null,

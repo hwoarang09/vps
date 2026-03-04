@@ -7,8 +7,9 @@ import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { CHAR_COUNT } from "./useDigitMaterials";
 import {
   applyHighAltitudeCulling,
-  updateVehicleTextTransforms,
+  updateVehicleTextTransformsOptimized,
   buildVehicleSlotData,
+  resetVehicleHiddenState,
   SlotData
 } from "./instancedTextUtils";
 import { BaseInstancedText } from "./BaseInstancedText";
@@ -58,6 +59,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
   // 슬롯 데이터 계산 (Render Phase) - hooks는 항상 호출되어야 함
   const slotData = useMemo(() => {
     if (!isVisible) return null;
+    resetVehicleHiddenState(); // numVehicles 변경 시 hidden state 리셋
     return buildVehicleSlotData(numVehicles, LABEL_LENGTH);
   }, [numVehicles, isVisible]);
 
@@ -85,7 +87,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
     const charSpacing = 0.15 * scale;
     const halfLen = (LABEL_LENGTH - 1) / 2;
 
-    updateVehicleTextTransforms(
+    const dirtyMeshes = updateVehicleTextTransformsOptimized(
       D as Required<SlotData>,
       vehicleData,
       camera,
@@ -96,9 +98,17 @@ const VehicleTextRenderer: React.FC<Props> = ({
         halfLen,
         zOffset,
         lodDistSq: LOD_DIST_SQ,
+        numVehicles,
+        labelLength: LABEL_LENGTH,
       },
       isSharedMemory ? SHM_LAYOUT : ARRAY_LAYOUT
     );
+
+    // Only upload dirty meshes to GPU
+    for (const meshIdx of dirtyMeshes) {
+      const msh = instRefs.current[meshIdx];
+      if (msh) msh.instanceMatrix.needsUpdate = true;
+    }
   });
 
   // Early return AFTER all hooks have been called
