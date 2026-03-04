@@ -77,6 +77,8 @@ export interface LockMgrState {
   locks: Map<string, number>;
   queues: Map<string, number[]>;
   pendingReleases: Map<number, Array<{ nodeName: string; releaseEdgeIdx: number }>>;
+  /** 현재 WAIT 중인 차량 Set (중복 WAIT 이벤트 방지) */
+  waitingVehicles: Set<number>;
   /** Lock 이벤트 콜백 (SimLogger 연결용) */
   onLockEvent?: OnLockEventCallback;
   /** Node name → index (0-based) 맵 */

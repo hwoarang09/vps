@@ -36,6 +36,7 @@ export class LockMgr {
     locks: new Map<string, number>(),
     queues: new Map<string, number[]>(),
     pendingReleases: new Map<number, Array<{ nodeName: string; releaseEdgeIdx: number }>>(),
+    waitingVehicles: new Set<number>(),
   };
 
   /** 1-based edge index → edge name (e.g. "E_29") */
@@ -152,6 +153,7 @@ export class LockMgr {
     this.state.locks.clear();
     this.state.queues.clear();
     this.state.pendingReleases.clear();
+    this.state.waitingVehicles.clear();
   }
 
   /**

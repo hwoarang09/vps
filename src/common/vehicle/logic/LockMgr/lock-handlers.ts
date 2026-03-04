@@ -135,6 +135,7 @@ export function handleLockWait(
     if (iAmInZone && !holderInZone) {
       // holder의 lock 회수 → 나에게 grant (holder는 큐에 잔류)
       state.locks.set(nodeName, vehicleId);
+      state.waitingVehicles.delete(vehicleId);
       data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
       data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
       return true;
@@ -144,11 +145,16 @@ export function handleLockWait(
     data[ptr + MovementData.VELOCITY] = 0;
     data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
     data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
-    emitLockEvent(state, vehicleId, nodeName, LockEventType.WAIT);
+    // WAIT 이벤트는 최초 진입 시 1회만 emit
+    if (!state.waitingVehicles.has(vehicleId)) {
+      state.waitingVehicles.add(vehicleId);
+      emitLockEvent(state, vehicleId, nodeName, LockEventType.WAIT);
+    }
     return false;
   }
 
   // lock 비어있거나 내가 보유 → 통과
+  state.waitingVehicles.delete(vehicleId);
   data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
   data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
   return true;
