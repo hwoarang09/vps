@@ -74,30 +74,26 @@ export class SimLogger {
   // ML 이벤트
   // ============================================================================
 
-  logPickup(ts: number, vehId: number, nodeEdgeId: number, stationIdx: number, bayIdx: number): void {
-    const buf = this.eventBuffers.get(EventType.ML_PICKUP);
+  logOrderComplete(
+    orderId: number, vehId: number, destEdge: number,
+    moveToPickupTs: number, pickupArriveTs: number, pickupStartTs: number, pickupDoneTs: number,
+    moveToDropTs: number, dropArriveTs: number, dropStartTs: number, dropDoneTs: number,
+  ): void {
+    const buf = this.eventBuffers.get(EventType.ML_ORDER_COMPLETE);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
+    buf.view.setUint32(off + 0, orderId, true);
     buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setUint32(off + 8, nodeEdgeId, true);
-    buf.view.setUint16(off + 12, stationIdx, true);
-    buf.view.setUint8(off + 14, bayIdx);
-    buf.view.setUint8(off + 15, 0); // padding
-    this._increment(buf, EventType.ML_PICKUP);
-  }
-
-  logDropoff(ts: number, vehId: number, nodeEdgeId: number, stationIdx: number, bayIdx: number): void {
-    const buf = this.eventBuffers.get(EventType.ML_DROPOFF);
-    if (!buf) return;
-    const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
-    buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setUint32(off + 8, nodeEdgeId, true);
-    buf.view.setUint16(off + 12, stationIdx, true);
-    buf.view.setUint8(off + 14, bayIdx);
-    buf.view.setUint8(off + 15, 0); // padding
-    this._increment(buf, EventType.ML_DROPOFF);
+    buf.view.setUint32(off + 8, destEdge, true);
+    buf.view.setUint32(off + 12, moveToPickupTs, true);
+    buf.view.setUint32(off + 16, pickupArriveTs, true);
+    buf.view.setUint32(off + 20, pickupStartTs, true);
+    buf.view.setUint32(off + 24, pickupDoneTs, true);
+    buf.view.setUint32(off + 28, moveToDropTs, true);
+    buf.view.setUint32(off + 32, dropArriveTs, true);
+    buf.view.setUint32(off + 36, dropStartTs, true);
+    buf.view.setUint32(off + 40, dropDoneTs, true);
+    this._increment(buf, EventType.ML_ORDER_COMPLETE);
   }
 
   logEdgeTransit(ts: number, vehId: number, edgeId: number, enterTs: number, exitTs: number, edgeLen: number): void {

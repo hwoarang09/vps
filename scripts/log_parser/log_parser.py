@@ -33,20 +33,18 @@ except ImportError:
 # ==============================================================================
 
 EVENT_TYPES = {
-    1:  ('ML_PICKUP',       16, '<IIiHBx'),     # ts(u32) vehId(u32) nodeEdgeId(i32) stationIdx(u16) bayIdx(u8) pad(1)
-    2:  ('ML_DROPOFF',      16, '<IIiHBx'),     # ts(u32) vehId(u32) nodeEdgeId(i32) stationIdx(u16) bayIdx(u8) pad(1)
-    3:  ('ML_EDGE_TRANSIT', 24, '<IIIIIf'),     # ts(u32) vehId(u32) edgeId(u32) enterTs(u32) exitTs(u32) edgeLen(f32)
-    4:  ('ML_LOCK',         16, '<IIHBxI'),     # ts(u32) vehId(u32) nodeIdx(u16) eventType(u8) pad(1) waitMs(u32)
-    10: ('DEV_VEH_STATE',   44, '<II9f'),       # ts(u32) vehId(u32) x y z edge ratio speed movingStatus trafficState jobState
-    11: ('DEV_PATH',        16, '<IIII'),       # ts(u32) vehId(u32) destEdge(u32) pathLen(u32)
-    12: ('DEV_LOCK_DETAIL', 20, '<IIHBxII'),   # ts(u32) vehId(u32) nodeIdx(u16) type(u8) pad(1) holderVehId(u32) waitMs(u32)
-    13: ('DEV_TRANSFER',    16, '<IIII'),       # ts(u32) vehId(u32) fromEdge(u32) toEdge(u32)
-    14: ('DEV_EDGE_QUEUE',  16, '<IIIHBx'),    # ts(u32) edgeId(u32) vehId(u32) count(u16) type(u8) pad(1)
+    1:  ('ML_ORDER_COMPLETE', 44, '<III8I'),    # orderId(u32) vehId(u32) destEdge(u32) 8×timestamp(u32)
+    3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf'),   # ts(u32) vehId(u32) edgeId(u32) enterTs(u32) exitTs(u32) edgeLen(f32)
+    4:  ('ML_LOCK',           16, '<IIHBxI'),   # ts(u32) vehId(u32) nodeIdx(u16) eventType(u8) pad(1) waitMs(u32)
+    10: ('DEV_VEH_STATE',     44, '<II9f'),     # ts(u32) vehId(u32) x y z edge ratio speed movingStatus trafficState jobState
+    11: ('DEV_PATH',          16, '<IIII'),     # ts(u32) vehId(u32) destEdge(u32) pathLen(u32)
+    12: ('DEV_LOCK_DETAIL',   20, '<IIHBxII'), # ts(u32) vehId(u32) nodeIdx(u16) type(u8) pad(1) holderVehId(u32) waitMs(u32)
+    13: ('DEV_TRANSFER',      16, '<IIII'),     # ts(u32) vehId(u32) fromEdge(u32) toEdge(u32)
+    14: ('DEV_EDGE_QUEUE',    16, '<IIIHBx'),  # ts(u32) edgeId(u32) vehId(u32) count(u16) type(u8) pad(1)
 }
 
 FILE_SUFFIX_TO_TYPES = {
-    'pickup':       [1],
-    'dropoff':      [2],
+    'order':        [1],
     'edge_transit': [3],
     'lock':         [4],
     'veh_state':    [10],
@@ -57,8 +55,7 @@ FILE_SUFFIX_TO_TYPES = {
 }
 
 COLUMNS = {
-    1:  ['ts', 'veh_id', 'node_edge_id', 'station_idx', 'bay_idx'],
-    2:  ['ts', 'veh_id', 'node_edge_id', 'station_idx', 'bay_idx'],
+    1:  ['order_id', 'veh_id', 'dest_edge', 'move_to_pickup_ts', 'pickup_arrive_ts', 'pickup_start_ts', 'pickup_done_ts', 'move_to_drop_ts', 'drop_arrive_ts', 'drop_start_ts', 'drop_done_ts'],
     3:  ['ts', 'veh_id', 'edge_id', 'enter_ts', 'exit_ts', 'edge_len'],
     4:  ['ts', 'veh_id', 'node_idx', 'event_type', 'wait_ms'],
     10: ['ts', 'veh_id', 'x', 'y', 'z', 'edge', 'ratio', 'speed', 'moving_status', 'traffic_state', 'job_state'],

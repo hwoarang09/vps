@@ -7,8 +7,7 @@
 
 export enum EventType {
   // ML 이벤트 (통계용)
-  ML_PICKUP = 1,
-  ML_DROPOFF = 2,
+  ML_ORDER_COMPLETE = 1,
   ML_EDGE_TRANSIT = 3,
   ML_LOCK = 4,
   // Dev 이벤트 (디버그용)
@@ -24,8 +23,7 @@ export enum EventType {
 // ============================================================================
 
 /**
- * ML_PICKUP (16B): ts(4) vehId(4) nodeEdgeId(4) stationIdx(2) bayIdx(1) pad(1)
- * ML_DROPOFF (16B): 동일
+ * ML_ORDER_COMPLETE (44B): orderId(4) vehId(4) destEdge(4) moveToPickupTs(4) pickupArriveTs(4) pickupStartTs(4) pickupDoneTs(4) moveToDropTs(4) dropArriveTs(4) dropStartTs(4) dropDoneTs(4)
  * ML_EDGE_TRANSIT (24B): ts(4) vehId(4) edgeId(4) enterTs(4) exitTs(4) edgeLen(f32,4)
  * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) pad(1) waitMs(4)
  * DEV_VEH_STATE (44B): ts(4) vehId(4) x(f4) y(f4) z(f4) edge(f4) ratio(f4) speed(f4) movingStatus(f4) trafficState(f4) jobState(f4)
@@ -35,8 +33,7 @@ export enum EventType {
  * DEV_EDGE_QUEUE (16B): ts(4) edgeId(4) vehId(4) count(2) type(1) pad(1)
  */
 export const RECORD_SIZE: Record<EventType, number> = {
-  [EventType.ML_PICKUP]: 16,
-  [EventType.ML_DROPOFF]: 16,
+  [EventType.ML_ORDER_COMPLETE]: 44,
   [EventType.ML_EDGE_TRANSIT]: 24,
   [EventType.ML_LOCK]: 16,
   [EventType.DEV_VEH_STATE]: 44,
@@ -55,16 +52,14 @@ export const FLUSH_THRESHOLD = 512;
 
 /** ML 이벤트 타입 목록 */
 export const ML_EVENT_TYPES: EventType[] = [
-  EventType.ML_PICKUP,
-  EventType.ML_DROPOFF,
+  EventType.ML_ORDER_COMPLETE,
   EventType.ML_EDGE_TRANSIT,
   EventType.ML_LOCK,
 ];
 
 /** 전체 이벤트 타입 목록 (ML + Dev) */
 export const ALL_EVENT_TYPES: EventType[] = [
-  EventType.ML_PICKUP,
-  EventType.ML_DROPOFF,
+  EventType.ML_ORDER_COMPLETE,
   EventType.ML_EDGE_TRANSIT,
   EventType.ML_LOCK,
   EventType.DEV_VEH_STATE,
@@ -79,8 +74,7 @@ export const ALL_EVENT_TYPES: EventType[] = [
 // ============================================================================
 
 const EVENT_FILE_SUFFIX: Record<EventType, string> = {
-  [EventType.ML_PICKUP]: 'pickup',
-  [EventType.ML_DROPOFF]: 'dropoff',
+  [EventType.ML_ORDER_COMPLETE]: 'order',
   [EventType.ML_EDGE_TRANSIT]: 'edge_transit',
   [EventType.ML_LOCK]: 'lock',
   [EventType.DEV_VEH_STATE]: 'veh_state',

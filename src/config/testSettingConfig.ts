@@ -163,7 +163,7 @@ let testSettingConfig: TestSettingConfig = {
       }
     }
   ],
-  DEFAULT_SETTING: "SIMPLE_CONNECTED"
+  DEFAULT_SETTING: "Y_SHORT"
 };
 
 // Load config immediately

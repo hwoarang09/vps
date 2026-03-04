@@ -104,8 +104,7 @@ export async function clearAllSimLogs(): Promise<{ deleted: string[]; failed: st
 // ============================================================================
 
 const SUFFIX_RECORD_SIZE: Record<string, number> = {
-  pickup: 16,
-  dropoff: 16,
+  order: 44,
   edge_transit: 24,
   lock: 16,
   veh_state: 44,

@@ -2,7 +2,7 @@
 // Shared constants for vehicle data array structure
 
 /**
- * Vehicle Data Array Memory Layout (31 fields × 4 bytes = 124 bytes per vehicle)
+ * Vehicle Data Array Memory Layout (41 fields × 4 bytes = 164 bytes per vehicle)
  *
  * | Field              | Type    | Offset | Section    | Description                           |
  * |--------------------|---------|--------|------------|---------------------------------------|
@@ -212,4 +212,18 @@ export const LogicData = {
   CURRENT_CP_TARGET: _lPtr++,   // Current checkpoint targetEdge (1-based, 0 = none)
 } as const;
 
-export const VEHICLE_DATA_SIZE = _lPtr;
+let _oPtr = _lPtr;
+export const OrderData = {
+  ORDER_ID: _oPtr++,
+  ORDER_DEST_EDGE: _oPtr++,
+  MOVE_TO_PICKUP_TS: _oPtr++,
+  PICKUP_ARRIVE_TS: _oPtr++,
+  PICKUP_START_TS: _oPtr++,
+  PICKUP_DONE_TS: _oPtr++,
+  MOVE_TO_DROP_TS: _oPtr++,
+  DROP_ARRIVE_TS: _oPtr++,
+  DROP_START_TS: _oPtr++,
+  DROP_DONE_TS: _oPtr++,
+} as const;
+
+export const VEHICLE_DATA_SIZE = _oPtr;

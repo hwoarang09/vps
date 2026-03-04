@@ -100,6 +100,7 @@ export class MultiWorkerController {
   // 상태
   private isInitialized: boolean = false;
   private isRunning: boolean = false;
+  private _loggingEnabled: boolean = false;
 
   // SimLogger는 Worker 내부에서 OPFS 직접 쓰기 (Main→Worker MessagePort 불필요)
 
@@ -637,6 +638,11 @@ export class MultiWorkerController {
       workerInfo.worker.postMessage(message, [port1]);
       port2.close();
     }
+    this._loggingEnabled = true;
+  }
+
+  isLoggingEnabled(): boolean {
+    return this._loggingEnabled;
   }
 
   /**

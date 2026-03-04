@@ -178,12 +178,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         sharedMapData,
       });
 
-      // SimLogger 초기화 (Worker에서 OPFS 직접 쓰기)
-      try {
-        await controller.enableLogging();
-      } catch {
-        // OPFS logging not available - continue without logging
-      }
+      // SimLogger는 play(start) 시점에 초기화됨 (enableLogging은 start에서 호출)
 
       const fabVehicleCounts: Record<string, number> = {};
       for (const fabId of controller.getFabIds()) {
@@ -225,6 +220,14 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   start: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
+      // SimLogger 초기화 (최초 start 시 1회만)
+      if (!controller.isLoggingEnabled()) {
+        try {
+          await controller.enableLogging();
+        } catch {
+          // OPFS logging not available - continue without logging
+        }
+      }
       controller.start();
       set({ isRunning: true });
     }
