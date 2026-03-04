@@ -31,7 +31,14 @@ interface Props {
   readonly lodDistance?: number;
   readonly camHeightCutoff?: number;
   readonly fabOffsetRef?: React.MutableRefObject<{ x: number; y: number }>;
+  /** false면 billboard 회전 없이 바닥(XY평면)에 고정 */
+  readonly billboard?: boolean;
+  readonly opacity?: number;
 }
+
+// Flat 모드용 고정값 (XY 평면에 깔림, 글자는 X축 방향)
+const _flatQuaternion = new THREE.Quaternion(); // identity
+const _flatRight = new THREE.Vector3(1, 0, 0);
 
 export default function InstancedText({
   groups = [],
@@ -43,6 +50,8 @@ export default function InstancedText({
   lodDistance = 10,
   camHeightCutoff = 60,
   fabOffsetRef,
+  billboard = true,
+  opacity = 1,
 }: Props) {
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
   const prevGroupsLengthRef = React.useRef(0);
@@ -117,10 +126,17 @@ export default function InstancedText({
       return;
     }
 
-    // Update billboard rotation once per frame
-    updateBillboardRotation(camera.quaternion);
-    const quaternion = getBillboardQuaternion();
-    const right = getBillboardRight();
+    // Billboard vs Flat: 회전 계산
+    let quaternion: THREE.Quaternion;
+    let right: THREE.Vector3;
+    if (billboard) {
+      updateBillboardRotation(camera.quaternion);
+      quaternion = getBillboardQuaternion();
+      right = getBillboardRight();
+    } else {
+      quaternion = _flatQuaternion;
+      right = _flatRight;
+    }
 
     // Render visible groups
     renderVisibleGroups(
@@ -149,7 +165,9 @@ export default function InstancedText({
       color={color}
       bgColor={bgColor}
       font={font}
-      renderOrder={RENDER_ORDER_TEXT}
+      renderOrder={billboard ? RENDER_ORDER_TEXT : 0}
+      depthTest={!billboard}
+      opacity={opacity}
     />
   );
 }

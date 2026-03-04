@@ -25,6 +25,7 @@ import {
   Circle,
   GitBranch,
   MapPin,
+  Gauge,
 } from "lucide-react";
 import { ReactComponent as Curve180Icon } from "@/assets/icons/curve180.svg";
 import { ReactComponent as Curve90Icon } from "@/assets/icons/curve90.svg";
@@ -404,6 +405,73 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       iconFn: (isActive: boolean) => (
         <Cog
           size={36}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+  ],
+  Visualization: [
+    {
+      id: "vis-performance",
+      label: "Performance",
+      iconFn: (isActive: boolean) => (
+        <Gauge
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "vis-bay-label",
+      label: "Bay Label",
+      iconFn: (isActive: boolean) => (
+        <MapPin
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "vis-heatmap",
+      label: "Heatmap",
+      iconFn: (isActive: boolean) => (
+        <Waves
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "vis-traffic-flow",
+      label: "Traffic Flow",
+      iconFn: (isActive: boolean) => (
+        <TrendingUp
+          size={ICON_SIZE_LARGE}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+    {
+      id: "vis-deadlock-zone",
+      label: "Deadlock Zone",
+      iconFn: (isActive: boolean) => (
+        <Lock
+          size={ICON_SIZE_LARGE}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
             strokeWidth: 2,

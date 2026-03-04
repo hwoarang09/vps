@@ -10,6 +10,8 @@ export interface BaseInstancedTextProps {
   bgColor?: string;
   font?: string;
   renderOrder?: number;
+  depthTest?: boolean;
+  opacity?: number;
 }
 
 export const BaseInstancedText = React.memo(({
@@ -19,8 +21,10 @@ export const BaseInstancedText = React.memo(({
   bgColor = "transparent",
   font,
   renderOrder,
+  depthTest = false,
+  opacity = 1,
 }: BaseInstancedTextProps) => {
-  const digitMaterials = useDigitMaterials({ color, bgColor, font });
+  const digitMaterials = useDigitMaterials({ color, bgColor, font, depthTest, opacity });
   const quad = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
 
   // Cleanup quad geometry

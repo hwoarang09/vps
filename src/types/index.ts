@@ -36,6 +36,7 @@ export interface Edge {
   edge_name: string; // 엣지 이름 (고유 식별자)
   from_node: string; // 시작 노드 이름 (waypoints[0]과 같음)
   to_node: string; // 끝 노드 이름 (waypoints[-1]과 같음)
+  bay_name?: string; // Bay 그룹 이름 (from edges.cfg)
   waypoints: string[]; // 전체 경로 노드들 (from_node부터 to_node까지)
   vos_rail_type: EdgeType; // 레일 타입 (S, C90, C180 등)
   distance: number; // 거리
@@ -74,7 +75,8 @@ export type MainMenuType =
   | "DataPanel"
   | "MQTT"
   | "DevTools"
-  | "Search";
+  | "Search"
+  | "Visualization";
 
 
 

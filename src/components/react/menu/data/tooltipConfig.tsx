@@ -17,6 +17,7 @@ export const tooltipsByLevel: {
     LayoutBuilder: "레이아웃 편집기",
     DataPanel: "데이터 패널",
     MQTT: "MQTT 연결 관리",
+    Visualization: "시각화 옵션",
     DevTools: "개발자 도구",
   },
   2: {
@@ -58,6 +59,12 @@ export const tooltipsByLevel: {
     "layout-menu-3": "Equipment 생성기",
 
     "mqtt-connection": "MQTT 브로커 연결 관리",
+
+    "vis-performance": "성능 모니터 표시/숨기기",
+    "vis-bay-label": "Bay 라벨 표시/숨기기",
+    "vis-heatmap": "트래픽 히트맵",
+    "vis-traffic-flow": "트래픽 흐름 시각화",
+    "vis-deadlock-zone": "데드락 존 표시",
 
     "devtools-lock": "노드별 Lock 상태 확인",
 

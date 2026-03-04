@@ -6,6 +6,7 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useCameraStore } from "@/store/ui/cameraStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
+import { useVisualizationStore } from "@/store/ui/visualizationStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
@@ -152,6 +153,11 @@ const RightPanel: React.FC = () => {
       );
     }
 
+    // Visualization Performance Panel
+    if (activeSubMenu === "vis-performance") {
+      return <PerformanceTogglePanel />;
+    }
+
     // DevTools Lock Panel
     if (activeSubMenu === "devtools-lock") {
       return <LockInfoPanel />;
@@ -231,6 +237,12 @@ const RightPanel: React.FC = () => {
       "map-menu-3": "Junction Parts",
       "map-menu-4": "Special Components",
       "map-menu-5": "Connection Tools",
+      // Visualization
+      "vis-performance": "Performance Monitor",
+      "vis-bay-label": "Bay Label",
+      "vis-heatmap": "Heatmap",
+      "vis-traffic-flow": "Traffic Flow",
+      "vis-deadlock-zone": "Deadlock Zone",
       // DevTools
       "devtools-lock": "Lock Info",
       // Search
@@ -244,6 +256,7 @@ const RightPanel: React.FC = () => {
 
   // Get panel title based on active menu
   const getPanelTitle = () => {
+    if (activeSubMenu === "vis-performance") return "Performance Monitor";
     if (activeSubMenu === "devtools-lock") return "Lock Info";
     if (activeSubMenu === "search-vehicle") return "Vehicle Search";
     if (activeSubMenu === "search-edge") return "Edge Search";
@@ -282,6 +295,46 @@ const RightPanel: React.FC = () => {
       {/* 내용 */}
       <div className={panelContentVariants({ padding: "md" })}>
         {renderContent()}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Performance Monitor 토글 패널
+ */
+const PerformanceTogglePanel: React.FC = () => {
+  const { showPerfLeft, showPerfRight, togglePerfLeft, togglePerfRight } =
+    useVisualizationStore();
+
+  const toggleStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px 12px",
+    borderRadius: "6px",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    cursor: "pointer",
+    userSelect: "none",
+  };
+
+  const dotStyle = (on: boolean): React.CSSProperties => ({
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    backgroundColor: on ? "#4ecdc4" : "#555",
+    transition: "background-color 0.15s",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      <div style={toggleStyle} onClick={togglePerfLeft}>
+        <span className="text-sm text-gray-200">Main / Worker Stats (좌측 하단)</span>
+        <div style={dotStyle(showPerfLeft)} />
+      </div>
+      <div style={toggleStyle} onClick={togglePerfRight}>
+        <span className="text-sm text-gray-200">r3f-perf GPU Stats (우측 하단)</span>
+        <div style={dotStyle(showPerfRight)} />
       </div>
     </div>
   );

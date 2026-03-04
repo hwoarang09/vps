@@ -15,8 +15,11 @@ import VehicleSystem from "./entities/vehicle/VehicleSystem";
 import CameraController from "./scene/Camera/cameraController";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { PerformanceMonitorUI } from "./performance/PerformanceMonitor";
+import { useVisualizationStore } from "@store/ui/visualizationStore";
 
 const ThreeScene: React.FC = () => {
+  const showPerfLeft = useVisualizationStore((s) => s.showPerfLeft);
+  const showPerfRight = useVisualizationStore((s) => s.showPerfRight);
 
   return (
     <>
@@ -66,11 +69,11 @@ const ThreeScene: React.FC = () => {
         <VehicleSystemRenderer />
 
         {/* Development tools */}
-        <Perf position="bottom-right"  deepAnalyze={true}  />
+        {showPerfRight && <Perf position="bottom-right" deepAnalyze={true} />}
       </Canvas>
 
       {/* Performance Monitor - 5-second average CPU usage */}
-      <PerformanceMonitorUI />
+      {showPerfLeft && <PerformanceMonitorUI />}
     </>
   );
 };

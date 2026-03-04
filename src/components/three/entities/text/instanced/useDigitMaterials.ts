@@ -27,6 +27,8 @@ interface DigitMaterialsOptions {
   bgColor?: string;
   font?: string;
   size?: number;
+  depthTest?: boolean;
+  opacity?: number;
 }
 
 export function useDigitMaterials({
@@ -34,6 +36,8 @@ export function useDigitMaterials({
   bgColor = "transparent",
   font = "bold 96px system-ui, Roboto, Arial",
   size = 256,
+  depthTest = false,
+  opacity = 1,
 }: DigitMaterialsOptions = {}) {
   const materials = useMemo(() => {
     return ALL_CHARS.map(char => {
@@ -62,11 +66,12 @@ export function useDigitMaterials({
       return new THREE.MeshBasicMaterial({
         map: tex,
         transparent: true,
-        depthTest: false,
+        depthTest,
         depthWrite: false,
+        opacity,
       });
     });
-  }, [color, bgColor, font, size]);
+  }, [color, bgColor, font, size, depthTest, opacity]);
 
   // Cleanup materials and textures when component unmounts or deps change
   const ref = useRef(materials);

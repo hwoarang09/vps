@@ -8,6 +8,7 @@ import {
   Building,
   Wrench,
   Search,
+  Layers,
 } from "lucide-react";
 import {
   MenuLevel1Item,
@@ -129,7 +130,23 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       ),
     },
   ],
-  // Group 5: Debug
+  // Group 5: Visualization
+  [
+    {
+      id: "Visualization",
+      label: "Visualization",
+      iconFn: (isActive) => (
+        <Layers
+          size={ICON_SIZE_MEDIUM}
+          style={{
+            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
+            strokeWidth: 2,
+          }}
+        />
+      ),
+    },
+  ],
+  // Group 6: Debug
   [
     {
       id: "DataPanel",

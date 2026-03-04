@@ -4,6 +4,8 @@ import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, 
 import { getStationTextConfig } from "@/config/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";
+import { useEdgeStore } from "@store/map/edgeStore";
+import { useNodeStore } from "@store/map/nodeStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
 import { VehicleSystemType } from "@/types/vehicle";
@@ -142,6 +144,56 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     }));
   }, [useArrayData, stationTexts, stationTextsArray, updateTrigger]);
 
+  // Bay labels: edge.bay_name 기반 그룹핑 → fn/tn 좌표 평균 → centroid에 bay 이름 표시
+  const edges = useEdgeStore((s) => s.edges);
+  const nodes = useNodeStore((s) => s.nodes);
+
+  const bayGroups = useMemo((): TextGroup[] => {
+    if (edges.length === 0 || nodes.length === 0) return [];
+
+    const hasBayName = edges.some((e) => e.bay_name);
+    if (!hasBayName) return [];
+
+    // node name → position lookup
+    const nodeMap = new Map<string, { x: number; y: number }>();
+    for (const node of nodes) {
+      nodeMap.set(node.node_name, { x: node.editor_x, y: node.editor_y });
+    }
+
+    // edge.bay_name 기반 그룹핑
+    const bayNodePositions: Record<string, { x: number; y: number }[]> = {};
+    for (const edge of edges) {
+      if (!edge.bay_name) continue;
+      const key = edge.bay_name;
+      if (!bayNodePositions[key]) bayNodePositions[key] = [];
+      const fnPos = nodeMap.get(edge.from_node);
+      const tnPos = nodeMap.get(edge.to_node);
+      if (fnPos) bayNodePositions[key].push(fnPos);
+      if (tnPos) bayNodePositions[key].push(tnPos);
+    }
+
+    // 각 bay의 centroid 계산
+    const result: TextGroup[] = [];
+    for (const [bayName, positions] of Object.entries(bayNodePositions)) {
+      if (positions.length === 0) continue;
+      const avgX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+
+      // OUTER가 포함된 bay는 y를 최대값(맨 위)으로
+      const isOuter = /OUTER/i.test(bayName);
+      const y = isOuter
+        ? Math.max(...positions.map((p) => p.y))
+        : positions.reduce((s, p) => s + p.y, 0) / positions.length;
+
+      result.push({ x: avgX, y, z: 0.2, digits: textToDigits(bayName) });
+    }
+    return result;
+  }, [edges, nodes]);
+
+  const BAY_LABEL_SCALE = 5;
+  const BAY_LABEL_COLOR = "#ffffff";
+  const BAY_LOD_DISTANCE = 200;
+  const BAY_CAM_HEIGHT_CUTOFF = 500;
+
   return (
     <group name="map-text">
       {showNodeText && nodeGroups.length > 0 && (
@@ -152,6 +204,18 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       )}
       {showStationText && stationGroups.length > 0 && (
         <InstancedText groups={stationGroups} scale={scale} color={stationColor} fabOffsetRef={fabOffsetRef} />
+      )}
+      {bayGroups.length > 0 && (
+        <InstancedText
+          groups={bayGroups}
+          scale={BAY_LABEL_SCALE}
+          color={BAY_LABEL_COLOR}
+          lodDistance={BAY_LOD_DISTANCE}
+          camHeightCutoff={BAY_CAM_HEIGHT_CUTOFF}
+          fabOffsetRef={fabOffsetRef}
+          billboard={false}
+          opacity={0.7}
+        />
       )}
     </group>
   );

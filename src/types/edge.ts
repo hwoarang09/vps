@@ -14,6 +14,7 @@ export interface Edge {
   edge_name: string;      // Unique Identifier
   from_node: string;      // Start Node Name
   to_node: string;        // End Node Name
+  bay_name?: string;      // Bay group name (from edges.cfg)
   vos_rail_type: EdgeType;  // Rail Type (S, C90, etc.)
   distance: number;       // Length in meters
   waypoints: string[];    // Full path nodes

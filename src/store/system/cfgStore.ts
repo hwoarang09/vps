@@ -82,6 +82,7 @@ interface EdgeRow {
   waypoints?: string;
   axis?: string;
   waiting_offset?: string;
+  bay_name?: string;
 }
 
 interface VehicleRow {
@@ -258,6 +259,7 @@ const parseEdgesCFG = (content: string, nodes: Node[]): Edge[] => {
         rendering_mode: "normal",
         renderingPoints: renderingPoints,
         waiting_offset: waitingOffset,
+        bay_name: row.bay_name || undefined,
       };
 
       return edge;
