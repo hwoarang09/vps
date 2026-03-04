@@ -17,4 +17,5 @@ export {
   downloadSimLogFile,
   deleteSimLogFile,
   clearAllSimLogs,
+  extractSessionId,
 } from './simLogUtils';

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   listSimLogFiles,
   downloadSimLogFile,
   deleteSimLogFile,
   clearAllSimLogs,
+  extractSessionId,
   type SimLogFileInfo,
 } from "@/logger";
 
@@ -13,9 +14,16 @@ interface SimLogFileManagerProps {
   hideButton?: boolean;
 }
 
+interface SessionGroup {
+  sessionId: string;
+  files: SimLogFileInfo[];
+  totalSize: number;
+}
+
 const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle, hideButton = false }) => {
   const [files, setFiles] = useState<SimLogFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
 
   const loadFiles = useCallback(async () => {
     setIsLoading(true);
@@ -29,14 +37,41 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     }
   }, []);
 
+  // Group files by sessionId
+  const sessions = useMemo<SessionGroup[]>(() => {
+    const map = new Map<string, SimLogFileInfo[]>();
+    for (const file of files) {
+      const sid = extractSessionId(file.fileName) ?? "unknown";
+      if (!map.has(sid)) map.set(sid, []);
+      map.get(sid)!.push(file);
+    }
+    const groups: SessionGroup[] = [];
+    for (const [sessionId, sessionFiles] of map) {
+      groups.push({
+        sessionId,
+        files: sessionFiles,
+        totalSize: sessionFiles.reduce((s, f) => s + f.size, 0),
+      });
+    }
+    // newest first (sessionId contains timestamp)
+    groups.sort((a, b) => b.sessionId.localeCompare(a.sessionId));
+    return groups;
+  }, [files]);
+
+  // Auto-select first session
+  useEffect(() => {
+    if (sessions.length > 0 && (!selectedSession || !sessions.find(s => s.sessionId === selectedSession))) {
+      setSelectedSession(sessions[0].sessionId);
+    }
+    if (sessions.length === 0) setSelectedSession(null);
+  }, [sessions, selectedSession]);
+
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
 
   const handleToggle = async () => {
-    if (!isOpen) {
-      await loadFiles();
-    }
+    if (!isOpen) await loadFiles();
     onToggle();
   };
 
@@ -48,9 +83,16 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     }
   };
 
+  const handleDownloadSession = async () => {
+    const group = sessions.find(s => s.sessionId === selectedSession);
+    if (!group) return;
+    for (const file of group.files) {
+      await downloadSimLogFile(file.fileName);
+    }
+  };
+
   const handleDelete = async (file: SimLogFileInfo) => {
     if (!confirm(`Delete ${file.fileName}?`)) return;
-
     try {
       await deleteSimLogFile(file.fileName);
       await loadFiles();
@@ -59,10 +101,19 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     }
   };
 
+  const handleDeleteSession = async () => {
+    const group = sessions.find(s => s.sessionId === selectedSession);
+    if (!group) return;
+    if (!confirm(`Delete all ${group.files.length} files of this session?`)) return;
+    for (const file of group.files) {
+      try { await deleteSimLogFile(file.fileName); } catch { /* skip */ }
+    }
+    await loadFiles();
+  };
+
   const handleDeleteAll = async () => {
     if (files.length === 0) return;
-    if (!confirm(`Delete all ${files.length} SimLog files?`)) return;
-
+    if (!confirm(`Delete all ${files.length} SimLog files (${sessions.length} sessions)?`)) return;
     try {
       const result = await clearAllSimLogs();
       if (result.failed.length > 0) {
@@ -74,11 +125,25 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     }
   };
 
-  const formatFileSize = (bytes: number): string => {
+  const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   };
+
+  /** sessionId에서 짧은 표시명 생성 */
+  const shortLabel = (sid: string): string => {
+    // "sim_fab_0_0_1772566076417" → timestamp 부분 추출해서 시간으로 변환
+    const match = sid.match(/(\d{13})$/);
+    if (match) {
+      const d = new Date(Number(match[1]));
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    return sid.length > 20 ? `...${sid.slice(-20)}` : sid;
+  };
+
+  const currentGroup = sessions.find(s => s.sessionId === selectedSession);
 
   return (
     <div style={{ position: "relative" }}>
@@ -96,7 +161,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
             fontWeight: "bold",
           }}
         >
-          SimLogs({files.length})
+          SimLogs({sessions.length})
         </button>
       )}
 
@@ -109,8 +174,8 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
             background: "rgba(20, 20, 20, 0.98)",
             border: "2px solid #9b59b6",
             borderRadius: "8px",
-            minWidth: "400px",
-            maxWidth: "500px",
+            minWidth: "420px",
+            maxWidth: "520px",
             maxHeight: "500px",
             overflowY: "auto",
             zIndex: 2000,
@@ -165,14 +230,82 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
             </div>
           </div>
 
-          {/* File list */}
+          {/* Session selector */}
+          {sessions.length > 0 && (
+            <div
+              style={{
+                padding: "8px 15px",
+                borderBottom: "1px solid #444",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <select
+                value={selectedSession ?? ""}
+                onChange={(e) => setSelectedSession(e.target.value)}
+                style={{
+                  flex: 1,
+                  background: "#2a2a2a",
+                  color: "#ddd",
+                  border: "1px solid #666",
+                  borderRadius: "4px",
+                  padding: "4px 8px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                {sessions.map((s) => (
+                  <option key={s.sessionId} value={s.sessionId}>
+                    {shortLabel(s.sessionId)} ({s.files.length} files, {formatSize(s.totalSize)})
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleDownloadSession}
+                title="Download all files in this session"
+                style={{
+                  padding: "3px 8px",
+                  background: "#3498db",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "3px",
+                  fontSize: "10px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  flexShrink: 0,
+                }}
+              >
+                DL All
+              </button>
+              <button
+                onClick={handleDeleteSession}
+                title="Delete all files in this session"
+                style={{
+                  padding: "3px 8px",
+                  background: "#e74c3c",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "3px",
+                  fontSize: "10px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  flexShrink: 0,
+                }}
+              >
+                Del
+              </button>
+            </div>
+          )}
+
+          {/* File list for selected session */}
           <div style={{ padding: "5px" }}>
             {isLoading ? (
               <div style={{ padding: "20px", textAlign: "center", color: "#aaa" }}>Loading...</div>
-            ) : files.length === 0 ? (
+            ) : !currentGroup ? (
               <div style={{ padding: "20px", textAlign: "center", color: "#aaa" }}>No SimLog files</div>
             ) : (
-              files.map((file) => (
+              currentGroup.files.map((file) => (
                 <div
                   key={file.fileName}
                   style={{
@@ -193,15 +326,12 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
                         color: "#bb8fce",
                         fontWeight: "bold",
                         marginBottom: "2px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
                       }}
                     >
-                      {file.fileName}
+                      {file.eventType}
                     </div>
                     <div style={{ color: "#aaa", fontSize: "10px" }}>
-                      {file.eventType} | {formatFileSize(file.size)} | {file.recordCount.toLocaleString()} records
+                      {formatSize(file.size)} | {file.recordCount.toLocaleString()} records
                     </div>
                   </div>
                   <button

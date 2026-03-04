@@ -115,12 +115,25 @@ const SUFFIX_RECORD_SIZE: Record<string, number> = {
   edge_queue: 16,
 };
 
+const KNOWN_SUFFIXES = Object.keys(SUFFIX_RECORD_SIZE);
+
 function extractSuffix(fileName: string): string | null {
   // e.g., "session_123_edge_transit.bin" → "edge_transit"
   const stem = fileName.replace('.bin', '');
-  for (const suffix of Object.keys(SUFFIX_RECORD_SIZE)) {
+  for (const suffix of KNOWN_SUFFIXES) {
     if (stem.endsWith(`_${suffix}`)) {
       return suffix;
+    }
+  }
+  return null;
+}
+
+/** 파일명에서 sessionId 추출 */
+export function extractSessionId(fileName: string): string | null {
+  const stem = fileName.replace('.bin', '');
+  for (const suffix of KNOWN_SUFFIXES) {
+    if (stem.endsWith(`_${suffix}`)) {
+      return stem.slice(0, -(suffix.length + 1)); // remove "_suffix"
     }
   }
   return null;
