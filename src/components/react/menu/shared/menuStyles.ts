@@ -32,8 +32,8 @@ export const menuButtonVariants = cva(
         ],
       },
       size: {
-        small: "w-12 h-10 mx-1",
-        large: "w-12 h-12",
+        small: "w-14 h-14 mx-1",
+        large: "w-14 h-14",
       },
     },
     defaultVariants: {

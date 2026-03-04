@@ -1,182 +1,95 @@
 import {
-  TrainTrack,
-  ChartPie,
-  Car,
-  ShipWheel,
-  Folder,
-  Table,
-  Building,
-  Wrench,
-  Search,
-  Layers,
-} from "lucide-react";
-import {
   MenuLevel1Item,
-  ACTIVE_STROKE_COLOR,
-  INACTIVE_STROKE_COLOR,
-  ACTIVE_FILL_COLOR,
-  INACTIVE_FILL_COLOR,
   ICON_SIZE_MEDIUM,
 } from "../shared";
 
+// Shapez2-style PNG icons
+import imgMapLoader from "@/assets/icons/game/menu-blueprint.png";
+import imgStatistics from "@/assets/icons/game/menu-sim.png";
+import imgSearch from "@/assets/icons/game/sim-inspect.png";
+import imgVehicle from "@/assets/icons/game/menu-trains.png";
+import imgOperation from "@/assets/icons/game/menu-rotate.png";
+import imgMapBuilder from "@/assets/icons/game/menu-train-tracks.png";
+import imgLayoutBuilder from "@/assets/icons/game/menu-shapes.png";
+import imgVisualization from "@/assets/icons/game/shape-stack.png";
+import imgDataPanel from "@/assets/icons/game/special-label.png";
+import imgDevTools from "@/assets/icons/game/menu-elec.png";
+
+const PS = ICON_SIZE_MEDIUM + 6;
+
+const pngIcon = (src: string, size = PS) => (
+  <img src={src} alt="" width={size} height={size} style={{ imageRendering: "auto" }} draggable={false} />
+);
+
 // Group menu items by category
 export const menuLevel1Groups: MenuLevel1Item[][] = [
-  // Group 1: Map Loader
   [
     {
       id: "MapLoader",
       label: "MapLoader",
-      iconFn: (isActive) => (
-        <Folder
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgMapLoader),
     },
   ],
-  // Group 2: Statistics
   [
     {
       id: "Statistics",
       label: "Statistics",
-      iconFn: (isActive) => (
-        <ChartPie
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgStatistics),
     },
   ],
-  // Group 3: Search
   [
     {
       id: "Search",
       label: "Search",
       shortcutLabel: "f",
-      iconFn: (isActive) => (
-        <Search
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgSearch),
     },
   ],
-  // Group 4: Vehicle & Operation (previously Group 3)
   [
     {
       id: "Vehicle",
       label: "Vehicle",
       shortcutLabel: "v",
-      iconFn: (isActive) => (
-        <Car
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgVehicle),
     },
     {
       id: "Operation",
       label: "Operation",
-      iconFn: (isActive) => (
-        <ShipWheel
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 1.5,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgOperation),
     },
   ],
-  // Group 4: MapBuilder & LayoutBuilder
   [
     {
       id: "MapBuilder",
       label: "MapBuilder",
-      iconFn: (isActive) => (
-        <TrainTrack
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            fill: isActive ? ACTIVE_FILL_COLOR : INACTIVE_FILL_COLOR,
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 1.5,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgMapBuilder),
     },
     {
       id: "LayoutBuilder",
       label: "LayoutBuilder",
-      iconFn: (isActive) => (
-        <Building
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 1.5,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgLayoutBuilder),
     },
   ],
-  // Group 5: Visualization
   [
     {
       id: "Visualization",
       label: "Visualization",
-      iconFn: (isActive) => (
-        <Layers
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgVisualization),
     },
   ],
-  // Group 6: Debug
   [
     {
       id: "DataPanel",
       label: "DataPanel",
-      iconFn: (isActive) => (
-        <Table
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgDataPanel),
     },
   ],
-  // Group 6: DevTools
   [
     {
       id: "DevTools",
       label: "DevTools",
       shortcutLabel: "d",
-      iconFn: (isActive) => (
-        <Wrench
-          size={ICON_SIZE_MEDIUM}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      iconFn: () => pngIcon(imgDevTools),
     },
   ],
 ];

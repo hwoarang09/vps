@@ -67,7 +67,7 @@ const MenuLevel2: React.FC = () => {
       };
 
   return (
-    <div className="fixed bottom-[80px] z-50" style={positionStyle}>
+    <div className="fixed bottom-[90px] z-50" style={positionStyle}>
       <div className={menuContainerVariants({ level: 2 })}>
         {menuItems.map((item, index) => (
           <MenuButton

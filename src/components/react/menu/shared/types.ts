@@ -29,7 +29,7 @@ export const TOOLTIP_ARROW_BORDER_COLOR = "rgba(230,230,230, 0.99)";
 
 // Icon size constants
 export const ICON_SIZE_LARGE = 30; // Large icon for Level 2 menu
-export const ICON_SIZE_MEDIUM = 24; // Medium icon for Level 1 menu
+export const ICON_SIZE_MEDIUM = 32; // Medium icon for Level 1 menu
 export const ICON_SIZE_SMALL = 20; // Small icon
 
 
