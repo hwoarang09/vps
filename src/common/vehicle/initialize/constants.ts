@@ -2,7 +2,7 @@
 // Shared constants for vehicle data array structure
 
 /**
- * Vehicle Data Array Memory Layout (41 fields × 4 bytes = 164 bytes per vehicle)
+ * Vehicle Data Array Memory Layout (42 fields × 4 bytes = 168 bytes per vehicle)
  *
  * | Field              | Type    | Offset | Section    | Description                           |
  * |--------------------|---------|--------|------------|---------------------------------------|
@@ -225,6 +225,7 @@ export const OrderData = {
   DROP_ARRIVE_TS: _oPtr++,
   DROP_START_TS: _oPtr++,
   DROP_DONE_TS: _oPtr++,
+  HAS_FOUP: _oPtr++,
 } as const;
 
 export const VEHICLE_DATA_SIZE = _oPtr;

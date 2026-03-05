@@ -6,9 +6,11 @@ import type { Edge } from "@/types/edge";
 import {
   MovementData,
   SensorData,
+  LogicData,
   NextEdgeState,
   MovingStatus,
   PresetIndex,
+  JobState,
   VEHICLE_DATA_SIZE,
   TransferMode,
 } from "./constants";
@@ -97,6 +99,9 @@ export function initializeSingleVehicle(
 
   // Initialize Target Ratio (New)
   vehData[ptr + MovementData.TARGET_RATIO] = initialTargetRatio;
+
+  // Initialize JobState to IDLE (0=INITIALIZING is unused sentinel)
+  vehData[ptr + LogicData.JOB_STATE] = JobState.IDLE;
 
   // Initialize NextEdge State (5개 모두 0으로 초기화 - 0은 invalid sentinel)
   vehData[ptr + MovementData.NEXT_EDGE_0] = 0;

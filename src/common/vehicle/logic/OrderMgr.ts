@@ -267,7 +267,14 @@ export class OrderMgr {
     const orderState = this.activeOrders.get(vehId);
     if (!orderState) return false;
 
-    if (simulationTime - orderState.timerStartTime >= orderState.order.loadDurationSec) {
+    const loadElapsed = simulationTime - orderState.timerStartTime;
+
+    // 절반 지점에서 FOUP 탑재 (받침대 올라오면서 FOUP 등장)
+    if (loadElapsed >= orderState.order.loadDurationSec / 2) {
+      data[ptr + OrderData.HAS_FOUP] = 1;
+    }
+
+    if (loadElapsed >= orderState.order.loadDurationSec) {
       data[ptr + OrderData.PICKUP_DONE_TS] = simulationTime;
 
       // dropoff으로 경로 할당
@@ -315,7 +322,14 @@ export class OrderMgr {
     const orderState = this.activeOrders.get(vehId);
     if (!orderState) return false;
 
-    if (simulationTime - orderState.timerStartTime >= orderState.order.unloadDurationSec) {
+    const unloadElapsed = simulationTime - orderState.timerStartTime;
+
+    // 절반 지점에서 FOUP 제거 (받침대 내려놓고 올라옴)
+    if (unloadElapsed >= orderState.order.unloadDurationSec / 2) {
+      data[ptr + OrderData.HAS_FOUP] = 0;
+    }
+
+    if (unloadElapsed >= orderState.order.unloadDurationSec) {
       data[ptr + OrderData.DROP_DONE_TS] = simulationTime;
       this.onOrderComplete?.(vehId, orderState.order.orderId, simulationTime);
       this.activeOrders.delete(vehId);
@@ -384,6 +398,7 @@ export class OrderMgr {
     data[ptr + OrderData.DROP_ARRIVE_TS] = 0;
     data[ptr + OrderData.DROP_START_TS] = 0;
     data[ptr + OrderData.DROP_DONE_TS] = 0;
+    data[ptr + OrderData.HAS_FOUP] = 0;
 
     const orderState: VehicleOrderState = {
       order,

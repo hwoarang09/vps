@@ -27,7 +27,9 @@ const MAX_ASSIGNMENTS_PER_FRAME = 5;
 export class JobBatchMgr {
   private orderQueue: ExternalOrder[] = [];
   private readonly stationMap: Map<string, number> = new Map(); // name → edgeIndex (1-based)
+  private stationNames: string[] = []; // for random selection
   private nextOrderId = 1;
+  private autoGenerateEnabled = false;
 
   constructor(private readonly orderMgr: OrderMgr) {}
 
@@ -36,14 +38,24 @@ export class JobBatchMgr {
    */
   initStations(stationData: StationRawData[], edgeNameToIndex: Map<string, number>): void {
     this.stationMap.clear();
+    this.stationNames = [];
     for (const station of stationData) {
       if (station.nearest_edge) {
         const edgeIdx = edgeNameToIndex.get(station.nearest_edge);
         if (edgeIdx !== undefined) {
           this.stationMap.set(station.station_name, edgeIdx);
+          this.stationNames.push(station.station_name);
         }
       }
     }
+  }
+
+  setAutoGenerate(enabled: boolean): void {
+    this.autoGenerateEnabled = enabled;
+  }
+
+  getAutoGenerate(): boolean {
+    return this.autoGenerateEnabled;
   }
 
   /**
@@ -76,6 +88,11 @@ export class JobBatchMgr {
     transferMgr: TransferMgr,
     lockMgr?: LockMgr
   ): void {
+    // 자동 반송 생성: queue가 비고 autoGenerate가 켜져 있으면 랜덤 order 보충
+    if (this.autoGenerateEnabled && this.orderQueue.length === 0 && this.stationNames.length >= 2) {
+      this.generateRandomOrders(numVehicles);
+    }
+
     if (this.orderQueue.length === 0) return;
 
     const data = vehicleDataArray.getData();
@@ -152,6 +169,27 @@ export class JobBatchMgr {
     }
   }
 
+  /**
+   * 랜덤 pickup/dropoff station 쌍으로 order 생성
+   */
+  private generateRandomOrders(count: number): void {
+    const names = this.stationNames;
+    const numOrders = Math.min(count, MAX_ASSIGNMENTS_PER_FRAME);
+
+    for (let i = 0; i < numOrders; i++) {
+      const pickupIdx = Math.floor(Math.random() * names.length);
+      let dropoffIdx = Math.floor(Math.random() * (names.length - 1));
+      if (dropoffIdx >= pickupIdx) dropoffIdx++;
+
+      this.orderQueue.push({
+        pickupStation: names[pickupIdx],
+        dropoffStation: names[dropoffIdx],
+        loadDurationSec: 4,
+        unloadDurationSec: 4,
+      });
+    }
+  }
+
   getQueueLength(): number {
     return this.orderQueue.length;
   }
@@ -159,5 +197,6 @@ export class JobBatchMgr {
   dispose(): void {
     this.orderQueue = [];
     this.stationMap.clear();
+    this.stationNames = [];
   }
 }

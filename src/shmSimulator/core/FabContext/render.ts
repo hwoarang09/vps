@@ -4,6 +4,7 @@
 import { MovementData, VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 import { SENSOR_DATA_SIZE, SENSOR_POINT_SIZE, SensorPoint } from "@/common/vehicle/memory/SensorPointArrayBase";
 import { VEHICLE_RENDER_SIZE, SENSOR_ATTR_SIZE } from "../../MemoryLayoutManager";
+import { LogicData, JobState, OrderData } from "@/common/vehicle/initialize/constants";
 import type { SensorSectionOffsets } from "./types";
 
 /**
@@ -18,6 +19,60 @@ export interface WriteToRenderRegionContext {
   fabOffsetX: number;
   fabOffsetY: number;
   sectionOffsets: SensorSectionOffsets | null;
+  simulationTime: number;
+}
+
+/** 받침대(tray) 내려가는 최대 거리 */
+const TRAY_DROP_DISTANCE = 0.15;
+
+/**
+ * LOADING/UNLOADING 중 받침대 Z 오프셋 계산
+ * - 0~절반: lerp(0, -trayDrop)  (내려감)
+ * - 절반~끝: lerp(-trayDrop, 0) (올라옴)
+ */
+function computeTrayOffsetZ(
+  data: Float32Array,
+  workerPtr: number,
+  simulationTime: number
+): number {
+  const jobState = Math.trunc(data[workerPtr + LogicData.JOB_STATE]);
+
+  let startTs: number;
+  let duration: number;
+
+  if (jobState === JobState.LOADING) {
+    startTs = data[workerPtr + OrderData.PICKUP_START_TS];
+    // loadDurationSec is not in SHM, so compute from PICKUP_DONE_TS if available
+    // Instead, use a fixed 4sec default and let the animation clamp
+    const doneTs = data[workerPtr + OrderData.PICKUP_DONE_TS];
+    duration = doneTs > 0 ? doneTs - startTs : 4;
+  } else if (jobState === JobState.UNLOADING) {
+    startTs = data[workerPtr + OrderData.DROP_START_TS];
+    const doneTs = data[workerPtr + OrderData.DROP_DONE_TS];
+    duration = doneTs > 0 ? doneTs - startTs : 4;
+  } else {
+    return 0;
+  }
+
+  if (startTs <= 0 || duration <= 0) return 0;
+
+  const elapsed = simulationTime - startTs;
+  if (elapsed < 0) return 0;
+
+  const half = duration / 2;
+  let t: number;
+
+  if (elapsed < half) {
+    // 내려가는 구간
+    t = elapsed / half;
+    return -TRAY_DROP_DISTANCE * t;
+  } else if (elapsed < duration) {
+    // 올라오는 구간
+    t = (elapsed - half) / half;
+    return -TRAY_DROP_DISTANCE * (1 - t);
+  }
+
+  return 0;
 }
 
 /**
@@ -48,6 +103,7 @@ export function writeToRenderRegion(ctx: WriteToRenderRegionContext): void {
     fabOffsetX,
     fabOffsetY,
     sectionOffsets,
+    simulationTime,
   } = ctx;
   if (!vehicleRenderData || !sensorRenderData) {
     return;
@@ -64,6 +120,8 @@ export function writeToRenderRegion(ctx: WriteToRenderRegionContext): void {
     vehicleRenderData[renderPtr + 1] = workerVehicleData[workerPtr + MovementData.Y] + fabOffsetY;
     vehicleRenderData[renderPtr + 2] = workerVehicleData[workerPtr + MovementData.Z];
     vehicleRenderData[renderPtr + 3] = workerVehicleData[workerPtr + MovementData.ROTATION];
+    vehicleRenderData[renderPtr + 4] = workerVehicleData[workerPtr + OrderData.HAS_FOUP];
+    vehicleRenderData[renderPtr + 5] = computeTrayOffsetZ(workerVehicleData, workerPtr, simulationTime);
   }
 
   // === Sensor Render Data (섹션별 연속 레이아웃) ===

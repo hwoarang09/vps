@@ -4,7 +4,7 @@ import {
 } from "../shared";
 
 // Shapez2-style PNG icons
-import imgMapLoader from "@/assets/icons/game/menu-blueprint.png";
+import imgMapLoader from "@/assets/icons/game/menu-blueprint.svg";
 import imgStatistics from "@/assets/icons/game/menu-sim.png";
 import imgSearch from "@/assets/icons/game/sim-inspect.png";
 import imgVehicle from "@/assets/icons/game/menu-trains.png";

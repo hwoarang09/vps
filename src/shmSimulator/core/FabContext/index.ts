@@ -15,6 +15,7 @@ import { SimLogger } from "@/logger";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, FabRenderOffset } from "../../types";
+import { TransferMode } from "@/common/vehicle/initialize/constants";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import { buildVehicleLoopMap } from "./loop-mode";
 import { initializeFab, setupRenderBuffer } from "./initialization";
@@ -79,6 +80,9 @@ export class FabContext {
   // === Edge Enter Time Tracking (vehId → simulationTime) ===
   private readonly edgeEnterTimes: Map<number, number> = new Map();
 
+  // === Last simulation time (for render buffer) ===
+  private lastSimulationTime: number = 0;
+
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
     this.config = params.config;
@@ -136,6 +140,12 @@ export class FabContext {
       this.store,
       this.edges
     );
+
+    // AUTO_ROUTE 모드: order 모드 + 자동 반송 생성 활성화
+    if (params.transferMode === TransferMode.AUTO_ROUTE) {
+      this.orderMgr.setOrderModeEnabled(true);
+      this.jobBatchMgr.setAutoGenerate(true);
+    }
   }
 
   /**
@@ -194,6 +204,7 @@ export class FabContext {
    * 5. Write to Render Buffer - 렌더링 데이터
    */
   step(clampedDelta: number, simulationTime: number = 0): void {
+    this.lastSimulationTime = simulationTime;
     executeSimulationStep({
       clampedDelta,
       simulationTime,
@@ -247,6 +258,7 @@ export class FabContext {
       fabOffsetX: this.fabOffset.x,
       fabOffsetY: this.fabOffset.y,
       sectionOffsets: this.sectionOffsets,
+      simulationTime: this.lastSimulationTime,
     });
   }
 

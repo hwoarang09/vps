@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128">
+  <defs>
+    <linearGradient id="bookBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdab41"/>
+      <stop offset="100%" stop-color="#f27013"/>
+    </linearGradient>
+    <linearGradient id="markBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d1d1d1"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="18" y="12" width="60" height="76" rx="10" fill="url(#bookBg)" stroke="#23282d" stroke-width="6"/>
+
+  <circle cx="82" cy="22" r="4.5" fill="#363f46" stroke="#23282d" stroke-width="3"/>
+
+  <path d="M 45 12 L 45 46 L 54 36 L 63 46 L 63 12 Z" fill="url(#markBg)" stroke="#23282d" stroke-width="5" stroke-linejoin="round"/>
+
+  <path d="M 28 72 L 68 72 M 28 82 L 68 82" stroke="#23282d" stroke-width="5" stroke-linecap="round"/>
+</svg>

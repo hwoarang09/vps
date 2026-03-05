@@ -7,9 +7,9 @@ import { CHECKPOINT_SECTION_SIZE } from "@/common/vehicle/initialize/constants";
 import type { FabMemoryAssignment, FabRenderAssignment } from "./types";
 
 /**
- * 렌더링용 Vehicle 데이터 크기 (x, y, z, rotation)
+ * 렌더링용 Vehicle 데이터 크기 (x, y, z, rotation, hasFoup, trayOffsetZ)
  */
-export const VEHICLE_RENDER_SIZE = 4;
+export const VEHICLE_RENDER_SIZE = 6;
 
 /**
  * Path buffer 상수

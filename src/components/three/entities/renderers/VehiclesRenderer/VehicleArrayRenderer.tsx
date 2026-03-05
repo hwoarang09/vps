@@ -6,6 +6,8 @@ import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore"
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
+import { TrayRenderer } from "./TrayRenderer";
+import { FoupRenderer } from "./FoupRenderer";
 import { VehicleSystemType } from "@/types/vehicle";
 import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
@@ -162,9 +164,15 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const dataArr = instanceDataAttr.array as Float32Array;
 
     if (isSharedMemory) {
-      // SharedMemory 모드: 레이아웃이 동일 (4 floats per vehicle)
-      // for 루프 없이 한 번에 복사
-      dataArr.set(data.subarray(0, actualNumVehicles * VEHICLE_RENDER_SIZE));
+      // SharedMemory 모드: stride 6 → body에는 4 floats (x,y,z,rot) 추출
+      for (let i = 0; i < actualNumVehicles; i++) {
+        const src = i * VEHICLE_RENDER_SIZE; // stride 6
+        const dst = i * 4;
+        dataArr[dst]     = data[src];     // x
+        dataArr[dst + 1] = data[src + 1]; // y
+        dataArr[dst + 2] = data[src + 2]; // z
+        dataArr[dst + 3] = data[src + 3]; // rotation
+      }
     } else {
       // Array 모드: 22 floats per vehicle → 4 floats per vehicle 변환 필요
       for (let i = 0; i < actualNumVehicles; i++) {
@@ -207,6 +215,20 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         frustumCulled={false}
         onPointerDown={handleVehicleClick}
       />
+      {isSharedMemory && (
+        <>
+          <TrayRenderer
+            numVehicles={actualNumVehicles}
+            bodyLength={bodyLength}
+            bodyWidth={bodyWidth}
+            bodyHeight={bodyHeight}
+          />
+          <FoupRenderer
+            numVehicles={actualNumVehicles}
+            bodyHeight={bodyHeight}
+          />
+        </>
+      )}
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
     </>
   );
