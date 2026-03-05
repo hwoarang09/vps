@@ -170,11 +170,11 @@ export class OrderMgr {
       case JobState.CYCLE:
         return this.handleCycle(vehId, ptr, data, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, simulationTime, lockMgr);
       case JobState.MOVE_TO_LOAD:
-        return this.handleMoveToLoad(vehId, ptr, data, simulationTime);
+        return this.handleMoveToLoad(vehId, ptr, data, transferMgr, simulationTime);
       case JobState.LOADING:
         return this.handleLoading(vehId, ptr, data, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, simulationTime, lockMgr);
       case JobState.MOVE_TO_UNLOAD:
-        return this.handleMoveToUnload(vehId, ptr, data, simulationTime);
+        return this.handleMoveToUnload(vehId, ptr, data, transferMgr, simulationTime);
       case JobState.UNLOADING:
         return this.handleUnloading(vehId, ptr, data, simulationTime);
       default:
@@ -242,12 +242,12 @@ export class OrderMgr {
 
   private handleMoveToLoad(
     vehId: number, ptr: number, data: Float32Array,
-    simulationTime: number
+    transferMgr: TransferMgr, simulationTime: number
   ): boolean {
     const orderState = this.activeOrders.get(vehId);
     if (!orderState) return false;
 
-    if (data[ptr + MovementData.MOVING_STATUS] === MovingStatus.STOPPED) {
+    if (this.isVehicleArrived(vehId, data, ptr, transferMgr)) {
       // pickup 도착
       data[ptr + OrderData.PICKUP_ARRIVE_TS] = simulationTime;
       data[ptr + OrderData.PICKUP_START_TS] = simulationTime;
@@ -293,12 +293,12 @@ export class OrderMgr {
 
   private handleMoveToUnload(
     vehId: number, ptr: number, data: Float32Array,
-    simulationTime: number
+    transferMgr: TransferMgr, simulationTime: number
   ): boolean {
     const orderState = this.activeOrders.get(vehId);
     if (!orderState) return false;
 
-    if (data[ptr + MovementData.MOVING_STATUS] === MovingStatus.STOPPED) {
+    if (this.isVehicleArrived(vehId, data, ptr, transferMgr)) {
       data[ptr + OrderData.DROP_ARRIVE_TS] = simulationTime;
       data[ptr + OrderData.DROP_START_TS] = simulationTime;
       data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
