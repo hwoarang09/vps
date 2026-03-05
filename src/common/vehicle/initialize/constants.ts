@@ -64,11 +64,12 @@ export const TrafficState = {
 export const JobState = {
   INITIALIZING: 0,
   IDLE: 1,
-  MOVE_TO_LOAD: 2,
-  LOADING: 3,
-  MOVE_TO_UNLOAD: 4,
-  UNLOADING: 5,
-  ERROR: 6,
+  CYCLE: 2,
+  MOVE_TO_LOAD: 3,
+  LOADING: 4,
+  MOVE_TO_UNLOAD: 5,
+  UNLOADING: 6,
+  ERROR: 7,
 } as const;
 
 // Stop Reason Bitmask

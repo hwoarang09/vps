@@ -34,7 +34,10 @@ export interface InitializeFabContext {
     setEdgeData: (e: Edge[], m: Map<string, number>) => void;
     setLockMgr: (l: LockMgr) => void;
   };
-  autoMgr: {
+  orderMgr: {
+    initStations: (s: StationRawData[], m: Map<string, number>) => void;
+  };
+  jobBatchMgr?: {
     initStations: (s: StationRawData[], m: Map<string, number>) => void;
   };
   edgeNameToIndexMap: Map<string, number>;
@@ -48,7 +51,7 @@ export interface InitializeFabContext {
  * 1. Worker 버퍼 설정 (vehicle, sensor, path, checkpoint)
  * 2. 맵 데이터 설정 (edges, nodes)
  * 3. 차량 초기화 (initializeVehicles)
- * 4. 매니저 초기화 (lockMgr, dispatchMgr, autoMgr)
+ * 4. 매니저 초기화 (lockMgr, dispatchMgr, orderMgr)
  */
 export function initializeFab(ctx: InitializeFabContext): {
   edges: Edge[];
@@ -66,7 +69,8 @@ export function initializeFab(ctx: InitializeFabContext): {
     lockMgr,
     transferMgr,
     dispatchMgr,
-    autoMgr,
+    orderMgr,
+    jobBatchMgr,
     edgeNameToIndexMap,
     nodeNameToIndexMap,
   } = ctx;
@@ -181,7 +185,8 @@ export function initializeFab(ctx: InitializeFabContext): {
   // Station 데이터 초기화
   const stationData = params.sharedMapRef?.stations ?? params.stationData;
   if (stationData) {
-    autoMgr.initStations(stationData, result.edgeNameToIndex);
+    orderMgr.initStations(stationData, result.edgeNameToIndex);
+    jobBatchMgr?.initStations(stationData, result.edgeNameToIndex);
   }
 
   return {

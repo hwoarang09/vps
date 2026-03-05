@@ -6,8 +6,9 @@ import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBa
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
-import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
+import { OrderMgr } from "@/common/vehicle/logic/OrderMgr";
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
+import { JobBatchMgr } from "@/shmSimulator/managers/JobBatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
 import { EngineStore } from "../EngineStore";
 import { SimLogger } from "@/logger";
@@ -60,7 +61,8 @@ export class FabContext {
   private readonly transferMgr: TransferMgr;
   private readonly dispatchMgr: DispatchMgr;
   public readonly routingMgr: RoutingMgr;
-  private readonly autoMgr: AutoMgr;
+  private readonly orderMgr: OrderMgr;
+  private readonly jobBatchMgr: JobBatchMgr;
 
   // === Runtime ===
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
@@ -92,7 +94,8 @@ export class FabContext {
     this.transferMgr = new TransferMgr();
     this.dispatchMgr = new DispatchMgr(this.transferMgr);
     this.routingMgr = new RoutingMgr(this.dispatchMgr);
-    this.autoMgr = new AutoMgr();
+    this.orderMgr = new OrderMgr();
+    this.jobBatchMgr = new JobBatchMgr(this.orderMgr);
 
     this.init(params);
   }
@@ -109,7 +112,8 @@ export class FabContext {
       lockMgr: this.lockMgr,
       transferMgr: this.transferMgr,
       dispatchMgr: this.dispatchMgr,
-      autoMgr: this.autoMgr,
+      orderMgr: this.orderMgr,
+      jobBatchMgr: this.jobBatchMgr,
       edgeNameToIndexMap: this.edgeNameToIndex,
       nodeNameToIndexMap: this.nodeNameToIndex,
     });
@@ -204,7 +208,7 @@ export class FabContext {
       fabId: this.fabId,
       lockMgr: this.lockMgr,
       transferMgr: this.transferMgr,
-      autoMgr: this.autoMgr,
+      orderMgr: this.orderMgr,
       store: {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
         transferMode: this.store.transferMode,
@@ -215,7 +219,18 @@ export class FabContext {
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
     });
 
-    // 5. Write to Render Buffer (렌더링 데이터)
+    // 5. JobBatchMgr - 새 order 배차
+    this.jobBatchMgr.update(
+      this.actualNumVehicles,
+      simulationTime,
+      this.vehicleDataArray,
+      this.edges,
+      this.edgeNameToIndex,
+      this.transferMgr,
+      this.lockMgr
+    );
+
+    // 6. Write to Render Buffer (렌더링 데이터)
     this.writeToRenderRegion();
   }
 
@@ -236,7 +251,14 @@ export class FabContext {
   }
 
   handleCommand(command: unknown): void {
-    this.routingMgr.receiveMessage(command);
+    const cmd = command as { type?: string; payload?: unknown };
+    if (cmd.type === 'TRANSPORT_ORDER') {
+      this.jobBatchMgr.addOrder(cmd.payload as import("@/shmSimulator/managers/JobBatchMgr").ExternalOrder);
+    } else if (cmd.type === 'TRANSPORT_BATCH') {
+      this.jobBatchMgr.addOrders(cmd.payload as import("@/shmSimulator/managers/JobBatchMgr").ExternalOrder[]);
+    } else {
+      this.routingMgr.receiveMessage(command);
+    }
   }
 
   dispose(): void {
@@ -255,7 +277,8 @@ export class FabContext {
     this.lockMgr.reset();
     this.transferMgr.clearQueue();
     this.dispatchMgr.dispose();
-    this.autoMgr.dispose();
+    this.orderMgr.dispose();
+    this.jobBatchMgr.dispose();
 
     this.edges = [];
     this.nodes = [];

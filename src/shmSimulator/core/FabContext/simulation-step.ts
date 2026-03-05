@@ -10,7 +10,7 @@ import type { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointAr
 import type { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
-import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
+import type { OrderMgr } from "@/common/vehicle/logic/OrderMgr";
 import type { SimLogger } from "@/logger";
 
 /**
@@ -35,7 +35,7 @@ export interface SimulationStepContext {
   // Managers
   lockMgr: LockMgr;
   transferMgr: TransferMgr;
-  autoMgr: AutoMgr;
+  orderMgr: OrderMgr;
   // Store
   store: {
     moveVehicleToEdge: (vehId: number, edgeIndex: number) => void;
@@ -75,7 +75,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     fabId,
     lockMgr,
     transferMgr,
-    autoMgr,
+    orderMgr,
     store,
     simLogger,
     edgeEnterTimes,
@@ -167,17 +167,18 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
 
   // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
   if (simLogger && simLogger.isDevMode()) {
-    autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
+    orderMgr.onPathFound = (vehId, destEdge, pathLen) => {
       simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
     };
   }
-  autoMgr.update(
+  orderMgr.update(
     store.transferMode,
     actualNumVehicles,
     vehicleDataArray,
     edges,
     edgeNameToIndex,
     transferMgr,
+    simulationTime,
     lockMgr
   );
 }
