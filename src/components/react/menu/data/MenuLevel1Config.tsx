@@ -5,15 +5,15 @@ import {
 
 // Shapez2-style PNG icons
 import imgMapLoader from "@/assets/icons/game/menu-blueprint.svg";
-import imgStatistics from "@/assets/icons/game/menu-sim.png";
-import imgSearch from "@/assets/icons/game/sim-inspect.png";
-import imgVehicle from "@/assets/icons/game/menu-trains.png";
-import imgOperation from "@/assets/icons/game/menu-rotate.png";
-import imgMapBuilder from "@/assets/icons/game/menu-train-tracks.png";
-import imgLayoutBuilder from "@/assets/icons/game/menu-shapes.png";
+import imgStatistics from "@/assets/icons/game/menu-statistics.svg";
+import imgSearch from "@/assets/icons/game/sim-inspect.svg";
+import imgVehicle from "@/assets/icons/game/menu-locos.png";
+import imgOperation from "@/assets/icons/game/menu-routing.png";
+import imgMapBuilder from "@/assets/icons/game/menu-train-tracks.svg";
+import imgLayoutBuilder from "@/assets/icons/game/menu-space.png";
 import imgVisualization from "@/assets/icons/game/shape-stack.png";
 import imgDataPanel from "@/assets/icons/game/special-label.png";
-import imgDevTools from "@/assets/icons/game/menu-elec.png";
+import imgDevTools from "@/assets/icons/game/menu-logic.png";
 
 const PS = ICON_SIZE_MEDIUM + 6;
 
@@ -27,6 +27,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "MapLoader",
       label: "MapLoader",
+
       iconFn: () => pngIcon(imgMapLoader),
     },
   ],
@@ -34,6 +35,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "Statistics",
       label: "Statistics",
+
       iconFn: () => pngIcon(imgStatistics),
     },
   ],
@@ -42,6 +44,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       id: "Search",
       label: "Search",
       shortcutLabel: "f",
+
       iconFn: () => pngIcon(imgSearch),
     },
   ],
@@ -50,11 +53,13 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       id: "Vehicle",
       label: "Vehicle",
       shortcutLabel: "v",
+
       iconFn: () => pngIcon(imgVehicle),
     },
     {
       id: "Operation",
       label: "Operation",
+
       iconFn: () => pngIcon(imgOperation),
     },
   ],
@@ -62,11 +67,13 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "MapBuilder",
       label: "MapBuilder",
+
       iconFn: () => pngIcon(imgMapBuilder),
     },
     {
       id: "LayoutBuilder",
       label: "LayoutBuilder",
+
       iconFn: () => pngIcon(imgLayoutBuilder),
     },
   ],
@@ -74,6 +81,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "Visualization",
       label: "Visualization",
+
       iconFn: () => pngIcon(imgVisualization),
     },
   ],
@@ -81,6 +89,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "DataPanel",
       label: "DataPanel",
+
       iconFn: () => pngIcon(imgDataPanel),
     },
   ],
@@ -89,6 +98,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       id: "DevTools",
       label: "DevTools",
       shortcutLabel: "d",
+
       iconFn: () => pngIcon(imgDevTools),
     },
   ],

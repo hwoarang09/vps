@@ -8,27 +8,32 @@ import { twMerge } from "tailwind-merge";
  * - size: small (Level 1), large (Level 2)
  */
 export const menuButtonVariants = cva(
-  // base styles
+  // base: border-2 유지 (active 토글 시 레이아웃 점프 방지)
   [
     "flex flex-col items-center justify-center",
     "rounded-xl border-2",
-    "text-xs font-medium",
     "transition-all duration-100",
     "hover:animate-bump",
+    "relative",
   ],
   {
     variants: {
       active: {
-        true: [
-          "bg-menu-active-bg",
-          "border-menu-border-active",
-          "shadow-menu-glow",
-        ],
+        // 비활성: 기존 남색 배경 + 투명 테두리 + 미세 빛반사
         false: [
-          "bg-menu-inactive-bg",
+          "bg-[#262C3F]",
           "border-transparent",
-          "hover:border-white/40",
+          "shadow-btn-inactive",
+          "opacity-90",
+          "hover:opacity-100",
           "hover:shadow-menu-hover",
+        ],
+        // 활성: 하늘색 배경 + 네온 테두리 + 외부 glow
+        true: [
+          "bg-[rgba(94,197,255,0.85)]",
+          "border-menu-border-neon",
+          "shadow-btn-active",
+          "opacity-100",
         ],
       },
       size: {
@@ -38,7 +43,7 @@ export const menuButtonVariants = cva(
     },
     defaultVariants: {
       active: false,
-      size: "large",
+      size: "small",
     },
   }
 );
@@ -64,7 +69,7 @@ export const menuContainerVariants = cva(
           "shadow-menu-container-glow",
         ],
         2: [
-          "space-x-2 p-2",
+          "space-x-2 px-2 py-1",
           "bg-menu-container-bg-lv2",
           "border-menu-border-container-lv2",
           "opacity-95",
@@ -93,7 +98,7 @@ export const menuDividerClass = twMerge(
  * Bottom label text variants
  */
 export const bottomLabelVariants = cva(
-  "text-xs font-mono leading-none tracking-tight",
+  "text-[11px] font-mono leading-none tracking-tight",
   {
     variants: {
       active: {

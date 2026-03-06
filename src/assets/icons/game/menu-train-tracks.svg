@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="rail" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C8CCD2" />
+      <stop offset="50%" stop-color="#F0F2F5" />
+      <stop offset="100%" stop-color="#A0A5AD" />
+    </linearGradient>
+    <linearGradient id="tie1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7DD3FC" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+    <linearGradient id="tie2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0369A1" />
+    </linearGradient>
+    <linearGradient id="tieside" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0369A1" />
+      <stop offset="100%" stop-color="#075985" />
+    </linearGradient>
+  </defs>
+
+  <!-- Sleeper 4 (back/top, smallest) -->
+  <polygon points="72,52 128,52 134,60 126,68 74,68 66,60" fill="url(#tie1)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+  <polygon points="66,60 134,60 126,68 74,68" fill="url(#tie2)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Sleeper 3 -->
+  <polygon points="62,78 138,78 146,88 136,98 64,98 54,88" fill="url(#tie1)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+  <polygon points="54,88 146,88 136,98 64,98" fill="url(#tie2)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Sleeper 2 -->
+  <polygon points="50,106 150,106 160,118 148,130 52,130 40,118" fill="url(#tie1)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+  <polygon points="40,118 160,118 148,130 52,130" fill="url(#tie2)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Sleeper 1 (front/bottom, largest) -->
+  <polygon points="36,136 164,136 176,150 162,164 38,164 24,150" fill="url(#tie1)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+  <polygon points="24,150 176,150 162,164 38,164" fill="url(#tie2)" stroke="#1E3A5F" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Left rail -->
+  <polygon points="82,42 90,42 58,170 48,170" fill="url(#rail)" stroke="#2C3340" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- Right rail -->
+  <polygon points="112,42 120,42 152,170 142,170" fill="url(#rail)" stroke="#2C3340" stroke-width="3" stroke-linejoin="round"/>
+</svg>

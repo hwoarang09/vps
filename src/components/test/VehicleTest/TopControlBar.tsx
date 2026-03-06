@@ -1,16 +1,10 @@
 // components/test/VehicleTest/TopControlBar.tsx
-// Top control bar with MenuLevel1/2 style buttons and dropdowns
+// Top control bar with compact style buttons and dropdowns
 
 import React, { useState } from "react";
 import { twMerge } from "tailwind-merge";
 import {
-  Map,
-  Route,
-  Car,
-  Trash2,
-  Grid3X3,
   X,
-  Settings,
   Play,
   Pause,
   ChevronDown,
@@ -23,6 +17,23 @@ import {
 } from "@/components/react/menu/shared/menuStyles";
 import { TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
 import { TestSetting } from "@/config/testSettingConfig";
+
+// Shapez2-style PNG icons for TopControlBar
+import imgBlueprint from "@/assets/icons/game/menu-blueprint.svg";
+import imgRouting from "@/assets/icons/game/menu-routing.png";
+import imgTrains from "@/assets/icons/game/menu-trains.png";
+import imgTrash from "@/assets/icons/game/shape-trash.png";
+import imgSpace from "@/assets/icons/game/menu-space.png";
+import imgLogic from "@/assets/icons/game/menu-logic.png";
+
+const TPS = 18; // TopBar PNG icon size (compact)
+
+const tpngIcon = (src: string, size = TPS) => (
+  <img src={src} alt="" width={size} height={size} style={{ imageRendering: "auto" }} draggable={false} />
+);
+
+// Compact button style overrides for top bar
+const compactButtonClass = "h-9 w-auto px-2 min-w-[36px]";
 
 // Dropdown menu item style
 const dropdownItemClass = twMerge(
@@ -65,7 +76,8 @@ const DropdownButton: React.FC<DropdownButtonProps> = ({
       onMouseLeave={hideTooltip}
       className={twMerge(
         menuButtonVariants({ active: isOpen, size: "small" }),
-        "w-auto px-2 min-w-[48px] gap-1"
+        compactButtonClass,
+        "min-w-[48px] gap-1"
       )}
     >
       <div className={twMerge("flex items-center gap-1", isOpen ? "text-white" : accentColor)}>
@@ -124,7 +136,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
       disabled={disabled}
       className={twMerge(
         menuButtonVariants({ active: isActive, size: "small" }),
-        "w-auto px-2 min-w-[40px]",
+        compactButtonClass,
         disabled && "opacity-50 cursor-not-allowed"
       )}
     >
@@ -167,7 +179,7 @@ const NumberInput: React.FC<NumberInputProps> = ({
         "font-mono text-xs",
         "focus:outline-none focus:border-accent-cyan",
         "transition-colors",
-        "px-1 py-1",
+        "px-1 py-0.5 h-7",
         "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
         width,
         disabled && "opacity-50 cursor-not-allowed"
@@ -259,13 +271,13 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
       <div
         className={twMerge(
           menuContainerVariants({ level: 1 }),
-          "flex items-center gap-1 px-2"
+          "flex items-center gap-1 px-2 py-1"
         )}
       >
         {/* Map Selection Dropdown */}
         <div className="relative">
           <DropdownButton
-            icon={<Map size={14} />}
+            icon={tpngIcon(imgBlueprint)}
             label={selectedMapName}
             tooltip="Select Map"
             isOpen={activeDropdown === "map"}
@@ -277,7 +289,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
             <div
               className={twMerge(
                 menuContainerVariants({ level: 2 }),
-                "absolute top-16 left-0 min-w-[200px] flex-col z-50 overflow-hidden p-0 space-x-0"
+                "absolute top-12 left-0 min-w-[200px] flex-col z-50 overflow-hidden p-0 space-x-0"
               )}
             >
               {testSettings.map((setting) => (
@@ -289,7 +301,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
                     selectedSettingId === setting.id && dropdownActiveClass
                   )}
                 >
-                  {setting.name} ({setting.mapName})
+                  {setting.name}
                 </button>
               ))}
             </div>
@@ -301,7 +313,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         {/* Transfer Mode Dropdown */}
         <div className="relative">
           <DropdownButton
-            icon={<Route size={14} />}
+            icon={tpngIcon(imgRouting)}
             label={transferModeLabels[transferMode]}
             tooltip="Transfer Mode"
             isOpen={activeDropdown === "mode"}
@@ -313,7 +325,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
             <div
               className={twMerge(
                 menuContainerVariants({ level: 2 }),
-                "absolute top-16 left-0 min-w-[120px] flex-col z-50 overflow-hidden p-0 space-x-0"
+                "absolute top-12 left-0 min-w-[120px] flex-col z-50 overflow-hidden p-0 space-x-0"
               )}
             >
               {Object.entries(transferModeLabels).map(([mode, label]) => (
@@ -345,7 +357,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         </div>
 
         <ActionButton
-          icon={<Car size={14} />}
+          icon={tpngIcon(imgTrains)}
           tooltip="Create Vehicles"
           onClick={onCreateVehicles}
           menuId="create-vehicles"
@@ -353,7 +365,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         />
 
         <ActionButton
-          icon={<Trash2 size={14} />}
+          icon={tpngIcon(imgTrash)}
           tooltip="Delete All Vehicles"
           onClick={onDeleteVehicles}
           menuId="delete-vehicles"
@@ -385,7 +397,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         </div>
 
         <ActionButton
-          icon={<Grid3X3 size={14} />}
+          icon={tpngIcon(imgSpace)}
           tooltip="Create FAB Grid"
           onClick={onFabCreate}
           menuId="fab-create"
@@ -403,7 +415,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         />
 
         <ActionButton
-          icon={<Settings size={14} />}
+          icon={tpngIcon(imgLogic)}
           tooltip="Simulation Parameters"
           onClick={onOpenParams}
           menuId="sim-params"

@@ -38,10 +38,11 @@ const MenuLevel1: React.FC = () => {
                 isActive={isActive}
                 onClick={() => handleMenuClick(item.id)}
                 dataMenuId={item.id}
-                size="small" // Level 1 menu uses small size
-                buttonLevel={1} // Level 1 menu
-                tooltip={tooltipsByLevel[1][item.id as MainMenuType]} // Tooltip
-                bottomLabel={shortcutLabel} // Shortcut label display
+                size="small"
+                buttonLevel={1}
+                tooltip={tooltipsByLevel[1][item.id as MainMenuType]}
+                bottomLabel={shortcutLabel}
+                bgColor={item.bgColor}
               >
                 {item.iconFn(isActive)}
               </MenuButton>

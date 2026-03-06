@@ -5,6 +5,7 @@ export type MenuLevel1Item = {
   label: string;
   iconFn: (isActive: boolean) => JSX.Element;
   shortcutLabel?: string;
+  bgColor?: string;
 };
 
 export type MenuLevel2Item = {
@@ -12,6 +13,7 @@ export type MenuLevel2Item = {
   label: string;
   iconFn: (isActive: boolean) => JSX.Element;
   shortcutLabel?: string;
+  bgColor?: string;
 };
 
 // Common color constants
@@ -28,7 +30,7 @@ export const TOOLTIP_ARROW_BACKGROUND_COLOR = "rgba(85,90,98,0.99)";
 export const TOOLTIP_ARROW_BORDER_COLOR = "rgba(230,230,230, 0.99)";
 
 // Icon size constants
-export const ICON_SIZE_LARGE = 30; // Large icon for Level 2 menu
+export const ICON_SIZE_LARGE = 38; // Large icon for Level 2 menu
 export const ICON_SIZE_MEDIUM = 32; // Medium icon for Level 1 menu
 export const ICON_SIZE_SMALL = 20; // Small icon
 
