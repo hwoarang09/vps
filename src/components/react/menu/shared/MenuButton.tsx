@@ -14,6 +14,7 @@ interface MenuButtonProps {
   tooltip?: string;
   bottomLabel?: string;
   buttonLevel?: number;
+  bgColor?: string;
 }
 
 export const MenuButton: React.FC<MenuButtonProps> = ({
@@ -26,6 +27,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
   tooltip,
   bottomLabel,
   buttonLevel = 1,
+  bgColor,
 }) => {
   const { showTooltip, hideTooltip } = useMenuStore();
 
@@ -64,6 +66,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({
         onMouseLeave={handleMouseLeave}
         className={twMerge(
           menuButtonVariants({ active: isActive, size }),
+          bgColor,
           className
         )}
       >

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 4 194 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="silver" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F4F6F9" />
+      <stop offset="40%" stop-color="#D5D9E0" />
+      <stop offset="100%" stop-color="#9EA4AD" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD13B" />
+      <stop offset="100%" stop-color="#F97B22" />
+    </linearGradient>
+  </defs>
+
+  <path transform="translate(-15, -15) scale(1.2)"
+        d="M 118 104
+           L 145 131
+           L 131 145
+           L 104 118
+           A 52 52 0 1 1 118 104 Z
+           M 75 45
+           A 30 30 0 1 0 75 105
+           A 30 30 0 1 0 75 45 Z"
+        fill="url(#silver)"
+        stroke="#262C36"
+        stroke-width="6.67"
+        fill-rule="evenodd"
+        stroke-linejoin="round" />
+
+  <polygon transform="translate(39, 39) scale(0.75)"
+           points="175,105 115,165 145,165 125,205 195,145 165,145"
+           fill="url(#gold)"
+           stroke="#262C36"
+           stroke-width="8"
+           stroke-linejoin="round" />
+</svg>

@@ -15,8 +15,11 @@ module.exports = {
         bump: 'bump 300ms ease-out',
       },
       boxShadow: {
-        // Menu button glow
-        'menu-glow': '0 0 8px rgba(156,237,255,0.4), 0 0 7px rgba(156,237,255,0.4), inset 0 0 15px rgba(156,237,255,0.8)',
+        // Menu button: inactive (subtle drop shadow only)
+        'btn-inactive': '0 1px 3px rgba(0,0,0,0.2)',
+        // Menu button: active (neon cyan glow only)
+        'btn-active': '0 0 12px 2px rgba(94, 197, 255, 0.8)',
+        // Menu button: hover
         'menu-hover': '0 0 6px rgba(255,255,255,0.3), 0 0 4px rgba(255,255,255,0.2)',
         // Panel glow effects - 2 layer glow (inner strong + outer soft)
         // Layer 1: 테두리 근처 강한 glow (0-15px)
@@ -88,13 +91,11 @@ module.exports = {
       colors: {
         // Menu system colors
         menu: {
-          'active-bg': 'rgba(94, 197, 255, 0.85)',
-          'inactive-bg': '#262C3F',
-          'container-bg': '#353948',
-          'container-bg-lv2': '#464959',
-          'border-active': 'rgba(156, 237, 255, 1.0)',
+          'container-bg': 'rgba(53, 57, 72, 0.75)',
+          'container-bg-lv2': 'rgba(70, 73, 89, 0.78)',
           'border-container': '#778397',
           'border-container-lv2': '#889498',
+          'border-neon': 'rgba(94, 197, 255, 1.0)',
         },
         // Panel system colors (dark theme)
         panel: {

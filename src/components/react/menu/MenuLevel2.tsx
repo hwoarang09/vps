@@ -74,10 +74,11 @@ const MenuLevel2: React.FC = () => {
             key={item.id}
             isActive={activeSubMenu === item.id}
             onClick={() => handleLevel2MenuClick(item.id)}
-            size="large" // Level 2 menu uses large size
-            buttonLevel={2} // Level 2 menu
+            size="large"
+            buttonLevel={2}
             bottomLabel={item.shortcutLabel || (index + 1).toString()}
-            tooltip={tooltipsByLevel[2][item.id]} // Level 2 menu tooltip
+            tooltip={tooltipsByLevel[2][item.id]}
+            bgColor={item.bgColor}
           >
             {item.iconFn(activeSubMenu === item.id)}
           </MenuButton>
