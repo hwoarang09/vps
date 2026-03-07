@@ -10,7 +10,7 @@ export const tooltipsByLevel: {
     // 메인메뉴 레벨
     MapLoader: "맵 불러오기",
     Statistics: "통계 및 분석",
-    Search: "검색 (Vehicle, Node, Edge, Station)",
+    Search: "검색",
     Vehicle: "차량 관리",
     Operation: "운영 관리",
     MapBuilder: "도로 편집기",
