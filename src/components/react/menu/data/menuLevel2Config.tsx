@@ -23,6 +23,7 @@ import imgStationIn from "@/assets/icons/game/station-shape-in.png";
 import imgStationOut from "@/assets/icons/game/station-shape-out.png";
 import imgSim from "@/assets/icons/game/menu-sim.png";
 import imgElec from "@/assets/icons/game/menu-elec.png";
+import imgGauge from "@/assets/icons/game/icon-gauge.svg";
 import imgTrains from "@/assets/icons/game/menu-trains.png";
 import imgRouting from "@/assets/icons/game/menu-routing.png";
 import imgInspect from "@/assets/icons/game/sim-inspect.svg";
@@ -118,7 +119,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       id: "stats-menu-5",
       label: "Performance",
 
-      iconFn: () => pngIcon(imgElec),
+      iconFn: () => pngIcon(imgGauge),
     },
   ],
   Vehicle: [
