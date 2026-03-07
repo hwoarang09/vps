@@ -18,7 +18,7 @@ module.exports = {
         // Menu button: inactive (subtle drop shadow only)
         'btn-inactive': '0 1px 3px rgba(0,0,0,0.2)',
         // Menu button: active (neon cyan glow only)
-        'btn-active': '0 0 12px 2px rgba(94, 197, 255, 0.8)',
+        'btn-active': '0 0 12px 2px rgba(94, 197, 255, 0.8), inset 0 0 6px 1px rgba(160, 220, 255, 0.4)',
         // Menu button: hover
         'menu-hover': '0 0 6px rgba(255,255,255,0.3), 0 0 4px rgba(255,255,255,0.2)',
         // Panel glow effects - 2 layer glow (inner strong + outer soft)
@@ -95,7 +95,7 @@ module.exports = {
           'container-bg-lv2': 'rgba(70, 73, 89, 0.78)',
           'border-container': '#778397',
           'border-container-lv2': '#889498',
-          'border-neon': 'rgba(94, 197, 255, 1.0)',
+          'border-neon': 'rgba(150, 220, 255, 1.0)',
         },
         // Panel system colors (dark theme)
         panel: {

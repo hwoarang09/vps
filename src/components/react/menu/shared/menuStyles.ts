@@ -11,7 +11,7 @@ export const menuButtonVariants = cva(
   // base: border-2 유지 (active 토글 시 레이아웃 점프 방지)
   [
     "flex flex-col items-center justify-center",
-    "rounded-xl border-2",
+    "rounded-xl border-[3px]",
     "transition-all duration-100",
     "hover:animate-bump",
     "relative",
@@ -30,7 +30,7 @@ export const menuButtonVariants = cva(
         ],
         // 활성: 하늘색 배경 + 네온 테두리 + 외부 glow
         true: [
-          "bg-[rgba(94,197,255,0.85)]",
+          "bg-[radial-gradient(circle,rgba(60,150,220,0.75)_0%,rgba(94,197,255,0.9)_100%)]",
           "border-menu-border-neon",
           "shadow-btn-active",
           "opacity-100",
