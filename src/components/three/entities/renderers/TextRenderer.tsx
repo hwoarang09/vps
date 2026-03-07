@@ -1,5 +1,6 @@
 import React from "react";
-import { getMapRenderConfig, getVehicleRenderConfig } from "@/config/renderConfig";
+import { getMapRenderConfig, getVehicleRenderConfig } from "@/config/threejs/renderConfig";
+import { getTextVisibility } from "@/config/threejs/textConfig";
 import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
@@ -30,7 +31,8 @@ const TextRenderer: React.FC<Props> = (props) => {
   const shmActualNumVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
 
   const isSharedMemoryMode = testMode === VehicleSystemType.SharedMemory;
-  const showVehicleText = vehicleConfig.text.visible && shmActualNumVehicles > 0 && isTestActive && isSharedMemoryMode;
+  const textVis = getTextVisibility();
+  const showVehicleText = textVis.vehicle && vehicleConfig.text.visible && shmActualNumVehicles > 0 && isTestActive && isSharedMemoryMode;
 
   return (
     <group name="text-renderer">

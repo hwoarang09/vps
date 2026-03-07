@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
-import { getEdgeColors as getEdgeColorConfig, getEdgeConfig } from "@/config/renderConfig";
+import { getEdgeColors as getEdgeColorConfig, getEdgeConfig } from "@/config/threejs/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import * as THREE from "three";

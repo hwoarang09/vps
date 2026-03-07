@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
-import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "@/config/threejs/vehicleConfig";
 import { SensorDebugRenderer } from "./SensorDebugRenderer";
 import { TrayRenderer } from "./TrayRenderer";
 import { FoupRenderer } from "./FoupRenderer";

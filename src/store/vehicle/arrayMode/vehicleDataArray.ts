@@ -1,7 +1,7 @@
 // vehicleDataArray.ts
 // Vehicle state storage using Float32Array (single thread)
 
-import { getMaxVehicles } from "@/config/vehicleConfig";
+import { getMaxVehicles } from "@/config/threejs/vehicleConfig";
 import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBase";
 
 // Re-export constants for compatibility

@@ -13,9 +13,9 @@ import {
   getCurveMaxSpeed,
   getApproachMinSpeed,
   getBrakeMinSpeed,
-} from "@/config/simulationConfig";
-import { getWorkerCount } from "@/config/workerConfig";
-import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
+} from "@/config/worker/simulationConfig";
+import { getWorkerCount } from "@/config/log/logConfig";
+import { getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { createFabGridSeparated } from "@/utils/fab/fabUtils";
 

@@ -4,7 +4,7 @@ import {
   MqttConfig,
   loadMqttConfig,
   defaultMqttConfig,
-} from "@/config/mqttConfig";
+} from "@/config/mqtt/mqttConfig";
 import { handleMqttMessage } from "./mqtt/messageHandler";
 
 const MAX_LOGS = 100;

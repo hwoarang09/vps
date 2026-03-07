@@ -1,7 +1,8 @@
 import React, { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, getStationConfig } from "@/config/renderConfig";
-import { getStationTextConfig } from "@/config/stationConfig";
+import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, getStationConfig } from "@/config/threejs/renderConfig";
+import { getStationTextConfig } from "@/config/threejs/stationConfig";
+import { getTextVisibility } from "@/config/threejs/textConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";
 import { useEdgeStore } from "@store/map/edgeStore";
@@ -32,10 +33,12 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     stationColor = stationTextConfig.COLOR,
   } = props;
 
-  // Text visibility flags from config
-  const showNodeText = nodeConfig.text.visible;
-  const showEdgeText = edgeConfig.text.visible;
-  const showStationText = stationConfig.text.visible;
+  // Text visibility flags from textConfig (overrides renderConfig)
+  const textVis = getTextVisibility();
+  const showNodeText = textVis.node && nodeConfig.text.visible;
+  const showEdgeText = textVis.edge && edgeConfig.text.visible;
+  const showStationText = textVis.station && stationConfig.text.visible;
+  const showBayText = textVis.bay;
   const {
     nodeTexts, edgeTexts, stationTexts,
     nodeTextsArray, edgeTextsArray, stationTextsArray,
@@ -149,6 +152,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
   const nodes = useNodeStore((s) => s.nodes);
 
   const bayGroups = useMemo((): TextGroup[] => {
+    if (!showBayText) return [];
     if (edges.length === 0 || nodes.length === 0) return [];
 
     const hasBayName = edges.some((e) => e.bay_name);
@@ -205,7 +209,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       {showStationText && stationGroups.length > 0 && (
         <InstancedText groups={stationGroups} scale={scale} color={stationColor} fabOffsetRef={fabOffsetRef} />
       )}
-      {bayGroups.length > 0 && (
+      {showBayText && bayGroups.length > 0 && (
         <InstancedText
           groups={bayGroups}
           scale={BAY_LABEL_SCALE}
@@ -215,6 +219,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
           fabOffsetRef={fabOffsetRef}
           billboard={false}
           opacity={0.7}
+          isStatic
         />
       )}
     </group>

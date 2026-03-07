@@ -55,13 +55,16 @@ export const BaseInstancedText = React.memo(({
     });
   }, [digitMaterials, quad, data?.counts, renderOrder, instRefs]);
 
-  // 2. Count update logic
+  // 2. Count update logic - count가 0인 메쉬는 visible=false로 draw call 제거
   useEffect(() => {
     if (!data) return;
     for (let d = 0; d < CHAR_COUNT; d++) {
       const mesh = instRefs.current[d];
-      if (mesh && data.counts[d] > 0) {
-        mesh.count = data.counts[d];
+      if (!mesh) continue;
+      const cnt = data.counts[d];
+      mesh.count = cnt;
+      mesh.visible = cnt > 0;
+      if (cnt > 0) {
         mesh.instanceMatrix.needsUpdate = true;
       }
     }

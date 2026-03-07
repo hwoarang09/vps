@@ -10,7 +10,7 @@ import { useEdgeStore } from "@/store/map/edgeStore";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { useCFGStore } from "@/store/system/cfgStore";
-import { getVehicleConfigSync, waitForConfig, getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig, getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
 import {
   getMaxDelta,
   getApproachMinSpeed,
@@ -20,7 +20,7 @@ import {
   getCurveAcceleration,
   getLinearPreBrakeDeceleration,
   getSimulationConfig
-} from "@/config/simulationConfig";
+} from "@/config/worker/simulationConfig";
 import { initializeVehicles } from "./initializeVehicles";
 import { checkCollisions, type CollisionCheckContext } from "@/common/vehicle/collision/collisionCheck";
 import { updateMovement, type MovementUpdateContext, type MovementConfig } from "@/common/vehicle/movement/movementUpdate";

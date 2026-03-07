@@ -5,8 +5,8 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
 import { StationRawData } from "@/types/station";
-import type { GrantStrategy } from "@/config/simulationConfig";
-import { DeadlockZoneStrategy } from "@/config/simulationConfig";
+import type { GrantStrategy } from "@/config/worker/simulationConfig";
+import { DeadlockZoneStrategy } from "@/config/worker/simulationConfig";
 import type { SensorPreset } from "@/common/vehicle/collision/sensorPresets";
 
 // ============================================================================
@@ -387,4 +387,4 @@ export { TransferMode } from "@/common/vehicle/initialize/constants";
 export type { Edge } from "@/types/edge";
 export type { Node } from "@/types";
 export type { VehicleCommand } from "@/common/vehicle/logic/TransferMgr";
-export type { GrantStrategy } from "@/config/simulationConfig";
+export type { GrantStrategy } from "@/config/worker/simulationConfig";

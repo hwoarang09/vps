@@ -8,7 +8,7 @@
 // - SENDER: UI, Backend, etc. (the sender)
 // - SERVICE: MOVE, TRANSFER, STOP, etc. (from TOPICS constant)
 
-import { TOPICS } from "@/config/mqttConfig";
+import { TOPICS } from "@/config/mqtt/mqttConfig";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 type MqttStoreGetter = () => {

@@ -1,6 +1,6 @@
 // @types/edgeColors.ts
 import { EdgeType } from "@/types";
-import { getEdgeColors as getEdgeColorConfig } from "@/config/renderConfig";
+import { getEdgeColors as getEdgeColorConfig } from "@/config/threejs/renderConfig";
 
 // Helper to get colors (will use config defaults initially, can be updated if config loads)
 // Note: This might be called before config is fully loaded async, so it relies on sync default or sync access

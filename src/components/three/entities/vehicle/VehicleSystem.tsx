@@ -4,7 +4,7 @@ import VehicleArrayMode from "./vehicleArrayMode/vehicleArrayMode";
 import VehicleSharedMemoryMode from "./vehicleSharedMode/VehicleSharedMemoryMode";
 import VehiclesRenderer from "../renderers/VehiclesRenderer/VehiclesRenderer";
 import { VehicleSystemType } from '@/types/vehicle';
-import { getRapierModeConfig } from "@/config/visualizationConfig";
+import { getRapierModeConfig } from "@/config/threejs/visualizationConfig";
 import VehicleSelector from "../../interaction/VehicleSelector";
 
 /**

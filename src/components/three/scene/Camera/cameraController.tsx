@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { useCameraStore } from "@store/ui/cameraStore";
 import { useMenuStore } from "@store/ui/menuStore";
 import { OrbitControls } from 'three-stdlib';
-import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "@/config/cameraConfig";
+import { getBayBuilderCameraPosition, getBayBuilderCameraTarget } from "@/config/threejs/cameraConfig";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";

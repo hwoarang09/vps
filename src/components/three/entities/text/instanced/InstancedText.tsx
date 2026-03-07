@@ -34,6 +34,8 @@ interface Props {
   /** false면 billboard 회전 없이 바닥(XY평면)에 고정 */
   readonly billboard?: boolean;
   readonly opacity?: number;
+  /** true면 최초 1회만 행렬 계산 후 useFrame 스킵 (정적 텍스트용) */
+  readonly isStatic?: boolean;
 }
 
 // Flat 모드용 고정값 (XY 평면에 깔림, 글자는 X축 방향)
@@ -52,6 +54,7 @@ export default function InstancedText({
   fabOffsetRef,
   billboard = true,
   opacity = 1,
+  isStatic = false,
 }: Props) {
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
   const prevGroupsLengthRef = React.useRef(0);
@@ -84,8 +87,17 @@ export default function InstancedText({
   const visibleGroupsRef = useRef<number[]>([]);
   const prevVisibleSetRef = useRef<Set<number>>(new Set());
   const newlyCulledRef = useRef<number[]>([]);
+  const staticRenderedRef = useRef(false);
+
+  // static 모드: groups 변경 시 리셋
+  React.useEffect(() => {
+    staticRenderedRef.current = false;
+  }, [groups]);
 
   useFrame(({ camera }) => {
+    // static 모드: 이미 렌더링했으면 스킵
+    if (isStatic && staticRenderedRef.current) return;
+
     const D = slotData;
     if (!D || groups.length === 0 || !spatialGrid) return;
 
@@ -96,6 +108,22 @@ export default function InstancedText({
     const fabOffsetY = fabOffsetRef?.current.y ?? 0;
     const localCx = cx - fabOffsetX;
     const localCy = cy - fabOffsetY;
+
+    // Static 모드: 전체 그룹을 한 번에 렌더링 (LOD/culling 스킵)
+    if (isStatic) {
+      const quaternion = billboard ? (updateBillboardRotation(camera.quaternion), getBillboardQuaternion()) : _flatQuaternion;
+      const right = billboard ? getBillboardRight() : _flatRight;
+
+      const allGroups: number[] = [];
+      for (let i = 0; i < groups.length; i++) allGroups.push(i);
+
+      renderVisibleGroups(allGroups, groups, D, instRefs.current, {
+        scale, charSpacing: 0.2 * scale, zOffset, quaternion, right, fabOffsetX, fabOffsetY,
+      });
+      updateInstanceMatrices(instRefs.current);
+      staticRenderedRef.current = true;
+      return;
+    }
 
     // Early exit 1: Camera too high
     if (applyHighAltitudeCulling(cz, camHeightCutoff, D, instRefs.current)) {

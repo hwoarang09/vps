@@ -3,12 +3,12 @@
 // Uses shared initialization logic from common module
 
 import { edgeVehicleQueue } from "@/store/vehicle/arrayMode/edgeVehicleQueue";
-import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed, getLinearMaxSpeed } from "@/config/simulationConfig";
+import { getLinearAcceleration, getLinearDeceleration, getCurveMaxSpeed, getLinearMaxSpeed } from "@/config/worker/simulationConfig";
 import { calculateVehiclePlacements, createPlacementsFromVehicleConfigs, VehiclePlacement } from "@/utils/vehicle/vehiclePlacement";
 import { vehicleDataArray } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { updateSensorPoints } from "@/common/vehicle/helpers/sensorPoints";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
-import { getBodyLength, getBodyWidth } from "@/config/vehicleConfig";
+import { getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { JobState } from "@/common/vehicle/initialize/constants";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";

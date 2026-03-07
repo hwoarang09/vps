@@ -11,8 +11,8 @@ import { getEdgeColor } from "@/utils/colors/edgeColors";
 import { PointsCalculator } from "@/components/three/entities/edge/points_calculator";
 import { VehicleSystemType } from "@/types/vehicle";
 import * as THREE from "three";
-import { getMarkerConfig } from "@/config/renderConfig";
-import { getStationTextConfig } from "@/config/stationConfig";
+import { getMarkerConfig } from "@/config/threejs/renderConfig";
+import { getStationTextConfig } from "@/config/threejs/stationConfig";
 
 interface CFGStore {
   isLoading: boolean;

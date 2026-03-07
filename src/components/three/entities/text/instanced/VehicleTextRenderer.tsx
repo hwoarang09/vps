@@ -15,7 +15,7 @@ import {
 import { BaseInstancedText } from "./BaseInstancedText";
 import { VehicleSystemType } from "@/types/vehicle";
 import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
-import { getVehicleRenderConfig } from "@/config/renderConfig";
+import { getVehicleRenderConfig } from "@/config/threejs/renderConfig";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;

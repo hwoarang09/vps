@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useCFGStore } from "@/store/system/cfgStore";
 import { useMenuStore } from "@/store/ui/menuStore";
-import { getAvailableMapFolders } from "@/config/testSettingConfig";
+import { getAvailableMapFolders } from "@/config/react/testSettingConfig";
 
 /**
  * CFGLoader component - Handles CFG file loading with folder selection
