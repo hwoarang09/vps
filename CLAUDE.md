@@ -84,3 +84,9 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
 
 -   커맨드 파일 위치: `.claude/commands/`
 -   에이전트 설정 파일 위치: `.ai-agents/`
+
+## 8. Session Context (작업 이어받기)
+-   **`.context/context.md`**: 세션 간 작업 컨텍스트를 저장하는 파일
+-   새 세션 시작 시 **반드시 `.context/context.md`를 먼저 읽어서** 이전 작업 상태를 파악할 것
+-   사용자가 "context 저장해줘"라고 하면 현재 진행 중인 작업, 미완료 항목, 다음 작업 등을 `.context/context.md`에 기록
+-   완료된 작업은 정리하고, 진행 중/미완료 작업 위주로 유지

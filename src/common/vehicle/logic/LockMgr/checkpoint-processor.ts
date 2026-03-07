@@ -7,6 +7,7 @@ import {
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 import type { CheckpointState, LockMgrState } from "./types";
+import { checkpointConfig } from "@/config/worker/checkpointConfig";
 import {
   ensureCheckpointLoaded,
   checkCheckpointReached,
@@ -56,9 +57,8 @@ export function processCheckpoint(
   const data = state.vehicleDataArray;
   const ptr = vehicleId * VEHICLE_DATA_SIZE;
 
-  // Catch-up loop: 놓친 CP를 연속 처리 (최대 10개)
-  const MAX_CATCHUP = 10;
-  for (let attempt = 0; attempt < MAX_CATCHUP; attempt++) {
+  // Catch-up loop: 놓친 CP를 연속 처리
+  for (let attempt = 0; attempt < checkpointConfig.maxCatchupPerFrame; attempt++) {
     // 1. Checkpoint 로드
     const cpState = ensureCheckpointLoaded(vehicleId, state);
     if (!cpState) return; // 더 이상 checkpoint 없음

@@ -37,6 +37,7 @@ import type {
   LockWaitCheckpointParams,
 } from "./types";
 import { isCurveEdge, sortCheckpointsByPathOrder } from "./utils";
+import { checkpointConfig } from "@/config/worker/checkpointConfig";
 
 /**
  * edge의 시작점(from_node)이 merge node인지 확인
@@ -49,12 +50,12 @@ function checkEdgeStartFromMergeNode(
 }
 
 /**
- * 기본 옵션
+ * 기본 옵션 (checkpointConfig에서 로드)
  */
 const DEFAULT_OPTIONS: MergeCheckpointOptions = {
-  straightRequestDistance: 5.1,  // 직선 target 요청 거리 (meters)
-  curveRequestDistance: 1,       // 곡선 target 요청 거리 (meters)
-  releaseRatio: 0.01,            // Lock 해제 ratio
+  straightRequestDistance: checkpointConfig.straightRequestDistance,
+  curveRequestDistance: checkpointConfig.curveRequestDistance,
+  releaseRatio: checkpointConfig.releaseRatio,
 };
 
 /**
@@ -326,8 +327,7 @@ function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
     });
   } else {
     // 직선 합류: waiting_offset 거리 전에서 대기 (없으면 기본 1.89m)
-    const DEFAULT_WAITING_OFFSET = 1.89;
-    const waitingOffset = incomingEdge.waiting_offset ?? DEFAULT_WAITING_OFFSET;
+    const waitingOffset = incomingEdge.waiting_offset ?? checkpointConfig.defaultWaitingOffset;
     const waitPoint = findWaitPoint(
       targetIdx,
       path,

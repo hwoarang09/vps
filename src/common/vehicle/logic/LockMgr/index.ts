@@ -16,9 +16,7 @@ import { checkAutoRelease, requestLockInternal } from "./lock-handlers";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
 import { LogicData, MovementData, MovingStatus, StopReason, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
-
-/** merge 근처 비holder 차량 정지 거리 (m) */
-const PRELOCK_STOP_DISTANCE = 5.1;
+import { lockConfig } from "@/config/worker/lockConfig";
 
 /**
  * LockMgr - 단순한 락 시스템
@@ -242,7 +240,7 @@ export class LockMgr {
       if (vehId === holder) continue;
       const edge = edges[edgeIdx - 1];
       const distToMerge = (1 - ratio) * edge.distance;
-      if (distToMerge <= PRELOCK_STOP_DISTANCE) {
+      if (distToMerge <= lockConfig.prelockStopDistance) {
         const ptr = vehId * VEHICLE_DATA_SIZE;
         data[ptr + MovementData.VELOCITY] = 0;
         data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;

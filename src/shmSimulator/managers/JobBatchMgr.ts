@@ -11,6 +11,7 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr";
 import type { Edge } from "@/types/edge";
 import type { StationRawData } from "@/types/station";
 import { findShortestPath } from "@/common/vehicle/logic/Dijkstra";
+import { jobBatchConfig } from "@/config/worker/jobBatchConfig";
 
 /**
  * 외부에서 들어오는 반송 명령
@@ -21,8 +22,6 @@ export interface ExternalOrder {
   loadDurationSec?: number;
   unloadDurationSec?: number;
 }
-
-const MAX_ASSIGNMENTS_PER_FRAME = 5;
 
 export class JobBatchMgr {
   private orderQueue: ExternalOrder[] = [];
@@ -113,7 +112,7 @@ export class JobBatchMgr {
     if (availableVehicles.length === 0) return;
 
     let assignCount = 0;
-    while (this.orderQueue.length > 0 && assignCount < MAX_ASSIGNMENTS_PER_FRAME) {
+    while (this.orderQueue.length > 0 && assignCount < jobBatchConfig.maxAssignmentsPerFrame) {
       const extOrder = this.orderQueue[0];
 
       const pickupEdge = this.stationMap.get(extOrder.pickupStation);
@@ -174,7 +173,7 @@ export class JobBatchMgr {
    */
   private generateRandomOrders(count: number): void {
     const names = this.stationNames;
-    const numOrders = Math.min(count, MAX_ASSIGNMENTS_PER_FRAME);
+    const numOrders = Math.min(count, jobBatchConfig.maxAssignmentsPerFrame);
 
     for (let i = 0; i < numOrders; i++) {
       const pickupIdx = Math.floor(Math.random() * names.length);
@@ -184,8 +183,8 @@ export class JobBatchMgr {
       this.orderQueue.push({
         pickupStation: names[pickupIdx],
         dropoffStation: names[dropoffIdx],
-        loadDurationSec: 4,
-        unloadDurationSec: 4,
+        loadDurationSec: jobBatchConfig.defaultLoadDurationSec,
+        unloadDurationSec: jobBatchConfig.defaultUnloadDurationSec,
       });
     }
   }

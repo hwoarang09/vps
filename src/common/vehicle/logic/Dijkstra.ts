@@ -1,5 +1,6 @@
 // common/vehicle/logic/Dijkstra.ts
 import { Edge } from "@/types/edge";
+import { pathfindingConfig } from "@/config/worker/pathfindingConfig";
 
 interface PerformanceStats {
   count: number;
@@ -106,7 +107,6 @@ class MinHeap {
 // ============================================================
 // LRU Path Cache
 // ============================================================
-const PATH_CACHE_MAX_SIZE = 2000;
 const pathCache = new Map<string, number[] | null>();
 
 function getCacheKey(start: number, end: number): string {
@@ -128,7 +128,7 @@ function getCachedPath(start: number, end: number): number[] | null | undefined 
 function setCachedPath(start: number, end: number, path: number[] | null): void {
   const key = getCacheKey(start, end);
   // Evict oldest if at capacity
-  if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
+  if (pathCache.size >= pathfindingConfig.cacheMaxSize) {
     const firstKey = pathCache.keys().next().value;
     if (firstKey !== undefined) {
       pathCache.delete(firstKey);

@@ -13,14 +13,12 @@ import { findShortestPath } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
 import { LockMgr } from "./LockMgr";
+import { orderConfig } from "@/config/worker/orderConfig";
 
 interface StationTarget {
   name: string;
   edgeIndex: number;
 }
-
-// Maximum number of path findings per frame to prevent spikes
-const MAX_PATH_FINDS_PER_FRAME = 10;
 
 /** applyPathToVehicle Context */
 interface ApplyPathContext {
@@ -131,7 +129,7 @@ export class OrderMgr {
     const data = vehicleDataArray.getData();
 
     for (let i = 0; i < numVehicles; i++) {
-      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
+      if (this.pathFindCountThisFrame >= orderConfig.maxPathFindsPerFrame) break;
 
       const vehId = (startIndex + i) % numVehicles;
       const ptr = vehId * VEHICLE_DATA_SIZE;
@@ -450,9 +448,7 @@ export class OrderMgr {
       return false;
     }
 
-    const MAX_ATTEMPTS = 5;
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < orderConfig.maxStationAttempts; attempt++) {
       const candidate = this.stations[Math.floor(Math.random() * this.stations.length)];
 
       if (candidate.edgeIndex === currentEdgeIdx && this.stations.length > 1) {
@@ -526,7 +522,7 @@ export class OrderMgr {
 
       pathCommand.push({
         edgeId: edge.edge_name,
-        targetRatio: isLast ? 0.5 : undefined
+        targetRatio: isLast ? orderConfig.pathEndTargetRatio : undefined
       });
     }
 

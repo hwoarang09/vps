@@ -16,6 +16,7 @@ import {
   type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
 import { buildCheckpointsFromPath, logCheckpoints } from "../checkpoint";
+import { transferConfig } from "@/config/worker/transferConfig";
 import type {
   VehicleLoop,
   ProcessPathCommandContext,
@@ -833,13 +834,12 @@ export class TransferMgr {
     }
 
     // 2. 예약 경로 없으면 nextEdgeIndices 따라가기 (폴백)
-    const MAX_LOOKAHEAD = 10;
     let edge = currentEdge;
     let accumulatedDistance = remainingDistance;
     const visited = new Set<string>();
     visited.add(edge.edge_name);
 
-    for (let i = 0; i < MAX_LOOKAHEAD; i++) {
+    for (let i = 0; i < transferConfig.maxLookahead; i++) {
       if (!edge.nextEdgeIndices || edge.nextEdgeIndices.length === 0) {
         break;
       }
@@ -941,13 +941,12 @@ export class TransferMgr {
     }
 
     // 2. 예약 경로 없으면 nextEdgeIndices 따라가기
-    const MAX_LOOKAHEAD = 10;
     let edge = currentEdge;
     let accumulatedDistance = remainingDistance;
     const visited = new Set<string>();
     visited.add(edge.edge_name);
 
-    for (let i = 0; i < MAX_LOOKAHEAD; i++) {
+    for (let i = 0; i < transferConfig.maxLookahead; i++) {
       const nextEdge = this.validateAndGetNextEdge(edge, edgeArray, visited);
       if (!nextEdge) break;
 
