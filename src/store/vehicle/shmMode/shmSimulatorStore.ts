@@ -39,6 +39,7 @@ interface ShmSimulatorState {
     config?: Partial<SimulationConfig>;
     transferMode?: TransferMode;
     stations: ReadonlyArray<unknown>;
+    bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
     fabId?: string;
   }) => Promise<void>;
 
@@ -108,6 +109,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       vehicleConfigs = [],
       config = {},
       transferMode = TransferMode.RANDOM,
+      bayLoopEntries,
       fabId = DEFAULT_FAB_ID,
     } = params;
 
@@ -120,6 +122,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         vehicleConfigs,
         transferMode,
         stations,
+        bayLoopEntries,
       }],
       config,
     });

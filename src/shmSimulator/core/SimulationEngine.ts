@@ -97,6 +97,7 @@ export class SimulationEngine {
           numVehicles: fabData.numVehicles,
           transferMode: fabData.transferMode,
           memoryAssignment: fabData.memoryAssignment,
+          bayLoopEntries: fabData.bayLoopEntries,
         };
 
       } else {
@@ -115,6 +116,7 @@ export class SimulationEngine {
           numVehicles: fabData.numVehicles,
           transferMode: fabData.transferMode,
           memoryAssignment: fabData.memoryAssignment,
+          bayLoopEntries: fabData.bayLoopEntries,
         };
       }
 
@@ -219,6 +221,7 @@ export class SimulationEngine {
       transferMode: fabData.transferMode,
       stationData: fabData.stationData ?? [],
       memoryAssignment: fabData.memoryAssignment,
+      bayLoopEntries: fabData.bayLoopEntries,
     };
 
     const context = new FabContext(params);

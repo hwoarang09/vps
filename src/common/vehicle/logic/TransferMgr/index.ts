@@ -381,7 +381,10 @@ export class TransferMgr {
       // MQTT_CONTROL or AUTO_ROUTE - both use reserved paths/commands
       return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, currentEdge.edge_name);
     } else if (mode === TransferMode.LOOP) {
-      // LOOP
+      // LOOP (bay 순환) - checkpoint/command 기반 (AUTO_ROUTE와 동일)
+      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, currentEdge.edge_name);
+    } else if (mode === TransferMode.SIMPLE_LOOP) {
+      // SIMPLE_LOOP (기존 nextEdgeIndices[0] 추적)
       return this.getNextEdgeFromLoop(
         currentEdge,
         vehicleIndex,
@@ -1049,6 +1052,7 @@ export class TransferMgr {
 
 export type {
   VehicleLoop,
+  VehicleBayLoop,
   ProcessPathCommandContext,
   ILockMgrForNextEdge,
   FillNextEdgesContext,

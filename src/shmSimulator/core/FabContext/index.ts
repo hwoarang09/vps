@@ -5,7 +5,7 @@ import { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataArrayBa
 import { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
 import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
-import { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
+import { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
@@ -15,7 +15,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { SimulationConfig, FabRenderOffset } from "../../types";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
-import { buildVehicleLoopMap } from "./loop-mode";
+import { buildVehicleLoopMap, buildVehicleBayLoopMap } from "./loop-mode";
 import { initializeFab, setupRenderBuffer } from "./initialization";
 import { setupLoggerPort } from "./logger-setup";
 import { writeToRenderRegion } from "./render";
@@ -64,6 +64,7 @@ export class FabContext {
 
   // === Runtime ===
   private readonly vehicleLoopMap: Map<number, VehicleLoop> = new Map();
+  private readonly vehicleBayLoopMap: Map<number, VehicleBayLoop> = new Map();
   private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
 
@@ -125,13 +126,25 @@ export class FabContext {
       this.fabOffset = params.fabOffset ?? { x: 0, y: 0 };
     }
 
-    // LOOP 모드: 차량별 순환 경로 구축
+    // SIMPLE_LOOP 모드: 차량별 순환 경로 구축
     buildVehicleLoopMap(
       this.vehicleLoopMap,
       this.actualNumVehicles,
       this.store,
       this.edges
     );
+
+    // LOOP 모드: bay 기반 차량별 순환 경로 구축
+    if (params.bayLoopEntries && params.bayLoopEntries.length > 0) {
+      buildVehicleBayLoopMap(
+        this.vehicleBayLoopMap,
+        this.actualNumVehicles,
+        this.store,
+        this.edges,
+        this.edgeNameToIndex,
+        params.bayLoopEntries
+      );
+    }
   }
 
   /**
@@ -205,6 +218,7 @@ export class FabContext {
       lockMgr: this.lockMgr,
       transferMgr: this.transferMgr,
       autoMgr: this.autoMgr,
+      vehicleBayLoopMap: this.vehicleBayLoopMap,
       store: {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
         transferMode: this.store.transferMode,
@@ -262,6 +276,7 @@ export class FabContext {
     this.edgeNameToIndex.clear();
     this.nodeNameToIndex.clear();
     this.vehicleLoopMap.clear();
+    this.vehicleBayLoopMap.clear();
     this.edgeEnterTimes.clear();
 
     this.fabOffset = { x: 0, y: 0 };

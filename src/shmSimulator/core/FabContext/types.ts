@@ -29,6 +29,7 @@ export interface FabInitParams {
   numVehicles: number;
   transferMode: TransferMode;
   memoryAssignment?: FabMemoryAssignment;
+  bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
 }
 
 /**

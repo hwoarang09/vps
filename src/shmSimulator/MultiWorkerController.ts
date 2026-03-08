@@ -31,6 +31,8 @@ export interface MultiFabInitParams {
   vehicleConfigs?: VehicleInitConfig[];
   transferMode?: TransferMode;
   stations: ReadonlyArray<unknown>;
+  /** Bay loop edges (loops.map) - LOOP 모드에서 bay별 순환 edge 정보 */
+  bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
   /** Fab별 SimulationConfig 오버라이드 (linearMaxSpeed, curveMaxSpeed, lockWaitDistance 등) */
   config?: Partial<SimulationConfig>;
 }
@@ -274,8 +276,9 @@ export class MultiWorkerController {
       fabOffset: { fabIndex, col, row },
       vehicleConfigs: fabConfig.vehicleConfigs ?? [],
       numVehicles: fabConfig.numVehicles,
-      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
+      transferMode: fabConfig.transferMode ?? TransferMode.SIMPLE_LOOP,
       memoryAssignment: fabAssignment,
+      bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
     };
   }
@@ -299,8 +302,9 @@ export class MultiWorkerController {
       fabOffset: undefined,
       vehicleConfigs: fabConfig.vehicleConfigs ?? [],
       numVehicles: fabConfig.numVehicles,
-      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
+      transferMode: fabConfig.transferMode ?? TransferMode.SIMPLE_LOOP,
       memoryAssignment: fabAssignment,
+      bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
     };
   }

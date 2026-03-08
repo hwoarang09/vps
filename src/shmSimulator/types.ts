@@ -224,6 +224,12 @@ export interface FabInitData {
   stationData?: StationRawData[];
 
   /**
+   * Bay loop edges (loops.map 파싱 결과)
+   * LOOP 모드에서 bay별 순환 edge 정보
+   */
+  bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
+
+  /**
    * Fab offset 정보 (멀티 Fab 모드에서 사용)
    * sharedMapData와 함께 사용하여 fab별 데이터 계산
    */

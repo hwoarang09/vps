@@ -9,7 +9,7 @@ import type { VehicleDataArrayBase } from "@/common/vehicle/memory/VehicleDataAr
 import type { SensorPointArrayBase } from "@/common/vehicle/memory/SensorPointArrayBase";
 import type { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
-import type { TransferMgr, VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
+import type { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { SimLogger } from "@/logger";
 
@@ -36,6 +36,7 @@ export interface SimulationStepContext {
   lockMgr: LockMgr;
   transferMgr: TransferMgr;
   autoMgr: AutoMgr;
+  vehicleBayLoopMap: Map<number, VehicleBayLoop>;
   // Store
   store: {
     moveVehicleToEdge: (vehId: number, edgeIndex: number) => void;
@@ -76,6 +77,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     lockMgr,
     transferMgr,
     autoMgr,
+    vehicleBayLoopMap,
     store,
     simLogger,
     edgeEnterTimes,
@@ -178,6 +180,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     edges,
     edgeNameToIndex,
     transferMgr,
-    lockMgr
+    lockMgr,
+    vehicleBayLoopMap
   );
 }

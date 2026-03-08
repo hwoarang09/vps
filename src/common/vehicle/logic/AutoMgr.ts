@@ -5,7 +5,7 @@ import {
   TransferMode,
   LogicData
 } from "@/common/vehicle/initialize/constants";
-import { TransferMgr, VehicleCommand, IVehicleDataArray } from "./TransferMgr";
+import { TransferMgr, VehicleCommand, IVehicleDataArray, VehicleBayLoop } from "./TransferMgr";
 import { findShortestPath } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
@@ -87,9 +87,10 @@ export class AutoMgr {
     edgeArray: Edge[],
     edgeNameToIndex: Map<string, number>,
     transferMgr: TransferMgr,
-    lockMgr?: LockMgr
+    lockMgr?: LockMgr,
+    vehicleBayLoopMap?: Map<number, VehicleBayLoop>
   ) {
-    if (mode !== TransferMode.AUTO_ROUTE) return;
+    if (mode !== TransferMode.AUTO_ROUTE && mode !== TransferMode.LOOP) return;
     if (numVehicles === 0) return;
 
     // Reset per-frame counter
@@ -105,14 +106,17 @@ export class AutoMgr {
       }
 
       const vehId = (startIndex + i) % numVehicles;
-      const didAssign = this.checkAndAssignRoute(
-        vehId,
-        vehicleDataArray,
-        edgeArray,
-        edgeNameToIndex,
-        transferMgr,
-        lockMgr
-      );
+
+      let didAssign = false;
+      if (mode === TransferMode.LOOP && vehicleBayLoopMap) {
+        didAssign = this.checkAndAssignLoopRoute(
+          vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
+        );
+      } else {
+        didAssign = this.checkAndAssignRoute(
+          vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+        );
+      }
 
       // Update next starting index for round-robin
       if (didAssign) {
@@ -122,10 +126,7 @@ export class AutoMgr {
   }
 
   /**
-   * Checks a specific vehicle and assigns a route if:
-   * 1. It has no pending commands (idle or finished path).
-   * 2. It is stopped or moving on the last edge.
-   * @returns true if a route was assigned, false otherwise
+   * AUTO_ROUTE: 랜덤 station 목적지 할당
    */
   private checkAndAssignRoute(
     vehId: number,
@@ -143,6 +144,76 @@ export class AutoMgr {
 
     // Assign random destination
     return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
+  }
+
+  /**
+   * LOOP: bay 순환 목적지 할당
+   * phase에 따라:
+   *   INIT → edge1으로 이동 → TO_E1
+   *   TO_E1 도착 → edge2로 이동 → TO_E2
+   *   TO_E2 도착 → edge1으로 이동 → TO_E1
+   */
+  private checkAndAssignLoopRoute(
+    vehId: number,
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr: LockMgr | undefined,
+    vehicleBayLoopMap: Map<number, VehicleBayLoop>
+  ): boolean {
+    if (transferMgr.hasPendingCommands(vehId)) return false;
+
+    const loopInfo = vehicleBayLoopMap.get(vehId);
+    if (!loopInfo) return false;
+
+    const data = vehicleDataArray.getData();
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+    const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+
+    // phase에 따라 목적지 결정
+    let destEdgeIdx: number;
+    let nextPhase: VehicleBayLoop['phase'];
+
+    if (loopInfo.phase === 'INIT' || loopInfo.phase === 'TO_E1') {
+      // edge1으로 가야 함 (INIT은 처음 시작, TO_E1은 edge2에서 돌아옴)
+      destEdgeIdx = loopInfo.edge1Idx;
+      nextPhase = 'TO_E2'; // edge1 도착 후 다음은 edge2로
+    } else {
+      // TO_E2: edge2로 가야 함
+      destEdgeIdx = loopInfo.edge2Idx;
+      nextPhase = 'TO_E1'; // edge2 도착 후 다음은 edge1로
+    }
+
+    // 이미 목적지 edge에 있으면 phase만 전환
+    if (currentEdgeIdx === destEdgeIdx) {
+      loopInfo.phase = nextPhase;
+      // 즉시 다음 목적지로 재귀 호출
+      return this.checkAndAssignLoopRoute(
+        vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
+      );
+    }
+
+    this.pathFindCountThisFrame++;
+
+    const pathIndices = findShortestPath(currentEdgeIdx, destEdgeIdx, edgeArray);
+    if (!pathIndices || pathIndices.length === 0) return false;
+
+    const destEdge = edgeArray[destEdgeIdx - 1];
+    const candidate = {
+      name: destEdge ? `${loopInfo.bayName}:${destEdge.edge_name}` : loopInfo.bayName,
+      edgeIndex: destEdgeIdx,
+    };
+
+    this.applyPathToVehicle({
+      vehId, pathIndices, candidate,
+      vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr,
+    });
+
+    // phase 전환
+    loopInfo.phase = nextPhase;
+
+    return true;
   }
 
   /**

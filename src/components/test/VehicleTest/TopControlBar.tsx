@@ -246,6 +246,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
   const selectedMapName = selectedSetting?.name || "Select Map";
 
   const transferModeLabels: Record<TransferMode, string> = {
+    [TransferMode.SIMPLE_LOOP]: "SIMPLE",
     [TransferMode.LOOP]: "LOOP",
     [TransferMode.RANDOM]: "RANDOM",
     [TransferMode.MQTT_CONTROL]: "MQTT",

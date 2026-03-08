@@ -18,6 +18,7 @@ import { getWorkerCount } from "@/config/worker/workerConfig";
 import { getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { createFabGridSeparated } from "@/utils/fab/fabUtils";
+import { useCFGStore } from "@/store/system/cfgStore";
 
 /**
  * VehicleSharedMemoryMode
@@ -100,6 +101,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       // simulationConfig.json에서 최신 값 동기화
       fabConfigStore.syncFromSimulationConfig();
 
+      const bayLoopEntries = useCFGStore.getState().bayLoopEntries;
       const fabs = fabDataList.map(fabData => {
         // Fab별 설정 적용 (baseConfig + override)
         const fabConfig = fabConfigStore.getFabConfig(fabData.fabIndex);
@@ -129,6 +131,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
           transferMode,
           stations: [], // sharedMapData 사용하므로 빈 배열
+          bayLoopEntries,
           fabOffset: {
             fabIndex: fabData.fabIndex,
             col: fabData.col,
@@ -156,6 +159,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         });
     } else {
       // 단일 Fab 모드: 기존 방식
+      const bayLoopEntries = useCFGStore.getState().bayLoopEntries;
 
       initSimulator({
         edges,
@@ -164,6 +168,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         config,
         transferMode,
         stations,
+        bayLoopEntries,
       })
         .then(() => {
         })

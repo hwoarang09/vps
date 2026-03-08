@@ -153,6 +153,7 @@ export const PresetIndex = {
 
 // Transition Control Mode
 export const TransferMode = {
+  SIMPLE_LOOP: "SIMPLE_LOOP",
   LOOP: "LOOP",
   RANDOM: "RANDOM",
   MQTT_CONTROL: "MQTT_CONTROL",

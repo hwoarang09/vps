@@ -12,7 +12,7 @@ export class EngineStore implements IVehicleStore {
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   public actualNumVehicles: number = 0;
-  public transferMode: TransferMode = TransferMode.LOOP;
+  public transferMode: TransferMode = TransferMode.SIMPLE_LOOP;
 
   /**
    * @param maxVehicles - 최대 vehicle 수

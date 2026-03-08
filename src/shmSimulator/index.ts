@@ -38,6 +38,7 @@ export interface FabInitParams {
   vehicleConfigs?: VehicleInitConfig[];
   transferMode?: TransferMode;
   stations: ReadonlyArray<unknown>;
+  bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
 }
 
 export class ShmSimulatorController {
@@ -157,8 +158,9 @@ export class ShmSimulatorController {
         nodes: fabParams.nodes,
         vehicleConfigs: fabParams.vehicleConfigs ?? [],
         numVehicles: fabParams.numVehicles,
-        transferMode: fabParams.transferMode ?? TransferMode.LOOP,
+        transferMode: fabParams.transferMode ?? TransferMode.SIMPLE_LOOP,
         stationData: fabParams.stations as StationRawData[],
+        bayLoopEntries: fabParams.bayLoopEntries,
       };
 
       fabInitDataList.push(fabInitData);
@@ -214,8 +216,9 @@ export class ShmSimulatorController {
       nodes: fabParams.nodes,
       vehicleConfigs: fabParams.vehicleConfigs ?? [],
       numVehicles: fabParams.numVehicles,
-      transferMode: fabParams.transferMode ?? TransferMode.LOOP,
+      transferMode: fabParams.transferMode ?? TransferMode.SIMPLE_LOOP,
       stationData: fabParams.stations as StationRawData[],
+      bayLoopEntries: fabParams.bayLoopEntries,
     };
 
     return new Promise((resolve) => {

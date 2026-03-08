@@ -2,7 +2,7 @@
 // LOOP 모드 관련 로직
 
 import type { Edge } from "@/types/edge";
-import type { VehicleLoop } from "@/common/vehicle/logic/TransferMgr";
+import type { VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { EngineStore } from "../EngineStore";
 
 /**
@@ -38,7 +38,7 @@ function traceEdgeSequence(
 }
 
 /**
- * LOOP 모드: 각 차량의 순환 경로 구축
+ * SIMPLE_LOOP 모드: 각 차량의 순환 경로 구축
  *
  * 동작:
  * - 각 차량의 현재 edge에서 시작
@@ -46,7 +46,7 @@ function traceEdgeSequence(
  * - vehicleLoopMap에 { edgeSequence: [...] } 형태로 저장
  *
  * 사용:
- * - TransferMode.LOOP일 때 TransferMgr.getNextEdgeFromLoop()에서 사용
+ * - TransferMode.SIMPLE_LOOP일 때 TransferMgr.getNextEdgeFromLoop()에서 사용
  */
 export function buildVehicleLoopMap(
   vehicleLoopMap: Map<number, VehicleLoop>,
@@ -64,5 +64,57 @@ export function buildVehicleLoopMap(
 
     const sequence = traceEdgeSequence(currentEdge, edges);
     vehicleLoopMap.set(i, { edgeSequence: sequence });
+  }
+}
+
+/**
+ * LOOP 모드: bay 기반 차량별 순환 경로 구축
+ *
+ * 동작:
+ * - 각 차량의 현재 edge → bay_name → loops.map에서 해당 bay의 edge1, edge2 조회
+ * - vehicleBayLoopMap에 { bayName, edge1Idx, edge2Idx, phase: 'INIT' } 저장
+ * - AutoMgr가 이 정보를 읽어서 Dijkstra 경로를 할당
+ */
+export function buildVehicleBayLoopMap(
+  vehicleBayLoopMap: Map<number, VehicleBayLoop>,
+  actualNumVehicles: number,
+  store: EngineStore,
+  edges: Edge[],
+  edgeNameToIndex: Map<string, number>,
+  bayLoopEntries: Array<{ bayName: string; edge1: string; edge2: string }>
+): void {
+  vehicleBayLoopMap.clear();
+
+  if (bayLoopEntries.length === 0) return;
+
+  // bay_name → { edge1, edge2 } 매핑
+  const bayMap = new Map<string, { edge1: string; edge2: string }>();
+  for (const entry of bayLoopEntries) {
+    bayMap.set(entry.bayName, { edge1: entry.edge1, edge2: entry.edge2 });
+  }
+
+  for (let vehId = 0; vehId < actualNumVehicles; vehId++) {
+    const currentEdgeIndex = store.getVehicleCurrentEdge(vehId);
+    if (currentEdgeIndex < 1) continue;
+
+    const currentEdge = edges[currentEdgeIndex - 1];
+    if (!currentEdge) continue;
+
+    const bayName = currentEdge.bay_name;
+    if (!bayName) continue;
+
+    const loopEdges = bayMap.get(bayName);
+    if (!loopEdges) continue;
+
+    const edge1Idx = edgeNameToIndex.get(loopEdges.edge1);
+    const edge2Idx = edgeNameToIndex.get(loopEdges.edge2);
+    if (edge1Idx === undefined || edge2Idx === undefined) continue;
+
+    vehicleBayLoopMap.set(vehId, {
+      bayName,
+      edge1Idx,
+      edge2Idx,
+      phase: 'INIT',
+    });
   }
 }

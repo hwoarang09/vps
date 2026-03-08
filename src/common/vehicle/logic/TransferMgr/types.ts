@@ -20,6 +20,15 @@ export type VehicleLoop = {
   edgeSequence: string[];
 };
 
+/** Bay loop 정보 (LOOP 모드에서 차량별 bay 순환용) */
+export type VehicleBayLoop = {
+  bayName: string;
+  edge1Idx: number;  // 1-based
+  edge2Idx: number;  // 1-based
+  /** 현재 목적지 phase: INIT→edge1, TO_E2→edge2, TO_E1→edge1 */
+  phase: 'INIT' | 'TO_E1' | 'TO_E2';
+};
+
 /**
  * processPathCommand 컨텍스트
  */

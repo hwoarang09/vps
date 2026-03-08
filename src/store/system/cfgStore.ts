@@ -14,10 +14,35 @@ import * as THREE from "three";
 import { getMarkerConfig } from "@/config/threejs/renderConfig";
 import { getStationTextConfig } from "@/config/threejs/stationConfig";
 
+/** Bay loop entry: bay → [edge1, edge2] */
+export interface BayLoopEntry {
+  bayName: string;
+  edge1: string;
+  edge2: string;
+}
+
+/**
+ * loops.map 파싱
+ * 형식: "BAY01 [E0255 E0542]"
+ */
+function parseLoopsMap(content: string): BayLoopEntry[] {
+  const entries: BayLoopEntry[] = [];
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("bay")) continue;
+    const match = trimmed.match(/^(\S+)\s+\[(\S+)\s+(\S+)\]/);
+    if (match) {
+      entries.push({ bayName: match[1], edge1: match[2], edge2: match[3] });
+    }
+  }
+  return entries;
+}
+
 interface CFGStore {
   isLoading: boolean;
   error: string | null;
   vehicleConfigs: VehicleConfig[];
+  bayLoopEntries: BayLoopEntry[];
   loadCFGFiles: (mapFolder: string) => Promise<void>;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -460,6 +485,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
   isLoading: false,
   error: null,
   vehicleConfigs: [],
+  bayLoopEntries: [],
 
   loadCFGFiles: async (mapFolder: string) => {
     set({ isLoading: true, error: null });
@@ -495,6 +521,15 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         stationRawData = parseStationMap(stationContent);
       } catch {
         // station.map is optional - silently ignore if not found
+      }
+
+      // 5-1. Load and parse loops.map (optional)
+      let bayLoopEntries: BayLoopEntry[] = [];
+      try {
+        const loopsContent = await loadCFGFile(mapFolder, "loops.map");
+        bayLoopEntries = parseLoopsMap(loopsContent);
+      } catch {
+        // loops.map is optional - silently ignore if not found
       }
 
       // 6. Set edges to store
@@ -536,7 +571,7 @@ export const useCFGStore = create<CFGStore>((set, get) => ({
         textStore.forceUpdate();
       }, 100);
 
-      set({ vehicleConfigs, isLoading: false });
+      set({ vehicleConfigs, bayLoopEntries, isLoading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       set({ error: errorMessage, isLoading: false });
