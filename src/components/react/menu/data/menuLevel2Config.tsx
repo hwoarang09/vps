@@ -85,12 +85,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
         />
       ),
     },
-    {
-      id: "stats-menu-5",
-      label: "Performance",
-
-      iconFn: () => pngIcon(imgGauge),
-    },
   ],
   Operation: [
     {
@@ -299,7 +293,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
     {
       id: "vis-performance",
       label: "Performance",
-      iconFn: () => pngIcon(imgElec),
+      iconFn: () => pngIcon(imgGauge),
     },
     {
       id: "vis-bay-label",
