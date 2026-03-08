@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Node, Edge } from "@/types";
 import type { Station } from "./stationStore";
-import { renderConfig } from "@/config/testSettingConfig";
+import { renderConfig } from "@/config/react/testSettingConfig";
 
 /**
  * Fab 정보 (각 fab의 bounds, center)

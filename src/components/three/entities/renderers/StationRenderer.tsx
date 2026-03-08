@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { Station } from "@/store/map/stationStore";
 import { useFabStore } from "@/store/map/fabStore";
-import { getStationTypeConfig, getStationBoxConfig } from "@/config/stationConfig";
+import { getStationTypeConfig, getStationBoxConfig } from "@/config/threejs/stationConfig";
 
 // Color mapping by station type
 const getStationColor = (type: string): string => {

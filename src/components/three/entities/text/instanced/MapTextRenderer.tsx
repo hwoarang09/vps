@@ -1,7 +1,7 @@
 import React, { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, getStationConfig } from "@/config/renderConfig";
-import { getStationTextConfig } from "@/config/stationConfig";
+import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, getStationConfig } from "@/config/threejs/renderConfig";
+import { getStationTextConfig } from "@/config/threejs/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";
 import { useEdgeStore } from "@store/map/edgeStore";

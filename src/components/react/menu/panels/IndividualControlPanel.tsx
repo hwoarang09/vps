@@ -19,7 +19,7 @@ import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { sensorPointArray } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "@/common/vehicle/logic/TransferMgr";
-import { getLockWaitDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve } from "@/config/simulationConfig";
+import { getLockWaitDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve } from "@/config/worker/simulationConfig";
 import {
     panelInputVariants,
     panelCardVariants,

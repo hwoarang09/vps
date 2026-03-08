@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Plug, PlugZap, Trash2 } from "lucide-react";
 import { useMqttStore } from "@/store/system/mqttStore";
-import { defaultMqttConfig } from "@/config/mqttConfig";
+import { defaultMqttConfig } from "@/config/mqtt/mqttConfig";
 
 const MqttControlPanel: React.FC = () => {
   const { isConnected, logs, config, loadConfig, connect, disconnect, clearLogs } =

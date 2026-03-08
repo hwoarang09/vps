@@ -1,5 +1,5 @@
 import React from "react";
-import { getMapRenderConfig, getVehicleRenderConfig } from "@/config/renderConfig";
+import { getMapRenderConfig, getVehicleRenderConfig } from "@/config/threejs/renderConfig";
 import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";

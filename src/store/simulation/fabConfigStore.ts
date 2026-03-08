@@ -13,7 +13,7 @@ import {
   getCurveMaxSpeed,
   getCurveAcceleration,
   type GrantStrategy,
-} from "@/config/simulationConfig";
+} from "@/config/worker/simulationConfig";
 import {
   DEFAULT_SENSOR_PRESETS,
   type SensorPreset,
@@ -33,7 +33,7 @@ export interface LockConfigOverride {
 }
 
 // Rule C.1: Use export...from syntax for re-exports
-export type { GrantStrategy } from "@/config/simulationConfig";
+export type { GrantStrategy } from "@/config/worker/simulationConfig";
 
 /**
  * Fab별로 오버라이드 가능한 Movement 설정

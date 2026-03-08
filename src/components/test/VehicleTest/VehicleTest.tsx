@@ -7,7 +7,7 @@ import { useCFGStore } from "@store/system/cfgStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "@/types/vehicle";
-import { getTestSettings, getDefaultSetting } from "@/config/testSettingConfig";
+import { getTestSettings, getDefaultSetting } from "@/config/react/testSettingConfig";
 import SimulationParamsModal from "./SimulationParamsModal";
 import TopControlBar from "./TopControlBar";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
@@ -19,7 +19,7 @@ import { useTextStore } from "@/store/map/textStore";
 import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
-import { getStationTextConfig } from "@/config/stationConfig";
+import { getStationTextConfig } from "@/config/threejs/stationConfig";
 
 /**
  * VehicleTest

@@ -8,7 +8,7 @@ import {
   getVehicleSpacing as getSimVehicleSpacing,
   getEdgeMargin as getSimEdgeMargin,
   getCrossEdgeSafeDistance as getSimCrossEdgeSafeDistance,
-} from "./simulationConfig";
+} from "../worker/simulationConfig";
 
 export interface VehicleConfig {
   body: {

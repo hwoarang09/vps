@@ -3,7 +3,7 @@ import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { getMarkerConfig } from "@/config/renderConfig";
+import { getMarkerConfig } from "@/config/threejs/renderConfig";
 
 // Threshold for selection in meters
 const SELECTION_THRESHOLD_SQ = 20 * 20;

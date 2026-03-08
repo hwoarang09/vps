@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { useNodeStore } from "./nodeStore";
 import { useEdgeStore } from "./edgeStore";
 import type { StationRawData } from "@/types/station";
-import { getStationTypeConfig } from "@/config/stationConfig";
+import { getStationTypeConfig } from "@/config/threejs/stationConfig";
 
 // Station interface with computed position
 export interface Station {

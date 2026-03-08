@@ -16,7 +16,7 @@ import {
   menuDividerClass,
 } from "@/components/react/menu/shared/menuStyles";
 import { TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
-import { TestSetting } from "@/config/testSettingConfig";
+import { TestSetting } from "@/config/react/testSettingConfig";
 
 // Shapez2-style PNG icons for TopControlBar
 import imgBlueprint from "@/assets/icons/game/menu-blueprint.svg";

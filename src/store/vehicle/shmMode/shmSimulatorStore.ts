@@ -7,7 +7,7 @@ import { TransferMode } from "@/shmSimulator";
 import type { SimulationConfig, VehicleInitConfig, SharedMapData, UnusualMoveData } from "@/shmSimulator";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
-import { getSimulationConfig } from "@/config/simulationConfig";
+import { getSimulationConfig } from "@/config/worker/simulationConfig";
 
 type FabInitParams = MultiFabInitParams;
 

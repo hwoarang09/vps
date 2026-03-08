@@ -3,7 +3,7 @@ import { RigidBody, CuboidCollider } from "@react-three/rapier";
 import type { RapierRigidBody } from "@react-three/rapier";
 import SpriteText from "three-spritetext";
 import { useVehicleRapierStore } from "@/store/vehicle/rapierMode/vehicleStore";
-import { getVehicleConfigSync, waitForConfig } from "@/config/vehicleConfig";
+import { getVehicleConfigSync, waitForConfig } from "@/config/threejs/vehicleConfig";
 import { MovingStatus } from "@/common/vehicle/initialize/constants";
 
 export interface VehicleRapierModeVehicleProps {
