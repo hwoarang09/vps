@@ -26,7 +26,7 @@ export interface MenuState {
   setActiveThirdMenu: (menu: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
   // Switch to lv1 menu with restoring last lv2 selection (for Shift+key)
-  switchToMainMenuWithMemory: (menu: MainMenuType) => void;
+  switchToMainMenuWithMemory: (menu: MainMenuType, centerX?: number) => void;
   showTooltip: (
     menuId: string,
     message: string,
@@ -111,7 +111,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   },
 
   // Switch to main menu and restore last lv2 selection (for Shift+key)
-  switchToMainMenuWithMemory: (menu: MainMenuType) => {
+  switchToMainMenuWithMemory: (menu: MainMenuType, centerX?: number) => {
     const { activeMainMenu, activeSubMenu, lastSubMenuByMainMenu } = get();
 
     // Save current lv2 selection before switching
@@ -125,6 +125,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
 
     set({
       activeMainMenu: menu,
+      activeMainMenuCenterX: centerX ?? null,
       activeSubMenu: lastSubMenu,
       activeThirdMenu: null,
       lastSubMenuByMainMenu: newLastSubMenuByMainMenu,

@@ -57,7 +57,7 @@ export type MenuButtonVariants = VariantProps<typeof menuButtonVariants>;
  */
 export const menuContainerVariants = cva(
   // base styles
-  ["flex", "rounded-xl", "border-2"],
+  ["flex", "items-center", "rounded-xl", "border-2"],
   {
     variants: {
       level: {
@@ -89,9 +89,8 @@ export type MenuContainerVariants = VariantProps<typeof menuContainerVariants>;
  * MenuDivider styles (simple class string)
  */
 export const menuDividerClass = twMerge(
-  "h-8 w-px mx-2",
-  "bg-gradient-to-b from-transparent via-white to-transparent",
-  "opacity-30"
+  "h-10 w-px mx-2",
+  "bg-gradient-to-b from-transparent via-white/60 to-transparent",
 );
 
 /**

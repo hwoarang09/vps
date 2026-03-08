@@ -6,7 +6,6 @@ import { MainMenuType } from "@/types";
 
 // Shortcut key to lv1 menu mapping
 const LV1_SHORTCUT_MAP: Record<string, MainMenuType> = {
-  v: "Vehicle",
   m: "MQTT",
   d: "DevTools",
   f: "Search",
@@ -17,9 +16,6 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
   MQTT: {
     c: "mqtt-connection",
   },
-  Vehicle: {
-    i: "vehicle-menu-individual",
-  },
   DevTools: {
     l: "devtools-lock",
   },
@@ -29,6 +25,14 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
     e: "search-edge",
     s: "search-station",
   },
+};
+
+/** Lv1 버튼의 center X 좌표를 DOM에서 계산 */
+const getMenuCenterX = (menuId: string): number | undefined => {
+  const btn = document.querySelector(`[data-menu-id="${menuId}"]`);
+  if (!btn) return undefined;
+  const rect = btn.getBoundingClientRect();
+  return rect.left + rect.width / 2;
 };
 
 const KeyboardShortcutHandler = () => {
@@ -70,14 +74,14 @@ const KeyboardShortcutHandler = () => {
       // Handle Shift + letter key: Switch to lv1 menu with memory (restore last lv2)
       if (e.shiftKey && LV1_SHORTCUT_MAP[key]) {
         e.preventDefault();
-        switchToMainMenuWithMemory(LV1_SHORTCUT_MAP[key]);
+        switchToMainMenuWithMemory(LV1_SHORTCUT_MAP[key], getMenuCenterX(LV1_SHORTCUT_MAP[key]));
         return;
       }
 
       // Handle lv1 menu shortcuts (only when no lv1 menu is active)
       if (!activeMainMenu && LV1_SHORTCUT_MAP[key]) {
         e.preventDefault();
-        setActiveMainMenu(LV1_SHORTCUT_MAP[key]);
+        setActiveMainMenu(LV1_SHORTCUT_MAP[key], getMenuCenterX(LV1_SHORTCUT_MAP[key]));
         return;
       }
 
@@ -135,7 +139,7 @@ const KeyboardShortcutHandler = () => {
         if (index < allLevel1MenuItems.length) {
           e.preventDefault();
           const targetLevel1Menu = allLevel1MenuItems[index];
-          setActiveMainMenu(targetLevel1Menu.id);
+          setActiveMainMenu(targetLevel1Menu.id, getMenuCenterX(targetLevel1Menu.id));
         }
       }
     };

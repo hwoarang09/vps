@@ -50,11 +50,7 @@ const MenuLevel1: React.FC = () => {
           })}
 
           {/* Add divider between groups */}
-          {groupIndex < menuLevel1Groups.length - 1 && (
-            <div className="w-2 flex items-center justify-center mx-1">
-              <MenuDivider />
-            </div>
-          )}
+          {groupIndex < menuLevel1Groups.length - 1 && <MenuDivider />}
         </React.Fragment>
       ))}
     </MenuContainer>

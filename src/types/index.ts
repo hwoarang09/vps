@@ -68,7 +68,6 @@ export interface Edge {
 export type MainMenuType =
   | "MapLoader"
   | "Statistics"
-  | "Vehicle"
   | "Operation"
   | "MapBuilder"
   | "LayoutBuilder"

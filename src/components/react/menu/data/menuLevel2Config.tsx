@@ -1,9 +1,7 @@
 // components/react/menu/data/menuLevel2Config.tsx
 import {
-  Calendar,
   CalendarDays,
   Timer,
-  FileText,
   FileCheck,
   Hash,
   Shuffle,
@@ -75,35 +73,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
     },
     {
       id: "stats-menu-2",
-      label: "Daily",
-
-      iconFn: (isActive: boolean) => (
-        <Calendar
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "stats-menu-3",
-      label: "Weekly",
-
-      iconFn: (isActive: boolean) => (
-        <CalendarDays
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "stats-menu-4",
-      label: "Monthly",
+      label: "Report",
 
       iconFn: (isActive: boolean) => (
         <CalendarDays
@@ -120,26 +90,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       label: "Performance",
 
       iconFn: () => pngIcon(imgGauge),
-    },
-  ],
-  Vehicle: [
-    {
-      id: "vehicle-menu-overall",
-      label: "Overall Status",
-      iconFn: () => pngIcon(imgTrains),
-    },
-    {
-      id: "vehicle-menu-history",
-      label: "History",
-      iconFn: (isActive: boolean) => (
-        <FileText
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
     },
   ],
   Operation: [

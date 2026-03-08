@@ -218,13 +218,8 @@ const RightPanel: React.FC = () => {
     const labels: Record<string, string> = {
       // Statistics
       "stats-menu-1": "Realtime Stats",
-      "stats-menu-2": "Daily Report",
-      "stats-menu-3": "Weekly Report",
-      "stats-menu-4": "Monthly Report",
+      "stats-menu-2": "Statistics Report",
       "stats-menu-5": "Performance Analysis",
-      // Vehicle
-      "vehicle-menu-overall": "Overall Status",
-      "vehicle-menu-history": "Vehicle History",
       // Operation
       "operation-menu-1": "Route Management",
       "operation-menu-2": "Schedule Control",
