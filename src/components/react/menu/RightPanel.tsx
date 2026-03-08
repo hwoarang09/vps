@@ -329,11 +329,11 @@ const PerformanceTogglePanel: React.FC = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
       <div style={toggleStyle} onClick={togglePerfLeft}>
-        <span className="text-sm text-gray-200">Main / Worker Stats (좌측 하단)</span>
+        <span className="text-sm text-gray-200">Main / Worker Stats (좌측 상단)</span>
         <div style={dotStyle(showPerfLeft)} />
       </div>
       <div style={toggleStyle} onClick={togglePerfRight}>
-        <span className="text-sm text-gray-200">r3f-perf GPU Stats (우측 하단)</span>
+        <span className="text-sm text-gray-200">r3f-perf GPU Stats (좌측 상단)</span>
         <div style={dotStyle(showPerfRight)} />
       </div>
     </div>

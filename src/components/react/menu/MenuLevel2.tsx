@@ -1,6 +1,7 @@
 // components/react/menu/MenuLevel2.tsx
 import React from "react";
 import { useMenuStore } from "@store/ui/menuStore";
+import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { MenuButton } from "./shared";
 import { menuLevel2Config } from "./data/menuLevel2Config";
 import { tooltipsByLevel } from "./data/tooltipConfig";
@@ -21,7 +22,16 @@ const MenuLevel2: React.FC = () => {
 
   const menuItems = menuLevel2Config[activeMainMenu] || [];
 
+  const { togglePerfLeft, togglePerfRight, showPerfLeft } = useVisualizationStore();
+
   const handleLevel2MenuClick = (menuId: string) => {
+    // vis-performance: 직접 토글 (RightPanel 사용 안 함)
+    if (menuId === "vis-performance") {
+      togglePerfLeft();
+      togglePerfRight();
+      return;
+    }
+
     // Toggle menu if same menu is clicked, otherwise activate the clicked menu
     const newActiveSubMenu = activeSubMenu === menuId ? null : menuId;
     setActiveSubMenu(newActiveSubMenu);
@@ -72,7 +82,7 @@ const MenuLevel2: React.FC = () => {
         {menuItems.map((item, index) => (
           <MenuButton
             key={item.id}
-            isActive={activeSubMenu === item.id}
+            isActive={item.id === "vis-performance" ? showPerfLeft : activeSubMenu === item.id}
             onClick={() => handleLevel2MenuClick(item.id)}
             size="large"
             buttonLevel={2}
