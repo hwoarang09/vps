@@ -49,6 +49,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   const bodyGeometry = useMemo(() => {
     const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
+    geo.translate(0, 0, -bodyHeight / 2);
 
     const initialCount = Math.max(actualNumVehicles, 1000);
 
@@ -67,6 +68,9 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   const bodyMaterial = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(vehicleColor),
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     mat.onBeforeCompile = (shader) => {

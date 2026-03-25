@@ -48,10 +48,14 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   const vehicleColor = "#1a85ff";
 
   // Geometry & Material (공통 - 메모이제이션)
-  const bodyGeometry = useMemo(() => new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight), [bodyLength, bodyWidth, bodyHeight]);
+  const bodyGeometry = useMemo(() => {
+    const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
+    geo.translate(0, 0, -bodyHeight / 2);
+    return geo;
+  }, [bodyLength, bodyWidth, bodyHeight]);
   const sensorGeometry = useMemo(() => new THREE.BoxGeometry(sensorLength, sensorWidth, sensorHeight), [sensorLength, sensorWidth, sensorHeight]);
   
-  const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: new THREE.Color(vehicleColor) }), [vehicleColor]);
+  const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: new THREE.Color(vehicleColor), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), [vehicleColor]);
   const sensorMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 }), []);
 
   // Temp Objects (Zero-GC: 재사용)
