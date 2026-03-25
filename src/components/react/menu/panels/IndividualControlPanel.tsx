@@ -24,6 +24,7 @@ import {
     panelInputVariants,
 } from "../shared/panelStyles";
 import { twMerge } from "tailwind-merge";
+import { useVehicleEdgeHighlightStore } from "@/store/ui/vehicleEdgeHighlightStore";
 
 // Helper to decode StopReason bitmask
 const getStopReasons = (reasonMask: number): string[] => {
@@ -240,10 +241,10 @@ const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
 
     return (
         <div className="space-y-2 text-xs">
-            {/* Next Edges */}
-            {nextEdgesInfo.length > 0 && (
-                <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
-                    <div className="text-accent-cyan font-medium mb-1">Next Edges ({nextEdgesInfo.length}/5)</div>
+            {/* Next Edges - 항상 표시 */}
+            <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
+                <div className="text-accent-cyan font-medium mb-1">Next Edges ({nextEdgesInfo.length}/5)</div>
+                {nextEdgesInfo.length > 0 ? (
                     <div className="space-y-0.5 text-gray-400">
                         {nextEdgesInfo.map((item) => (
                             item && (
@@ -257,30 +258,10 @@ const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
                             )
                         ))}
                     </div>
-                </div>
-            )}
-
-            {/* Merge Wait Point */}
-            {mergeWaitInfo && (
-                <div className="p-2 bg-accent-orange/10 rounded border border-accent-orange/30">
-                    <div className="flex justify-between font-bold text-accent-orange mb-1">
-                        <span>Merge Wait</span>
-                        <span>{mergeWaitInfo.waitNodeName} ({mergeWaitInfo.isCurve ? 'Curve' : 'Str'})</span>
-                    </div>
-                    <div className="flex justify-between text-accent-orange-light">
-                        <span>Dist:</span>
-                        <span className="font-mono font-bold">{mergeWaitInfo.distanceToWait.toFixed(2)} m</span>
-                    </div>
-                    <div className="flex justify-between text-orange-300">
-                        <span>Via:</span>
-                        <span className="font-mono">{mergeWaitInfo.mergeEdgeName}</span>
-                    </div>
-                    <div className="flex justify-between text-orange-300">
-                        <span>Hops:</span>
-                        <span className="font-mono">{mergeWaitInfo.edgeHops === 0 ? 'Current' : mergeWaitInfo.edgeHops}</span>
-                    </div>
-                </div>
-            )}
+                ) : (
+                    <div className="text-gray-600 font-mono text-center py-1">—</div>
+                )}
+            </div>
 
             {/* Path (SHM only) */}
             {isShmMode && (() => {
@@ -289,41 +270,76 @@ const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
 
                 const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
                 const len = pathData[pathPtr + PATH_LEN];
-                if (len === 0) return null;
-
-                const remainingPath: { edgeIdx: number; edgeName: string }[] = [];
-                for (let i = 0; i < len && i < 10; i++) {
-                    const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
-                    if (edgeIdx >= 0) {
-                        const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
-                        remainingPath.push({
-                            edgeIdx,
-                            edgeName: edge?.edge_name || `Edge#${edgeIdx}`
-                        });
-                    }
-                }
-
-                if (remainingPath.length === 0) return null;
 
                 return (
                     <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
                         <div className="text-purple-400 font-medium mb-1">
-                            Path ({remainingPath.length}{len > 10 ? `+${len - 10}` : ''} edges)
+                            Path ({len} edges)
                         </div>
-                        <div className="space-y-0.5 max-h-40 overflow-y-auto text-gray-400">
-                            {remainingPath.map((item, idx) => (
-                                <div key={idx} className="flex justify-between font-mono">
-                                    <span>{idx + 1}. {item.edgeName}</span>
-                                    <span className="text-gray-600">#{item.edgeIdx}</span>
-                                </div>
-                            ))}
-                            {len > 10 && (
-                                <div className="text-gray-600 text-center">... +{len - 10} more</div>
-                            )}
-                        </div>
+                        {len > 0 ? (
+                            <div className="space-y-0.5 max-h-40 overflow-y-auto text-gray-400">
+                                {(() => {
+                                    const items: { edgeIdx: number; edgeName: string }[] = [];
+                                    for (let i = 0; i < len && i < 10; i++) {
+                                        const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
+                                        if (edgeIdx >= 0) {
+                                            const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
+                                            items.push({ edgeIdx, edgeName: edge?.edge_name || `Edge#${edgeIdx}` });
+                                        }
+                                    }
+                                    return items.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between font-mono">
+                                            <span>{idx + 1}. {item.edgeName}</span>
+                                            <span className="text-gray-600">#{item.edgeIdx}</span>
+                                        </div>
+                                    ));
+                                })()}
+                                {len > 10 && (
+                                    <div className="text-gray-600 text-center">... +{len - 10} more</div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-gray-600 font-mono text-center py-1">—</div>
+                        )}
                     </div>
                 );
             })()}
+
+            {/* Merge Wait Point - 항상 표시, Path 아래 */}
+            <div className={twMerge(
+                "p-2 rounded border",
+                mergeWaitInfo
+                    ? "bg-accent-orange/10 border-accent-orange/30"
+                    : "bg-panel-bg-solid border-panel-border"
+            )}>
+                <div className={twMerge(
+                    "font-medium mb-1",
+                    mergeWaitInfo ? "flex justify-between font-bold text-accent-orange" : "text-gray-500"
+                )}>
+                    <span>Merge Wait</span>
+                    {mergeWaitInfo && (
+                        <span>{mergeWaitInfo.waitNodeName} ({mergeWaitInfo.isCurve ? 'Curve' : 'Str'})</span>
+                    )}
+                </div>
+                {mergeWaitInfo ? (
+                    <>
+                        <div className="flex justify-between text-accent-orange-light">
+                            <span>Dist:</span>
+                            <span className="font-mono font-bold">{mergeWaitInfo.distanceToWait.toFixed(2)} m</span>
+                        </div>
+                        <div className="flex justify-between text-orange-300">
+                            <span>Via:</span>
+                            <span className="font-mono">{mergeWaitInfo.mergeEdgeName}</span>
+                        </div>
+                        <div className="flex justify-between text-orange-300">
+                            <span>Hops:</span>
+                            <span className="font-mono">{mergeWaitInfo.edgeHops === 0 ? 'Current' : mergeWaitInfo.edgeHops}</span>
+                        </div>
+                    </>
+                ) : (
+                    <div className="text-gray-600 font-mono text-center py-1">—</div>
+                )}
+            </div>
 
             {!isShmMode && nextEdgesInfo.length === 0 && (
                 <div className="text-gray-500 text-center py-4">No route data (Array mode)</div>
@@ -453,6 +469,13 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         }, 100);
         return () => {
              if (intervalRef.current) clearInterval(intervalRef.current);
+        };
+    }, []);
+
+    // Clear edge highlight on unmount
+    useEffect(() => {
+        return () => {
+            useVehicleEdgeHighlightStore.getState().clear();
         };
     }, []);
 
@@ -602,6 +625,9 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         collisionTarget, targetEdgeInfo, targetRatioInfo,
         trafficState, stopReasons, mergeWaitInfo, isShmMode, zonePoints,
     };
+
+    // Update edge highlight for selected vehicle (currentEdge)
+    useVehicleEdgeHighlightStore.getState().setCurrentEdge(currentEdgeIdx >= 1 ? currentEdgeIdx : null);
 
     const tabs: { key: TabType; label: string }[] = [
         { key: "basic", label: "기본" },

@@ -7,6 +7,7 @@ import { useFabStore } from "@/store/map/fabStore";
 import EdgeRenderer from "./EdgeRenderer";
 import NodesRenderer from "./NodesRenderer";
 import StationRenderer from "./StationRenderer";
+import VehicleEdgeOverlay from "./VehicleEdgeOverlay";
 import { useRenderCheck } from "@/utils/renderDebug";
 
 // 카메라 위치 변화 감지 임계값 (이 거리 이상 이동해야 업데이트)
@@ -71,6 +72,9 @@ const MapRenderer: React.FC = () => {
 
       {/* Render all edges - slot offset applied inside renderer */}
       <EdgeRenderer edges={edges} />
+
+      {/* 선택된 vehicle의 currentEdge 오버레이 */}
+      <VehicleEdgeOverlay />
 
       {/* Render all stations - slot offset applied inside renderer */}
       <StationRenderer stations={stations} />
