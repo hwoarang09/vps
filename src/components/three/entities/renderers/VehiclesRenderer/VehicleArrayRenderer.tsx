@@ -185,6 +185,87 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     instanceDataAttr.needsUpdate = true;
   });
 
+  // Selection glow outline for selected vehicle (multi-layer fake bloom)
+  const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
+  const glowGroupRef = useRef<THREE.Group>(null);
+
+  // 15-layer glow: dense layers so individual lines blend seamlessly
+  const GLOW_LAYER_COUNT = 15;
+  const glowLayers = useMemo(() => {
+    const pad = 1.35;
+    const box = new THREE.BoxGeometry(bodyLength * pad, bodyWidth * pad, bodyHeight * pad);
+    box.translate(0, 0, -bodyHeight / 2);
+    const baseGeo = new THREE.EdgesGeometry(box);
+
+    const layers: { geo: THREE.EdgesGeometry; mat: THREE.LineBasicMaterial }[] = [];
+    for (let i = 0; i < GLOW_LAYER_COUNT; i++) {
+      const t = i / (GLOW_LAYER_COUNT - 1);
+      // 낮은 개별 opacity → 겹쳐서 자연스럽게 밝아짐
+      const opacity = 0.5 * Math.pow(1 - t, 2.0);
+      const g = Math.round(105 + t * 100);
+      const b = Math.round(180 + t * 60);
+      const color = (255 << 16) | (g << 8) | b;
+
+      const mat = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: Math.max(opacity, 0.02),
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
+      layers.push({ geo: baseGeo, mat });
+    }
+    return layers;
+  }, [bodyLength, bodyWidth, bodyHeight]);
+
+  const glowChildRefs = useRef<THREE.LineSegments[]>([]);
+  const tempVec = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(({ camera }) => {
+    const group = glowGroupRef.current;
+    if (!group) return;
+
+    if (selectedVehicleId === null) {
+      group.visible = false;
+      return;
+    }
+
+    const instanceDataAttr = instanceDataRef.current;
+    if (!instanceDataAttr) { group.visible = false; return; }
+
+    const arr = instanceDataAttr.array as Float32Array;
+    const ptr = selectedVehicleId * 4;
+    const x = arr[ptr], y = arr[ptr + 1], z = arr[ptr + 2];
+    const rotDeg = arr[ptr + 3];
+
+    if (x === 0 && y === 0 && z === 0) { group.visible = false; return; }
+
+    group.position.set(x, y, z);
+    group.rotation.set(0, 0, rotDeg * Math.PI / 180);
+    group.visible = true;
+
+    // Distance-adaptive spread (3-tier)
+    const dist = camera.position.distanceTo(tempVec.set(x, y, z));
+    let spread: number;
+    if (dist < 2) {
+      // 초근접: 아주 타이트하게
+      spread = 0.12;
+    } else if (dist < 5) {
+      // 근접: 살짝 느슨 (2m→0.12, 5m→0.4 선형 보간)
+      spread = THREE.MathUtils.lerp(0.12, 0.4, (dist - 2) / 3);
+    } else {
+      // 일반~원거리
+      spread = THREE.MathUtils.clamp(dist * 0.018, 0.4, 2.5);
+    }
+
+    const children = glowChildRefs.current;
+    for (let i = 0; i < children.length; i++) {
+      const t = i / (GLOW_LAYER_COUNT - 1);
+      const s = 1.0 + spread * t * t; // quadratic: inner layers stay tight
+      children[i].scale.set(s, s, s);
+    }
+  });
+
   // Vehicle click handler - opens IndividualControlPanel
   const handleVehicleClick = useCallback((e: ThreeEvent<PointerEvent>) => {
     // instanceId is the index of the clicked instance
@@ -211,6 +292,17 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         frustumCulled={false}
         onPointerDown={handleVehicleClick}
       />
+      <group ref={glowGroupRef} visible={false} renderOrder={999}>
+        {glowLayers.map((layer, i) => (
+          <lineSegments
+            key={i}
+            ref={(el: THREE.LineSegments) => { if (el) glowChildRefs.current[i] = el; }}
+            geometry={layer.geo}
+            material={layer.mat}
+            frustumCulled={false}
+          />
+        ))}
+      </group>
       <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
     </>
   );

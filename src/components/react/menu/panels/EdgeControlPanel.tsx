@@ -409,13 +409,7 @@ const EdgeControlPanel: React.FC = () => {
             )}
           </div>
         </div>
-      ) : (
-        <div className="text-center text-gray-500 py-8">
-          <Search size={48} className="mx-auto mb-4 opacity-50" />
-          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>드롭다운에서 Edge를 선택하거나</p>
-          <p className={panelTextVariants({ variant: "muted", size: "sm" })}>이름/인덱스로 검색하세요</p>
-        </div>
-      )}
+      ) : null}
 
       {/* Click outside to close dropdown */}
       {isEdgeDropdownOpen && (

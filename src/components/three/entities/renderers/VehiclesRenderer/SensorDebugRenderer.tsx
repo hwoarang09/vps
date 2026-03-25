@@ -3,6 +3,7 @@
 import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
 import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { SENSOR_ATTR_SIZE, SensorSection } from "@/shmSimulator/MemoryLayoutManager";
@@ -195,6 +196,261 @@ function InstancedQuadLines({
 }
 
 // -----------------------------------------------------------------------------
+// Selected Vehicle Sensor Glow (4-layer, subtle)
+// -----------------------------------------------------------------------------
+
+// Quad의 4점을 라인으로 연결: FL→SL→SR→FR→FL (8 vertices = 4 line segments)
+const QUAD_VERTS = 8;
+
+interface SensorGlowQuadProps {
+  zHeight: number;
+  color: number;
+  layerCount: number;
+}
+
+/**
+ * 선택된 vehicle 1대의 센서 zone 1개를 glow로 표현.
+ * 매 프레임 setQuadPoints()로 world좌표 4점을 업데이트.
+ */
+class SensorGlowQuad {
+  lines: THREE.LineSegments[] = [];
+  posArrays: Float32Array[] = [];
+
+  constructor(scene: THREE.Group, config: SensorGlowQuadProps) {
+    for (let i = 0; i < config.layerCount; i++) {
+      const t = i / Math.max(config.layerCount - 1, 1);
+      const opacity = 0.5 * Math.pow(1 - t, 2.0);
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(QUAD_VERTS * 3);
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+      const mat = new THREE.LineBasicMaterial({
+        color: config.color,
+        transparent: true,
+        opacity: Math.max(opacity, 0.05),
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+      });
+
+      const line = new THREE.LineSegments(geo, mat);
+      line.frustumCulled = false;
+      line.renderOrder = 998;
+      scene.add(line);
+      this.lines.push(line);
+      this.posArrays.push(positions);
+    }
+  }
+
+  /** fl,sl,sr,fr = [x,y] world coords. Expand uniformly along edge normals. */
+  update(
+    fl: [number, number], sl: [number, number],
+    sr: [number, number], fr: [number, number],
+    zHeight: number, spread: number,
+  ) {
+    // Compute outward normal per vertex by averaging adjacent edge normals
+    // Quad order: FL → SL → SR → FR (CCW or CW)
+    const corners: [number, number][] = [fl, sl, sr, fr];
+    const n = corners.length;
+
+    // Per-vertex outward offset direction
+    const offsets: [number, number][] = [];
+    for (let v = 0; v < n; v++) {
+      const prev = corners[(v + n - 1) % n];
+      const curr = corners[v];
+      const next = corners[(v + 1) % n];
+
+      // edge normals (pointing outward: rotate edge direction 90° outward)
+      // edge prev→curr
+      let e1x = curr[0] - prev[0], e1y = curr[1] - prev[1];
+      let n1x = e1y, n1y = -e1x;
+      const len1 = Math.sqrt(n1x * n1x + n1y * n1y) || 1;
+      n1x /= len1; n1y /= len1;
+
+      // edge curr→next
+      let e2x = next[0] - curr[0], e2y = next[1] - curr[1];
+      let n2x = e2y, n2y = -e2x;
+      const len2 = Math.sqrt(n2x * n2x + n2y * n2y) || 1;
+      n2x /= len2; n2y /= len2;
+
+      // average normal
+      let nx = n1x + n2x, ny = n1y + n2y;
+      const lenN = Math.sqrt(nx * nx + ny * ny) || 1;
+      nx /= lenN; ny /= lenN;
+
+      // check outward: should point away from center
+      const cx = (fl[0] + sl[0] + sr[0] + fr[0]) * 0.25;
+      const cy = (fl[1] + sl[1] + sr[1] + fr[1]) * 0.25;
+      const toCenterX = cx - curr[0], toCenterY = cy - curr[1];
+      if (nx * toCenterX + ny * toCenterY > 0) { nx = -nx; ny = -ny; }
+
+      offsets.push([nx, ny]);
+    }
+
+    for (let i = 0; i < this.lines.length; i++) {
+      const t = i / Math.max(this.lines.length - 1, 1);
+      const dist = spread * t; // uniform distance offset
+      const arr = this.posArrays[i];
+
+      // FL→SL, SL→SR, SR→FR, FR→FL → vertex pairs: [0,1, 1,2, 2,3, 3,0]
+      const indices = [0, 1, 1, 2, 2, 3, 3, 0];
+      for (let j = 0; j < QUAD_VERTS; j++) {
+        const ci = indices[j];
+        arr[j * 3] = corners[ci][0] + offsets[ci][0] * dist;
+        arr[j * 3 + 1] = corners[ci][1] + offsets[ci][1] * dist;
+        arr[j * 3 + 2] = zHeight;
+      }
+
+      const attr = this.lines[i].geometry.attributes.position as THREE.BufferAttribute;
+      attr.needsUpdate = true;
+    }
+  }
+
+  setVisible(v: boolean) {
+    for (const l of this.lines) l.visible = v;
+  }
+
+  dispose() {
+    for (const l of this.lines) {
+      l.geometry.dispose();
+      (l.material as THREE.Material).dispose();
+    }
+  }
+}
+
+/** Glow for the 4 sensor quads of the selected vehicle */
+function SelectedSensorGlow({
+  numVehicles, getData, isSharedMemory,
+}: {
+  numVehicles: number;
+  getData: () => Float32Array | null;
+  isSharedMemory: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const quadsRef = useRef<SensorGlowQuad[] | null>(null);
+  const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
+
+  // zone colors: body=cyan, zone0=yellow, zone1=orange, zone2=red
+  const GLOW_LAYER_COUNT = 10;
+  const zoneColors = useMemo(() => [0x00ffff, 0xffff00, 0xff8800, 0xff0000], []);
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+
+    // body + 3 zones = 4 quads
+    const quads = zoneColors.map(color =>
+      new SensorGlowQuad(group, { zHeight: 0, color, layerCount: GLOW_LAYER_COUNT })
+    );
+    quadsRef.current = quads;
+
+    return () => {
+      for (const q of quads) q.dispose();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numVehicles]);
+
+  useFrame(({ camera }) => {
+    const quads = quadsRef.current;
+    const group = groupRef.current;
+    if (!quads || !group) return;
+
+    if (selectedVehicleId === null || selectedVehicleId >= numVehicles) {
+      for (const q of quads) q.setVisible(false);
+      return;
+    }
+
+    const data = getData();
+    if (!data) {
+      for (const q of quads) q.setVisible(false);
+      return;
+    }
+
+    const zH = getMarkerConfig().Z;
+
+    // Distance-adaptive spread
+    // Need vehicle position to calc distance - approximate from body quad center
+    let spread = 0.15;
+
+    if (isSharedMemory) {
+      // SHM layout: section-based
+      const sectionSize = numVehicles * SENSOR_ATTR_SIZE;
+      const vid = selectedVehicleId;
+
+      // Read each zone's 4 points
+      const zoneConfigs = [
+        // body: startEnd=ZONE0_STARTEND, other=BODY_OTHER, use BL/BR
+        { se: SensorSection.ZONE0_STARTEND, ot: SensorSection.BODY_OTHER },
+        // zone0: startEnd=ZONE0_STARTEND, other=ZONE0_OTHER
+        { se: SensorSection.ZONE0_STARTEND, ot: SensorSection.ZONE0_OTHER },
+        // zone1
+        { se: SensorSection.ZONE1_STARTEND, ot: SensorSection.ZONE1_OTHER },
+        // zone2
+        { se: SensorSection.ZONE2_STARTEND, ot: SensorSection.ZONE2_OTHER },
+      ];
+
+      // calc distance from body center
+      const seOff0 = SensorSection.ZONE0_STARTEND * sectionSize + vid * SENSOR_ATTR_SIZE;
+      const otOff0 = SensorSection.BODY_OTHER * sectionSize + vid * SENSOR_ATTR_SIZE;
+      const bcx = (data[seOff0] + data[seOff0 + 2] + data[otOff0] + data[otOff0 + 2]) * 0.25;
+      const bcy = (data[seOff0 + 1] + data[seOff0 + 3] + data[otOff0 + 1] + data[otOff0 + 3]) * 0.25;
+      const dist = camera.position.distanceTo(new THREE.Vector3(bcx, bcy, zH));
+      spread = THREE.MathUtils.clamp(dist * 0.005, 0.06, 0.4);
+
+      for (let z = 0; z < 4; z++) {
+        const cfg = zoneConfigs[z];
+        const seOff = cfg.se * sectionSize + vid * SENSOR_ATTR_SIZE;
+        const otOff = cfg.ot * sectionSize + vid * SENSOR_ATTR_SIZE;
+
+        const fl: [number, number] = [data[seOff], data[seOff + 1]];
+        const fr: [number, number] = [data[seOff + 2], data[seOff + 3]];
+        const ol: [number, number] = [data[otOff], data[otOff + 1]];
+        const or2: [number, number] = [data[otOff + 2], data[otOff + 3]];
+
+        quads[z].update(fl, ol, or2, fr, zH, spread);
+        quads[z].setVisible(true);
+      }
+    } else {
+      // Array mode layout
+      const vid = selectedVehicleId;
+      const base = vid * SENSOR_DATA_SIZE;
+
+      // Body quad (zone0 FL/FR + BL/BR)
+      const readQuad = (zoneOff: number, useBody: boolean): [[number, number], [number, number], [number, number], [number, number]] => {
+        const off = base + zoneOff * SENSOR_POINT_SIZE;
+        const fl: [number, number] = [data[off + SensorPoint.FL_X], data[off + SensorPoint.FL_Y]];
+        const fr: [number, number] = [data[off + SensorPoint.FR_X], data[off + SensorPoint.FR_Y]];
+        const ol: [number, number] = useBody
+          ? [data[off + SensorPoint.BL_X], data[off + SensorPoint.BL_Y]]
+          : [data[off + SensorPoint.SL_X], data[off + SensorPoint.SL_Y]];
+        const or2: [number, number] = useBody
+          ? [data[off + SensorPoint.BR_X], data[off + SensorPoint.BR_Y]]
+          : [data[off + SensorPoint.SR_X], data[off + SensorPoint.SR_Y]];
+        return [fl, ol, or2, fr];
+      };
+
+      // body=zone0+body, zone0, zone1, zone2
+      const configs: [number, boolean][] = [[0, true], [0, false], [1, false], [2, false]];
+
+      // distance calc from body center
+      const bPts = readQuad(0, true);
+      const bcx = (bPts[0][0] + bPts[1][0] + bPts[2][0] + bPts[3][0]) * 0.25;
+      const bcy = (bPts[0][1] + bPts[1][1] + bPts[2][1] + bPts[3][1]) * 0.25;
+      const dist = camera.position.distanceTo(new THREE.Vector3(bcx, bcy, zH));
+      spread = THREE.MathUtils.clamp(dist * 0.005, 0.06, 0.4);
+
+      for (let z = 0; z < 4; z++) {
+        const [zoneOff, isBody] = configs[z];
+        const [fl, ol, or2, fr] = readQuad(zoneOff, isBody);
+        quads[z].update(fl, ol, or2, fr, zH, spread);
+        quads[z].setVisible(true);
+      }
+    }
+  });
+
+  return <group ref={groupRef} />;
+}
+
+// -----------------------------------------------------------------------------
 // Main Renderer
 // -----------------------------------------------------------------------------
 
@@ -261,6 +517,12 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
         isSharedMemory={isSharedMemory}
         startEndSection={SensorSection.ZONE0_STARTEND}
         otherSection={SensorSection.BODY_OTHER}
+      />
+      {/* Glow for selected vehicle's sensors */}
+      <SelectedSensorGlow
+        numVehicles={numVehicles}
+        getData={getData}
+        isSharedMemory={isSharedMemory}
       />
     </>
   );

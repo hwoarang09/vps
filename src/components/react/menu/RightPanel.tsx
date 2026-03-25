@@ -1,5 +1,6 @@
 // components/react/menu/RightPanel.tsx
 import React, { useEffect } from "react";
+import { twMerge } from "tailwind-merge";
 import { Radio } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
@@ -288,7 +289,10 @@ const RightPanel: React.FC = () => {
       </div>
 
       {/* 내용 */}
-      <div className={panelContentVariants({ padding: "md" })}>
+      <div className={twMerge(
+        panelContentVariants({ padding: "md" }),
+        activeSubMenu === "search-vehicle" && "overflow-hidden"
+      )}>
         {renderContent()}
       </div>
     </div>

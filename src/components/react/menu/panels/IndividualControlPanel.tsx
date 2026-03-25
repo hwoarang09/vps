@@ -22,9 +22,6 @@ import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "@/common/vehicle/lo
 import { getLockWaitDistanceFromMergingStr, getLockWaitDistanceFromMergingCurve } from "@/config/worker/simulationConfig";
 import {
     panelInputVariants,
-    panelCardVariants,
-    panelTextVariants,
-    panelButtonVariants,
 } from "../shared/panelStyles";
 import { twMerge } from "tailwind-merge";
 
@@ -46,20 +43,20 @@ const getStopReasons = (reasonMask: number): string[] => {
     return reasons;
 };
 
-// Map for Traffic State
 const TrafficStateMap: Record<number, string> = {
     [TrafficState.FREE]: "FREE",
     [TrafficState.WAITING]: "WAITING",
     [TrafficState.ACQUIRED]: "ACQUIRED",
 };
 
-// Map for Hit Zone
 const HitZoneMap: Record<number, string> = {
     [-1]: "None",
     0: "Approach",
     1: "Brake",
     2: "Stop",
 };
+
+type TabType = "basic" | "route" | "sensor";
 
 interface VehicleMonitorProps {
     vehicleIndex: number;
@@ -162,8 +159,287 @@ const findNearestMergeWait = (
     return null;
 };
 
+// ─── Tab: Basic ─────────────────────────────────────────
+const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
+    const {
+        vehicleId, vehicleIndex, status, velocity, acceleration, deceleration,
+        currentEdgeName, currentEdgeIdx, currentEdge, nextEdgeName, nextEdgeIdx,
+        destinationEdgeName, pathRemaining, isShmMode, trafficState, stopReasons,
+    } = data;
+
+    const railType = currentEdge
+        ? (currentEdge.vos_rail_type === EdgeType.LINEAR ? "Str" : "Curve")
+        : "—";
+
+    return (
+        <div className="space-y-1 text-sm bg-panel-bg-solid p-2 rounded border border-panel-border">
+            <div className="flex justify-between border-b border-panel-border pb-1 mb-1">
+                <span className="text-gray-400">ID / Index</span>
+                <span className="font-mono font-bold text-white">{vehicleId} <span className="text-gray-500 text-xs">#{vehicleIndex}</span></span>
+            </div>
+
+            <div className="flex justify-between">
+                <span className="text-gray-400">Status</span>
+                <span className={`font-mono font-bold ${status === MovingStatus.MOVING ? "text-green-400" : status === MovingStatus.PAUSED ? "text-orange-400" : "text-red-400"}`}>
+                    {status === MovingStatus.MOVING ? "MOVING" : status === MovingStatus.PAUSED ? "PAUSED" : "STOPPED"}
+                </span>
+            </div>
+
+            <div className="flex justify-between">
+                <span className="text-gray-400">Velocity</span>
+                <span className="font-mono text-white">{velocity.toFixed(3)} m/s</span>
+            </div>
+
+            <div className="flex justify-between text-xs text-gray-500">
+                <span>Acc / Dec</span>
+                <span className="font-mono">{acceleration.toFixed(2)} / {deceleration.toFixed(2)}</span>
+            </div>
+
+            <div className="flex justify-between text-xs text-accent-cyan font-medium mt-1">
+                <span>Cur Edge <span className="text-gray-600">({railType})</span></span>
+                <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx})</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-500">
+                <span>Next Edge</span>
+                <span className="font-mono">{nextEdgeName} {nextEdgeIdx !== -1 ? `(#${nextEdgeIdx})` : ""}</span>
+            </div>
+
+            {isShmMode && destinationEdgeName !== "None" && (
+                <div className="flex justify-between text-xs text-purple-400 font-medium mt-1">
+                    <span>Destination</span>
+                    <span className="font-mono">{destinationEdgeName} (Hops: {pathRemaining?.toFixed(0)})</span>
+                </div>
+            )}
+
+            <div className="my-1.5 border-t border-panel-border" />
+
+            <div className="flex justify-between">
+                <span className="text-gray-400">Traffic</span>
+                <span className={`font-mono ${trafficState === TrafficState.WAITING ? "text-accent-orange animate-pulse" : "text-accent-cyan"}`}>
+                    {TrafficStateMap[trafficState] || trafficState}
+                </span>
+            </div>
+
+            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="text-gray-500 text-xs shrink-0">Stop:</span>
+                {stopReasons.map(r => (
+                    <span key={r} className={`px-1 py-0.5 text-[10px] rounded border ${r === "NONE" ? "bg-panel-bg text-gray-500 border-panel-border" : "bg-red-500/20 text-red-400 border-red-500/30 font-bold"}`}>
+                        {r}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ─── Tab: Route ─────────────────────────────────────────
+const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
+    const {
+        vehicleIndex, nextEdgesInfo, mergeWaitInfo, isShmMode,
+    } = data;
+
+    return (
+        <div className="space-y-2 text-xs">
+            {/* Next Edges */}
+            {nextEdgesInfo.length > 0 && (
+                <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
+                    <div className="text-accent-cyan font-medium mb-1">Next Edges ({nextEdgesInfo.length}/5)</div>
+                    <div className="space-y-0.5 text-gray-400">
+                        {nextEdgesInfo.map((item) => (
+                            item && (
+                                <div key={item.index} className={`flex justify-between font-mono ${item.isMerge ? 'text-accent-orange font-bold' : ''}`}>
+                                    <span>{item.index + 1}. {item.name}</span>
+                                    <span className="text-gray-600">
+                                        #{item.edgeIdx}
+                                        {item.isMerge && <span className="ml-1 text-accent-orange">[M]</span>}
+                                    </span>
+                                </div>
+                            )
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Merge Wait Point */}
+            {mergeWaitInfo && (
+                <div className="p-2 bg-accent-orange/10 rounded border border-accent-orange/30">
+                    <div className="flex justify-between font-bold text-accent-orange mb-1">
+                        <span>Merge Wait</span>
+                        <span>{mergeWaitInfo.waitNodeName} ({mergeWaitInfo.isCurve ? 'Curve' : 'Str'})</span>
+                    </div>
+                    <div className="flex justify-between text-accent-orange-light">
+                        <span>Dist:</span>
+                        <span className="font-mono font-bold">{mergeWaitInfo.distanceToWait.toFixed(2)} m</span>
+                    </div>
+                    <div className="flex justify-between text-orange-300">
+                        <span>Via:</span>
+                        <span className="font-mono">{mergeWaitInfo.mergeEdgeName}</span>
+                    </div>
+                    <div className="flex justify-between text-orange-300">
+                        <span>Hops:</span>
+                        <span className="font-mono">{mergeWaitInfo.edgeHops === 0 ? 'Current' : mergeWaitInfo.edgeHops}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Path (SHM only) */}
+            {isShmMode && (() => {
+                const pathData = useShmSimulatorStore.getState().getPathData();
+                if (!pathData) return null;
+
+                const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+                const len = pathData[pathPtr + PATH_LEN];
+                if (len === 0) return null;
+
+                const remainingPath: { edgeIdx: number; edgeName: string }[] = [];
+                for (let i = 0; i < len && i < 10; i++) {
+                    const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
+                    if (edgeIdx >= 0) {
+                        const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
+                        remainingPath.push({
+                            edgeIdx,
+                            edgeName: edge?.edge_name || `Edge#${edgeIdx}`
+                        });
+                    }
+                }
+
+                if (remainingPath.length === 0) return null;
+
+                return (
+                    <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
+                        <div className="text-purple-400 font-medium mb-1">
+                            Path ({remainingPath.length}{len > 10 ? `+${len - 10}` : ''} edges)
+                        </div>
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto text-gray-400">
+                            {remainingPath.map((item, idx) => (
+                                <div key={idx} className="flex justify-between font-mono">
+                                    <span>{idx + 1}. {item.edgeName}</span>
+                                    <span className="text-gray-600">#{item.edgeIdx}</span>
+                                </div>
+                            ))}
+                            {len > 10 && (
+                                <div className="text-gray-600 text-center">... +{len - 10} more</div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {!isShmMode && nextEdgesInfo.length === 0 && (
+                <div className="text-gray-500 text-center py-4">No route data (Array mode)</div>
+            )}
+        </div>
+    );
+};
+
+// ─── Tab: Sensor ────────────────────────────────────────
+const SensorTab: React.FC<{ data: VehicleData }> = ({ data }) => {
+    const {
+        sensorPreset, hitZone, collisionTarget,
+        currentEdgeName, currentEdgeIdx, currentEdgeRatio,
+        targetEdgeInfo, targetRatioInfo, zonePoints,
+    } = data;
+
+    return (
+        <div className="space-y-2 text-sm">
+            <div className="bg-panel-bg-solid p-2 rounded border border-panel-border space-y-1">
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Preset</span>
+                    <span className="font-mono text-white text-xs">
+                        {Object.keys(PresetIndex).find(key => PresetIndex[key as keyof typeof PresetIndex] === sensorPreset) || sensorPreset}
+                    </span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Hit Zone</span>
+                    <span className={`font-mono font-bold ${hitZone > 0 ? "text-red-400" : "text-gray-400"}`}>
+                        {HitZoneMap[Math.round(hitZone)] || hitZone} ({hitZone.toFixed(0)})
+                    </span>
+                </div>
+            </div>
+
+            {/* Collision Target */}
+            {collisionTarget !== -1 && (
+                <div className="p-2 bg-red-500/10 rounded border border-red-500/30 text-xs text-red-300">
+                    <div className="flex justify-between font-bold mb-1">
+                        <span>Collision Target</span>
+                        <span>VEH{collisionTarget.toString().padStart(5, '0')} (#{collisionTarget})</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-500">Target:</span>
+                        <span className="font-mono">{targetEdgeInfo} : {targetRatioInfo}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-500">Me:</span>
+                        <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx}) : {currentEdgeRatio.toFixed(3)}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Sensor Points (Array mode only) */}
+            {zonePoints && (
+                <details className="group">
+                    <summary className="font-semibold text-xs text-gray-500 cursor-pointer list-none flex items-center gap-1 select-none">
+                        <span className="group-open:rotate-90 transition-transform">▸</span>
+                        Sensor Points (World)
+                    </summary>
+                    <div className="text-[10px] space-y-2 mt-2 pl-2">
+                        <div className="grid grid-cols-2 gap-1 bg-panel-bg p-1 rounded">
+                            <span className="font-bold col-span-2 text-gray-300">Body Quad</span>
+                            <span className="text-gray-400">FL: {zonePoints[0].pts.fl[0].toFixed(2)}, {zonePoints[0].pts.fl[1].toFixed(2)}</span>
+                            <span className="text-gray-400">FR: {zonePoints[0].pts.fr[0].toFixed(2)}, {zonePoints[0].pts.fr[1].toFixed(2)}</span>
+                            <span className="text-gray-400">BL: {zonePoints[0].pts.bl[0].toFixed(2)}, {zonePoints[0].pts.bl[1].toFixed(2)}</span>
+                            <span className="text-gray-400">BR: {zonePoints[0].pts.br[0].toFixed(2)}, {zonePoints[0].pts.br[1].toFixed(2)}</span>
+                        </div>
+                        {zonePoints.map((z, idx) => (
+                            <div key={idx} className="bg-panel-bg p-1 rounded border border-panel-border">
+                                <div className="font-bold mb-1 text-gray-300">{z.name} (SL/SR)</div>
+                                <div className="grid grid-cols-1 gap-1">
+                                    <span className="text-gray-400">SL: {z.pts.sl[0].toFixed(2)}, {z.pts.sl[1].toFixed(2)}</span>
+                                    <span className="text-gray-400">SR: {z.pts.sr[0].toFixed(2)}, {z.pts.sr[1].toFixed(2)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </details>
+            )}
+        </div>
+    );
+};
+
+// ─── Shared data interface for tabs ─────────────────────
+interface VehicleData {
+    vehicleId: string;
+    vehicleIndex: number;
+    status: number;
+    velocity: number;
+    acceleration: number;
+    deceleration: number;
+    currentEdgeName: string;
+    currentEdgeIdx: number;
+    currentEdge: FullEdge | undefined;
+    currentEdgeRatio: number;
+    nextEdgeName: string;
+    nextEdgeIdx: number;
+    nextEdges: number[];
+    nextEdgesInfo: { index: number; edgeIdx: number; name: string; toNode: string; isMerge: boolean }[];
+    destinationEdgeName: string;
+    pathRemaining: number | undefined;
+    sensorPreset: number;
+    hitZone: number;
+    collisionTarget: number;
+    targetEdgeInfo: string;
+    targetRatioInfo: string;
+    trafficState: number;
+    stopReasons: string[];
+    mergeWaitInfo: MergeWaitInfo | null;
+    isShmMode: boolean;
+    zonePoints: { name: string; pts: any }[] | null;
+}
+
+// ─── VehicleMonitor ─────────────────────────────────────
 const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles, isShmMode }) => {
     const [tick, setTick] = useState(0);
+    const [activeTab, setActiveTab] = useState<TabType>("basic");
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const followingVehicleId = useCameraStore((state) => state.followingVehicleId);
@@ -214,15 +490,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         } else {
             followVehicle(vehicleIndex);
         }
-    };
-
-    const getCurrentSensorPreset = () => {
-        if (isShmMode) {
-            const data = useShmSimulatorStore.getState().getVehicleFullData();
-            if (!data) return 0;
-            return data[vehicleIndex * SHM_VEHICLE_DATA_SIZE + ShmSensorData.PRESET_IDX];
-        }
-        return vehicleDataArray.get(vehicleIndex).sensor.presetIdx;
     };
 
     let status: number, velocity: number, acceleration: number, deceleration: number;
@@ -288,7 +555,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         if (isShmMode) {
             const data = useShmSimulatorStore.getState().getVehicleFullData();
             const actualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
-
             if (data && collisionTarget >= 0 && collisionTarget < actualNumVehicles) {
                 const tData = readShmVehicleData(data, collisionTarget);
                 const tEdgeIdx = tData.movement.currentEdge;
@@ -299,7 +565,6 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
             }
         } else {
             const actualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
-
             if (collisionTarget >= 0 && collisionTarget < actualNumVehicles) {
                 const tData = vehicleDataArray.get(collisionTarget);
                 const tEdgeIdx = tData.movement.currentEdge;
@@ -327,287 +592,82 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         if (edgeIdx < 1) return null;
         const edge = edges[edgeIdx - 1];
         return edge ? { index: i, edgeIdx, name: edge.edge_name, toNode: edge.to_node, isMerge: edge.toNodeIsMerge ?? false } : null;
-    }).filter(Boolean);
+    }).filter(Boolean) as VehicleData["nextEdgesInfo"];
 
-    // Control button style helper
-    const controlBtnClass = (color: string, isActive = false) => twMerge(
-        "flex flex-col items-center justify-center p-2 rounded transition-colors",
-        `border border-${color}-500/50 bg-${color}-500/20 text-${color}-400 hover:bg-${color}-500/30`,
-        isActive && `border-${color}-400 bg-${color}-500/40`
-    );
+    const vehicleData: VehicleData = {
+        vehicleId, vehicleIndex, status, velocity, acceleration, deceleration,
+        currentEdgeName, currentEdgeIdx, currentEdge, currentEdgeRatio,
+        nextEdgeName, nextEdgeIdx, nextEdges, nextEdgesInfo,
+        destinationEdgeName, pathRemaining, sensorPreset, hitZone,
+        collisionTarget, targetEdgeInfo, targetRatioInfo,
+        trafficState, stopReasons, mergeWaitInfo, isShmMode, zonePoints,
+    };
+
+    const tabs: { key: TabType; label: string }[] = [
+        { key: "basic", label: "기본" },
+        { key: "route", label: "경로" },
+        { key: "sensor", label: "센서" },
+    ];
 
     return (
-        <div className="space-y-4">
-            {/* Control Area */}
-            <div className="grid grid-cols-5 gap-2">
-                <button
-                    onClick={handleStop}
-                    className="flex flex-col items-center justify-center p-2 border border-red-500/50 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors"
-                >
-                    <Octagon size={20} className="mb-1" />
-                    <span className="text-[10px] font-medium">Stop</span>
+        <div className="space-y-2">
+            {/* Control Buttons - compact, icon only */}
+            <div className="flex gap-1.5">
+                <button onClick={handleStop} title="Stop"
+                    className="flex items-center justify-center w-8 h-8 rounded border border-red-500/50 bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                    <Octagon size={14} />
                 </button>
-                <button
-                    onClick={handlePause}
-                    className="flex flex-col items-center justify-center p-2 border border-orange-500/50 bg-orange-500/20 text-orange-400 rounded hover:bg-orange-500/30 transition-colors"
-                >
-                    <Pause size={20} className="mb-1" />
-                    <span className="text-[10px] font-medium">Pause</span>
+                <button onClick={handlePause} title="Pause"
+                    className="flex items-center justify-center w-8 h-8 rounded border border-orange-500/50 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors">
+                    <Pause size={14} />
                 </button>
-                <button
-                    onClick={handleResume}
-                    className="flex flex-col items-center justify-center p-2 border border-green-500/50 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors"
-                >
-                    <Play size={20} className="mb-1" />
-                    <span className="text-[10px] font-medium">Resume</span>
+                <button onClick={handleResume} title="Resume"
+                    className="flex items-center justify-center w-8 h-8 rounded border border-green-500/50 bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
+                    <Play size={14} />
                 </button>
-                <button
-                    onClick={handleToggleFollow}
+                <button onClick={handleToggleFollow} title={isFollowing ? "Following" : "Follow"}
                     className={twMerge(
-                        "flex flex-col items-center justify-center p-2 border rounded transition-colors",
+                        "flex items-center justify-center w-8 h-8 rounded border transition-colors",
                         isFollowing
                             ? "border-purple-400 bg-purple-500/40 text-purple-300"
                             : "border-purple-500/50 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
-                    )}
-                >
-                    {isFollowing ? <Video size={20} className="mb-1" /> : <VideoOff size={20} className="mb-1" />}
-                    <span className="text-[10px] font-medium">{isFollowing ? "Following" : "Follow"}</span>
+                    )}>
+                    {isFollowing ? <Video size={14} /> : <VideoOff size={14} />}
                 </button>
-                <button
-                    onClick={handleChangeSensor}
-                    className="flex flex-col items-center justify-center p-2 border border-blue-500/50 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors"
-                >
-                    <Settings size={20} className="mb-1" />
-                    <span className="text-[10px] font-medium leading-tight text-center">
-                        {Object.keys(PresetIndex).find(key => PresetIndex[key as keyof typeof PresetIndex] === getCurrentSensorPreset()) || "SENSOR"}
-                    </span>
+                <button onClick={handleChangeSensor} title="Sensor Preset"
+                    className="flex items-center justify-center w-8 h-8 rounded border border-blue-500/50 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors">
+                    <Settings size={14} />
                 </button>
+                <span className="ml-auto text-[10px] text-gray-600 font-mono self-center">T:{tick % 100}</span>
             </div>
 
-            {/* Status Area */}
-            <div className={panelCardVariants({ variant: "glow-orange", padding: "md" })}>
-                <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-semibold text-white">Vehicle Status</h4>
-                    <span className="text-xs text-gray-500 font-mono">Tick: {tick % 100}</span>
-                </div>
-
-                <div className="space-y-1 text-sm bg-panel-bg-solid p-2 rounded border border-panel-border">
-                    <div className="flex justify-between border-b border-panel-border pb-1 mb-1">
-                        <span className="text-gray-400">ID / Index</span>
-                        <span className="font-mono font-bold text-white">{vehicleId} <span className="text-gray-500 text-xs">#{vehicleIndex}</span></span>
-                    </div>
-
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">Status</span>
-                        <span className={`font-mono font-bold ${status === MovingStatus.MOVING ? "text-green-400" : status === MovingStatus.PAUSED ? "text-orange-400" : "text-red-400"}`}>
-                            {status === MovingStatus.MOVING ? "MOVING" : status === MovingStatus.PAUSED ? "PAUSED" : "STOPPED"}
-                        </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">Velocity</span>
-                        <span className="font-mono text-white">{velocity.toFixed(3)} m/s</span>
-                    </div>
-
-                    <div className="flex justify-between text-xs text-gray-500">
-                        <span>Acc / Dec</span>
-                        <span className="font-mono">{acceleration.toFixed(2)} / {deceleration.toFixed(2)}</span>
-                    </div>
-
-                    <div className="flex justify-between text-xs text-accent-cyan font-medium mt-1">
-                        <span>Cur Edge</span>
-                        <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx})</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                         <span>Next Edge</span>
-                         <span className="font-mono">{nextEdgeName} {nextEdgeIdx !== -1 ? `(#${nextEdgeIdx})` : ""}</span>
-                    </div>
-
-                    {isShmMode && destinationEdgeName !== "None" && (
-                        <div className="flex justify-between text-xs text-purple-400 font-medium mt-1">
-                            <span>Destination</span>
-                            <span className="font-mono">{destinationEdgeName} (Hops: {pathRemaining?.toFixed(0)})</span>
-                        </div>
-                    )}
-
-                    {/* Path Display */}
-                    {isShmMode && (() => {
-                        const pathData = useShmSimulatorStore.getState().getPathData();
-                        if (!pathData) return null;
-
-                        const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
-                        const len = pathData[pathPtr + PATH_LEN];
-
-                        if (len === 0) return null;
-
-                        const remainingPath: { edgeIdx: number; edgeName: string }[] = [];
-                        for (let i = 0; i < len && i < 10; i++) {
-                            const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
-                            if (edgeIdx >= 0) {
-                                const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
-                                remainingPath.push({
-                                    edgeIdx,
-                                    edgeName: edge?.edge_name || `Edge#${edgeIdx}`
-                                });
-                            }
-                        }
-
-                        if (remainingPath.length === 0) return null;
-
-                        return (
-                            <details className="text-xs mt-2">
-                                <summary className="cursor-pointer text-purple-400 font-medium hover:text-purple-300">
-                                    Path ({remainingPath.length}{len > 10 ? `+${len - 10}` : ''} edges)
-                                </summary>
-                                <div className="mt-1 pl-2 space-y-0.5 max-h-32 overflow-y-auto text-gray-400">
-                                    {remainingPath.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between font-mono">
-                                            <span>{idx + 1}.</span>
-                                            <span>{item.edgeName}</span>
-                                            <span className="text-gray-600">#{item.edgeIdx}</span>
-                                        </div>
-                                    ))}
-                                    {len > 10 && (
-                                        <div className="text-gray-600 text-center">... +{len - 10} more</div>
-                                    )}
-                                </div>
-                            </details>
-                        );
-                    })()}
-
-                    {/* Next Edges & Merge Node Info (SHM mode) */}
-                    {isShmMode && nextEdgesInfo.length > 0 && (
-                        <details className="text-xs mt-2" open>
-                            <summary className="cursor-pointer text-accent-cyan font-medium hover:text-cyan-300">
-                                Next Edges ({nextEdgesInfo.length}/5)
-                            </summary>
-                            <div className="mt-1 pl-2 space-y-0.5 text-gray-400">
-                                {nextEdgesInfo.map((item) => (
-                                    item && (
-                                        <div key={item.index} className={`flex justify-between font-mono ${item.isMerge ? 'text-accent-orange font-bold' : ''}`}>
-                                            <span>{item.index + 1}.</span>
-                                            <span>{item.name}</span>
-                                            <span className="text-gray-600">
-                                                #{item.edgeIdx}
-                                                {item.isMerge && <span className="ml-1 text-accent-orange">[M]</span>}
-                                            </span>
-                                        </div>
-                                    )
-                                ))}
-                            </div>
-                        </details>
-                    )}
-
-                    {/* Merge Wait Point Alert */}
-                    {isShmMode && mergeWaitInfo && (
-                        <div className="mt-2 p-2 bg-accent-orange/10 rounded border border-accent-orange/30 text-xs">
-                            <div className="flex justify-between font-bold text-accent-orange mb-1">
-                                <span>Merge Wait Point</span>
-                                <span>{mergeWaitInfo.waitNodeName} ({mergeWaitInfo.isCurve ? 'Curve' : 'Str'})</span>
-                            </div>
-                            <div className="flex justify-between text-accent-orange-light">
-                                <span>Distance to Wait:</span>
-                                <span className="font-mono font-bold">{mergeWaitInfo.distanceToWait.toFixed(2)} m</span>
-                            </div>
-                            <div className="flex justify-between text-orange-300">
-                                <span>Via Edge:</span>
-                                <span className="font-mono">{mergeWaitInfo.mergeEdgeName}</span>
-                            </div>
-                            <div className="flex justify-between text-orange-300">
-                                <span>Hops:</span>
-                                <span className="font-mono">{mergeWaitInfo.edgeHops === 0 ? 'Current' : mergeWaitInfo.edgeHops}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="my-2 border-t border-panel-border"></div>
-
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">Sensor Preset</span>
-                        <span className="font-mono text-white">{Object.keys(PresetIndex).find(key => PresetIndex[key as keyof typeof PresetIndex] === sensorPreset) || sensorPreset}</span>
-                    </div>
-
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">Hit Zone</span>
-                        <span className={`font-mono font-bold ${hitZone > 0 ? "text-red-400" : "text-gray-400"}`}>
-                            {HitZoneMap[Math.round(hitZone)] || hitZone} ({hitZone.toFixed(0)})
-                        </span>
-                    </div>
-
-                    {collisionTarget !== -1 && (
-                        <div className="mt-2 p-2 bg-red-500/10 rounded border border-red-500/30 text-xs text-red-300">
-                            <div className="flex justify-between font-bold mb-1">
-                                <span>Collision Target:</span>
-                                <span>VEH{collisionTarget.toString().padStart(5, '0')} (#{collisionTarget})</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">Target Loc:</span>
-                                <span className="font-mono">{targetEdgeInfo} : {targetRatioInfo}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-500">My Loc:</span>
-                                <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx}) : {currentEdgeRatio.toFixed(3)}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="my-2 border-t border-panel-border"></div>
-
-                    {zonePoints && (
-                        <div className="space-y-2">
-                            <details className="group">
-                                <summary className="font-semibold text-xs text-gray-500 cursor-pointer list-none flex items-center gap-1 select-none">
-                                    <span className="group-open:rotate-90 transition-transform">▸</span>
-                                    Sensor Points (World)
-                                </summary>
-                                <div className="text-[10px] space-y-2 mt-2 pl-2">
-                                    <div className="grid grid-cols-2 gap-1 bg-panel-bg p-1 rounded">
-                                        <span className="font-bold col-span-2 text-gray-300">Body Quad</span>
-                                        <span className="text-gray-400">FL: {zonePoints[0].pts.fl[0].toFixed(2)}, {zonePoints[0].pts.fl[1].toFixed(2)}</span>
-                                        <span className="text-gray-400">FR: {zonePoints[0].pts.fr[0].toFixed(2)}, {zonePoints[0].pts.fr[1].toFixed(2)}</span>
-                                        <span className="text-gray-400">BL: {zonePoints[0].pts.bl[0].toFixed(2)}, {zonePoints[0].pts.bl[1].toFixed(2)}</span>
-                                        <span className="text-gray-400">BR: {zonePoints[0].pts.br[0].toFixed(2)}, {zonePoints[0].pts.br[1].toFixed(2)}</span>
-                                    </div>
-
-                                    {zonePoints.map((z, idx) => (
-                                        <div key={idx} className="bg-panel-bg p-1 rounded border border-panel-border">
-                                            <div className="font-bold mb-1 text-gray-300">{z.name} (SL/SR)</div>
-                                            <div className="grid grid-cols-1 gap-1">
-                                                <span className="text-gray-400">SL: {z.pts.sl[0].toFixed(2)}, {z.pts.sl[1].toFixed(2)}</span>
-                                                <span className="text-gray-400">SR: {z.pts.sr[0].toFixed(2)}, {z.pts.sr[1].toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </details>
-                        </div>
-                    )}
-
-                    <div className="my-2 border-t border-panel-border"></div>
-
-                    <div className="flex justify-between">
-                        <span className="text-gray-400">Traffic State</span>
-                        <span className={`font-mono ${trafficState === TrafficState.WAITING ? "text-accent-orange animate-pulse" : "text-accent-cyan"}`}>
-                            {TrafficStateMap[trafficState] || trafficState}
-                        </span>
-                    </div>
-
-                    <div className="flex flex-col mt-1">
-                        <span className="mb-1 text-gray-500">Stop Reasons:</span>
-                        <div className="flex flex-wrap gap-1">
-                            {stopReasons.map(r => (
-                                <span key={r} className={`px-1.5 py-0.5 text-[10px] rounded border ${r === "NONE" ? "bg-panel-bg text-gray-500 border-panel-border" : "bg-red-500/20 text-red-400 border-red-500/30 font-bold"}`}>
-                                    {r}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+            {/* Tabs */}
+            <div className="flex border-b border-panel-border">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={twMerge(
+                            "flex-1 py-1.5 text-xs font-medium transition-colors",
+                            activeTab === tab.key
+                                ? "text-accent-cyan border-b-2 border-accent-cyan"
+                                : "text-gray-500 hover:text-gray-300"
+                        )}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
+
+            {/* Tab Content */}
+            {activeTab === "basic" && <BasicTab data={vehicleData} />}
+            {activeTab === "route" && <RouteTab data={vehicleData} />}
+            {activeTab === "sensor" && <SensorTab data={vehicleData} />}
         </div>
     );
-}
+};
 
+// ─── IndividualControlPanel ─────────────────────────────
 const IndividualControlPanel: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [foundVehicleIndex, setFoundVehicleIndex] = useState<number | null>(null);
@@ -666,17 +726,16 @@ const IndividualControlPanel: React.FC = () => {
         if (selectedVehicleId !== null) {
             setFoundVehicleIndex(selectedVehicleId);
             setSearchTerm(`VEH${String(selectedVehicleId).padStart(5, '0')}`);
-            followVehicle(selectedVehicleId);
         }
-    }, [selectedVehicleId, followVehicle]);
+    }, [selectedVehicleId]);
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col h-full">
             {/* Search Area */}
-            <div className="relative">
+            <div className="relative shrink-0 pb-3">
                 <input
                     type="text"
-                    placeholder="Search Vehicle (e.g. VEH00001)"
+                    placeholder="VEH00001 or 1"
                     className={twMerge(
                         panelInputVariants({ size: "md", width: "full" }),
                         "pl-10 pr-4 py-2"
@@ -689,17 +748,13 @@ const IndividualControlPanel: React.FC = () => {
             </div>
 
             {/* Monitor Area */}
-            {foundVehicleIndex !== null ? (
-                <VehicleMonitor
-                    vehicleIndex={foundVehicleIndex}
-                    vehicles={vehicles}
-                    isShmMode={isShmMode}
-                />
-            ) : (
-                <div className="text-center text-gray-500 py-8">
-                    <Search size={48} className="mx-auto mb-4 opacity-50" />
-                    <p className={panelTextVariants({ variant: "muted", size: "sm" })}>차량 ID를 검색하세요</p>
-                    <p className={panelTextVariants({ variant: "muted", size: "xs" })}>예: VEH00001 또는 1</p>
+            {foundVehicleIndex !== null && (
+                <div className="flex-1 overflow-y-auto min-h-0">
+                    <VehicleMonitor
+                        vehicleIndex={foundVehicleIndex}
+                        vehicles={vehicles}
+                        isShmMode={isShmMode}
+                    />
                 </div>
             )}
         </div>
