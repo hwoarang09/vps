@@ -626,8 +626,10 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         trafficState, stopReasons, mergeWaitInfo, isShmMode, zonePoints,
     };
 
-    // Update edge highlight for selected vehicle (currentEdge)
-    useVehicleEdgeHighlightStore.getState().setCurrentEdge(currentEdgeIdx >= 1 ? currentEdgeIdx : null);
+    // Update edge highlight for selected vehicle
+    const highlightStore = useVehicleEdgeHighlightStore.getState();
+    highlightStore.setCurrentEdge(currentEdgeIdx >= 1 ? currentEdgeIdx : null);
+    highlightStore.setNextEdge(nextEdgeIdx >= 1 ? nextEdgeIdx : null);
 
     const tabs: { key: TabType; label: string }[] = [
         { key: "basic", label: "기본" },

@@ -9,6 +9,47 @@ import { useNodeStore } from "@store/map/nodeStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
 import { VehicleSystemType } from "@/types/vehicle";
+import type { Edge, Node } from "@/types";
+
+/** edge.bay_name 기반으로 노드 좌표를 그룹핑 */
+function groupEdgesByBay(
+  edges: Edge[],
+  nodes: Node[]
+): Record<string, { x: number; y: number }[]> {
+  const nodeMap = new Map<string, { x: number; y: number }>();
+  for (const node of nodes) {
+    nodeMap.set(node.node_name, { x: node.editor_x, y: node.editor_y });
+  }
+
+  const result: Record<string, { x: number; y: number }[]> = {};
+  for (const edge of edges) {
+    if (!edge.bay_name) continue;
+    const key = edge.bay_name;
+    result[key] ??= [];
+    const fnPos = nodeMap.get(edge.from_node);
+    const tnPos = nodeMap.get(edge.to_node);
+    if (fnPos) result[key].push(fnPos);
+    if (tnPos) result[key].push(tnPos);
+  }
+  return result;
+}
+
+/** 각 bay의 centroid → TextGroup 변환 */
+function computeBayCentroids(
+  bayNodePositions: Record<string, { x: number; y: number }[]>
+): TextGroup[] {
+  const result: TextGroup[] = [];
+  for (const [bayName, positions] of Object.entries(bayNodePositions)) {
+    if (positions.length === 0) continue;
+    const avgX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+    const isOuter = /OUTER/i.test(bayName);
+    const y = isOuter
+      ? Math.max(...positions.map((p) => p.y))
+      : positions.reduce((s, p) => s + p.y, 0) / positions.length;
+    result.push({ x: avgX, y, z: 0.2, digits: textToDigits(bayName) });
+  }
+  return result;
+}
 
 interface Props {
   mode: VehicleSystemType;
@@ -150,43 +191,10 @@ const MapTextRenderer: React.FC<Props> = (props) => {
 
   const bayGroups = useMemo((): TextGroup[] => {
     if (edges.length === 0 || nodes.length === 0) return [];
+    if (!edges.some((e) => e.bay_name)) return [];
 
-    const hasBayName = edges.some((e) => e.bay_name);
-    if (!hasBayName) return [];
-
-    // node name → position lookup
-    const nodeMap = new Map<string, { x: number; y: number }>();
-    for (const node of nodes) {
-      nodeMap.set(node.node_name, { x: node.editor_x, y: node.editor_y });
-    }
-
-    // edge.bay_name 기반 그룹핑
-    const bayNodePositions: Record<string, { x: number; y: number }[]> = {};
-    for (const edge of edges) {
-      if (!edge.bay_name) continue;
-      const key = edge.bay_name;
-      if (!bayNodePositions[key]) bayNodePositions[key] = [];
-      const fnPos = nodeMap.get(edge.from_node);
-      const tnPos = nodeMap.get(edge.to_node);
-      if (fnPos) bayNodePositions[key].push(fnPos);
-      if (tnPos) bayNodePositions[key].push(tnPos);
-    }
-
-    // 각 bay의 centroid 계산
-    const result: TextGroup[] = [];
-    for (const [bayName, positions] of Object.entries(bayNodePositions)) {
-      if (positions.length === 0) continue;
-      const avgX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
-
-      // OUTER가 포함된 bay는 y를 최대값(맨 위)으로
-      const isOuter = /OUTER/i.test(bayName);
-      const y = isOuter
-        ? Math.max(...positions.map((p) => p.y))
-        : positions.reduce((s, p) => s + p.y, 0) / positions.length;
-
-      result.push({ x: avgX, y, z: 0.2, digits: textToDigits(bayName) });
-    }
-    return result;
+    const bayNodePositions = groupEdgesByBay(edges, nodes);
+    return computeBayCentroids(bayNodePositions);
   }, [edges, nodes]);
 
   const BAY_LABEL_SCALE = 5;

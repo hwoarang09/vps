@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 
@@ -23,37 +23,45 @@ export const PerformanceMonitorUI: React.FC = () => {
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Worker expand 버튼 클릭은 드래그 무시
-    if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
-    e.preventDefault();
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: rect.left,
-      origY: rect.top,
+  // Drag: imperative listener로 등록 (JSX 접근성 규칙 준수)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Worker expand 버튼 클릭은 드래그 무시
+      if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: rect.left,
+        origY: rect.top,
+      };
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (!dragRef.current) return;
+        const dx = ev.clientX - dragRef.current.startX;
+        const dy = ev.clientY - dragRef.current.startY;
+        setPosition({
+          x: dragRef.current.origX + dx,
+          y: dragRef.current.origY + dy,
+        });
+      };
+
+      const handleMouseUp = () => {
+        dragRef.current = null;
+        globalThis.removeEventListener("mousemove", handleMouseMove);
+        globalThis.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      globalThis.addEventListener("mousemove", handleMouseMove);
+      globalThis.addEventListener("mouseup", handleMouseUp);
     };
 
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = ev.clientX - dragRef.current.startX;
-      const dy = ev.clientY - dragRef.current.startY;
-      setPosition({
-        x: dragRef.current.origX + dx,
-        y: dragRef.current.origY + dy,
-      });
-    };
-
-    const handleMouseUp = () => {
-      dragRef.current = null;
-      globalThis.removeEventListener("mousemove", handleMouseMove);
-      globalThis.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    globalThis.addEventListener("mousemove", handleMouseMove);
-    globalThis.addEventListener("mouseup", handleMouseUp);
+    el.addEventListener("mousedown", handleMouseDown);
+    return () => el.removeEventListener("mousedown", handleMouseDown);
   }, []);
 
   // Get worker performance stats from store
@@ -114,7 +122,6 @@ export const PerformanceMonitorUI: React.FC = () => {
   return (
     <div
       ref={containerRef}
-      onMouseDown={handleMouseDown}
       style={{
         position: "fixed",
         ...(position

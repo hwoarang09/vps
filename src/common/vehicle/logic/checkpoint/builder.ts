@@ -436,8 +436,8 @@ export function buildCheckpoints(
 
 /**
  * Checkpoint 리스트를 로그로 출력 (디버깅용)
- * TODO: SimLogger의 DEV 이벤트로 전환 예정
+ * SimLogger의 DEV 이벤트로 전환 완료 — 이 함수는 하위 호환을 위해 no-op으로 유지
  */
 export function logCheckpoints(_vehicleId: number, _checkpoints: Checkpoint[]): void {
-  // no-op: SimLogger checkpoint logging not yet implemented
+  // no-op: checkpoint logging is handled by SimLogger.logCheckpoint()
 }

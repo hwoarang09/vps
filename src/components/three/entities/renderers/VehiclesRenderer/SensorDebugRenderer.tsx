@@ -219,7 +219,7 @@ class SensorGlowQuad {
   constructor(scene: THREE.Group, config: SensorGlowQuadProps) {
     for (let i = 0; i < config.layerCount; i++) {
       const t = i / Math.max(config.layerCount - 1, 1);
-      const opacity = 0.5 * Math.pow(1 - t, 2.0);
+      const opacity = 0.5 * Math.pow(1 - t, 2);
       const geo = new THREE.BufferGeometry();
       const positions = new Float32Array(QUAD_VERTS * 3);
       geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -263,18 +263,18 @@ class SensorGlowQuad {
       // edge prev→curr
       let e1x = curr[0] - prev[0], e1y = curr[1] - prev[1];
       let n1x = e1y, n1y = -e1x;
-      const len1 = Math.sqrt(n1x * n1x + n1y * n1y) || 1;
+      const len1 = Math.hypot(n1x, n1y) || 1;
       n1x /= len1; n1y /= len1;
 
       // edge curr→next
       let e2x = next[0] - curr[0], e2y = next[1] - curr[1];
       let n2x = e2y, n2y = -e2x;
-      const len2 = Math.sqrt(n2x * n2x + n2y * n2y) || 1;
+      const len2 = Math.hypot(n2x, n2y) || 1;
       n2x /= len2; n2y /= len2;
 
       // average normal
       let nx = n1x + n2x, ny = n1y + n2y;
-      const lenN = Math.sqrt(nx * nx + ny * ny) || 1;
+      const lenN = Math.hypot(nx, ny) || 1;
       nx /= lenN; ny /= lenN;
 
       // check outward: should point away from center
@@ -320,11 +320,11 @@ class SensorGlowQuad {
 /** Glow for the 4 sensor quads of the selected vehicle */
 function SelectedSensorGlow({
   numVehicles, getData, isSharedMemory,
-}: {
+}: Readonly<{
   numVehicles: number;
   getData: () => Float32Array | null;
   isSharedMemory: boolean;
-}) {
+}>) {
   const groupRef = useRef<THREE.Group>(null);
   const quadsRef = useRef<SensorGlowQuad[] | null>(null);
   const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
@@ -368,9 +368,7 @@ function SelectedSensorGlow({
     const zH = getMarkerConfig().Z;
 
     // Distance-adaptive spread
-    // Need vehicle position to calc distance - approximate from body quad center
-    let spread = 0.15;
-
+    let spread: number;
     if (isSharedMemory) {
       // SHM layout: section-based
       const sectionSize = numVehicles * SENSOR_ATTR_SIZE;

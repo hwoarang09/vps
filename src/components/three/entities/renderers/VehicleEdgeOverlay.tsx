@@ -1,6 +1,6 @@
 /**
- * VehicleEdgeOverlay - 선택된 vehicle의 currentEdge 위에 색칠된 오버레이를 그린다.
- * 기존 edge를 수정하지 않고, 동일한 위치에 z+0.001 높이로 새 quad를 그린다.
+ * VehicleEdgeOverlay - 선택된 vehicle의 currentEdge / nextEdge 위에 오버레이를 그린다.
+ * 기존 edge를 수정하지 않고, 동일한 위치에 z 오프셋으로 새 quad를 그린다.
  * LINEAR edge: 1개 quad, CURVE edge: renderingPoints 세그먼트만큼 quad.
  */
 import React, { useRef, useMemo, useEffect } from "react";
@@ -8,26 +8,23 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useVehicleEdgeHighlightStore } from "@/store/ui/vehicleEdgeHighlightStore";
-import { EdgeType } from "@/types";
+import { EdgeType, Edge } from "@/types";
 
-/** 오버레이 Z 오프셋 */
-const Z_OFFSET = 0.002;
 /** quad 두께 (edge width) */
 const QUAD_WIDTH = 0.3;
 /** 최대 세그먼트 수 (curve edge: DEFAULT_SEGMENTS=100 → 101 points → 100 segments) */
 const MAX_SEGMENTS = 128;
 
-// 오버레이 색상
-const CURRENT_EDGE_COLOR = new THREE.Color("#4cff72");
-
 // vertex shader: 단순 instanced quad
 const overlayVertexShader = /* glsl */ `
 uniform float uTime;
+uniform float uZOffset;
 varying float vProgress;
 
 void main() {
     vProgress = uv.x;
     vec4 instancePosition = instanceMatrix * vec4(position, 1.0);
+    instancePosition.z += uZOffset;
     vec4 mvPosition = modelViewMatrix * instancePosition;
     gl_Position = projectionMatrix * mvPosition;
 }
@@ -46,15 +43,92 @@ void main() {
 }
 `;
 
-const VehicleEdgeOverlay: React.FC = () => {
+/** Reusable context for matrix computation */
+interface MatrixCtx {
+  matrix: THREE.Matrix4;
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+  scale: THREE.Vector3;
+  euler: THREE.Euler;
+}
+
+/**
+ * edge의 renderingPoints를 기반으로 InstancedMesh에 quad를 설정한다.
+ * @returns 실제 설정된 instance 수
+ */
+function buildEdgeOverlay(
+  edge: Edge,
+  mesh: THREE.InstancedMesh,
+  ctx: MatrixCtx,
+): number {
+  const points = edge.renderingPoints;
+  if (!points || points.length === 0) return 0;
+
+  const isLinear = !edge.vos_rail_type || edge.vos_rail_type === EdgeType.LINEAR;
+
+  if (isLinear) {
+    const startPos = points[0];
+    const endPos = points.at(-1)!;
+    const length = startPos.distanceTo(endPos);
+    if (length < 0.01) return 0;
+
+    const cx = (startPos.x + endPos.x) / 2;
+    const cy = (startPos.y + endPos.y) / 2;
+    const cz = (startPos.z + endPos.z) / 2;
+    const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x);
+
+    ctx.position.set(cx, cy, cz);
+    ctx.euler.set(0, 0, angle);
+    ctx.quaternion.setFromEuler(ctx.euler);
+    ctx.scale.set(length, QUAD_WIDTH, 1);
+    ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
+
+    mesh.setMatrixAt(0, ctx.matrix);
+    return 1;
+  }
+
+  // CURVE: 세그먼트별 quad
+  const segCount = Math.min(points.length - 1, MAX_SEGMENTS);
+  let idx = 0;
+
+  for (let i = 0; i < segCount; i++) {
+    const s = points[i];
+    const e = points[i + 1];
+    const length = s.distanceTo(e);
+    if (length < 0.001) continue;
+
+    const cx = (s.x + e.x) / 2;
+    const cy = (s.y + e.y) / 2;
+    const cz = (s.z + e.z) / 2;
+    const angle = Math.atan2(e.y - s.y, e.x - s.x);
+
+    ctx.position.set(cx, cy, cz);
+    ctx.euler.set(0, 0, angle);
+    ctx.quaternion.setFromEuler(ctx.euler);
+    ctx.scale.set(length * 2, QUAD_WIDTH, 1);
+    ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
+
+    mesh.setMatrixAt(idx, ctx.matrix);
+    idx++;
+  }
+  return idx;
+}
+
+/** 단일 edge 오버레이 mesh */
+const EdgeOverlayMesh: React.FC<{
+  color: string;
+  zOffset: number;
+  getEdgeIndex: () => number | null;
+}> = ({ color, zOffset, getEdgeIndex }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const prevEdgeIndexRef = useRef<number | null>(null);
 
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const material = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
-      uColor: { value: CURRENT_EDGE_COLOR },
+      uColor: { value: new THREE.Color(color) },
       uTime: { value: 0 },
+      uZOffset: { value: zOffset },
     },
     vertexShader: overlayVertexShader,
     fragmentShader: overlayFragmentShader,
@@ -63,10 +137,9 @@ const VehicleEdgeOverlay: React.FC = () => {
     depthTest: true,
     depthWrite: false,
     depthFunc: THREE.LessEqualDepth,
-  }), []);
+  }), [color, zOffset]);
 
-  // Reusable Three.js objects
-  const ctx = useMemo(() => ({
+  const ctx = useMemo<MatrixCtx>(() => ({
     matrix: new THREE.Matrix4(),
     position: new THREE.Vector3(),
     quaternion: new THREE.Quaternion(),
@@ -74,7 +147,6 @@ const VehicleEdgeOverlay: React.FC = () => {
     euler: new THREE.Euler(),
   }), []);
 
-  // Cleanup
   useEffect(() => {
     return () => {
       geometry.dispose();
@@ -82,86 +154,34 @@ const VehicleEdgeOverlay: React.FC = () => {
     };
   }, [geometry, material]);
 
-  // Subscribe to store via useFrame (no React re-render)
   useFrame((state) => {
     material.uniforms.uTime.value = state.clock.elapsedTime;
 
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    const { currentEdgeIndex } = useVehicleEdgeHighlightStore.getState();
+    const edgeIndex = getEdgeIndex();
 
-    // 변화 없으면 skip
-    if (currentEdgeIndex === prevEdgeIndexRef.current) return;
-    prevEdgeIndexRef.current = currentEdgeIndex;
+    if (edgeIndex === prevEdgeIndexRef.current) return;
+    prevEdgeIndexRef.current = edgeIndex;
 
-    // 하이라이트 없으면 숨기기
-    if (currentEdgeIndex === null || currentEdgeIndex < 1) {
+    if (edgeIndex === null || edgeIndex < 1) {
       mesh.count = 0;
       return;
     }
 
-    // edge 조회 (1-based → 0-based)
     const edges = useEdgeStore.getState().edges;
-    const edge = edges[currentEdgeIndex - 1];
-    if (!edge || !edge.renderingPoints || edge.renderingPoints.length === 0) {
+    const edge = edges[edgeIndex - 1];
+    if (!edge) {
       mesh.count = 0;
       return;
     }
 
-    const points = edge.renderingPoints;
-    const isLinear = !edge.vos_rail_type || edge.vos_rail_type === EdgeType.LINEAR;
-
-    if (isLinear) {
-      // LINEAR: 1개 quad
-      const startPos = points[0];
-      const endPos = points.at(-1)!;
-      const length = startPos.distanceTo(endPos);
-      if (length < 0.01) { mesh.count = 0; return; }
-
-      const cx = (startPos.x + endPos.x) / 2;
-      const cy = (startPos.y + endPos.y) / 2;
-      const cz = (startPos.z + endPos.z) / 2 + Z_OFFSET;
-      const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x);
-
-      ctx.position.set(cx, cy, cz);
-      ctx.euler.set(0, 0, angle);
-      ctx.quaternion.setFromEuler(ctx.euler);
-      ctx.scale.set(length, QUAD_WIDTH, 1);
-      ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
-
-      mesh.setMatrixAt(0, ctx.matrix);
-      mesh.count = 1;
-    } else {
-      // CURVE: 세그먼트별 quad
-      const segCount = Math.min(points.length - 1, MAX_SEGMENTS);
-      let idx = 0;
-
-      for (let i = 0; i < segCount; i++) {
-        const s = points[i];
-        const e = points[i + 1];
-        const length = s.distanceTo(e);
-        if (length < 0.001) continue;
-
-        const cx = (s.x + e.x) / 2;
-        const cy = (s.y + e.y) / 2;
-        const cz = (s.z + e.z) / 2 + Z_OFFSET;
-        const angle = Math.atan2(e.y - s.y, e.x - s.x);
-
-        ctx.position.set(cx, cy, cz);
-        ctx.euler.set(0, 0, angle);
-        ctx.quaternion.setFromEuler(ctx.euler);
-        // curve segments use length*2 scale like EdgeRenderer
-        ctx.scale.set(length * 2, QUAD_WIDTH, 1);
-        ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
-
-        mesh.setMatrixAt(idx, ctx.matrix);
-        idx++;
-      }
-      mesh.count = idx;
+    const count = buildEdgeOverlay(edge, mesh, ctx);
+    mesh.count = count;
+    if (count > 0) {
+      mesh.instanceMatrix.needsUpdate = true;
     }
-
-    mesh.instanceMatrix.needsUpdate = true;
   });
 
   return (
@@ -171,6 +191,22 @@ const VehicleEdgeOverlay: React.FC = () => {
       frustumCulled={false}
       renderOrder={10}
     />
+  );
+};
+
+const VehicleEdgeOverlay: React.FC = () => {
+  const getCurrentEdge = useMemo(() => {
+    return () => useVehicleEdgeHighlightStore.getState().currentEdgeIndex;
+  }, []);
+  const getNextEdge = useMemo(() => {
+    return () => useVehicleEdgeHighlightStore.getState().nextEdgeIndex;
+  }, []);
+
+  return (
+    <group>
+      <EdgeOverlayMesh color="#4cff72" zOffset={0.003} getEdgeIndex={getCurrentEdge} />
+      <EdgeOverlayMesh color="#ffd740" zOffset={0.002} getEdgeIndex={getNextEdge} />
+    </group>
   );
 };
 

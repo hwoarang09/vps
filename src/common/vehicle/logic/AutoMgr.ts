@@ -80,16 +80,17 @@ export class AutoMgr {
    * Checks if vehicles need new destinations and assigns them.
    * Uses round-robin and per-frame limit to prevent performance spikes.
    */
-  update(
-    mode: TransferMode,
-    numVehicles: number,
-    vehicleDataArray: IVehicleDataArray,
-    edgeArray: Edge[],
-    edgeNameToIndex: Map<string, number>,
-    transferMgr: TransferMgr,
-    lockMgr?: LockMgr,
-    vehicleBayLoopMap?: Map<number, VehicleBayLoop>
-  ) {
+  update(ctx: {
+    mode: TransferMode;
+    numVehicles: number;
+    vehicleDataArray: IVehicleDataArray;
+    edgeArray: Edge[];
+    edgeNameToIndex: Map<string, number>;
+    transferMgr: TransferMgr;
+    lockMgr?: LockMgr;
+    vehicleBayLoopMap?: Map<number, VehicleBayLoop>;
+  }) {
+    const { mode, numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap } = ctx;
     if (mode !== TransferMode.AUTO_ROUTE && mode !== TransferMode.LOOP) return;
     if (numVehicles === 0) return;
 
@@ -232,14 +233,16 @@ export class AutoMgr {
       return false;
     }
 
-    const MAX_ATTEMPTS = 5;
+    // Random offset + linear scan: 중복 선택 없이 최대 stations.length개 시도
+    const stationCount = this.stations.length;
+    const startOffset = Math.floor(Math.random() * stationCount);
+    const maxAttempts = Math.min(stationCount, 5);
 
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      // Pick random station
-      const candidate = this.stations[Math.floor(Math.random() * this.stations.length)];
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const candidate = this.stations[(startOffset + attempt) % stationCount];
 
       // Skip if same as current edge (unless it's the only one)
-      if (candidate.edgeIndex === currentEdgeIdx && this.stations.length > 1) {
+      if (candidate.edgeIndex === currentEdgeIdx && stationCount > 1) {
         continue;
       }
 

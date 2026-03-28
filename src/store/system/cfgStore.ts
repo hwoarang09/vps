@@ -30,7 +30,7 @@ function parseLoopsMap(content: string): BayLoopEntry[] {
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("bay")) continue;
-    const match = trimmed.match(/^(\S+)\s+\[(\S+)\s+(\S+)\]/);
+    const match = /^(\S+)\s+\[(\S+)\s+(\S+)\]/.exec(trimmed);
     if (match) {
       entries.push({ bayName: match[1], edge1: match[2], edge2: match[3] });
     }

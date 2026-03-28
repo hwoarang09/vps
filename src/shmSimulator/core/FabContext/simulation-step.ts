@@ -168,19 +168,19 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   updateMovement(movementCtx);
 
   // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
-  if (simLogger && simLogger.isDevMode()) {
+  if (simLogger?.isDevMode()) {
     autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
       simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
     };
   }
-  autoMgr.update(
-    store.transferMode,
-    actualNumVehicles,
+  autoMgr.update({
+    mode: store.transferMode,
+    numVehicles: actualNumVehicles,
     vehicleDataArray,
-    edges,
+    edgeArray: edges,
     edgeNameToIndex,
     transferMgr,
     lockMgr,
-    vehicleBayLoopMap
-  );
+    vehicleBayLoopMap,
+  });
 }

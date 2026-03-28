@@ -201,7 +201,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     for (let i = 0; i < GLOW_LAYER_COUNT; i++) {
       const t = i / (GLOW_LAYER_COUNT - 1);
       // 낮은 개별 opacity → 겹쳐서 자연스럽게 밝아짐
-      const opacity = 0.5 * Math.pow(1 - t, 2.0);
+      const opacity = 0.5 * Math.pow(1 - t, 2);
       const g = Math.round(105 + t * 100);
       const b = Math.round(180 + t * 60);
       const color = (255 << 16) | (g << 8) | b;
@@ -261,7 +261,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const children = glowChildRefs.current;
     for (let i = 0; i < children.length; i++) {
       const t = i / (GLOW_LAYER_COUNT - 1);
-      const s = 1.0 + spread * t * t; // quadratic: inner layers stay tight
+      const s = 1 + spread * t * t; // quadratic: inner layers stay tight
       children[i].scale.set(s, s, s);
     }
   });
@@ -295,7 +295,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       <group ref={glowGroupRef} visible={false} renderOrder={999}>
         {glowLayers.map((layer, i) => (
           <lineSegments
-            key={i}
+            key={layer.mat.uuid}
             ref={(el: THREE.LineSegments) => { if (el) glowChildRefs.current[i] = el; }}
             geometry={layer.geo}
             material={layer.mat}
