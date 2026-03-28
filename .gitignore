@@ -46,8 +46,9 @@ Thumbs.db
 # Coverage
 coverage/
 
-#
+# SonarQube
 .sonar*
+.scannerwork/
 
 # Python
 __pycache__/
