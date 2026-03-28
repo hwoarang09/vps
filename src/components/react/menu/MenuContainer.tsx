@@ -6,6 +6,7 @@ import MenuLevel2 from "./MenuLevel2";
 import MapLoader from "../MapLoader/MapLoader";
 import ConfigDataPanel from "../DataPanel/DataPanel";
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
+import TransportScheduleModal from "./panels/TransportScheduleModal";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
@@ -13,7 +14,7 @@ import MqttStatusIndicator from "../system/MqttStatusIndicator";
 import LogIndicator from "../system/LogIndicator";
 
 const MenuContainer: React.FC = () => {
-  const { activeMainMenu, rightPanelOpen } = useMenuStore();
+  const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
   const { loadConfig } = useMqttStore();
 
   // Load MQTT config on mount and auto-connect
@@ -76,6 +77,13 @@ const MenuContainer: React.FC = () => {
 
       {/* Vehicle Test - Performance testing functionality */}
       <VehicleTest />
+
+      {/* Transport Schedule Modal - 중앙 대형 모달 */}
+      {activeSubMenu === "operation-menu-2" && (
+        <TransportScheduleModal
+          onClose={() => setActiveSubMenu(null)}
+        />
+      )}
     </>
   );
 };

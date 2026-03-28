@@ -48,6 +48,7 @@ const MenuLevel2: React.FC = () => {
       // Check if this menu should NOT open RightPanel (e.g., CFGLoader, Test menus)
       const shouldNotOpenRightPanel =
         menuId === "maploader-menu-1" || // Load CFG
+        menuId === "operation-menu-2" || // Schedule - 중앙 모달 사용
         menuId.startsWith("test-"); // All test menus
 
       if (hasThirdLevelMenu) {
