@@ -24,15 +24,23 @@ const pngIcon = (src: string, size = PS) => (
 export const menuLevel1Groups: MenuLevel1Item[][] = [
   [
     {
+      id: "Operation",
+      label: "Operation",
+      shortcutLabel: "o",
+      iconFn: () => pngIcon(imgOperation),
+    },
+  ],
+  [
+    {
       id: "Statistics",
       label: "Statistics",
-
+      shortcutLabel: "s",
       iconFn: () => pngIcon(imgStatistics),
     },
     {
       id: "DataPanel",
       label: "DataPanel",
-
+      shortcutLabel: "d",
       iconFn: () => pngIcon(imgDataPanel),
     },
   ],
@@ -43,14 +51,6 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       shortcutLabel: "f",
 
       iconFn: () => pngIcon(imgSearch),
-    },
-  ],
-  [
-    {
-      id: "Operation",
-      label: "Operation",
-      shortcutLabel: "o",
-      iconFn: () => pngIcon(imgOperation),
     },
   ],
   [
@@ -79,7 +79,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "DevTools",
       label: "DevTools",
-      shortcutLabel: "d",
+      shortcutLabel: "t",
 
       iconFn: () => pngIcon(imgDevTools),
     },

@@ -10,9 +10,11 @@ import { MainMenuType } from "@/types";
 // Shortcut key to lv1 menu mapping
 const LV1_SHORTCUT_MAP: Record<string, MainMenuType> = {
   m: "MQTT",
-  d: "DevTools",
+  t: "DevTools",
   f: "Search",
   o: "Operation",
+  s: "Statistics",
+  d: "DataPanel",
 };
 
 // Shortcut key to lv2 menu mapping (within currently active lv1 menu)
