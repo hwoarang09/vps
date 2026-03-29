@@ -223,14 +223,6 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   start: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
-      // SimLogger 초기화 (최초 start 시 1회만)
-      if (!controller.isLoggingEnabled()) {
-        try {
-          await controller.enableLogging();
-        } catch {
-          // OPFS logging not available - continue without logging
-        }
-      }
       controller.start();
       set({ isRunning: true });
     }
