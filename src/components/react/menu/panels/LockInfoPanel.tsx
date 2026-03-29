@@ -107,19 +107,19 @@ const LockInfoPanel: React.FC = () => {
         setStrategy(lockMgr.getGrantStrategy());
 
         if (searchType === "node" && nodeName) {
-          const node = table[nodeName];
+          const node = table.get(nodeName);
           setArrayNodeInfo(node ?? null);
         }
         // Array 모드에서 Vehicle 검색용 테이블 데이터 변환
         if (searchType === "vehicle") {
           const nodes: Record<string, LockNodeData> = {};
-          for (const [name, node] of Object.entries(table)) {
+          for (const [name, node] of table) {
             nodes[name] = {
               name: node.name,
-              requests: node.requests.map(r => ({ vehId: r.vehId, edgeName: r.edgeName, requestTime: r.requestTime })),
-              granted: node.granted.map(g => ({ edge: g.edge, veh: g.veh })),
+              requests: node.requests.map((r: { vehId: number; edgeName: string }) => ({ vehId: r.vehId, edgeName: r.edgeName, requestTime: 0 })),
+              granted: node.granted.map((g: { edge: string; veh: number }) => ({ edge: g.edge, veh: g.veh })),
               edgeQueueSizes: Object.fromEntries(
-                Object.entries(node.edgeQueues ?? {}).map(([k, q]) => [k, q.size])
+                [...(node.edgeQueues ?? new Map())].map(([k, q]: [string, unknown[]]) => [k, q.length])
               ),
             };
           }

@@ -31,6 +31,13 @@ EVENT_CONFIG = {
         "table": "ml_lock",
         "columns": ["ts", "veh_id", "node_idx", "event_type", "_pad", "wait_ms"],
     },
+    # ML_REPLAY_SNAPSHOT (36B): Uint32 Uint32 Float32×5 Uint32 Float32 Float32 Uint32
+    5: {
+        "size": 36,
+        "fmt": "<IIfffIffI",
+        "table": "ml_replay_snapshot",
+        "columns": ["ts", "veh_id", "x", "y", "z", "edge_idx", "ratio", "speed", "status"],
+    },
     # DEV_PATH (16B): all Uint32
     11: {
         "size": 16,

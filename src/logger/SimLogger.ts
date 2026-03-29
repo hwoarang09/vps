@@ -10,15 +10,35 @@ import {
   RECORD_SIZE,
   FLUSH_THRESHOLD,
   getFileName,
-  ML_EVENT_TYPES,
-  ALL_EVENT_TYPES,
 } from './protocol';
+import { DbShipper } from './DbShipper';
+
+/** 이벤트별 enable 플래그 */
+export interface LogEvents {
+  edgeTransit?: boolean;      // ML_EDGE_TRANSIT (기본: true)
+  lock?: boolean;             // ML_LOCK (기본: true)
+  orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
+  replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
+  vehState?: boolean;         // DEV_VEH_STATE (기본: false)
+  path?: boolean;             // DEV_PATH (기본: true in dev)
+  lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
+  transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
+  edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
+}
+
+export interface LogTargets {
+  opfs?: boolean;    // OPFS 파일 쓰기 (기본: true)
+  db?: boolean;      // DB 서버 전송 (기본: true)
+  dbUrl?: string;    // 기본: http://localhost:8100
+}
 
 export interface SimLoggerConfig {
   sessionId: string;
   workerId: number;
   mode: 'ml' | 'dev';       // ml = ML이벤트만, dev = ML+디버그 전체
   vehStateHz?: 10 | 30 | 60; // dev mode veh_state 기록 빈도 (기본: 30)
+  targets?: LogTargets;
+  events?: LogEvents;        // 이벤트별 on/off (미지정 시 mode 기반 기본값)
 }
 
 interface EventBuffer {
@@ -34,40 +54,94 @@ interface EventBuffer {
 export class SimLogger {
   private readonly config: SimLoggerConfig;
   private readonly eventBuffers = new Map<EventType, EventBuffer>();
+  private readonly enabledEvents: Set<EventType>;
+  private dbShipper: DbShipper | null = null;
+  private readonly useOpfs: boolean;
+  private readonly useDb: boolean;
   private initialized = false;
   private frameCount = 0;
 
   constructor(config: SimLoggerConfig) {
     this.config = config;
+    this.useOpfs = config.targets?.opfs !== false; // 기본 true
+    this.useDb = config.targets?.db !== false;     // 기본 true
+    this.enabledEvents = this._resolveEnabledEvents();
   }
 
   async init(): Promise<void> {
-    const root = await navigator.storage.getDirectory();
+    const eventTypes = [...this.enabledEvents];
 
-    const eventTypes = this.config.mode === 'ml' ? ML_EVENT_TYPES : ALL_EVENT_TYPES;
+    if (this.useOpfs) {
+      const root = await navigator.storage.getDirectory();
 
-    for (const eventType of eventTypes) {
-      const recordSize = RECORD_SIZE[eventType];
-      const bufferBytes = FLUSH_THRESHOLD * recordSize;
-      const buffer = new ArrayBuffer(bufferBytes);
+      for (const eventType of eventTypes) {
+        const recordSize = RECORD_SIZE[eventType];
+        const bufferBytes = FLUSH_THRESHOLD * recordSize;
+        const buffer = new ArrayBuffer(bufferBytes);
 
-      const fileName = getFileName(this.config.sessionId, eventType);
-      const fileHandle = await root.getFileHandle(fileName, { create: true });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const handle = await (fileHandle as any).createSyncAccessHandle();
-      const fileSize = (handle as { getSize(): number }).getSize();
+        const fileName = getFileName(this.config.sessionId, eventType);
+        const fileHandle = await root.getFileHandle(fileName, { create: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const handle = await (fileHandle as any).createSyncAccessHandle();
+        const fileSize = (handle as { getSize(): number }).getSize();
 
-      this.eventBuffers.set(eventType, {
-        buffer,
-        view: new DataView(buffer),
-        count: 0,
-        recordSize,
-        handle,
-        fileOffset: fileSize,
-      });
+        this.eventBuffers.set(eventType, {
+          buffer,
+          view: new DataView(buffer),
+          count: 0,
+          recordSize,
+          handle,
+          fileOffset: fileSize,
+        });
+      }
+    } else {
+      // db-only: OPFS 없이 버퍼만 생성 (DbShipper에 push하기 위해)
+      for (const eventType of eventTypes) {
+        const recordSize = RECORD_SIZE[eventType];
+        const bufferBytes = FLUSH_THRESHOLD * recordSize;
+        const buffer = new ArrayBuffer(bufferBytes);
+        this.eventBuffers.set(eventType, {
+          buffer,
+          view: new DataView(buffer),
+          count: 0,
+          recordSize,
+          handle: null,
+          fileOffset: 0,
+        });
+      }
+    }
+
+    if (this.useDb) {
+      this.dbShipper = new DbShipper(
+        this.config.sessionId,
+        this.config.mode,
+        this.config.targets?.dbUrl,
+      );
+      await this.dbShipper.start(this.config.mode);
     }
 
     this.initialized = true;
+  }
+
+  /** mode + events 설정 기반으로 활성화할 EventType 결정 */
+  private _resolveEnabledEvents(): Set<EventType> {
+    const ev = this.config.events ?? {};
+    const isDev = this.config.mode === 'dev';
+    const enabled = new Set<EventType>();
+
+    // ML events
+    if (ev.orderComplete)                          enabled.add(EventType.ML_ORDER_COMPLETE);
+    if (ev.edgeTransit !== false)                  enabled.add(EventType.ML_EDGE_TRANSIT);
+    if (ev.lock !== false)                         enabled.add(EventType.ML_LOCK);
+    if (ev.replaySnapshot !== false)               enabled.add(EventType.ML_REPLAY_SNAPSHOT);
+    // DEV events (기본: dev 모드일 때만)
+    if (ev.vehState === true)                      enabled.add(EventType.DEV_VEH_STATE);
+    if (ev.path ?? isDev)                          enabled.add(EventType.DEV_PATH);
+    if (ev.lockDetail === true)                    enabled.add(EventType.DEV_LOCK_DETAIL);
+    if (ev.transfer ?? isDev)                      enabled.add(EventType.DEV_TRANSFER);
+    if (ev.edgeQueue === true)                     enabled.add(EventType.DEV_EDGE_QUEUE);
+
+    return enabled;
   }
 
   // ============================================================================
@@ -120,6 +194,28 @@ export class SimLogger {
     buf.view.setUint8(off + 11, 0); // padding
     buf.view.setUint32(off + 12, waitMs, true);
     this._increment(buf, EventType.ML_LOCK);
+  }
+
+  /** 리플레이용 스냅샷 (36B): ts vehId x y z edgeIdx ratio speed status */
+  logReplaySnapshot(ts: number, vehId: number, x: number, y: number, z: number, edgeIdx: number, ratio: number, speed: number, status: number): void {
+    const buf = this.eventBuffers.get(EventType.ML_REPLAY_SNAPSHOT);
+    if (!buf) return;
+    const off = buf.count * buf.recordSize;
+    buf.view.setUint32(off + 0, ts, true);
+    buf.view.setUint32(off + 4, vehId, true);
+    buf.view.setFloat32(off + 8, x, true);
+    buf.view.setFloat32(off + 12, y, true);
+    buf.view.setFloat32(off + 16, z, true);
+    buf.view.setUint32(off + 20, edgeIdx, true);
+    buf.view.setFloat32(off + 24, ratio, true);
+    buf.view.setFloat32(off + 28, speed, true);
+    buf.view.setUint32(off + 32, status, true);
+    this._increment(buf, EventType.ML_REPLAY_SNAPSHOT);
+  }
+
+  /** replay snapshot 활성화 여부 */
+  isReplayEnabled(): boolean {
+    return this.enabledEvents.has(EventType.ML_REPLAY_SNAPSHOT);
   }
 
   // ============================================================================
@@ -210,6 +306,8 @@ export class SimLogger {
       buf.handle = null;
     }
     this.eventBuffers.clear();
+    this.dbShipper?.dispose();
+    this.dbShipper = null;
     this.initialized = false;
   }
 
@@ -242,6 +340,12 @@ export class SimLogger {
   // ============================================================================
 
   private _increment(buf: EventBuffer, eventType: EventType): void {
+    // DbShipper: 레코드 1건씩 push (flush 전에)
+    if (this.dbShipper) {
+      const recordOffset = (buf.count) * buf.recordSize;
+      this.dbShipper.push(eventType, buf.view, recordOffset, buf.recordSize);
+    }
+
     buf.count++;
     if (buf.count >= FLUSH_THRESHOLD) {
       this._flushBuffer(buf, eventType);
@@ -249,12 +353,14 @@ export class SimLogger {
   }
 
   private _flushBuffer(buf: EventBuffer, _eventType: EventType): void {
-    if (buf.count === 0 || !buf.handle) return;
-    const bytes = buf.count * buf.recordSize;
-    const slice = buf.buffer.slice(0, bytes);
-    buf.handle.write(slice, { at: buf.fileOffset });
-    buf.handle.flush();
-    buf.fileOffset += bytes;
+    if (buf.count === 0) return;
+    if (this.useOpfs && buf.handle) {
+      const bytes = buf.count * buf.recordSize;
+      const slice = buf.buffer.slice(0, bytes);
+      buf.handle.write(slice, { at: buf.fileOffset });
+      buf.handle.flush();
+      buf.fileOffset += bytes;
+    }
     buf.count = 0;
   }
 }

@@ -126,6 +126,25 @@ export interface SimulationConfig {
   /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
   edgeTransitLogEnabled?: boolean;
 
+  /** 로그 출력 대상 + 이벤트별 on/off */
+  logTargets?: {
+    opfs?: boolean;   // OPFS 파일 쓰기 (기본: true)
+    db?: boolean;     // DB 서버 전송 (기본: true)
+    dbUrl?: string;   // 기본: http://localhost:8100
+  };
+  /** 이벤트별 enable/disable (미지정 시 mode 기반 기본값) */
+  logEvents?: {
+    edgeTransit?: boolean;      // ML_EDGE_TRANSIT (기본: true)
+    lock?: boolean;             // ML_LOCK (기본: true)
+    orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
+    replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
+    vehState?: boolean;         // DEV_VEH_STATE (기본: false)
+    path?: boolean;             // DEV_PATH (기본: true in dev)
+    lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
+    transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
+    edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
+  };
+
   // Sensor presets (fab별 오버라이드 가능)
   /** fab별 커스텀 센서 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용) */
   customSensorPresets?: SensorPreset[];

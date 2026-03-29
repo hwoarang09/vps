@@ -29,6 +29,8 @@ export async function setupLoggerPort(
     sessionId,
     workerId: workerId % 256,
     mode: 'ml',
+    targets: config.logTargets ?? { opfs: true, db: true },
+    events: config.logEvents,
   });
 
   try {

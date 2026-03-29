@@ -12,6 +12,7 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { SimLogger } from "@/logger";
+import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
 
 /**
  * 시뮬레이션 스텝 실행 컨텍스트
@@ -49,6 +50,9 @@ export interface SimulationStepContext {
   // Timers
   collisionCheckTimers: Map<number, number>;
   curveBrakeCheckTimers: Map<number, number>;
+  // Replay snapshot state
+  lastReplaySnapshotTime: number;
+  prevVehicleSpeeds: Float32Array | null;
 }
 
 /**
@@ -183,4 +187,44 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     lockMgr,
     vehicleBayLoopMap,
   });
+
+  // 5. Replay Snapshot (0.5초 주기 + 속도 0 전환 감지)
+  if (simLogger?.isReplayEnabled()) {
+    const REPLAY_INTERVAL = 0.5; // seconds
+    const doPeriodicSnapshot = simulationTime - ctx.lastReplaySnapshotTime >= REPLAY_INTERVAL;
+
+    for (let i = 0; i < actualNumVehicles; i++) {
+      const speed = vehicleDataArray.getVelocity(i);
+      const prevSpeed = ctx.prevVehicleSpeeds ? ctx.prevVehicleSpeeds[i] : speed;
+      const stoppedNow = speed === 0 && prevSpeed > 0;
+
+      if (doPeriodicSnapshot || stoppedNow) {
+        const pos = vehicleDataArray.getPosition(i);
+        simLogger.logReplaySnapshot(
+          simulationTime, i,
+          pos.x, pos.y, pos.z,
+          vehicleDataArray.getData()[i * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE],
+          vehicleDataArray.getEdgeRatio(i),
+          speed,
+          vehicleDataArray.getMovingStatus(i),
+        );
+      }
+
+      if (ctx.prevVehicleSpeeds) {
+        ctx.prevVehicleSpeeds[i] = speed;
+      }
+    }
+
+    if (doPeriodicSnapshot) {
+      ctx.lastReplaySnapshotTime = simulationTime;
+    }
+
+    // 최초 호출 시 prevVehicleSpeeds 초기화
+    if (!ctx.prevVehicleSpeeds) {
+      ctx.prevVehicleSpeeds = new Float32Array(actualNumVehicles);
+      for (let i = 0; i < actualNumVehicles; i++) {
+        ctx.prevVehicleSpeeds[i] = vehicleDataArray.getVelocity(i);
+      }
+    }
+  }
 }

@@ -78,6 +78,10 @@ export class FabContext {
   // === Edge Enter Time Tracking (vehId → simulationTime) ===
   private readonly edgeEnterTimes: Map<number, number> = new Map();
 
+  // === Replay Snapshot State ===
+  private lastReplaySnapshotTime = 0;
+  private prevVehicleSpeeds: Float32Array | null = null;
+
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
     this.config = params.config;
@@ -203,7 +207,7 @@ export class FabContext {
    * 5. Write to Render Buffer - 렌더링 데이터
    */
   step(clampedDelta: number, simulationTime: number = 0): void {
-    executeSimulationStep({
+    const ctx = {
       clampedDelta,
       simulationTime,
       vehicleDataArray: this.vehicleDataArray,
@@ -227,7 +231,14 @@ export class FabContext {
       edgeEnterTimes: this.edgeEnterTimes,
       collisionCheckTimers: this.collisionCheckTimers,
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
-    });
+      lastReplaySnapshotTime: this.lastReplaySnapshotTime,
+      prevVehicleSpeeds: this.prevVehicleSpeeds,
+    };
+    executeSimulationStep(ctx);
+
+    // Write-back replay state
+    this.lastReplaySnapshotTime = ctx.lastReplaySnapshotTime;
+    this.prevVehicleSpeeds = ctx.prevVehicleSpeeds;
 
     // 5. Write to Render Buffer (렌더링 데이터)
     this.writeToRenderRegion();

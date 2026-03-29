@@ -49,6 +49,20 @@ CREATE TABLE dev_path (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE ml_replay_snapshot (
+    session_id TEXT NOT NULL,
+    ts INT NOT NULL,
+    veh_id INT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL,
+    edge_idx INT NOT NULL,
+    ratio REAL NOT NULL,
+    speed REAL NOT NULL,
+    status INT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Indexes
 CREATE INDEX idx_edge_transit_session_edge ON ml_edge_transit(session_id, edge_id);
 CREATE INDEX idx_edge_transit_session_veh ON ml_edge_transit(session_id, veh_id);
@@ -56,3 +70,5 @@ CREATE INDEX idx_lock_session_node ON ml_lock(session_id, node_idx);
 CREATE INDEX idx_lock_session_veh ON ml_lock(session_id, veh_id);
 CREATE INDEX idx_transfer_session_veh ON dev_transfer(session_id, veh_id);
 CREATE INDEX idx_path_session_veh ON dev_path(session_id, veh_id);
+CREATE INDEX idx_replay_session_ts ON ml_replay_snapshot(session_id, ts);
+CREATE INDEX idx_replay_session_veh ON ml_replay_snapshot(session_id, veh_id);

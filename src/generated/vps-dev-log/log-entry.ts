@@ -4,7 +4,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { LogContent, unionToLogContent, unionListToLogContent } from '../vps-dev-log/log-content.js';
+import { LogContent } from '../vps-dev-log/log-content.js';
 import { LogLevel } from '../vps-dev-log/log-level.js';
 
 
@@ -48,7 +48,7 @@ contentType():LogContent {
   return offset ? this.bb!.readUint8(this.bb_pos + offset) : LogContent.NONE;
 }
 
-content<T extends flatbuffers.Table>(obj:any):any|null {
+content(obj:any):any|null {
   const offset = this.bb!.__offset(this.bb_pos, 12);
   return offset ? this.bb!.__union(obj, this.bb_pos + offset) : null;
 }

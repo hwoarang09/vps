@@ -9,7 +9,6 @@ import {
   panelInputVariants,
   panelSelectVariants,
   panelCardVariants,
-  panelTextVariants,
   panelButtonVariants,
   panelLabelVariants,
 } from "../shared/panelStyles";
