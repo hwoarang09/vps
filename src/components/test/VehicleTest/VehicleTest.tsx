@@ -7,7 +7,7 @@ import { useCFGStore } from "@store/system/cfgStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import VehicleTestRunner from "./VehicleTestRunner";
 import { VehicleSystemType } from "@/types/vehicle";
-import { getTestSettings, getDefaultSetting } from "@/config/react/testSettingConfig";
+import { getTestSettings } from "@/config/react/testSettingConfig";
 import SimulationParamsModal from "./SimulationParamsModal";
 import TopControlBar from "./TopControlBar";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
@@ -30,15 +30,14 @@ import { getStationTextConfig } from "@/config/threejs/stationConfig";
  */
 
 const VehicleTest: React.FC = () => {
-  const { stopTest, isPaused, setPaused } = useVehicleTestStore();
+  const { stopTest, isPaused, setPaused, selectedSettingId, settingChangeSeq } = useVehicleTestStore();
   const edges = useEdgeStore((state) => state.edges);
-  const { transferMode, setTransferMode } = useVehicleArrayStore();
+  const { setTransferMode } = useVehicleArrayStore();
 
   const { dispose: disposeShmSimulator } = useShmSimulatorStore();
   const { loadCFGFiles } = useCFGStore();
   const { setCameraView } = useCameraStore();
 
-  const [selectedSettingId, setSelectedSettingId] = useState<string>(getDefaultSetting());
   const testSettings = getTestSettings();
 
   // Get selected test setting
@@ -316,21 +315,20 @@ const VehicleTest: React.FC = () => {
 
 
 
-  // Handle test setting change - load map, set camera, and create vehicles from vehicles.cfg
-  const handleSettingChange = async (newSettingId: string) => {
-    setSelectedSettingId(newSettingId);
-    await loadTestSetting(newSettingId);
-  };
+  // React to setting changes from Operation panel (store-based)
+  const settingChangeSeqRef = useRef(settingChangeSeq);
+  useEffect(() => {
+    // Skip initial render (already handled by mount effect)
+    if (settingChangeSeqRef.current === settingChangeSeq) return;
+    settingChangeSeqRef.current = settingChangeSeq;
+    loadTestSetting(selectedSettingId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingChangeSeq]);
 
   return (
     <>
       {/* Top Control Bar - MenuLevel1/2 style */}
       <TopControlBar
-        testSettings={testSettings}
-        selectedSettingId={selectedSettingId}
-        onSettingChange={handleSettingChange}
-        transferMode={transferMode}
-        onTransferModeChange={setTransferMode}
         vehicleCount={inputValue}
         onVehicleCountChange={setInputValue}
         maxVehicleCapacity={maxVehicleCapacity}
@@ -343,7 +341,6 @@ const VehicleTest: React.FC = () => {
         isFabApplied={isFabApplied}
         onFabCreate={handleFabCreate}
         onFabClear={handleFabClear}
-        onOpenParams={() => useFabConfigStore.getState().setModalOpen(true)}
         isPaused={isPaused}
         onPlay={() => setPaused(false)}
         onPause={() => setPaused(true)}

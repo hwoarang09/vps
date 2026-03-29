@@ -2,8 +2,10 @@
 import React from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { MenuButton } from "./shared";
 import { menuLevel2Config } from "./data/menuLevel2Config";
+import { menuLevel3Config } from "./data/menuLevel3Config";
 import { tooltipsByLevel } from "./data/tooltipConfig";
 import { menuContainerVariants } from "./shared/menuStyles";
 
@@ -32,28 +34,30 @@ const MenuLevel2: React.FC = () => {
       return;
     }
 
+    // operation-menu-8 (Params): SimulationParamsModal 열기
+    if (menuId === "operation-menu-8") {
+      useFabConfigStore.getState().setModalOpen(true);
+      return;
+    }
+
     // Toggle menu if same menu is clicked, otherwise activate the clicked menu
     const newActiveSubMenu = activeSubMenu === menuId ? null : menuId;
     setActiveSubMenu(newActiveSubMenu);
 
     // Handle Level 3 menu only when Level 2 menu is selected
     if (newActiveSubMenu) {
-      // Check if this menu has Level 3 submenu
-      // Example: Only some MapBuilder menus have Level 3
-      const hasThirdLevelMenu =
-        activeMainMenu === "MapBuilder" &&
-        // ["map-menu-1", "map-menu-2"].includes(menuId);
-        ["temporary"].includes(menuId);
+      // Check if this menu has Level 3 submenu (from menuLevel3Config)
+      const hasThirdLevelMenu = menuId in menuLevel3Config;
 
       // Check if this menu should NOT open RightPanel (e.g., CFGLoader, Test menus)
       const shouldNotOpenRightPanel =
-        menuId === "maploader-menu-1" || // Load CFG
+        hasThirdLevelMenu || // LV3가 있으면 RightPanel 불필요
         menuId === "operation-menu-2" || // Schedule - 중앙 모달 사용
         menuId.startsWith("test-"); // All test menus
 
       if (hasThirdLevelMenu) {
-        // Has Level 3 menu - auto-select first Level 3 menu item
-        setActiveThirdMenu(`${menuId}-sub-1`);
+        // Has Level 3 menu
+        setActiveThirdMenu(menuLevel3Config[menuId][0].id);
       } else if (!shouldNotOpenRightPanel) {
         // No Level 3 menu and should open RightPanel
         setRightPanelOpen(true);

@@ -42,6 +42,9 @@ export const tooltipsByLevel: {
     "operation-menu-3": "실시간 모니터링",
     "operation-menu-4": "알림 관리",
     "operation-menu-5": "운영 로그",
+    "operation-menu-6": "레이아웃 불러오기",
+    "operation-menu-7": "반송 모드 설정",
+    "operation-menu-8": "시뮬레이션 파라미터",
 
     "map-menu-1": "직선 도로 생성",
     "map-menu-2": "90° 곡선 도로",
@@ -73,8 +76,10 @@ export const tooltipsByLevel: {
     "search-station": "스테이션 이름으로 검색",
   },
   3: {
-    // 서브서브메뉴 레벨 (필요한 경우에만)
-    // 예: 'realtime-dashboard': '실시간 대시보드',
-    // 'realtime-alerts': '실시간 알림 관리'
+    "transfer-1": "단순 루프 반송",
+    "transfer-2": "순환 루프 반송",
+    "transfer-3": "랜덤 목적지 반송",
+    "transfer-4": "MQTT 외부 제어 반송",
+    "transfer-5": "자동 경로 배정 반송",
   },
 };

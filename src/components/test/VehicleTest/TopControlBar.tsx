@@ -1,13 +1,12 @@
 // components/test/VehicleTest/TopControlBar.tsx
 // Top control bar with compact style buttons and dropdowns
 
-import React, { useState } from "react";
+import React from "react";
 import { twMerge } from "tailwind-merge";
 import {
   X,
   Play,
   Pause,
-  ChevronDown,
 } from "lucide-react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import {
@@ -15,16 +14,11 @@ import {
   menuButtonVariants,
   menuDividerClass,
 } from "@/components/react/menu/shared/menuStyles";
-import { TransferMode } from "@store/vehicle/arrayMode/vehicleStore";
-import { TestSetting } from "@/config/react/testSettingConfig";
 
 // Shapez2-style PNG icons for TopControlBar
-import imgBlueprint from "@/assets/icons/game/menu-blueprint.svg";
-import imgRouting from "@/assets/icons/game/menu-routing.png";
 import imgTrains from "@/assets/icons/game/menu-trains.png";
 import imgTrash from "@/assets/icons/game/shape-trash.png";
 import imgSpace from "@/assets/icons/game/menu-space.png";
-import imgLogic from "@/assets/icons/game/menu-logic.png";
 
 const TPS = 18; // TopBar PNG icon size (compact)
 
@@ -34,60 +28,6 @@ const tpngIcon = (src: string, size = TPS) => (
 
 // Compact button style overrides for top bar
 const compactButtonClass = "h-9 w-auto px-2 min-w-[36px]";
-
-// Dropdown menu item style
-const dropdownItemClass = twMerge(
-  "w-full px-2 py-2 text-left text-xs font-mono",
-  "text-gray-200 hover:text-white hover:bg-white/10 transition-colors"
-);
-
-const dropdownActiveClass = "bg-accent-cyan/20 text-accent-cyan font-bold";
-
-interface DropdownButtonProps {
-  icon: React.ReactNode;
-  label: string;
-  tooltip: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  menuId: string;
-  accentColor?: string;
-}
-
-const DropdownButton: React.FC<DropdownButtonProps> = ({
-  icon,
-  label,
-  tooltip,
-  isOpen,
-  onToggle,
-  menuId,
-  accentColor = "text-accent-cyan",
-}) => {
-  const { showTooltip, hideTooltip } = useMenuStore();
-
-  const handleMouseEnter = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(menuId, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom - 40 }, 2);
-  };
-
-  return (
-    <button
-      onClick={onToggle}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={hideTooltip}
-      className={twMerge(
-        menuButtonVariants({ active: isOpen, size: "small" }),
-        compactButtonClass,
-        "min-w-[48px] gap-1"
-      )}
-    >
-      <div className={twMerge("flex items-center gap-1", isOpen ? "text-white" : accentColor)}>
-        {icon}
-        <span className="text-[10px] font-bold max-w-[80px] truncate">{label}</span>
-        <ChevronDown size={10} className={twMerge("transition-transform", isOpen && "rotate-180")} />
-      </div>
-    </button>
-  );
-};
 
 interface ActionButtonProps {
   icon: React.ReactNode;
@@ -189,13 +129,6 @@ const NumberInput: React.FC<NumberInputProps> = ({
 };
 
 interface TopControlBarProps {
-  // Map Selection
-  testSettings: TestSetting[];
-  selectedSettingId: string;
-  onSettingChange: (settingId: string) => void;
-  // Transfer Mode
-  transferMode: TransferMode;
-  onTransferModeChange: (mode: TransferMode) => void;
   // Vehicles
   vehicleCount: string;
   onVehicleCountChange: (count: string) => void;
@@ -210,7 +143,6 @@ interface TopControlBarProps {
   isFabApplied: boolean;
   onFabCreate: () => void;
   onFabClear: () => void;
-  onOpenParams: () => void;
   // Play/Pause
   isPaused: boolean;
   onPlay: () => void;
@@ -218,11 +150,6 @@ interface TopControlBarProps {
 }
 
 const TopControlBar: React.FC<TopControlBarProps> = ({
-  testSettings,
-  selectedSettingId,
-  onSettingChange,
-  transferMode,
-  onTransferModeChange,
   vehicleCount,
   onVehicleCountChange,
   maxVehicleCapacity,
@@ -235,38 +162,10 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
   isFabApplied,
   onFabCreate,
   onFabClear,
-  onOpenParams,
   isPaused,
   onPlay,
   onPause,
 }) => {
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-
-  const selectedSetting = testSettings.find((s) => s.id === selectedSettingId);
-  const selectedMapName = selectedSetting?.name || "Select Map";
-
-  const transferModeLabels: Record<TransferMode, string> = {
-    [TransferMode.SIMPLE_LOOP]: "SIMPLE",
-    [TransferMode.LOOP]: "LOOP",
-    [TransferMode.RANDOM]: "RANDOM",
-    [TransferMode.MQTT_CONTROL]: "MQTT",
-    [TransferMode.AUTO_ROUTE]: "AUTO",
-  };
-
-  const handleDropdownToggle = (dropdownId: string) => {
-    setActiveDropdown(activeDropdown === dropdownId ? null : dropdownId);
-  };
-
-  const handleMapSelect = (settingId: string) => {
-    onSettingChange(settingId);
-    setActiveDropdown(null);
-  };
-
-  const handleModeSelect = (mode: TransferMode) => {
-    onTransferModeChange(mode);
-    setActiveDropdown(null);
-  };
-
   return (
     <div className="fixed top-2.5 left-1/2 -translate-x-1/2 z-[1001]">
       <div
@@ -275,78 +174,6 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
           "flex items-center gap-1 px-2 py-1"
         )}
       >
-        {/* Map Selection Dropdown */}
-        <div className="relative">
-          <DropdownButton
-            icon={tpngIcon(imgBlueprint)}
-            label={selectedMapName}
-            tooltip="Select Map"
-            isOpen={activeDropdown === "map"}
-            onToggle={() => handleDropdownToggle("map")}
-            menuId="map-select"
-            accentColor="text-accent-cyan"
-          />
-          {activeDropdown === "map" && (
-            <div
-              className={twMerge(
-                menuContainerVariants({ level: 2 }),
-                "absolute top-12 left-0 min-w-[200px] flex-col z-50 overflow-hidden p-0 space-x-0"
-              )}
-            >
-              {testSettings.map((setting) => (
-                <button
-                  key={setting.id}
-                  onClick={() => handleMapSelect(setting.id)}
-                  className={twMerge(
-                    dropdownItemClass,
-                    selectedSettingId === setting.id && dropdownActiveClass
-                  )}
-                >
-                  {setting.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className={menuDividerClass} />
-
-        {/* Transfer Mode Dropdown */}
-        <div className="relative">
-          <DropdownButton
-            icon={tpngIcon(imgRouting)}
-            label={transferModeLabels[transferMode]}
-            tooltip="Transfer Mode"
-            isOpen={activeDropdown === "mode"}
-            onToggle={() => handleDropdownToggle("mode")}
-            menuId="mode-select"
-            accentColor="text-accent-purple"
-          />
-          {activeDropdown === "mode" && (
-            <div
-              className={twMerge(
-                menuContainerVariants({ level: 2 }),
-                "absolute top-12 left-0 min-w-[120px] flex-col z-50 overflow-hidden p-0 space-x-0"
-              )}
-            >
-              {Object.entries(transferModeLabels).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  onClick={() => handleModeSelect(mode as TransferMode)}
-                  className={twMerge(
-                    dropdownItemClass,
-                    transferMode === mode && dropdownActiveClass
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className={menuDividerClass} />
-
         {/* Vehicles Section */}
         <div className="flex items-center gap-1">
           <NumberInput
@@ -413,13 +240,6 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
           menuId="fab-clear"
           disabled={!isFabApplied}
           variant="warning"
-        />
-
-        <ActionButton
-          icon={tpngIcon(imgLogic)}
-          tooltip="Simulation Parameters"
-          onClick={onOpenParams}
-          menuId="sim-params"
         />
 
         <div className={menuDividerClass} />

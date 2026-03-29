@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vps_logs_db
+    environment:
+      POSTGRES_DB: vps_logs
+      POSTGRES_USER: vps
+      POSTGRES_PASSWORD: vps
+    ports:
+      - "5432:5432"
+    volumes:
+      - vps_pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+
+volumes:
+  vps_pgdata:

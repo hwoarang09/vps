@@ -18,9 +18,9 @@ import { ReactComponent as RMapIcon } from "@/assets/icons/r_edge.svg";
 // Shapez2-style PNG icons
 import imgBlueprint from "@/assets/icons/game/menu-blueprint.svg";
 import imgStationIn from "@/assets/icons/game/station-shape-in.png";
-import imgStationOut from "@/assets/icons/game/station-shape-out.png";
+
 import imgSim from "@/assets/icons/game/menu-sim.png";
-import imgElec from "@/assets/icons/game/menu-elec.png";
+
 import imgGauge from "@/assets/icons/game/icon-gauge.svg";
 import imgTrains from "@/assets/icons/game/menu-trains.png";
 import imgRouting from "@/assets/icons/game/menu-routing.png";
@@ -29,6 +29,7 @@ import imgSignal from "@/assets/icons/game/signal-wait-stop.png";
 import imgLabel from "@/assets/icons/game/special-label.png";
 import imgFluids from "@/assets/icons/game/menu-fluids.png";
 import imgTracks from "@/assets/icons/game/menu-train-tracks.svg";
+import imgDevToolsGear from "@/assets/icons/game/menu-devtools-gear.svg";
 
 import {
   MenuLevel2Item,
@@ -44,26 +45,6 @@ const pngIcon = (src: string, size = PS) => (
 );
 
 export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
-  MapLoader: [
-    {
-      id: "maploader-menu-1",
-      label: "Load CFG",
-
-      iconFn: () => pngIcon(imgBlueprint),
-    },
-    {
-      id: "maploader-menu-2",
-      label: "Import",
-
-      iconFn: () => pngIcon(imgStationIn),
-    },
-    {
-      id: "maploader-menu-3",
-      label: "Export",
-
-      iconFn: () => pngIcon(imgStationOut),
-    },
-  ],
   Statistics: [
     {
       id: "stats-menu-1",
@@ -88,9 +69,22 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
   ],
   Operation: [
     {
-      id: "operation-menu-1",
-      label: "Routes",
+      id: "operation-menu-6",
+      label: "Layout",
+      shortcutLabel: "l",
+      iconFn: () => pngIcon(imgBlueprint),
+    },
+    {
+      id: "operation-menu-7",
+      label: "Transfer",
+      shortcutLabel: "m",
       iconFn: () => pngIcon(imgRouting),
+    },
+    {
+      id: "operation-menu-8",
+      label: "Params",
+      shortcutLabel: "p",
+      iconFn: () => pngIcon(imgDevToolsGear),
     },
     {
       id: "operation-menu-2",
@@ -104,6 +98,11 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
           }}
         />
       ),
+    },
+    {
+      id: "operation-menu-1",
+      label: "Routes",
+      iconFn: () => pngIcon(imgRouting),
     },
     {
       id: "operation-menu-3",

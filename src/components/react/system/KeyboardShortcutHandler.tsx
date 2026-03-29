@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
+import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { menuLevel2Config } from "../menu/data/menuLevel2Config";
+import { menuLevel3Config } from "../menu/data/menuLevel3Config";
 import { menuLevel1Groups } from "../menu/data/MenuLevel1Config";
 import { MainMenuType } from "@/types";
 
@@ -9,6 +12,7 @@ const LV1_SHORTCUT_MAP: Record<string, MainMenuType> = {
   m: "MQTT",
   d: "DevTools",
   f: "Search",
+  o: "Operation",
 };
 
 // Shortcut key to lv2 menu mapping (within currently active lv1 menu)
@@ -24,6 +28,11 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
     n: "search-node",
     e: "search-edge",
     s: "search-station",
+  },
+  Operation: {
+    l: "operation-menu-6",
+    m: "operation-menu-7",
+    p: "operation-menu-8",
   },
 };
 
@@ -89,11 +98,20 @@ const KeyboardShortcutHandler = () => {
       if (activeMainMenu && LV2_SHORTCUT_MAP[activeMainMenu]?.[key]) {
         e.preventDefault();
         const targetSubMenu = LV2_SHORTCUT_MAP[activeMainMenu][key];
+
+        // operation-menu-8 (Params, 'p'): SimulationParamsModal 열기
+        if (targetSubMenu === "operation-menu-8") {
+          useFabConfigStore.getState().setModalOpen(true);
+          return;
+        }
+
         setActiveSubMenu(targetSubMenu);
 
         // Check if this menu should NOT open RightPanel
+        const hasLv3 = targetSubMenu in menuLevel3Config;
         const shouldNotOpenRightPanel =
-          targetSubMenu === "maploader-menu-1" ||
+          hasLv3 ||
+          targetSubMenu === "operation-menu-2" ||
           targetSubMenu.startsWith("test-");
 
         if (!shouldNotOpenRightPanel) {
@@ -107,6 +125,21 @@ const KeyboardShortcutHandler = () => {
 
       const keyNumber = Number.parseInt(e.key, 10);
 
+      // If Level 3 menu is open (LV2 has LV3 config), handle Level 3 shortcuts first
+      if (activeMainMenu && activeSubMenu && activeSubMenu in menuLevel3Config) {
+        const lv3Items = menuLevel3Config[activeSubMenu];
+        const index = keyNumber - 1;
+        if (lv3Items && index < lv3Items.length) {
+          e.preventDefault();
+          const item = lv3Items[index];
+          // Transfer mode selection
+          if (item.transferMode !== undefined) {
+            useVehicleArrayStore.getState().setTransferMode(item.transferMode);
+          }
+          return;
+        }
+      }
+
       // If Level 1 menu is active, handle Level 2 menu shortcuts
       if (activeMainMenu) {
         const index = keyNumber - 1;
@@ -117,9 +150,11 @@ const KeyboardShortcutHandler = () => {
           const targetLevel2Menu = level2Menus[index];
           setActiveSubMenu(targetLevel2Menu.id);
 
-          // Check if this menu should NOT open RightPanel (e.g., CFGLoader, Test menus)
+          // Check if this menu should NOT open RightPanel
+          const hasLv3 = targetLevel2Menu.id in menuLevel3Config;
           const shouldNotOpenRightPanel =
-            targetLevel2Menu.id === "maploader-menu-1" ||
+            hasLv3 ||
+            targetLevel2Menu.id === "operation-menu-2" ||
             targetLevel2Menu.id.startsWith("test-");
 
           if (!shouldNotOpenRightPanel) {

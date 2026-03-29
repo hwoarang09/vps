@@ -710,6 +710,20 @@ const SimulationParamsModal: React.FC = () => {
     }
   }, [isModalOpen, syncFromSimulationConfig]);
 
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setModalOpen(false);
+      }
+    };
+    // capture phase로 등록해서 KeyboardShortcutHandler보다 먼저 처리
+    window.addEventListener("keydown", handleKey, true);
+    return () => window.removeEventListener("keydown", handleKey, true);
+  }, [isModalOpen, setModalOpen]);
+
   // 오버라이드가 있는 fab 목록
   const overriddenFabIndices = Object.keys(fabOverrides).map(Number).sort((a, b) => a - b);
 

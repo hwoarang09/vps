@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { VehicleSystemType } from "@/types/vehicle";
+import { getDefaultSetting } from "@/config/react/testSettingConfig";
 
 /**
  * Vehicle Test Store
@@ -16,6 +17,8 @@ interface VehicleTestState {
   isPaused: boolean; // Simulation pause state
   initialVehicleDistribution: Map<number, number[]> | null; // Edge index -> vehicle indices
   useVehicleConfig: boolean; // If true, use vehicles.cfg; if false, use numVehicles
+  selectedSettingId: string; // Current test setting ID (shared with Operation panel)
+  settingChangeSeq: number; // Increment to trigger reload
 
   // Actions
   startTest: (mode: VehicleSystemType, numVehicles?: number, useVehicleConfig?: boolean) => void;
@@ -24,6 +27,7 @@ interface VehicleTestState {
   setPanelVisible: (visible: boolean) => void;
   setPaused: (paused: boolean) => void;
   setInitialVehicleDistribution: (distribution: Map<number, number[]>) => void;
+  requestSettingChange: (settingId: string) => void;
 }
 
 export const useVehicleTestStore = create<VehicleTestState>((set) => ({
@@ -34,6 +38,8 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
   isPaused: true, // Start paused by default
   initialVehicleDistribution: null,
   useVehicleConfig: false,
+  selectedSettingId: getDefaultSetting(),
+  settingChangeSeq: 0,
 
   startTest: (mode: VehicleSystemType, numVehicles = 50, useVehicleConfig = false) => {
     set({ isTestActive: true, testMode: mode, numVehicles, isPanelVisible: true, isPaused: true, useVehicleConfig });
@@ -57,6 +63,13 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
 
   setInitialVehicleDistribution: (distribution: Map<number, number[]>) => {
     set({ initialVehicleDistribution: distribution });
+  },
+
+  requestSettingChange: (settingId: string) => {
+    set((state) => ({
+      selectedSettingId: settingId,
+      settingChangeSeq: state.settingChangeSeq + 1,
+    }));
   },
 }));
 

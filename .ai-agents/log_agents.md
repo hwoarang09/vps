@@ -147,3 +147,134 @@ python scripts/log_parser/log_parser.py /path/to/ --session session_xxx --export
 | SimLogger 메서드 시그니처 | FabContext/logger-setup.ts, simulation-step.ts |
 | simLogUtils.ts | SimLogFileManager.tsx, shmSimulatorStore.ts |
 | Python parser struct format | log_parser.py EVENT_TYPES, COLUMNS |
+
+## [TODO] PostgreSQL 로그 DB 계획
+
+### 목표
+현재: Worker → OPFS .bin → 수동 다운로드 → Python 파싱 → 분석
+목표: Worker → fetch() → FastAPI → PostgreSQL → 실시간 분석
+
+### 아키텍처
+```
+┌─ Sim Worker ─────────────────────────┐
+│ SimLogger (기존 OPFS 유지, fallback)  │
+│ LogShipper (NEW)                      │
+│   - 버퍼에 레코드 모음               │
+│   - 1초 or 1000건마다 batch POST      │
+└──────────── fetch() ─────────────────┘
+                 │
+                 ▼
+┌─ Local Backend (Python FastAPI) ─────┐
+│ POST /logs/ingest                     │
+│   - binary batch 수신                │
+│   - PostgreSQL INSERT                │
+└──────────────────────────────────────┘
+                 │
+                 ▼
+┌─ PostgreSQL (Docker, 로컬) ──────────┐
+│ 테이블: ml_*, dev_* (이벤트 타입별)   │
+│ → SQL 직접 분석                       │
+│ → Python psycopg2 쿼리               │
+│ → Grafana 연결 가능                   │
+└──────────────────────────────────────┘
+```
+
+### 로그 목록
+
+**ML (항상 기록):**
+| 이벤트 | 테이블 | 빈도 |
+|--------|--------|------|
+| ORDER_COMPLETE | ml_order_complete | 오더 완료 시 |
+| EDGE_TRANSIT | ml_edge_transit | 엣지 진입/퇴출마다 |
+| LOCK | ml_lock | 락 이벤트마다 |
+
+**DEV (dev 모드에서만):**
+| 이벤트 | 테이블 | 빈도 |
+|--------|--------|------|
+| VEH_STATE | dev_veh_state | 매 프레임 (10~60Hz) |
+| PATH | dev_path | 경로 변경 시 |
+| LOCK_DETAIL | dev_lock_detail | 락 대기 발생 시 |
+| TRANSFER | dev_transfer | transfer 시 |
+| EDGE_QUEUE | dev_edge_queue | 큐 변동 시 |
+
+**추가 후보:**
+| 이벤트 | 목적 | 우선순위 |
+|--------|------|----------|
+| DISPATCH | 배차 로직 디버깅 | 높음 |
+| COLLISION | 충돌 감지/회피 | 중간 |
+| SIM_TICK | 틱 처리 시간 프로파일링 | 낮음 |
+
+### DB 테이블 설계
+
+```sql
+-- 세션 메타
+CREATE TABLE sessions (
+    session_id TEXT PRIMARY KEY,
+    started_at TIMESTAMPTZ DEFAULT now(),
+    mode TEXT NOT NULL,            -- 'ml' | 'dev'
+    vehicle_count INT,
+    map_name TEXT,
+    note TEXT
+);
+
+-- ML 이벤트
+CREATE TABLE ml_order_complete (
+    session_id TEXT NOT NULL, order_id INT, veh_id INT, dest_edge INT,
+    move_to_pickup_ts INT, pickup_arrive_ts INT, pickup_start_ts INT, pickup_done_ts INT,
+    move_to_drop_ts INT, drop_arrive_ts INT, drop_start_ts INT, drop_done_ts INT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE ml_edge_transit (
+    session_id TEXT NOT NULL, ts INT, veh_id INT, edge_id INT,
+    enter_ts INT, exit_ts INT, edge_len REAL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE ml_lock (
+    session_id TEXT NOT NULL, ts INT, veh_id INT,
+    node_idx SMALLINT, event_type SMALLINT, wait_ms INT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- DEV 이벤트
+CREATE TABLE dev_veh_state (
+    session_id TEXT NOT NULL, ts INT, veh_id INT,
+    x REAL, y REAL, z REAL, edge REAL, ratio REAL, speed REAL,
+    moving_status REAL, traffic_state REAL, job_state REAL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE dev_path (
+    session_id TEXT NOT NULL, ts INT, veh_id INT,
+    dest_edge INT, path_len INT, created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE dev_lock_detail (
+    session_id TEXT NOT NULL, ts INT, veh_id INT,
+    node_idx SMALLINT, type SMALLINT, holder_veh_id INT, wait_ms INT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE dev_transfer (
+    session_id TEXT NOT NULL, ts INT, veh_id INT,
+    from_edge INT, to_edge INT, created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE dev_edge_queue (
+    session_id TEXT NOT NULL, ts INT, edge_id INT,
+    veh_id INT, count SMALLINT, type SMALLINT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 인덱스
+CREATE INDEX idx_edge_transit_session_edge ON ml_edge_transit(session_id, edge_id);
+CREATE INDEX idx_lock_session_node ON ml_lock(session_id, node_idx);
+CREATE INDEX idx_veh_state_session_veh ON dev_veh_state(session_id, veh_id);
+CREATE INDEX idx_lock_detail_session_veh ON dev_lock_detail(session_id, veh_id);
+```
+
+### 구현 Phase
+- Phase 1: Docker PostgreSQL + 스키마 + FastAPI 서버 (scripts/log_server/)
+- Phase 2: Worker LogShipper.ts — SimLogger에서 write 시 LogShipper에도 push, batch fetch POST
+- Phase 3: 분석 쿼리 스크립트 (scripts/log_analyzer/)

@@ -4,7 +4,7 @@ import {
 } from "../shared";
 
 // Shapez2-style PNG icons
-import imgMapLoader from "@/assets/icons/game/menu-blueprint.svg";
+
 import imgStatistics from "@/assets/icons/game/menu-statistics.svg";
 import imgSearch from "@/assets/icons/game/sim-inspect.svg";
 import imgOperation from "@/assets/icons/game/menu-routing.png";
@@ -22,14 +22,6 @@ const pngIcon = (src: string, size = PS) => (
 
 // Group menu items by category
 export const menuLevel1Groups: MenuLevel1Item[][] = [
-  [
-    {
-      id: "MapLoader",
-      label: "MapLoader",
-
-      iconFn: () => pngIcon(imgMapLoader),
-    },
-  ],
   [
     {
       id: "Statistics",
@@ -57,7 +49,7 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
     {
       id: "Operation",
       label: "Operation",
-
+      shortcutLabel: "o",
       iconFn: () => pngIcon(imgOperation),
     },
   ],

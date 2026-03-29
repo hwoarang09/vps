@@ -73,6 +73,8 @@ export const panelTitleVariants = cva(
       color: {
         white: "text-white",
         orange: "text-accent-orange",
+        cyan: "text-accent-cyan",
+        purple: "text-accent-purple",
         muted: "text-gray-300",
       },
     },

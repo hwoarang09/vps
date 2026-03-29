@@ -3,7 +3,8 @@ import React, { useEffect } from "react";
 import MenuLevel1 from "./MenuLevel1";
 import RightPanel from "./RightPanel";
 import MenuLevel2 from "./MenuLevel2";
-import MapLoader from "../MapLoader/MapLoader";
+import MenuLevel3 from "./MenuLevel3";
+
 import ConfigDataPanel from "../DataPanel/DataPanel";
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import TransportScheduleModal from "./panels/TransportScheduleModal";
@@ -50,6 +51,9 @@ const MenuContainer: React.FC = () => {
       {/* Level 2 Menu - Show when Level 1 menu is active */}
       {activeMainMenu && <MenuLevel2 />}
 
+      {/* Level 3 Menu - Show when Level 2 has sub-items */}
+      {activeMainMenu && <MenuLevel3 />}
+
       {/* Right Panel - Consider top/bottom menu heights */}
       {rightPanelOpen && (
         <div
@@ -71,9 +75,6 @@ const MenuContainer: React.FC = () => {
 
       {/* Menu Tooltip - Always rendered */}
       <MenuTooltip />
-
-      {/* Map Loader - Map loading functionality */}
-      <MapLoader />
 
       {/* Vehicle Test - Performance testing functionality */}
       <VehicleTest />

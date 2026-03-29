@@ -11,6 +11,7 @@ import { useVisualizationStore } from "@/store/ui/visualizationStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
+import OperationMapPanel from "./panels/OperationMapPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -174,6 +175,11 @@ const RightPanel: React.FC = () => {
       return <EdgeControlPanel />;
     }
 
+    // Operation Map/CFG Panel
+    if (activeSubMenu === "operation-menu-6") {
+      return <OperationMapPanel />;
+    }
+
     // 다른 메뉴들의 경우
     return (
       <div className="space-y-4">
@@ -227,6 +233,9 @@ const RightPanel: React.FC = () => {
       "operation-menu-3": "Live Monitoring",
       "operation-menu-4": "Alert System",
       "operation-menu-5": "Operation Logs",
+      "operation-menu-6": "Layout Load",
+      "operation-menu-7": "Transfer Mode",
+      "operation-menu-8": "Sim Parameters",
       // MapBuilder
       "map-menu-1": "Straight Rails",
       "map-menu-2": "Curved Rails",
