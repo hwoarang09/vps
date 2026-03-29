@@ -1,7 +1,8 @@
 /**
- * VehicleEdgeOverlay - 선택된 vehicle의 currentEdge / nextEdge 위에 오버레이를 그린다.
+ * VehicleEdgeOverlay - 선택된 vehicle의 currentEdge / nextEdge / path 위에 오버레이를 그린다.
  * 기존 edge를 수정하지 않고, 동일한 위치에 z 오프셋으로 새 quad를 그린다.
  * LINEAR edge: 1개 quad, CURVE edge: renderingPoints 세그먼트만큼 quad.
+ * Path edges: 점선 스타일 (current/next와 구분)
  */
 import React, { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -14,6 +15,8 @@ import { EdgeType, Edge } from "@/types";
 const QUAD_WIDTH = 0.3;
 /** 최대 세그먼트 수 (curve edge: DEFAULT_SEGMENTS=100 → 101 points → 100 segments) */
 const MAX_SEGMENTS = 128;
+/** Path overlay: 최대 edge 수 × 세그먼트 */
+const MAX_PATH_INSTANCES = 2048;
 
 // vertex shader: 단순 instanced quad
 const overlayVertexShader = /* glsl */ `
@@ -30,7 +33,7 @@ void main() {
 }
 `;
 
-// fragment shader: pulse glow
+// fragment shader: pulse glow (solid)
 const overlayFragmentShader = /* glsl */ `
 uniform vec3 uColor;
 uniform float uTime;
@@ -40,6 +43,19 @@ varying float vProgress;
 void main() {
     float pulse = 0.75 + 0.25 * sin(uTime * 4.0);
     gl_FragColor = vec4(uColor * pulse, 0.9);
+}
+`;
+
+// fragment shader: path edges (solid, slightly dimmer)
+const pathFragmentShader = /* glsl */ `
+uniform vec3 uColor;
+uniform float uTime;
+
+varying float vProgress;
+
+void main() {
+    float pulse = 0.65 + 0.15 * sin(uTime * 3.0);
+    gl_FragColor = vec4(uColor * pulse, 0.85);
 }
 `;
 
@@ -60,6 +76,7 @@ function buildEdgeOverlay(
   edge: Edge,
   mesh: THREE.InstancedMesh,
   ctx: MatrixCtx,
+  startIdx = 0,
 ): number {
   const points = edge.renderingPoints;
   if (!points || points.length === 0) return 0;
@@ -83,7 +100,7 @@ function buildEdgeOverlay(
     ctx.scale.set(length, QUAD_WIDTH, 1);
     ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
 
-    mesh.setMatrixAt(0, ctx.matrix);
+    mesh.setMatrixAt(startIdx, ctx.matrix);
     return 1;
   }
 
@@ -108,7 +125,7 @@ function buildEdgeOverlay(
     ctx.scale.set(length * 2, QUAD_WIDTH, 1);
     ctx.matrix.compose(ctx.position, ctx.quaternion, ctx.scale);
 
-    mesh.setMatrixAt(idx, ctx.matrix);
+    mesh.setMatrixAt(startIdx + idx, ctx.matrix);
     idx++;
   }
   return idx;
@@ -194,6 +211,91 @@ const EdgeOverlayMesh: React.FC<{
   );
 };
 
+/** Path edges 오버레이 (여러 edge를 한 mesh에) */
+const PathOverlayMesh: React.FC = () => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const prevLenRef = useRef<number>(-1);
+  const prevFirstRef = useRef<number>(-1);
+
+  const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  const material = useMemo(() => new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color("#ff4444") }, // bright red
+      uTime: { value: 0 },
+      uZOffset: { value: 0.004 },
+    },
+    vertexShader: overlayVertexShader,
+    fragmentShader: pathFragmentShader,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthTest: true,
+    depthWrite: false,
+    depthFunc: THREE.LessEqualDepth,
+  }), []);
+
+  const ctx = useMemo<MatrixCtx>(() => ({
+    matrix: new THREE.Matrix4(),
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+    scale: new THREE.Vector3(),
+    euler: new THREE.Euler(),
+  }), []);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  useFrame((state) => {
+    material.uniforms.uTime.value = state.clock.elapsedTime;
+
+    const mesh = meshRef.current;
+    if (!mesh) return;
+
+    const pathEdgeIndices = useVehicleEdgeHighlightStore.getState().pathEdgeIndices;
+    const len = pathEdgeIndices.length;
+    const first = len > 0 ? pathEdgeIndices[0] : -1;
+
+    // 빠른 변경 감지: 길이 + 첫 번째 원소
+    if (len === prevLenRef.current && first === prevFirstRef.current) return;
+    prevLenRef.current = len;
+    prevFirstRef.current = first;
+
+    if (len === 0) {
+      mesh.count = 0;
+      return;
+    }
+
+    const edges = useEdgeStore.getState().edges;
+    let totalCount = 0;
+
+    for (const edgeIdx of pathEdgeIndices) {
+      if (edgeIdx < 1 || totalCount >= MAX_PATH_INSTANCES) break;
+      const edge = edges[edgeIdx - 1];
+      if (!edge) continue;
+
+      const count = buildEdgeOverlay(edge, mesh, ctx, totalCount);
+      totalCount += count;
+    }
+
+    mesh.count = totalCount;
+    if (totalCount > 0) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  });
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[geometry, material, MAX_PATH_INSTANCES]}
+      frustumCulled={false}
+      renderOrder={9}
+    />
+  );
+};
+
 const VehicleEdgeOverlay: React.FC = () => {
   const getCurrentEdge = useMemo(() => {
     return () => useVehicleEdgeHighlightStore.getState().currentEdgeIndex;
@@ -204,6 +306,7 @@ const VehicleEdgeOverlay: React.FC = () => {
 
   return (
     <group>
+      <PathOverlayMesh />
       <EdgeOverlayMesh color="#4cff72" zOffset={0.003} getEdgeIndex={getCurrentEdge} />
       <EdgeOverlayMesh color="#ffd740" zOffset={0.002} getEdgeIndex={getNextEdge} />
     </group>

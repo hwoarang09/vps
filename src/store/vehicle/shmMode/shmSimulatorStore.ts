@@ -255,7 +255,14 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   resume: async () => {
     const { controller } = get();
     if (controller && get().isInitialized) {
-
+      // SimLogger 초기화 (최초 resume 시 1회만)
+      if (!controller.isLoggingEnabled()) {
+        try {
+          await controller.enableLogging();
+        } catch (err) {
+          console.error('[ShmSimulator] enableLogging failed:', err);
+        }
+      }
       controller.resume();
       set({ isRunning: true });
     }

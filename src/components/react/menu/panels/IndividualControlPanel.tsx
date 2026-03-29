@@ -238,6 +238,7 @@ const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
     const {
         vehicleIndex, nextEdgesInfo, mergeWaitInfo, isShmMode,
     } = data;
+    const [pathExpanded, setPathExpanded] = useState(false);
 
     return (
         <div className="space-y-2 text-xs">
@@ -271,31 +272,44 @@ const RouteTab: React.FC<{ data: VehicleData }> = ({ data }) => {
                 const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
                 const len = pathData[pathPtr + PATH_LEN];
 
+                const displayCount = pathExpanded ? len : Math.min(len, 10);
+                const items: { edgeIdx: number; edgeName: string }[] = [];
+                for (let i = 0; i < displayCount; i++) {
+                    const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
+                    if (edgeIdx >= 0) {
+                        const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
+                        items.push({ edgeIdx, edgeName: edge?.edge_name || `Edge#${edgeIdx}` });
+                    }
+                }
+
                 return (
                     <div className="bg-panel-bg-solid p-2 rounded border border-panel-border">
                         <div className="text-purple-400 font-medium mb-1">
                             Path ({len} edges)
                         </div>
                         {len > 0 ? (
-                            <div className="space-y-0.5 max-h-40 overflow-y-auto text-gray-400">
-                                {(() => {
-                                    const items: { edgeIdx: number; edgeName: string }[] = [];
-                                    for (let i = 0; i < len && i < 10; i++) {
-                                        const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
-                                        if (edgeIdx >= 0) {
-                                            const edge = useEdgeStore.getState().getEdgeByIndex(edgeIdx);
-                                            items.push({ edgeIdx, edgeName: edge?.edge_name || `Edge#${edgeIdx}` });
-                                        }
-                                    }
-                                    return items.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between font-mono">
-                                            <span>{idx + 1}. {item.edgeName}</span>
-                                            <span className="text-gray-600">#{item.edgeIdx}</span>
-                                        </div>
-                                    ));
-                                })()}
-                                {len > 10 && (
-                                    <div className="text-gray-600 text-center">... +{len - 10} more</div>
+                            <div className={twMerge("space-y-0.5 overflow-y-auto text-gray-400", pathExpanded ? "max-h-60" : "max-h-40")}>
+                                {items.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between font-mono">
+                                        <span>{idx + 1}. {item.edgeName}</span>
+                                        <span className="text-gray-600">#{item.edgeIdx}</span>
+                                    </div>
+                                ))}
+                                {!pathExpanded && len > 10 && (
+                                    <button
+                                        onClick={() => setPathExpanded(true)}
+                                        className="w-full text-center text-purple-400 hover:text-purple-300 py-1 transition-colors cursor-pointer"
+                                    >
+                                        +{len - 10} more
+                                    </button>
+                                )}
+                                {pathExpanded && len > 10 && (
+                                    <button
+                                        onClick={() => setPathExpanded(false)}
+                                        className="w-full text-center text-gray-500 hover:text-gray-400 py-1 transition-colors cursor-pointer"
+                                    >
+                                        collapse
+                                    </button>
                                 )}
                             </div>
                         ) : (
@@ -630,6 +644,30 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     const highlightStore = useVehicleEdgeHighlightStore.getState();
     highlightStore.setCurrentEdge(currentEdgeIdx >= 1 ? currentEdgeIdx : null);
     highlightStore.setNextEdge(nextEdgeIdx >= 1 ? nextEdgeIdx : null);
+
+    // Path edges highlight (SHM only)
+    if (isShmMode) {
+        const pathData = useShmSimulatorStore.getState().getPathData();
+        if (pathData) {
+            const pathPtr = vehicleIndex * MAX_PATH_LENGTH;
+            const len = pathData[pathPtr + PATH_LEN];
+
+            const excludeSet = new Set<number>();
+            if (currentEdgeIdx >= 1) excludeSet.add(currentEdgeIdx);
+            for (const ne of nextEdges) {
+                if (ne >= 1) excludeSet.add(ne);
+            }
+
+            const pathOnly: number[] = [];
+            for (let i = 0; i < len; i++) {
+                const edgeIdx = pathData[pathPtr + PATH_EDGES_START + i];
+                if (edgeIdx >= 1 && !excludeSet.has(edgeIdx)) {
+                    pathOnly.push(edgeIdx);
+                }
+            }
+            highlightStore.setPathEdges(pathOnly);
+        }
+    }
 
     const tabs: { key: TabType; label: string }[] = [
         { key: "basic", label: "기본" },
