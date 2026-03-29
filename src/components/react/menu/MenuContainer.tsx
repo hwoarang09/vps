@@ -5,7 +5,6 @@ import RightPanel from "./RightPanel";
 import MenuLevel2 from "./MenuLevel2";
 import MenuLevel3 from "./MenuLevel3";
 
-import ConfigDataPanel from "../DataPanel/DataPanel";
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import TransportScheduleModal from "./panels/TransportScheduleModal";
 import { useMenuStore } from "@/store/ui/menuStore";
@@ -70,8 +69,6 @@ const MenuContainer: React.FC = () => {
         </div>
       )}
 
-      {/* Config Data Panel - Show only when DataPanel menu is active */}
-      {activeMainMenu === "DataPanel" && <ConfigDataPanel />}
 
       {/* Menu Tooltip - Always rendered */}
       <MenuTooltip />

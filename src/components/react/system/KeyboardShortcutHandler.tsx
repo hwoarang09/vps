@@ -14,7 +14,6 @@ const LV1_SHORTCUT_MAP: Record<string, MainMenuType> = {
   f: "Search",
   o: "Operation",
   s: "Statistics",
-  d: "DataPanel",
 };
 
 // Shortcut key to lv2 menu mapping (within currently active lv1 menu)
@@ -24,6 +23,13 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
   },
   DevTools: {
     l: "devtools-lock",
+  },
+  Statistics: {
+    t: "data-topology",
+    r: "stats-menu-1",
+    v: "data-vehicle-history",
+    d: "data-transfer-history",
+    l: "data-lock-history",
   },
   Search: {
     v: "search-vehicle",

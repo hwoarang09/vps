@@ -12,6 +12,7 @@ import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 import OperationMapPanel from "./panels/OperationMapPanel";
+import DataPanel from "../DataPanel/DataPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -180,6 +181,11 @@ const RightPanel: React.FC = () => {
       return <OperationMapPanel />;
     }
 
+    // DataPanel sub-menus
+    if (activeSubMenu?.startsWith("data-")) {
+      return <DataPanel />;
+    }
+
     // 다른 메뉴들의 경우
     return (
       <div className="space-y-4">
@@ -248,6 +254,11 @@ const RightPanel: React.FC = () => {
       "vis-heatmap": "Heatmap",
       "vis-traffic-flow": "Traffic Flow",
       "vis-deadlock-zone": "Deadlock Zone",
+      // DataPanel
+      "data-topology": "Topology",
+      "data-vehicle-history": "운행이력",
+      "data-transfer-history": "반송이력",
+      "data-lock-history": "Lock이력",
       // DevTools
       "devtools-lock": "Lock Info",
       // Search

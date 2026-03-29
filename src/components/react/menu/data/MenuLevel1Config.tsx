@@ -11,7 +11,6 @@ import imgOperation from "@/assets/icons/game/menu-routing.png";
 import imgMapBuilder from "@/assets/icons/game/menu-train-tracks.svg";
 import imgLayoutBuilder from "@/assets/icons/game/menu-cut.png";
 import imgVisualization from "@/assets/icons/game/shape-stack.png";
-import imgDataPanel from "@/assets/icons/game/special-label.png";
 import imgDevTools from "@/assets/icons/game/menu-devtools-gear.svg";
 
 const PS = ICON_SIZE_MEDIUM + 6;
@@ -36,12 +35,6 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       label: "Statistics",
       shortcutLabel: "s",
       iconFn: () => pngIcon(imgStatistics),
-    },
-    {
-      id: "DataPanel",
-      label: "DataPanel",
-      shortcutLabel: "d",
-      iconFn: () => pngIcon(imgDataPanel),
     },
   ],
   [

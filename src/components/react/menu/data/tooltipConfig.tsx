@@ -14,7 +14,6 @@ export const tooltipsByLevel: {
     Operation: "운영 관리",
     MapBuilder: "도로 편집기",
     LayoutBuilder: "레이아웃 편집기",
-    DataPanel: "데이터 패널",
     MQTT: "MQTT 연결 관리",
     Visualization: "시각화 옵션",
     DevTools: "개발자 도구",
@@ -25,11 +24,11 @@ export const tooltipsByLevel: {
     "maploader-menu-2": "맵 데이터 가져오기",
     "maploader-menu-3": "맵 데이터 내보내기",
 
+    "data-topology": "노드/엣지 토폴로지 정보",
     "stats-menu-1": "실시간 데이터 분석",
-    "stats-menu-2": "일일 통계 리포트",
-    "stats-menu-3": "주간 통계 리포트",
-    "stats-menu-4": "월간 통계 리포트",
-    "stats-menu-5": "성능 분석",
+    "data-vehicle-history": "차량별 운행 이력 조회",
+    "data-transfer-history": "반송 이력 조회",
+    "data-lock-history": "Lock 이벤트 이력 조회",
 
     "vehicle-menu-1": "전체 차량 현황",
     "vehicle-menu-2": "운행중인 차량",

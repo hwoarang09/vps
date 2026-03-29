@@ -47,7 +47,6 @@ export type MainMenuType =
   | "Operation"
   | "MapBuilder"
   | "LayoutBuilder"
-  | "DataPanel"
   | "MQTT"
   | "DevTools"
   | "Search"

@@ -1,6 +1,5 @@
 // components/react/menu/data/menuLevel2Config.tsx
 import {
-  CalendarDays,
   Timer,
   FileCheck,
   Hash,
@@ -47,24 +46,34 @@ const pngIcon = (src: string, size = PS) => (
 export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
   Statistics: [
     {
+      id: "data-topology",
+      label: "Topology",
+      shortcutLabel: "t",
+      iconFn: () => pngIcon(imgTracks),
+    },
+    {
       id: "stats-menu-1",
       label: "Realtime",
-
+      shortcutLabel: "r",
       iconFn: () => pngIcon(imgSim),
     },
     {
-      id: "stats-menu-2",
-      label: "Report",
-
-      iconFn: (isActive: boolean) => (
-        <CalendarDays
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
+      id: "data-vehicle-history",
+      label: "운행이력",
+      shortcutLabel: "v",
+      iconFn: () => pngIcon(imgTrains),
+    },
+    {
+      id: "data-transfer-history",
+      label: "반송이력",
+      shortcutLabel: "d",
+      iconFn: () => pngIcon(imgRouting),
+    },
+    {
+      id: "data-lock-history",
+      label: "Lock이력",
+      shortcutLabel: "l",
+      iconFn: () => pngIcon(imgSignal),
     },
   ],
   Operation: [
