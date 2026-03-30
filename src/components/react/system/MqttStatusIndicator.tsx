@@ -4,9 +4,11 @@
 import React, { useState } from "react";
 import { Antenna, WifiOff, ChevronDown, PlugZap, Settings } from "lucide-react";
 import { useMqttStore } from "@/store/system/mqttStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 const MqttStatusIndicator: React.FC = () => {
   const { isConnected, config, disconnect, connect } = useMqttStore();
+  const currentSessionId = useShmSimulatorStore((s) => s.currentSessionId);
   const [isOpen, setIsOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [brokerUrl, setBrokerUrl] = useState("");
@@ -79,7 +81,7 @@ const MqttStatusIndicator: React.FC = () => {
             isConnected ? "text-green-600" : "text-red-600"
           }`}
         >
-          {isConnected ? "MQTT" : "MQTT Off"}
+          {isConnected ? "MQTT" : currentSessionId ?? "MQTT Off"}
         </span>
 
         {/* Pulsing dot indicator */}

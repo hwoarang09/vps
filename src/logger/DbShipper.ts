@@ -39,6 +39,8 @@ export class DbShipper {
   /** 세션 등록 + 타이머 시작 */
   async start(mode: string, vehicleCount?: number, mapName?: string): Promise<void> {
     try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2000);
       await fetch(`${this.dbUrl}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,7 +50,9 @@ export class DbShipper {
           vehicle_count: vehicleCount,
           map_name: mapName,
         }),
+        signal: ctrl.signal,
       });
+      clearTimeout(timer);
     } catch {
       // 서버 미기동 시 무시
     }
