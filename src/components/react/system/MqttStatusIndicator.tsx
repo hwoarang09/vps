@@ -78,7 +78,7 @@ const MqttStatusIndicator: React.FC = () => {
         {/* Status Text */}
         <span
           className={`text-xs font-medium ${
-            isConnected ? "text-green-600" : "text-red-600"
+            isConnected ? "text-green-600" : currentSessionId ? "text-cyan-400 font-mono" : "text-red-600"
           }`}
         >
           {isConnected ? "MQTT" : currentSessionId ?? "MQTT Off"}

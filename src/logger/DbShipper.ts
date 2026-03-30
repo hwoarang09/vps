@@ -4,13 +4,14 @@
 import { EventType, RECORD_SIZE, ML_EVENT_TYPES, ALL_EVENT_TYPES } from './protocol';
 
 const DEFAULT_DB_URL = 'http://localhost:8100';
-const FLUSH_INTERVAL_MS = 1000;
-const FLUSH_RECORD_LIMIT = 1000;
+const FLUSH_INTERVAL_MS = 5000;
+const FLUSH_RECORD_LIMIT = 2000;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 interface ShipperBuffer {
   buffer: Uint8Array;
-  offset: number; // 현재 쓰기 위치 (bytes)
-  count: number;  // 레코드 수
+  offset: number;
+  count: number;
   recordSize: number;
 }
 
@@ -19,6 +20,8 @@ export class DbShipper {
   private readonly dbUrl: string;
   private readonly buffers = new Map<EventType, ShipperBuffer>();
   private timerId: ReturnType<typeof setInterval> | null = null;
+  private consecutiveFailures = 0;
+  private disabled = false;
 
   constructor(sessionId: string, mode: 'ml' | 'dev', dbUrl?: string) {
     this.sessionId = sessionId;
@@ -36,12 +39,11 @@ export class DbShipper {
     }
   }
 
-  /** 세션 등록 + 타이머 시작 */
   async start(mode: string, vehicleCount?: number, mapName?: string): Promise<void> {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 2000);
-      await fetch(`${this.dbUrl}/sessions`, {
+      const res = await fetch(`${this.dbUrl}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -53,19 +55,22 @@ export class DbShipper {
         signal: ctrl.signal,
       });
       clearTimeout(timer);
+      if (!res.ok) throw new Error(`${res.status}`);
+      console.log(`[DbShipper] session registered: ${this.sessionId}`);
     } catch {
-      // 서버 미기동 시 무시
+      console.warn(`[DbShipper] server unreachable (${this.dbUrl}), disabling DB shipping`);
+      this.disabled = true;
+      return;
     }
 
     this.timerId = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
   }
 
-  /** 레코드의 raw bytes를 버퍼에 push */
   push(eventType: EventType, view: DataView, byteOffset: number, recordSize: number): void {
+    if (this.disabled) return;
     const buf = this.buffers.get(eventType);
     if (!buf) return;
 
-    // 버퍼에 복사
     const src = new Uint8Array(view.buffer, byteOffset, recordSize);
     buf.buffer.set(src, buf.offset);
     buf.offset += recordSize;
@@ -76,8 +81,8 @@ export class DbShipper {
     }
   }
 
-  /** 모든 버퍼 전송 */
   flush(): void {
+    if (this.disabled) return;
     for (const [et, buf] of this.buffers) {
       if (buf.count > 0) {
         this._shipBuffer(et, buf);
@@ -85,13 +90,12 @@ export class DbShipper {
     }
   }
 
-  /** 타이머 정리 + 최종 flush */
   dispose(): void {
     if (this.timerId !== null) {
       clearInterval(this.timerId);
       this.timerId = null;
     }
-    this.flush();
+    if (!this.disabled) this.flush();
   }
 
   private _shipBuffer(eventType: EventType, buf: ShipperBuffer): void {
@@ -99,7 +103,6 @@ export class DbShipper {
     buf.offset = 0;
     buf.count = 0;
 
-    // fire-and-forget — 실패 시 데이터 폐기
     fetch(`${this.dbUrl}/logs/ingest`, {
       method: 'POST',
       headers: {
@@ -108,8 +111,18 @@ export class DbShipper {
         'Content-Type': 'application/octet-stream',
       },
       body: data,
+    }).then(() => {
+      this.consecutiveFailures = 0;
     }).catch(() => {
-      // 서버 미기동 시 무시
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.warn(`[DbShipper] ${MAX_CONSECUTIVE_FAILURES} failures, disabling`);
+        this.disabled = true;
+        if (this.timerId !== null) {
+          clearInterval(this.timerId);
+          this.timerId = null;
+        }
+      }
     });
   }
 }
