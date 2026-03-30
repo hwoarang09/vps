@@ -184,7 +184,16 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
           transferMode: fab.transferMode ?? TransferMode.RANDOM,
         })),
         workerCount,
-        config: { ...getSimulationConfig(), ...config },
+        config: {
+          ...getSimulationConfig(),
+          ...config,
+          logTargets: {
+            opfs: true,
+            db: true,
+            dbUrl: `http://${window.location.hostname}:8100`,
+            ...config.logTargets,
+          },
+        },
         sharedMapData,
       });
 
