@@ -3,7 +3,9 @@
 
 import { EventType, RECORD_SIZE, ML_EVENT_TYPES, ALL_EVENT_TYPES } from './protocol';
 
-const DEFAULT_DB_URL = 'http://localhost:8100';
+const DEFAULT_DB_URL = typeof self !== 'undefined' && self.location
+  ? `http://${self.location.hostname}:8100`
+  : 'http://localhost:8100';
 const FLUSH_INTERVAL_MS = 1000;
 const FLUSH_RECORD_LIMIT = 1000;
 

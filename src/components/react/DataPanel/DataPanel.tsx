@@ -5,7 +5,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
-const DB_URL = "http://localhost:8100";
+const DB_URL = `http://${window.location.hostname}:8100`;
 
 // ============================================================================
 // Shared hooks
