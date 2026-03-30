@@ -1,14 +1,13 @@
 // src/components/react/DataPanel/DataPanel.tsx
-// DB History 대형 모달 — 탭으로 운행이력/반송이력/Lock이력/Replay 전환
+// DB History 대형 모달 — 탭으로 운행이력/반송이력/Lock이력 전환
 
 import React, { useState, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
-
-import { LOG_DB_URL as DB_URL } from "@/config/logConfig";
+import { LOG_DB_URL } from "@/config/logConfig";
 
 // ============================================================================
-// Shared hooks
+// Shared
 // ============================================================================
 
 function useSessionId() {
@@ -22,11 +21,11 @@ function useSessionId() {
 
 interface SessionInfo { session_id: string; started_at: string; mode: string; vehicle_count: number | null; }
 
-const SessionSelector: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+const SessionSelector: React.FC<{ value: string; onChange: (v: string) => void; dbUrl: string }> = ({ value, onChange, dbUrl }) => {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   useEffect(() => {
-    fetch(`${DB_URL}/api/sessions`).then(r => r.json()).then(setSessions).catch(() => setSessions([]));
-  }, []);
+    fetch(`${dbUrl}/api/sessions`).then(r => r.json()).then(setSessions).catch(() => setSessions([]));
+  }, [dbUrl]);
 
   return sessions.length > 0 ? (
     <select className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white" value={value} onChange={e => onChange(e.target.value)}>
@@ -65,10 +64,6 @@ const Badge: React.FC<{ loading: boolean; error: string | null; count: number }>
   return <span className="text-gray-600">no data</span>;
 };
 
-// ============================================================================
-// Table wrapper
-// ============================================================================
-
 const TH: React.FC<{ children: React.ReactNode; align?: string }> = ({ children, align = "left" }) => (
   <th className={`sticky top-0 bg-gray-800 px-2 py-1.5 text-${align} text-gray-400 font-medium border-b border-gray-700`}>{children}</th>
 );
@@ -77,17 +72,17 @@ const TD: React.FC<{ children: React.ReactNode; className?: string }> = ({ child
 );
 
 // ============================================================================
-// Vehicle Tab (운행이력)
+// Vehicle Tab
 // ============================================================================
 
-const VehicleTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+const VehicleTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, dbUrl }) => {
   const [vehId, setVehId] = useState("");
   const snapshots = useDbQuery<any>(useCallback((p: Record<string, string>) =>
-    `${DB_URL}/api/vehicle/${p.vehId}/snapshots?session_id=${p.sessionId}&limit=2000`, []));
+    `${p.dbUrl}/api/vehicle/${p.vehId}/snapshots?session_id=${p.sessionId}&limit=2000`, []));
   const edges = useDbQuery<any>(useCallback((p: Record<string, string>) =>
-    `${DB_URL}/api/vehicle/${p.vehId}/edges?session_id=${p.sessionId}&limit=2000`, []));
+    `${p.dbUrl}/api/vehicle/${p.vehId}/edges?session_id=${p.sessionId}&limit=2000`, []));
 
-  const search = () => { if (!sessionId || !vehId) return; const p = { sessionId, vehId }; snapshots.query(p); edges.query(p); };
+  const search = () => { if (!sessionId || !vehId) return; const p = { sessionId, vehId, dbUrl }; snapshots.query(p); edges.query(p); };
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -96,7 +91,6 @@ const VehicleTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
         <button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded" onClick={search}>조회</button>
       </div>
       <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-        {/* Snapshots */}
         <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">위치/속도 이력</span>
@@ -116,7 +110,6 @@ const VehicleTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
             </table>
           </div>
         </div>
-        {/* Edge History */}
         <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">Edge 통과 이력</span>
@@ -141,15 +134,15 @@ const VehicleTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
 };
 
 // ============================================================================
-// Transfer Tab (반송이력)
+// Transfer Tab
 // ============================================================================
 
-const TransferTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+const TransferTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, dbUrl }) => {
   const [vehId, setVehId] = useState("");
   const edges = useDbQuery<any>(useCallback((p: Record<string, string>) =>
-    `${DB_URL}/api/vehicle/${p.vehId}/edges?session_id=${p.sessionId}&limit=5000`, []));
+    `${p.dbUrl}/api/vehicle/${p.vehId}/edges?session_id=${p.sessionId}&limit=5000`, []));
 
-  const search = () => { if (!sessionId || !vehId) return; edges.query({ sessionId, vehId }); };
+  const search = () => { if (!sessionId || !vehId) return; edges.query({ sessionId, vehId, dbUrl }); };
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -184,25 +177,25 @@ const TransferTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
 };
 
 // ============================================================================
-// Lock Tab (Lock이력)
+// Lock Tab
 // ============================================================================
 
 const LOCK_NAMES: Record<number, string> = { 0: "REQ", 1: "GRANT", 2: "REL", 3: "WAIT" };
 
-const LockTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+const LockTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, dbUrl }) => {
   const [mode, setMode] = useState<"node" | "vehicle">("node");
   const [searchId, setSearchId] = useState("");
   const events = useDbQuery<any>(useCallback((p: Record<string, string>) =>
     p.mode === "node"
-      ? `${DB_URL}/api/lock/by-node/${p.id}?session_id=${p.sessionId}&limit=2000`
-      : `${DB_URL}/api/lock/by-vehicle/${p.id}?session_id=${p.sessionId}&limit=2000`, []));
+      ? `${p.dbUrl}/api/lock/by-node/${p.id}?session_id=${p.sessionId}&limit=2000`
+      : `${p.dbUrl}/api/lock/by-vehicle/${p.id}?session_id=${p.sessionId}&limit=2000`, []));
   const topWait = useDbQuery<any>(useCallback((p: Record<string, string>) =>
-    `${DB_URL}/api/lock/top-wait?session_id=${p.sessionId}`, []));
+    `${p.dbUrl}/api/lock/top-wait?session_id=${p.sessionId}`, []));
 
   const search = () => {
     if (!sessionId || !searchId) return;
-    events.query({ sessionId, mode, id: searchId });
-    topWait.query({ sessionId });
+    events.query({ sessionId, mode, id: searchId, dbUrl });
+    topWait.query({ sessionId, dbUrl });
   };
 
   return (
@@ -216,7 +209,6 @@ const LockTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
         <button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded" onClick={search}>조회</button>
       </div>
       <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
-        {/* Top Wait */}
         <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">Top Wait Nodes</span>
@@ -235,7 +227,6 @@ const LockTab: React.FC<{ sessionId: string }> = ({ sessionId }) => {
             </table>
           </div>
         </div>
-        {/* Events */}
         <div className="col-span-2 flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">Lock Events</span>
@@ -275,18 +266,18 @@ const TABS: { key: TabKey; label: string }[] = [
 const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [tab, setTab] = useState<TabKey>("vehicle");
   const [sessionId, setSessionId] = useSessionId();
+  const [dbUrl, setDbUrl] = useState(LOG_DB_URL);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* backdrop */}
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      {/* modal */}
       <div className="relative w-[90vw] max-w-[1400px] h-[80vh] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 bg-gray-800/80">
           <div className="flex items-center gap-4">
             <h2 className="text-base font-bold text-white">DB History</h2>
-            <SessionSelector value={sessionId} onChange={setSessionId} />
+            <input className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300 font-mono w-52" value={dbUrl} onChange={e => setDbUrl(e.target.value)} title="DB API URL" />
+            <SessionSelector value={sessionId} onChange={setSessionId} dbUrl={dbUrl} />
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={20} /></button>
         </div>
@@ -306,9 +297,9 @@ const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
         {/* content */}
         <div className="flex-1 p-5 min-h-0 overflow-hidden">
-          {tab === "vehicle" && <VehicleTab sessionId={sessionId} />}
-          {tab === "transfer" && <TransferTab sessionId={sessionId} />}
-          {tab === "lock" && <LockTab sessionId={sessionId} />}
+          {tab === "vehicle" && <VehicleTab sessionId={sessionId} dbUrl={dbUrl} />}
+          {tab === "transfer" && <TransferTab sessionId={sessionId} dbUrl={dbUrl} />}
+          {tab === "lock" && <LockTab sessionId={sessionId} dbUrl={dbUrl} />}
         </div>
       </div>
     </div>

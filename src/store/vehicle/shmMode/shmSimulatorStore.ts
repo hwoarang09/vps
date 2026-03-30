@@ -8,6 +8,7 @@ import type { SimulationConfig, VehicleInitConfig, SharedMapData, UnusualMoveDat
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { getSimulationConfig } from "@/config/worker/simulationConfig";
+import { LOG_DB_URL } from "@/config/logConfig";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -190,7 +191,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
           logTargets: {
             opfs: true,
             db: true,
-            dbUrl: 'http://localhost:8100',
+            dbUrl: LOG_DB_URL,
             ...config.logTargets,
           },
         },

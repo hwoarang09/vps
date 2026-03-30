@@ -20,12 +20,5 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
-    proxy: {
-      '/logdb': {
-        target: 'http://localhost:8100',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/logdb/, ''),
-      },
-    },
   },
 })
