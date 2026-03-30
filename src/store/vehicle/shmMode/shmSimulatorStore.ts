@@ -190,7 +190,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
           logTargets: {
             opfs: true,
             db: true,
-            dbUrl: `http://${window.location.hostname}:8100`,
+            dbUrl: 'http://localhost:8100',
             ...config.logTargets,
           },
         },
