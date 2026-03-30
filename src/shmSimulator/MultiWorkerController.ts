@@ -110,6 +110,7 @@ export class MultiWorkerController {
   private onPerfStatsCallback: ((workerStats: WorkerPerfStats[]) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
   private onUnusualMoveCallback: ((data: UnusualMoveData) => void) | null = null;
+  private onLogSessionCallback: ((sessionId: string) => void) | null = null;
 
   // Rule D.1: Add readonly modifier - never reassigned after constructor
   // Lock 테이블 요청 대기
@@ -125,6 +126,10 @@ export class MultiWorkerController {
 
   onUnusualMove(callback: (data: UnusualMoveData) => void): void {
     this.onUnusualMoveCallback = callback;
+  }
+
+  onLogSession(callback: (sessionId: string) => void): void {
+    this.onLogSessionCallback = callback;
   }
 
   /**
@@ -412,6 +417,10 @@ export class MultiWorkerController {
 
       case "UNUSUAL_MOVE":
         this.onUnusualMoveCallback?.(message.data);
+        break;
+
+      case "LOG_SESSION_STARTED":
+        this.onLogSessionCallback?.(message.sessionId);
         break;
     }
   }

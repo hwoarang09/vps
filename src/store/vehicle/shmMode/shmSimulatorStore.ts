@@ -29,6 +29,8 @@ interface ShmSimulatorState {
   workerP99: number;
   /** UnusualMove 이벤트 정보 (발생 시 모달 표시용) */
   unusualMove: UnusualMoveData | null;
+  /** 현재 로그 세션 ID */
+  currentSessionId: string | null;
 
   // Actions
   init: (params: {
@@ -99,6 +101,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
   workerCV: 0,
   workerP99: 0,
   unusualMove: null,
+  currentSessionId: null,
 
   init: async (params) => {
     const {
@@ -168,6 +171,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       set({ unusualMove: data });
       controller.stop();
       set({ isRunning: false });
+    });
+
+    controller.onLogSession((sessionId) => {
+      set({ currentSessionId: sessionId });
     });
 
     try {

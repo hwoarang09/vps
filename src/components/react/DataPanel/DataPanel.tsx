@@ -1,20 +1,73 @@
 // src/components/react/DataPanel/DataPanel.tsx
 // DataPanel 서브메뉴별 컨텐츠
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useEdgeStore } from "@/store/map/edgeStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import {
   panelTitleVariants,
   panelCardVariants,
   panelTextVariants,
   panelInputVariants,
+  panelSelectVariants,
   panelButtonVariants,
   panelLabelVariants,
 } from "../menu/shared/panelStyles";
 
 const DB_URL = "http://localhost:8100";
+
+// ============================================================================
+// Shared: Session Selector
+// ============================================================================
+
+interface SessionInfo {
+  session_id: string;
+  started_at: string;
+  mode: string;
+  vehicle_count: number | null;
+}
+
+/** 현재 세션 ID를 기본값으로 사용하는 hook */
+function useSessionId() {
+  const currentSessionId = useShmSimulatorStore((s) => s.currentSessionId);
+  const [sessionId, setSessionId] = useState(currentSessionId ?? "");
+  useEffect(() => {
+    if (currentSessionId && !sessionId) setSessionId(currentSessionId);
+  }, [currentSessionId, sessionId]);
+  return [sessionId, setSessionId] as const;
+}
+
+/** 세션 목록을 가져와서 드롭다운으로 선택 */
+const SessionSelector: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+
+  useEffect(() => {
+    fetch(`${DB_URL}/api/sessions`)
+      .then(r => r.json())
+      .then(setSessions)
+      .catch(() => setSessions([]));
+  }, []);
+
+  return (
+    <div>
+      <label className={panelLabelVariants({})}>Session</label>
+      {sessions.length > 0 ? (
+        <select className={panelSelectVariants({})} value={value} onChange={e => onChange(e.target.value)}>
+          <option value="">-- select --</option>
+          {sessions.map(s => (
+            <option key={s.session_id} value={s.session_id}>
+              {s.session_id.replace("sim_", "")} ({s.mode}, {s.vehicle_count ?? "?"}veh)
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input className={panelInputVariants({})} placeholder="DB 미연결 — 직접 입력" value={value} onChange={e => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+};
 
 // ============================================================================
 // Shared: Session Selector + Search Input
@@ -92,7 +145,7 @@ const TopologyPanel: React.FC = () => {
 // ============================================================================
 
 const VehicleHistoryPanel: React.FC = () => {
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useSessionId();
   const [vehId, setVehId] = useState("");
 
   const snapshots = useDbQuery<any>(
@@ -117,10 +170,7 @@ const VehicleHistoryPanel: React.FC = () => {
 
       {/* Search */}
       <div className="space-y-2">
-        <div>
-          <label className={panelLabelVariants({})}>Session ID</label>
-          <input className={panelInputVariants({})} placeholder="sim_fab_0_..." value={sessionId} onChange={e => setSessionId(e.target.value)} />
-        </div>
+        <SessionSelector value={sessionId} onChange={setSessionId} />
         <div>
           <label className={panelLabelVariants({})}>Vehicle ID</label>
           <input className={panelInputVariants({})} type="number" placeholder="0" value={vehId} onChange={e => setVehId(e.target.value)} />
@@ -191,7 +241,7 @@ const VehicleHistoryPanel: React.FC = () => {
 // ============================================================================
 
 const TransferHistoryPanel: React.FC = () => {
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useSessionId();
   const [vehId, setVehId] = useState("");
 
   const edges = useDbQuery<any>(
@@ -209,10 +259,7 @@ const TransferHistoryPanel: React.FC = () => {
       <h3 className={panelTitleVariants({ size: "lg", color: "orange" })}>반송이력</h3>
 
       <div className="space-y-2">
-        <div>
-          <label className={panelLabelVariants({})}>Session ID</label>
-          <input className={panelInputVariants({})} placeholder="sim_fab_0_..." value={sessionId} onChange={e => setSessionId(e.target.value)} />
-        </div>
+        <SessionSelector value={sessionId} onChange={setSessionId} />
         <div>
           <label className={panelLabelVariants({})}>Vehicle ID</label>
           <input className={panelInputVariants({})} type="number" placeholder="0" value={vehId} onChange={e => setVehId(e.target.value)} />
@@ -261,7 +308,7 @@ const TransferHistoryPanel: React.FC = () => {
 const LOCK_EVENT_NAMES: Record<number, string> = { 0: "REQ", 1: "GRANT", 2: "REL", 3: "WAIT" };
 
 const LockHistoryPanel: React.FC = () => {
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useSessionId();
   const [searchType, setSearchType] = useState<"node" | "vehicle">("node");
   const [searchId, setSearchId] = useState("");
 
@@ -287,10 +334,7 @@ const LockHistoryPanel: React.FC = () => {
       <h3 className={panelTitleVariants({ size: "lg", color: "purple" })}>Lock이력</h3>
 
       <div className="space-y-2">
-        <div>
-          <label className={panelLabelVariants({})}>Session ID</label>
-          <input className={panelInputVariants({})} placeholder="sim_fab_0_..." value={sessionId} onChange={e => setSessionId(e.target.value)} />
-        </div>
+        <SessionSelector value={sessionId} onChange={setSessionId} />
         <div className="flex gap-2">
           <button
             className={panelButtonVariants({ variant: searchType === "node" ? "primary" : "ghost" })}

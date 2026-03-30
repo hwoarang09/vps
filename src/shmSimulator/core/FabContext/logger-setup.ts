@@ -24,7 +24,12 @@ export async function setupLoggerPort(
     return null;
   }
 
-  const sessionId = `sim_${fabId}_${Date.now()}`;
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const note = config.logSessionNote ? `_${config.logSessionNote}` : "";
+  const sessionId = `${ts}${note}`;
+
   const logger = new SimLogger({
     sessionId,
     workerId: workerId % 256,
@@ -35,6 +40,8 @@ export async function setupLoggerPort(
 
   try {
     await logger.init();
+    // Main Thread에 sessionId 알림
+    globalThis.postMessage({ type: "LOG_SESSION_STARTED", sessionId, fabId });
     console.log(`[SimLogger] initialized: session=${sessionId}, mode=ml, fabId=${fabId}`);
     return logger;
   } catch (err) {

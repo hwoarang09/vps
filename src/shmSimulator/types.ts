@@ -126,6 +126,8 @@ export interface SimulationConfig {
   /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
   edgeTransitLogEnabled?: boolean;
 
+  /** 로그 세션 메모 (sessionId에 붙음, 예: "test1" → "20260330_0504_test1") */
+  logSessionNote?: string;
   /** 로그 출력 대상 + 이벤트별 on/off */
   logTargets?: {
     opfs?: boolean;   // OPFS 파일 쓰기 (기본: true)
@@ -368,7 +370,8 @@ export type MainMessage =
   | { type: "FAB_ADDED"; /** Unique identifier for the fab */ fabId: string; actualNumVehicles: number }
   | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string }
   | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData }
-  | { type: "UNUSUAL_MOVE"; data: UnusualMoveData };
+  | { type: "UNUSUAL_MOVE"; data: UnusualMoveData }
+  | { type: "LOG_SESSION_STARTED"; sessionId: string; fabId: string };
 
 // UnusualMove 이벤트 데이터
 export interface UnusualMoveData {
