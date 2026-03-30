@@ -24,11 +24,8 @@ export const tooltipsByLevel: {
     "maploader-menu-2": "맵 데이터 가져오기",
     "maploader-menu-3": "맵 데이터 내보내기",
 
-    "data-topology": "노드/엣지 토폴로지 정보",
-    "stats-menu-1": "실시간 데이터 분석",
-    "data-vehicle-history": "차량별 운행 이력 조회",
-    "data-transfer-history": "반송 이력 조회",
-    "data-lock-history": "Lock 이벤트 이력 조회",
+    "stats-realtime": "실시간 모니터링 대시보드",
+    "stats-history": "DB 이력 조회 (운행/반송/Lock/Replay)",
 
     "vehicle-menu-1": "전체 차량 현황",
     "vehicle-menu-2": "운행중인 차량",
@@ -75,6 +72,10 @@ export const tooltipsByLevel: {
     "search-station": "스테이션 이름으로 검색",
   },
   3: {
+    "history-vehicle": "차량별 운행 이력 (위치/속도)",
+    "history-transfer": "반송 이력 (Edge 통과)",
+    "history-lock": "Lock 이벤트 이력",
+    "history-replay": "과거 세션 재생",
     "transfer-1": "단순 루프 반송",
     "transfer-2": "순환 루프 반송",
     "transfer-3": "랜덤 목적지 반송",

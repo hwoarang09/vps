@@ -25,7 +25,7 @@ import {
 } from "./shared/panelStyles";
 
 const RightPanel: React.FC = () => {
-  const { activeMainMenu, activeSubMenu, setRightPanelOpen } = useMenuStore();
+  const { activeMainMenu, activeSubMenu, activeThirdMenu, setRightPanelOpen } = useMenuStore();
   const stopFollowingVehicle = useCameraStore((s) => s.stopFollowingVehicle);
   const closeVehiclePanel = useVehicleControlStore((s) => s.closePanel);
 
@@ -181,9 +181,14 @@ const RightPanel: React.FC = () => {
       return <OperationMapPanel />;
     }
 
-    // DataPanel sub-menus
-    if (activeSubMenu?.startsWith("data-")) {
+    // Statistics > History > LV3 panels
+    if (activeSubMenu === "stats-history" && activeThirdMenu) {
       return <DataPanel />;
+    }
+
+    // Statistics > Realtime
+    if (activeSubMenu === "stats-realtime") {
+      return <PerformanceTogglePanel />;
     }
 
     // 다른 메뉴들의 경우
@@ -254,11 +259,14 @@ const RightPanel: React.FC = () => {
       "vis-heatmap": "Heatmap",
       "vis-traffic-flow": "Traffic Flow",
       "vis-deadlock-zone": "Deadlock Zone",
-      // DataPanel
-      "data-topology": "Topology",
-      "data-vehicle-history": "운행이력",
-      "data-transfer-history": "반송이력",
-      "data-lock-history": "Lock이력",
+      // Statistics
+      "stats-realtime": "Realtime Monitor",
+      "stats-history": "History",
+      // History LV3
+      "history-vehicle": "운행이력",
+      "history-transfer": "반송이력",
+      "history-lock": "Lock이력",
+      "history-replay": "Replay",
       // DevTools
       "devtools-lock": "Lock Info",
       // Search
@@ -272,6 +280,7 @@ const RightPanel: React.FC = () => {
 
   // Get panel title based on active menu
   const getPanelTitle = () => {
+    if (activeThirdMenu) return getMenuLabel(activeThirdMenu);
     if (activeSubMenu === "vis-performance") return "Performance Monitor";
     if (activeSubMenu === "devtools-lock") return "Lock Info";
     if (activeSubMenu === "search-vehicle") return "Vehicle Search";

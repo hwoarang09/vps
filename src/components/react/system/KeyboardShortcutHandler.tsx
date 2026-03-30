@@ -25,11 +25,8 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
     l: "devtools-lock",
   },
   Statistics: {
-    t: "data-topology",
-    r: "stats-menu-1",
-    v: "data-vehicle-history",
-    d: "data-transfer-history",
-    l: "data-lock-history",
+    r: "stats-realtime",
+    h: "stats-history",
   },
   Search: {
     v: "search-vehicle",
@@ -143,6 +140,10 @@ const KeyboardShortcutHandler = () => {
           // Transfer mode selection
           if (item.transferMode !== undefined) {
             useVehicleArrayStore.getState().setTransferMode(item.transferMode);
+          } else {
+            // Generic LV3: set third menu + open right panel
+            useMenuStore.getState().setActiveThirdMenu(item.id);
+            setRightPanelOpen(true);
           }
           return;
         }

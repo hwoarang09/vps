@@ -46,34 +46,16 @@ const pngIcon = (src: string, size = PS) => (
 export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
   Statistics: [
     {
-      id: "data-topology",
-      label: "Topology",
-      shortcutLabel: "t",
-      iconFn: () => pngIcon(imgTracks),
-    },
-    {
-      id: "stats-menu-1",
+      id: "stats-realtime",
       label: "Realtime",
       shortcutLabel: "r",
       iconFn: () => pngIcon(imgSim),
     },
     {
-      id: "data-vehicle-history",
-      label: "운행이력",
-      shortcutLabel: "v",
-      iconFn: () => pngIcon(imgTrains),
-    },
-    {
-      id: "data-transfer-history",
-      label: "반송이력",
-      shortcutLabel: "d",
-      iconFn: () => pngIcon(imgRouting),
-    },
-    {
-      id: "data-lock-history",
-      label: "Lock이력",
-      shortcutLabel: "l",
-      iconFn: () => pngIcon(imgSignal),
+      id: "stats-history",
+      label: "History",
+      shortcutLabel: "h",
+      iconFn: () => pngIcon(imgLabel),
     },
   ],
   Operation: [

@@ -13,6 +13,12 @@ export interface MenuLevel3Item {
  * Level 3 menu items, keyed by parent Level 2 menu ID.
  */
 export const menuLevel3Config: Record<string, MenuLevel3Item[]> = {
+  "stats-history": [
+    { id: "history-vehicle", label: "Vehicle", shortcutLabel: "1" },
+    { id: "history-transfer", label: "Transfer", shortcutLabel: "2" },
+    { id: "history-lock", label: "Lock", shortcutLabel: "3" },
+    { id: "history-replay", label: "Replay", shortcutLabel: "4" },
+  ],
   "operation-menu-7": [
     { id: "transfer-1", label: "SIMPLE", shortcutLabel: "1", transferMode: TransferMode.SIMPLE_LOOP },
     { id: "transfer-2", label: "LOOP", shortcutLabel: "2", transferMode: TransferMode.LOOP },

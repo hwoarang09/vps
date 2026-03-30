@@ -3,8 +3,6 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
-import { useNodeStore } from "@/store/map/nodeStore";
-import { useEdgeStore } from "@/store/map/edgeStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import {
   panelTitleVariants,
@@ -102,42 +100,6 @@ const StatusBadge: React.FC<{ loading: boolean; error: string | null; count: num
   if (error) return <span className="text-xs text-red-400">err: {error}</span>;
   if (count > 0) return <span className="text-xs text-green-400">{count} rows</span>;
   return null;
-};
-
-// ============================================================================
-// Topology Panel
-// ============================================================================
-
-const TopologyPanel: React.FC = () => {
-  const { nodes } = useNodeStore();
-  const { edges } = useEdgeStore();
-
-  const mergeNodes = nodes.filter((n: any) => n.isMerge);
-  const divergeNodes = nodes.filter((n: any) => n.isDiverge);
-
-  return (
-    <div className="space-y-3">
-      <h3 className={panelTitleVariants({ size: "lg", color: "cyan" })}>Topology</h3>
-      <div className="grid grid-cols-2 gap-2">
-        <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-          <div className={panelTextVariants({ variant: "muted", size: "sm" })}>Nodes</div>
-          <div className="text-2xl font-bold text-white font-mono">{nodes.length}</div>
-        </div>
-        <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-          <div className={panelTextVariants({ variant: "muted", size: "sm" })}>Edges</div>
-          <div className="text-2xl font-bold text-white font-mono">{edges.length}</div>
-        </div>
-        <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-          <div className={panelTextVariants({ variant: "muted", size: "sm" })}>Merge</div>
-          <div className="text-2xl font-bold text-red-400 font-mono">{mergeNodes.length}</div>
-        </div>
-        <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-          <div className={panelTextVariants({ variant: "muted", size: "sm" })}>Diverge</div>
-          <div className="text-2xl font-bold text-yellow-400 font-mono">{divergeNodes.length}</div>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 // ============================================================================
@@ -416,16 +378,27 @@ const LockHistoryPanel: React.FC = () => {
 // Router
 // ============================================================================
 
+const ReplayPanel: React.FC = () => (
+  <div className="space-y-3">
+    <h3 className={panelTitleVariants({ size: "lg", color: "orange" })}>Replay</h3>
+    <div className={panelCardVariants({ variant: "default", padding: "md" })}>
+      <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
+        과거 세션의 replay_snapshot 데이터로 차량 이동 재생 (준비 중)
+      </div>
+    </div>
+  </div>
+);
+
 const PANEL_MAP: Record<string, React.FC> = {
-  "data-topology": TopologyPanel,
-  "data-vehicle-history": VehicleHistoryPanel,
-  "data-transfer-history": TransferHistoryPanel,
-  "data-lock-history": LockHistoryPanel,
+  "history-vehicle": VehicleHistoryPanel,
+  "history-transfer": TransferHistoryPanel,
+  "history-lock": LockHistoryPanel,
+  "history-replay": ReplayPanel,
 };
 
 const DataPanel: React.FC = () => {
-  const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
-  const Panel = activeSubMenu ? PANEL_MAP[activeSubMenu] : null;
+  const activeThirdMenu = useMenuStore((s) => s.activeThirdMenu);
+  const Panel = activeThirdMenu ? PANEL_MAP[activeThirdMenu] : null;
   if (!Panel) return null;
   return <Panel />;
 };
