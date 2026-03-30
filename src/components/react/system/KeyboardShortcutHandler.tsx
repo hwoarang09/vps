@@ -26,7 +26,7 @@ const LV2_SHORTCUT_MAP: Record<string, Record<string, string>> = {
   },
   Statistics: {
     r: "stats-realtime",
-    h: "stats-history",
+    d: "stats-db",
   },
   Search: {
     v: "search-vehicle",

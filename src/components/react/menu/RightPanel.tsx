@@ -12,7 +12,6 @@ import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 import OperationMapPanel from "./panels/OperationMapPanel";
-import DataPanel from "../DataPanel/DataPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -181,11 +180,6 @@ const RightPanel: React.FC = () => {
       return <OperationMapPanel />;
     }
 
-    // Statistics > History > LV3 panels
-    if (activeSubMenu === "stats-history" && activeThirdMenu) {
-      return <DataPanel />;
-    }
-
     // Statistics > Realtime
     if (activeSubMenu === "stats-realtime") {
       return <PerformanceTogglePanel />;
@@ -261,12 +255,7 @@ const RightPanel: React.FC = () => {
       "vis-deadlock-zone": "Deadlock Zone",
       // Statistics
       "stats-realtime": "Realtime Monitor",
-      "stats-history": "History",
-      // History LV3
-      "history-vehicle": "운행이력",
-      "history-transfer": "반송이력",
-      "history-lock": "Lock이력",
-      "history-replay": "Replay",
+      "stats-db": "DB History",
       // DevTools
       "devtools-lock": "Lock Info",
       // Search

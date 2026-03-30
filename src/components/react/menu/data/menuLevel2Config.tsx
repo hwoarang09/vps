@@ -52,9 +52,9 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       iconFn: () => pngIcon(imgSim),
     },
     {
-      id: "stats-history",
-      label: "History",
-      shortcutLabel: "h",
+      id: "stats-db",
+      label: "DB",
+      shortcutLabel: "d",
       iconFn: () => pngIcon(imgLabel),
     },
   ],

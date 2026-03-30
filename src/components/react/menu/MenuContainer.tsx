@@ -7,6 +7,7 @@ import MenuLevel3 from "./MenuLevel3";
 
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import TransportScheduleModal from "./panels/TransportScheduleModal";
+import DataPanel from "../DataPanel/DataPanel";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
@@ -81,6 +82,11 @@ const MenuContainer: React.FC = () => {
         <TransportScheduleModal
           onClose={() => setActiveSubMenu(null)}
         />
+      )}
+
+      {/* DB History Modal - 중앙 대형 모달 */}
+      {activeSubMenu === "stats-db" && (
+        <DataPanel onClose={() => setActiveSubMenu(null)} />
       )}
     </>
   );
