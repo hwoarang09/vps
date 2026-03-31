@@ -25,9 +25,22 @@ const MenuContainer: React.FC = () => {
   }, [loadConfig]);
 
   // stats-db 메뉴 클릭 시 DataPanel 토글 (독립 state)
+  // DataPanel 열릴 때 RightPanel(Vehicle Search)도 함께 열기
   useEffect(() => {
     if (activeSubMenu === "stats-db") {
-      setShowDataPanel(prev => !prev);
+      setShowDataPanel(prev => {
+        const willOpen = !prev;
+        if (willOpen) {
+          // Vehicle Search 패널도 함께 열기 — 약간 딜레이 (null 리셋 이후)
+          setTimeout(() => {
+            const store = useMenuStore.getState();
+            store.setActiveMainMenu("Search");
+            store.setActiveSubMenu("search-vehicle");
+            store.setRightPanelOpen(true);
+          }, 0);
+        }
+        return willOpen;
+      });
       setActiveSubMenu(null); // 메뉴 상태는 즉시 해제
     }
   }, [activeSubMenu, setActiveSubMenu]);

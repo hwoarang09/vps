@@ -2,9 +2,93 @@
 // DB History 대형 모달 — 탭으로 운행이력/반송이력/Lock이력 전환
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronDown, GripHorizontal } from "lucide-react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { LOG_DB_URL } from "@/config/logConfig";
+
+// ============================================================================
+// Drag & Resize Hook
+// ============================================================================
+
+const MIN_W = 400;
+const MIN_H = 250;
+const DEFAULT_X = 0;
+const DEFAULT_Y = 60;
+const DEFAULT_W = 750;
+
+type ResizeDir = "e" | "s" | "se" | "w" | "sw" | null;
+
+/** 드래그/리사이즈 중 DOM 직접 조작 → mouseup 시에만 React state 반영 */
+function useDragResize() {
+  const elRef = useRef<HTMLDivElement>(null);
+  // 현재 값을 ref로 추적 (렌더 없이 DOM 직접 조작용)
+  const liveRef = useRef({ x: DEFAULT_X, y: DEFAULT_Y, w: DEFAULT_W, h: window.innerHeight - 160 });
+  // 초기 렌더용 state (mouseup 시에만 갱신)
+  const [, forceUpdate] = useState(0);
+
+  const applyStyle = () => {
+    const el = elRef.current;
+    if (!el) return;
+    const { x, y, w, h } = liveRef.current;
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+    el.style.width = w + "px";
+    el.style.height = h + "px";
+  };
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const { x, y } = liveRef.current;
+    const startX = e.clientX, startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      liveRef.current.x = x + (ev.clientX - startX);
+      liveRef.current.y = y + (ev.clientY - startY);
+      applyStyle();
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      forceUpdate(n => n + 1);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  const onResizeStart = useCallback((dir: ResizeDir) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { w: origW, h: origH, x: origX } = liveRef.current;
+    const startX = e.clientX, startY = e.clientY;
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (dir === "e" || dir === "se") liveRef.current.w = Math.max(MIN_W, origW + dx);
+      if (dir === "s" || dir === "se" || dir === "sw") liveRef.current.h = Math.max(MIN_H, origH + dy);
+      if (dir === "w" || dir === "sw") {
+        const newW = Math.max(MIN_W, origW - dx);
+        liveRef.current.w = newW;
+        liveRef.current.x = origX + (origW - newW);
+      }
+      applyStyle();
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      forceUpdate(n => n + 1);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
+  const initialStyle = {
+    left: liveRef.current.x,
+    top: liveRef.current.y,
+    width: liveRef.current.w,
+    height: liveRef.current.h,
+  };
+
+  return { elRef, initialStyle, onDragStart, onResizeStart };
+}
 
 // ============================================================================
 // Shared
@@ -139,12 +223,14 @@ function useDbQuery<T>(buildUrl: (params: Record<string, string>) => string) {
   return { data, loading, error, query };
 }
 
-/** ts(ms) → mm:ss 포맷 */
+/** ts(ms) → h:mm:ss.SSS 포맷 */
 const fmtTs = (ms: number): string => {
-  const totalSec = Math.floor(ms / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+  const totalMs = Math.floor(ms);
+  const h = Math.floor(totalMs / 3_600_000);
+  const m = Math.floor((totalMs % 3_600_000) / 60_000);
+  const s = Math.floor((totalMs % 60_000) / 1_000);
+  const millis = totalMs % 1_000;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
 };
 
 const Badge: React.FC<{ loading: boolean; error: string | null; count: number }> = ({ loading, error, count }) => {
@@ -361,6 +447,7 @@ const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [tab, setTab] = useState<TabKey>("vehicle");
   const [sessionId, setSessionId] = useSessionId();
   const [dbUrl] = useState(LOG_DB_URL);
+  const { elRef, initialStyle, onDragStart, onResizeStart } = useDragResize();
 
   // ESC 키로만 닫힘
   useEffect(() => {
@@ -373,16 +460,21 @@ const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   return (
     <div
-      className="fixed top-0 left-0 bottom-0 z-[60] flex flex-col bg-gray-900/95 border-r border-gray-700 shadow-2xl backdrop-blur-sm"
-      style={{ width: "750px" }}
+      ref={elRef}
+      className="fixed z-[60] flex flex-col bg-gray-900/95 border border-gray-700 shadow-2xl backdrop-blur-sm rounded-xl"
+      style={initialStyle}
     >
-      {/* header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800/80">
+      {/* header (drag handle) */}
+      <div
+        className="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800/80 rounded-t-xl cursor-move select-none"
+        onMouseDown={onDragStart}
+      >
         <div className="flex items-center gap-2">
+          <GripHorizontal size={14} className="text-gray-500 flex-shrink-0" />
           <h2 className="text-sm font-bold text-white whitespace-nowrap">DB History</h2>
           <SessionSelector value={sessionId} onChange={setSessionId} dbUrl={dbUrl} />
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors" title="ESC"><X size={16} /></button>
+        <button onClick={onClose} onMouseDown={e => e.stopPropagation()} className="text-gray-400 hover:text-white transition-colors" title="ESC"><X size={16} /></button>
       </div>
       {/* tabs */}
       <div className="flex border-b border-gray-700 bg-gray-800/40 px-4">
@@ -398,12 +490,19 @@ const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           >{t.label}</button>
         ))}
       </div>
-      {/* content */}
-      <div className="flex-1 p-3 min-h-0 overflow-hidden">
+      {/* content — pr/pl 여백으로 resize 핸들과 겹치지 않게 */}
+      <div className="flex-1 pl-2 pr-2 pb-2 pt-3 min-h-0 overflow-hidden">
         {tab === "vehicle" && <VehicleTab sessionId={sessionId} dbUrl={dbUrl} />}
         {tab === "transfer" && <TransferTab sessionId={sessionId} dbUrl={dbUrl} />}
         {tab === "lock" && <LockTab sessionId={sessionId} dbUrl={dbUrl} />}
       </div>
+
+      {/* resize handles — z-10으로 content 위에 표시 */}
+      <div className="absolute top-0 right-0 w-2 h-full cursor-ew-resize z-10 hover:bg-blue-500/30" onMouseDown={onResizeStart("e")} />
+      <div className="absolute bottom-0 left-0 w-full h-2 cursor-ns-resize z-10 hover:bg-blue-500/30" onMouseDown={onResizeStart("s")} />
+      <div className="absolute top-0 left-0 w-2 h-full cursor-ew-resize z-10 hover:bg-blue-500/30" onMouseDown={onResizeStart("w")} />
+      <div className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-20 hover:bg-blue-500/30 rounded-br-xl" onMouseDown={onResizeStart("se")} />
+      <div className="absolute bottom-0 left-0 w-5 h-5 cursor-nesw-resize z-20 hover:bg-blue-500/30 rounded-bl-xl" onMouseDown={onResizeStart("sw")} />
     </div>
   );
 };
