@@ -132,7 +132,7 @@ export interface SimulationConfig {
   logTargets?: {
     opfs?: boolean;   // OPFS 파일 쓰기 (기본: true)
     db?: boolean;     // DB 서버 전송 (기본: true)
-    dbUrl?: string;   // 기본: http://localhost:8100
+    mqttUrl?: string;  // 기본: ws://localhost:9003
   };
   /** 이벤트별 enable/disable (미지정 시 mode 기반 기본값) */
   logEvents?: {

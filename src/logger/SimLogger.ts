@@ -28,8 +28,8 @@ export interface LogEvents {
 
 export interface LogTargets {
   opfs?: boolean;    // OPFS 파일 쓰기 (기본: true)
-  db?: boolean;      // DB 서버 전송 (기본: true)
-  dbUrl?: string;    // 기본: http://localhost:8100
+  db?: boolean;      // MQTT → DB 전송 (기본: true)
+  mqttUrl?: string;  // 기본: ws://localhost:9003
 }
 
 export interface SimLoggerConfig {
@@ -115,7 +115,7 @@ export class SimLogger {
       this.dbShipper = new DbShipper(
         this.config.sessionId,
         this.config.mode,
-        this.config.targets?.dbUrl,
+        this.config.targets?.mqttUrl,
       );
       await this.dbShipper.start(this.config.mode);
     }

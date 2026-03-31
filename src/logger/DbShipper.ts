@@ -1,9 +1,12 @@
 // logger/DbShipper.ts
-// Worker에서 fetch()로 로그 레코드를 FastAPI 서버에 batch POST
+// Worker에서 MQTT(ws)로 로그 레코드를 batch publish
+// 토픽: VPS/logs/{sessionId}/{eventType} (binary payload)
+// 세션등록: VPS/logs/session (JSON payload)
 
+import mqtt from 'mqtt';
 import { EventType, RECORD_SIZE, ML_EVENT_TYPES, ALL_EVENT_TYPES } from './protocol';
 
-const DEFAULT_DB_URL = 'http://localhost:8100';
+const DEFAULT_MQTT_URL = 'ws://localhost:9003';
 const FLUSH_INTERVAL_MS = 5000;
 const FLUSH_RECORD_LIMIT = 2000;
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -17,15 +20,17 @@ interface ShipperBuffer {
 
 export class DbShipper {
   private readonly sessionId: string;
-  private readonly dbUrl: string;
+  private readonly mqttUrl: string;
+  private client: mqtt.MqttClient | null = null;
   private readonly buffers = new Map<EventType, ShipperBuffer>();
   private timerId: ReturnType<typeof setInterval> | null = null;
   private consecutiveFailures = 0;
   private disabled = false;
+  private connected = false;
 
-  constructor(sessionId: string, mode: 'ml' | 'dev', dbUrl?: string) {
+  constructor(sessionId: string, mode: 'ml' | 'dev', mqttUrl?: string) {
     this.sessionId = sessionId;
-    this.dbUrl = dbUrl ?? DEFAULT_DB_URL;
+    this.mqttUrl = mqttUrl ?? DEFAULT_MQTT_URL;
 
     const eventTypes = mode === 'ml' ? ML_EVENT_TYPES : ALL_EVENT_TYPES;
     for (const et of eventTypes) {
@@ -41,29 +46,61 @@ export class DbShipper {
 
   async start(mode: string, vehicleCount?: number, mapName?: string): Promise<void> {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 2000);
-      const res = await fetch(`${this.dbUrl}/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          mode,
-          vehicle_count: vehicleCount,
-          map_name: mapName,
-        }),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error(`${res.status}`);
-      console.log(`[DbShipper] session registered: ${this.sessionId}`);
-    } catch {
-      console.warn(`[DbShipper] server unreachable (${this.dbUrl}), disabling DB shipping`);
+      await this._connect();
+    } catch (err) {
+      console.warn(`[DbShipper] MQTT unreachable (${this.mqttUrl}):`, err);
       this.disabled = true;
       return;
     }
 
+    // 세션 등록 (JSON)
+    this.client!.publish(
+      'VPS/logs/session',
+      JSON.stringify({
+        session_id: this.sessionId,
+        mode,
+        vehicle_count: vehicleCount,
+        map_name: mapName,
+      }),
+      { qos: 1 },
+    );
+    console.log(`[DbShipper] session published via MQTT: ${this.sessionId}`);
+
     this.timerId = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
+  }
+
+  private _connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('MQTT connect timeout'));
+      }, 3000);
+
+      this.client = mqtt.connect(this.mqttUrl, {
+        clientId: `vps_worker_${this.sessionId.slice(0, 8)}_${Date.now()}`,
+        clean: true,
+        connectTimeout: 3000,
+      });
+
+      this.client.on('connect', () => {
+        clearTimeout(timer);
+        this.connected = true;
+        console.log(`[DbShipper] MQTT connected: ${this.mqttUrl}`);
+        resolve();
+      });
+
+      this.client.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+
+      this.client.on('offline', () => {
+        this.connected = false;
+      });
+
+      this.client.on('reconnect', () => {
+        console.log('[DbShipper] MQTT reconnecting...');
+      });
+    });
   }
 
   push(eventType: EventType, view: DataView, byteOffset: number, recordSize: number): void {
@@ -96,6 +133,10 @@ export class DbShipper {
       this.timerId = null;
     }
     if (!this.disabled) this.flush();
+    if (this.client) {
+      this.client.end();
+      this.client = null;
+    }
   }
 
   private _shipBuffer(eventType: EventType, buf: ShipperBuffer): void {
@@ -103,17 +144,7 @@ export class DbShipper {
     buf.offset = 0;
     buf.count = 0;
 
-    fetch(`${this.dbUrl}/logs/ingest`, {
-      method: 'POST',
-      headers: {
-        'X-Session-Id': this.sessionId,
-        'X-Event-Type': String(eventType),
-        'Content-Type': 'application/octet-stream',
-      },
-      body: data,
-    }).then(() => {
-      this.consecutiveFailures = 0;
-    }).catch(() => {
+    if (!this.client || !this.connected) {
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         console.warn(`[DbShipper] ${MAX_CONSECUTIVE_FAILURES} failures, disabling`);
@@ -122,6 +153,24 @@ export class DbShipper {
           clearInterval(this.timerId);
           this.timerId = null;
         }
+      }
+      return;
+    }
+
+    const topic = `VPS/logs/${this.sessionId}/${eventType}`;
+    this.client.publish(topic, Buffer.from(data), { qos: 1 }, (err) => {
+      if (err) {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.warn(`[DbShipper] ${MAX_CONSECUTIVE_FAILURES} failures, disabling`);
+          this.disabled = true;
+          if (this.timerId !== null) {
+            clearInterval(this.timerId);
+            this.timerId = null;
+          }
+        }
+      } else {
+        this.consecutiveFailures = 0;
       }
     });
   }

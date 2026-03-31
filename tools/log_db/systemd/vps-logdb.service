@@ -1,0 +1,13 @@
+[Unit]
+Description=VPS Log DB (PostgreSQL via Docker)
+After=default.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/vosui/vosui/vps/tools/log_db/db
+ExecStart=/snap/bin/docker-compose up -d
+ExecStop=/snap/bin/docker-compose down
+
+[Install]
+WantedBy=default.target

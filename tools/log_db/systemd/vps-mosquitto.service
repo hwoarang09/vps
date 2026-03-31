@@ -1,0 +1,12 @@
+[Unit]
+Description=VPS Mosquitto MQTT Broker (9003/ws, 9883/tcp)
+Before=vps-logapi.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/mosquitto -c /home/vosui/vosui/vps/tools/log_db/broker/mosquitto.conf
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
