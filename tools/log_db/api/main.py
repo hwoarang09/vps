@@ -199,6 +199,17 @@ async def list_sessions():
     )
 
 
+@app.get("/api/vehicles")
+async def list_vehicles(session_id: str):
+    """세션 내 차량 ID 목록 (unique, 정렬)"""
+    return await run_in_thread(
+        _query,
+        "SELECT DISTINCT veh_id FROM ml_replay_snapshot "
+        "WHERE session_id = %s ORDER BY veh_id",
+        (session_id,),
+    )
+
+
 @app.get("/api/vehicle/{veh_id}/snapshots")
 async def vehicle_snapshots(veh_id: int, session_id: str, from_ts: int = 0, to_ts: int = 2147483647, limit: int = 5000):
     """차량 위치/속도 이력 (replay_snapshot)"""

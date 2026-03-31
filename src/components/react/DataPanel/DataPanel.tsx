@@ -1,8 +1,8 @@
 // src/components/react/DataPanel/DataPanel.tsx
 // DB History 대형 모달 — 탭으로 운행이력/반송이력/Lock이력 전환
 
-import React, { useState, useCallback, useEffect } from "react";
-import { X } from "lucide-react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { X, ChevronDown } from "lucide-react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { LOG_DB_URL } from "@/config/logConfig";
 
@@ -41,6 +41,88 @@ const SessionSelector: React.FC<{ value: string; onChange: (v: string) => void; 
   );
 };
 
+// ============================================================================
+// Vehicle Selector (dropdown + input 겸용)
+// ============================================================================
+
+const VehicleSelector: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  sessionId: string;
+  dbUrl: string;
+  placeholder?: string;
+  onEnter?: () => void;
+}> = ({ value, onChange, sessionId, dbUrl, placeholder = "Vehicle ID", onEnter }) => {
+  const [vehicleIds, setVehicleIds] = useState<number[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!sessionId || !dbUrl) { setVehicleIds([]); return; }
+    fetch(`${dbUrl}/api/vehicles?session_id=${sessionId}`)
+      .then(r => r.json())
+      .then((data: { veh_id: number }[]) => setVehicleIds(data.map(d => d.veh_id)))
+      .catch(() => setVehicleIds([]));
+  }, [sessionId, dbUrl]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = vehicleIds.filter(id => filter === "" || String(id).includes(filter));
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="flex">
+        <input
+          className="bg-gray-800 border border-gray-600 rounded-l px-2 py-1 text-xs text-white w-20"
+          type="text"
+          inputMode="numeric"
+          placeholder={placeholder}
+          value={value}
+          onChange={e => { onChange(e.target.value); setFilter(e.target.value); }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={e => { if (e.key === "Enter") { setIsOpen(false); onEnter?.(); } }}
+        />
+        <button
+          className="bg-gray-700 border border-l-0 border-gray-600 rounded-r px-1 text-gray-400 hover:text-white"
+          onClick={() => setIsOpen(!isOpen)}
+          type="button"
+        >
+          <ChevronDown size={12} className={isOpen ? "rotate-180" : ""} />
+        </button>
+      </div>
+      {isOpen && vehicleIds.length > 0 && (
+        <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-600 rounded shadow-xl z-50 max-h-48 w-24 overflow-auto">
+          {filtered.length === 0 ? (
+            <div className="px-2 py-1 text-xs text-gray-500">no match</div>
+          ) : (
+            filtered.slice(0, 100).map(id => (
+              <button
+                key={id}
+                className={`w-full text-left px-2 py-1 text-xs hover:bg-gray-700 ${
+                  String(id) === value ? "text-blue-400 bg-gray-700" : "text-gray-300"
+                }`}
+                onClick={() => { onChange(String(id)); setFilter(""); setIsOpen(false); }}
+              >
+                {id}
+              </button>
+            ))
+          )}
+          {filtered.length > 100 && (
+            <div className="px-2 py-1 text-xs text-gray-500">+{filtered.length - 100} more...</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function useDbQuery<T>(buildUrl: (params: Record<string, string>) => string) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,6 +138,14 @@ function useDbQuery<T>(buildUrl: (params: Record<string, string>) => string) {
   }, [buildUrl]);
   return { data, loading, error, query };
 }
+
+/** ts(ms) → mm:ss 포맷 */
+const fmtTs = (ms: number): string => {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
 
 const Badge: React.FC<{ loading: boolean; error: string | null; count: number }> = ({ loading, error, count }) => {
   if (loading) return <span className="text-yellow-400 animate-pulse">loading...</span>;
@@ -87,10 +177,10 @@ const VehicleTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId,
   return (
     <div className="flex flex-col gap-4 h-full">
       <div className="flex items-center gap-3">
-        <input className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24" type="number" placeholder="Vehicle ID" value={vehId} onChange={e => setVehId(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} />
+        <VehicleSelector value={vehId} onChange={setVehId} sessionId={sessionId} dbUrl={dbUrl} onEnter={search} />
         <button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded" onClick={search}>조회</button>
       </div>
-      <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
         <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">위치/속도 이력</span>
@@ -102,7 +192,7 @@ const VehicleTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId,
               <tbody>
                 {snapshots.data.map((r: any, i: number) => (
                   <tr key={i} className={r.speed === 0 ? "text-red-400" : "text-gray-300"}>
-                    <TD>{r.ts}</TD><TD className="text-right">{r.speed?.toFixed(2)}</TD><TD className="text-right">{r.edge_idx}</TD>
+                    <TD>{fmtTs(r.ts)}</TD><TD className="text-right">{r.speed?.toFixed(2)}</TD><TD className="text-right">{r.edge_idx}</TD>
                     <TD className="text-right">{r.x?.toFixed(1)}</TD><TD className="text-right">{r.y?.toFixed(1)}</TD><TD className="text-right">{r.status}</TD>
                   </tr>
                 ))}
@@ -121,7 +211,7 @@ const VehicleTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId,
               <tbody>
                 {edges.data.map((r: any, i: number) => (
                   <tr key={i} className="text-gray-300">
-                    <TD>{r.ts}</TD><TD className="text-right">{r.edge_id}</TD><TD className="text-right">{r.exit_ts - r.enter_ts}</TD><TD className="text-right">{r.edge_len?.toFixed(2)}</TD>
+                    <TD>{fmtTs(r.ts)}</TD><TD className="text-right">{r.edge_id}</TD><TD className="text-right">{r.exit_ts - r.enter_ts}</TD><TD className="text-right">{r.edge_len?.toFixed(2)}</TD>
                   </tr>
                 ))}
               </tbody>
@@ -147,7 +237,7 @@ const TransferTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId
   return (
     <div className="flex flex-col gap-4 h-full">
       <div className="flex items-center gap-3">
-        <input className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24" type="number" placeholder="Vehicle ID" value={vehId} onChange={e => setVehId(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} />
+        <VehicleSelector value={vehId} onChange={setVehId} sessionId={sessionId} dbUrl={dbUrl} onEnter={search} />
         <button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded" onClick={search}>조회</button>
       </div>
       <div className="flex-1 min-h-0 flex flex-col">
@@ -163,8 +253,8 @@ const TransferTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId
                 const dur = r.exit_ts - r.enter_ts;
                 return (
                   <tr key={i} className={dur > 5000 ? "text-yellow-400" : "text-gray-300"}>
-                    <TD>{r.ts}</TD><TD className="text-right">{r.edge_id}</TD><TD className="text-right">{r.enter_ts}</TD>
-                    <TD className="text-right">{r.exit_ts}</TD><TD className="text-right">{dur}</TD><TD className="text-right">{r.edge_len?.toFixed(2)}</TD>
+                    <TD>{fmtTs(r.ts)}</TD><TD className="text-right">{r.edge_id}</TD><TD className="text-right">{fmtTs(r.enter_ts)}</TD>
+                    <TD className="text-right">{fmtTs(r.exit_ts)}</TD><TD className="text-right">{dur}</TD><TD className="text-right">{r.edge_len?.toFixed(2)}</TD>
                   </tr>
                 );
               })}
@@ -205,10 +295,14 @@ const LockTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, db
           <button className={`px-2 py-1 text-xs ${mode === "node" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`} onClick={() => setMode("node")}>Node</button>
           <button className={`px-2 py-1 text-xs ${mode === "vehicle" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`} onClick={() => setMode("vehicle")}>Vehicle</button>
         </div>
-        <input className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24" type="number" placeholder={mode === "node" ? "Node Idx" : "Veh ID"} value={searchId} onChange={e => setSearchId(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} />
+        {mode === "vehicle" ? (
+          <VehicleSelector value={searchId} onChange={setSearchId} sessionId={sessionId} dbUrl={dbUrl} placeholder="Vehicle ID" onEnter={search} />
+        ) : (
+          <input className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white w-24" type="number" placeholder="Node Idx" value={searchId} onChange={e => setSearchId(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} />
+        )}
         <button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded" onClick={search}>조회</button>
       </div>
-      <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
+      <div className="flex flex-col gap-4 flex-1 min-h-0">
         <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">Top Wait Nodes</span>
@@ -227,7 +321,7 @@ const LockTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, db
             </table>
           </div>
         </div>
-        <div className="col-span-2 flex flex-col min-h-0">
+        <div className="flex flex-col min-h-0">
           <div className="flex justify-between items-center mb-1 text-xs">
             <span className="text-gray-400 font-medium">Lock Events</span>
             <Badge loading={events.loading} error={events.error} count={events.data.length} />
@@ -238,7 +332,7 @@ const LockTab: React.FC<{ sessionId: string; dbUrl: string }> = ({ sessionId, db
               <tbody>
                 {events.data.map((r: any, i: number) => (
                   <tr key={i} className={r.event_type === 3 ? "text-red-400" : "text-gray-300"}>
-                    <TD>{r.ts}</TD><TD className="text-right">{mode === "node" ? r.veh_id : r.node_idx}</TD>
+                    <TD>{fmtTs(r.ts)}</TD><TD className="text-right">{mode === "node" ? r.veh_id : r.node_idx}</TD>
                     <TD className="text-center">{LOCK_NAMES[r.event_type] ?? r.event_type}</TD><TD className="text-right">{r.wait_ms > 0 ? r.wait_ms : "-"}</TD>
                   </tr>
                 ))}
@@ -266,41 +360,49 @@ const TABS: { key: TabKey; label: string }[] = [
 const DataPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [tab, setTab] = useState<TabKey>("vehicle");
   const [sessionId, setSessionId] = useSessionId();
-  const [dbUrl, setDbUrl] = useState(LOG_DB_URL);
+  const [dbUrl] = useState(LOG_DB_URL);
+
+  // ESC 키로만 닫힘
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-[90vw] max-w-[1400px] h-[80vh] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
-        {/* header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 bg-gray-800/80">
-          <div className="flex items-center gap-4">
-            <h2 className="text-base font-bold text-white">DB History</h2>
-            <input className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300 font-mono w-52" value={dbUrl} onChange={e => setDbUrl(e.target.value)} title="DB API URL" />
-            <SessionSelector value={sessionId} onChange={setSessionId} dbUrl={dbUrl} />
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={20} /></button>
+    <div
+      className="fixed top-0 left-0 bottom-0 z-[60] flex flex-col bg-gray-900/95 border-r border-gray-700 shadow-2xl backdrop-blur-sm"
+      style={{ width: "750px" }}
+    >
+      {/* header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-gray-800/80">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white whitespace-nowrap">DB History</h2>
+          <SessionSelector value={sessionId} onChange={setSessionId} dbUrl={dbUrl} />
         </div>
-        {/* tabs */}
-        <div className="flex border-b border-gray-700 bg-gray-800/40 px-5">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                tab === t.key
-                  ? "border-blue-500 text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-300"
-              }`}
-            >{t.label}</button>
-          ))}
-        </div>
-        {/* content */}
-        <div className="flex-1 p-5 min-h-0 overflow-hidden">
-          {tab === "vehicle" && <VehicleTab sessionId={sessionId} dbUrl={dbUrl} />}
-          {tab === "transfer" && <TransferTab sessionId={sessionId} dbUrl={dbUrl} />}
-          {tab === "lock" && <LockTab sessionId={sessionId} dbUrl={dbUrl} />}
-        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors" title="ESC"><X size={16} /></button>
+      </div>
+      {/* tabs */}
+      <div className="flex border-b border-gray-700 bg-gray-800/40 px-4">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+              tab === t.key
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-gray-500 hover:text-gray-300"
+            }`}
+          >{t.label}</button>
+        ))}
+      </div>
+      {/* content */}
+      <div className="flex-1 p-3 min-h-0 overflow-hidden">
+        {tab === "vehicle" && <VehicleTab sessionId={sessionId} dbUrl={dbUrl} />}
+        {tab === "transfer" && <TransferTab sessionId={sessionId} dbUrl={dbUrl} />}
+        {tab === "lock" && <LockTab sessionId={sessionId} dbUrl={dbUrl} />}
       </div>
     </div>
   );

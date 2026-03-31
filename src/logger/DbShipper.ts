@@ -158,7 +158,8 @@ export class DbShipper {
     }
 
     const topic = `VPS/logs/${this.sessionId}/${eventType}`;
-    this.client.publish(topic, Buffer.from(data), { qos: 1 }, (err) => {
+    // mqtt.js 타입은 Buffer를 요구하지만 브라우저에서는 Uint8Array로 동작
+    this.client.publish(topic, data as unknown as Buffer, { qos: 1 }, (err) => {
       if (err) {
         this.consecutiveFailures++;
         if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {

@@ -81,7 +81,9 @@ const MqttStatusIndicator: React.FC = () => {
             isConnected ? "text-green-600" : currentSessionId ? "text-cyan-400 font-mono" : "text-red-600"
           }`}
         >
-          {isConnected ? "MQTT" : currentSessionId ?? "MQTT Off"}
+          {isConnected
+            ? currentSessionId ? `MQTT · ${currentSessionId}` : "MQTT"
+            : currentSessionId ?? "MQTT Off"}
         </span>
 
         {/* Pulsing dot indicator */}

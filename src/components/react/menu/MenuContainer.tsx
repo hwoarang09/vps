@@ -1,5 +1,5 @@
 // components/react/menu/MenuContainer.tsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import MenuLevel1 from "./MenuLevel1";
 import RightPanel from "./RightPanel";
 import MenuLevel2 from "./MenuLevel2";
@@ -17,11 +17,20 @@ import LogIndicator from "../system/LogIndicator";
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
   const { loadConfig } = useMqttStore();
+  const [showDataPanel, setShowDataPanel] = useState(false);
 
   // Load MQTT config on mount and auto-connect
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  // stats-db 메뉴 클릭 시 DataPanel 토글 (독립 state)
+  useEffect(() => {
+    if (activeSubMenu === "stats-db") {
+      setShowDataPanel(prev => !prev);
+      setActiveSubMenu(null); // 메뉴 상태는 즉시 해제
+    }
+  }, [activeSubMenu, setActiveSubMenu]);
 
   return (
     <>
@@ -84,9 +93,9 @@ const MenuContainer: React.FC = () => {
         />
       )}
 
-      {/* DB History Modal - 중앙 대형 모달 */}
-      {activeSubMenu === "stats-db" && (
-        <DataPanel onClose={() => setActiveSubMenu(null)} />
+      {/* DB History - 왼쪽 사이드 패널 (ESC로만 닫힘) */}
+      {showDataPanel && (
+        <DataPanel onClose={() => setShowDataPanel(false)} />
       )}
     </>
   );
