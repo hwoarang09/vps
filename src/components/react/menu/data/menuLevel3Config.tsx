@@ -20,4 +20,9 @@ export const menuLevel3Config: Record<string, MenuLevel3Item[]> = {
     { id: "transfer-4", label: "MQTT", shortcutLabel: "4", transferMode: TransferMode.MQTT_CONTROL },
     { id: "transfer-5", label: "AUTO", shortcutLabel: "5", transferMode: TransferMode.AUTO_ROUTE },
   ],
+  "operation-menu-8": [
+    { id: "params-movement", label: "Movement", shortcutLabel: "1" },
+    { id: "params-lock", label: "Lock", shortcutLabel: "2" },
+    { id: "params-routing", label: "Routing", shortcutLabel: "3" },
+  ],
 };

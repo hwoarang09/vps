@@ -6,7 +6,7 @@ import {
   LogicData
 } from "@/common/vehicle/initialize/constants";
 import { TransferMgr, VehicleCommand, IVehicleDataArray, VehicleBayLoop } from "./TransferMgr";
-import { findShortestPath } from "./Dijkstra";
+import { findShortestPath, type RoutingContext } from "./Dijkstra";
 import { Edge } from "@/types/edge";
 import { StationRawData } from "@/types/station";
 import { LockMgr } from "./LockMgr";
@@ -53,6 +53,21 @@ export class AutoMgr {
   private pathFindCountThisFrame = 0;
   /** Path 발견 콜백 (SimLogger 연결용) */
   onPathFound?: OnPathFoundCallback;
+  /** Per-fab routing context for BPR cost */
+  routingContext?: RoutingContext;
+
+  /**
+   * Reroute interval (edges).
+   *  0 = reroute only at destination (default)
+   *  1 = every edge transition
+   *  N = every N edge transitions
+   */
+  rerouteInterval = 0;
+
+  // Per-vehicle: last known CURRENT_EDGE (for detecting edge transitions)
+  private readonly lastEdge: Map<number, number> = new Map();
+  // Per-vehicle: edge transitions since last reroute
+  private readonly edgesSinceReroute: Map<number, number> = new Map();
 
   /**
    * Initializes available stations for routing.
@@ -97,6 +112,11 @@ export class AutoMgr {
     // Reset per-frame counter
     this.pathFindCountThisFrame = 0;
 
+    // Reroute check: detect edge transitions and trigger reroute if interval is set
+    if (this.rerouteInterval > 0) {
+      this.checkReroutes(numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
+    }
+
     // Process vehicles in round-robin fashion with limit
     const startIndex = this.nextVehicleIndex;
 
@@ -123,6 +143,66 @@ export class AutoMgr {
       if (didAssign) {
         this.nextVehicleIndex = (vehId + 1) % numVehicles;
       }
+    }
+  }
+
+  /**
+   * Check for edge transitions and reroute vehicles that have traveled rerouteInterval edges.
+   */
+  private checkReroutes(
+    numVehicles: number,
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr,
+  ): void {
+    const data = vehicleDataArray.getData();
+
+    for (let vehId = 0; vehId < numVehicles; vehId++) {
+      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
+
+      const ptr = vehId * VEHICLE_DATA_SIZE;
+      const currentEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+      if (currentEdge < 1) continue;
+
+      const prevEdge = this.lastEdge.get(vehId) ?? 0;
+      this.lastEdge.set(vehId, currentEdge);
+
+      // No transition
+      if (currentEdge === prevEdge || prevEdge === 0) continue;
+
+      // Edge transition detected — increment counter
+      const count = (this.edgesSinceReroute.get(vehId) ?? 0) + 1;
+
+      if (count < this.rerouteInterval) {
+        this.edgesSinceReroute.set(vehId, count);
+        continue;
+      }
+
+      // Reroute threshold reached
+      this.edgesSinceReroute.set(vehId, 0);
+
+      // Only reroute if vehicle has a destination
+      const dest = this.vehicleDestinations.get(vehId);
+      if (!dest) continue;
+      // Skip if already at destination
+      if (currentEdge === dest.edgeIndex) continue;
+
+      this.pathFindCountThisFrame++;
+      const pathIndices = findShortestPath(currentEdge, dest.edgeIndex, edgeArray, this.routingContext);
+      if (!pathIndices || pathIndices.length <= 1) continue;
+
+      this.applyPathToVehicle({
+        vehId,
+        pathIndices,
+        candidate: { name: dest.stationName, edgeIndex: dest.edgeIndex },
+        vehicleDataArray,
+        edgeArray,
+        edgeNameToIndex,
+        transferMgr,
+        lockMgr,
+      });
     }
   }
 
@@ -197,7 +277,7 @@ export class AutoMgr {
 
     this.pathFindCountThisFrame++;
 
-    const pathIndices = findShortestPath(currentEdgeIdx, destEdgeIdx, edgeArray);
+    const pathIndices = findShortestPath(currentEdgeIdx, destEdgeIdx, edgeArray, this.routingContext);
     if (!pathIndices || pathIndices.length === 0) return false;
 
     const destEdge = edgeArray[destEdgeIdx - 1];
@@ -250,7 +330,7 @@ export class AutoMgr {
       this.pathFindCountThisFrame++;
 
       // Pathfinding
-      const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray);
+      const pathIndices = findShortestPath(currentEdgeIdx, candidate.edgeIndex, edgeArray, this.routingContext);
 
       if (pathIndices && pathIndices.length > 0) {
         this.applyPathToVehicle({

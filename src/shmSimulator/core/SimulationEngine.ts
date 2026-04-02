@@ -254,6 +254,12 @@ export class SimulationEngine {
     return this.fabContexts.get(fabId);
   }
 
+  forEachFab(fn: (ctx: FabContext) => void): void {
+    for (const ctx of this.fabContexts.values()) {
+      fn(ctx);
+    }
+  }
+
   /**
    * Get all fab IDs
    * @returns Array of fab identifiers (e.g., ["fab_A", "fab_B"])

@@ -86,12 +86,26 @@ export interface SensorConfigOverride {
 }
 
 /**
+ * Routing (길찾기) 설정
+ */
+export type RoutingStrategy = 'DISTANCE' | 'BPR';
+
+export interface RoutingConfig {
+  strategy: RoutingStrategy;
+  bprAlpha: number;
+  bprBeta: number;
+  /** 경로 재탐색 주기 (edge 수). 0=도착 시만 */
+  rerouteInterval: number;
+}
+
+/**
  * Fab별로 오버라이드 가능한 전체 설정
  */
 export interface FabConfigOverride {
   lock?: LockConfigOverride;
   movement?: MovementConfigOverride;
   sensor?: SensorConfigOverride;
+  routing?: Partial<RoutingConfig>;
 }
 
 /**
@@ -126,6 +140,9 @@ interface FabConfigStore {
   // Fab별 오버라이드 (fabIndex -> override)
   fabOverrides: Record<number, FabConfigOverride>;
 
+  // Routing 설정
+  routingConfig: RoutingConfig;
+
   // 모달 상태
   isModalOpen: boolean;
 
@@ -135,6 +152,7 @@ interface FabConfigStore {
   removeFabOverride: (fabIndex: number) => void;
   clearAllOverrides: () => void;
   setModalOpen: (open: boolean) => void;
+  setRoutingConfig: (config: Partial<RoutingConfig>) => void;
 
   // Getters
   getFabConfig: (fabIndex: number) => {
@@ -193,6 +211,13 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   fabOverrides: {},
 
+  routingConfig: {
+    strategy: 'DISTANCE',
+    bprAlpha: 0.15,
+    bprBeta: 4.0,
+    rerouteInterval: 0,
+  },
+
   isModalOpen: false,
 
   setBaseConfig: (config) => {
@@ -226,6 +251,12 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   setModalOpen: (open) => {
     set({ isModalOpen: open });
+  },
+
+  setRoutingConfig: (config) => {
+    set((state) => ({
+      routingConfig: { ...state.routingConfig, ...config },
+    }));
   },
 
   /**

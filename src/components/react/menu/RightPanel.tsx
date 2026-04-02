@@ -12,6 +12,10 @@ import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 import OperationMapPanel from "./panels/OperationMapPanel";
+import FabStatsPanel from "./panels/FabStatsPanel";
+import MovementParamsPanel from "./panels/params/MovementParamsPanel";
+import LockParamsPanel from "./panels/params/LockParamsPanel";
+import RoutingParamsPanel from "./panels/params/RoutingParamsPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -175,14 +179,19 @@ const RightPanel: React.FC = () => {
       return <EdgeControlPanel />;
     }
 
+    // Params panels (lv3)
+    if (activeThirdMenu === "params-movement") return <MovementParamsPanel />;
+    if (activeThirdMenu === "params-lock") return <LockParamsPanel />;
+    if (activeThirdMenu === "params-routing") return <RoutingParamsPanel />;
+
     // Operation Map/CFG Panel
     if (activeSubMenu === "operation-menu-6") {
       return <OperationMapPanel />;
     }
 
-    // Statistics > Realtime
+    // Statistics > Fab Stats
     if (activeSubMenu === "stats-realtime") {
-      return <PerformanceTogglePanel />;
+      return <FabStatsPanel />;
     }
 
     // 다른 메뉴들의 경우
@@ -254,7 +263,7 @@ const RightPanel: React.FC = () => {
       "vis-traffic-flow": "Traffic Flow",
       "vis-deadlock-zone": "Deadlock Zone",
       // Statistics
-      "stats-realtime": "Realtime Monitor",
+      "stats-realtime": "Fab Stats",
       "stats-db": "DB History",
       // DevTools
       "devtools-lock": "Lock Info",
@@ -263,6 +272,10 @@ const RightPanel: React.FC = () => {
       "search-node": "Node Search",
       "search-edge": "Edge Search",
       "search-station": "Station Search",
+      // Params (lv3)
+      "params-movement": "Movement",
+      "params-lock": "Lock",
+      "params-routing": "Routing",
     };
     return labels[menuId] || menuId;
   };

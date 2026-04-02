@@ -472,6 +472,24 @@ export class MultiWorkerController {
     workerInfo.worker.postMessage(message);
   }
 
+  /**
+   * Update routing config. If fabId is given, only that fab is updated.
+   */
+  setRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number): void {
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval };
+        this.workers[workerIndex].worker.postMessage(message);
+      }
+    } else {
+      const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", strategy, bprAlpha, bprBeta, rerouteInterval };
+      for (const workerInfo of this.workers) {
+        workerInfo.worker.postMessage(message);
+      }
+    }
+  }
+
   async dispose(): Promise<void> {
     if (this.workers.length === 0) {
       return;

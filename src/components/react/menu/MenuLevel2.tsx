@@ -2,7 +2,6 @@
 import React from "react";
 import { useMenuStore } from "@store/ui/menuStore";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
-import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { MenuButton } from "./shared";
 import { menuLevel2Config } from "./data/menuLevel2Config";
 import { menuLevel3Config } from "./data/menuLevel3Config";
@@ -31,12 +30,6 @@ const MenuLevel2: React.FC = () => {
     if (menuId === "vis-performance") {
       togglePerfLeft();
       togglePerfRight();
-      return;
-    }
-
-    // operation-menu-8 (Params): SimulationParamsModal 열기
-    if (menuId === "operation-menu-8") {
-      useFabConfigStore.getState().setModalOpen(true);
       return;
     }
 

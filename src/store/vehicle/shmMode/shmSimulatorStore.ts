@@ -9,6 +9,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { getSimulationConfig } from "@/config/worker/simulationConfig";
 import { MQTT_WS_URL } from "@/config/logConfig";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -179,6 +180,9 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     });
 
     try {
+      // Routing config from fabConfigStore
+      const { routingConfig: rc } = useFabConfigStore.getState();
+
       await controller.init({
         fabs: fabs.map(fab => ({
           ...fab,
@@ -188,6 +192,11 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         config: {
           ...getSimulationConfig(),
           ...config,
+          // Routing config from UI store
+          routingStrategy: rc.strategy,
+          routingBprAlpha: rc.bprAlpha,
+          routingBprBeta: rc.bprBeta,
+          routingRerouteInterval: rc.rerouteInterval,
           logTargets: {
             opfs: true,
             db: true,
@@ -201,8 +210,24 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       // SimLogger는 play(start) 시점에 초기화됨 (enableLogging은 start에서 호출)
 
       const fabVehicleCounts: Record<string, number> = {};
-      for (const fabId of controller.getFabIds()) {
+      const allFabIds = controller.getFabIds();
+      for (const fabId of allFabIds) {
         fabVehicleCounts[fabId] = controller.getActualNumVehicles(fabId);
+      }
+
+      // Apply per-fab routing overrides from fabConfigStore
+      const { fabOverrides, routingConfig: globalRc } = useFabConfigStore.getState();
+      for (let i = 0; i < allFabIds.length; i++) {
+        const routing = fabOverrides[i]?.routing;
+        if (routing) {
+          controller.setRoutingConfig(
+            routing.strategy ?? globalRc.strategy,
+            routing.bprAlpha ?? globalRc.bprAlpha,
+            routing.bprBeta ?? globalRc.bprBeta,
+            allFabIds[i],
+            routing.rerouteInterval ?? globalRc.rerouteInterval,
+          );
+        }
       }
 
       const totalVehicles = controller.getTotalVehicleCount();

@@ -184,6 +184,21 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     case "GET_LOCK_TABLE":
       handleGetLockTable(message.fabId, message.requestId);
       break;
+    case "SET_ROUTING_CONFIG":
+      if (engine) {
+        if (message.fabId) {
+          // Per-fab update
+          engine.getFabContext(message.fabId)?.updateRoutingConfig(
+            message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval
+          );
+        } else {
+          // Broadcast to all fabs
+          engine.forEachFab((ctx) => {
+            ctx.updateRoutingConfig(message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval);
+          });
+        }
+      }
+      break;
     default:
   }
 };

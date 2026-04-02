@@ -147,6 +147,16 @@ export interface SimulationConfig {
     edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
   };
 
+  // Routing parameters
+  /** 길찾기 전략: DISTANCE (길이 기반) 또는 BPR (혼잡도 기반) */
+  routingStrategy?: 'DISTANCE' | 'BPR';
+  /** BPR alpha 파라미터 (기본 0.15) */
+  routingBprAlpha?: number;
+  /** BPR beta 파라미터 (기본 4.0) */
+  routingBprBeta?: number;
+  /** 경로 재탐색 주기 (edge 수). 0=도착 시만, 1=매 edge, N=N edge마다 */
+  routingRerouteInterval?: number;
+
   // Sensor presets (fab별 오버라이드 가능)
   /** fab별 커스텀 센서 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용) */
   customSensorPresets?: SensorPreset[];
@@ -334,7 +344,9 @@ export type WorkerMessage =
   // Logger 설정
   | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number }
   // Lock 정보 요청
-  | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string };
+  | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string }
+  // Routing config 동적 변경 (fabId 생략 시 전체 fab에 적용)
+  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number };
 
 // Worker -> Main Thread Messages
 export type MainMessage =

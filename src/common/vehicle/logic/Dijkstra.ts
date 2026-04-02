@@ -1,5 +1,6 @@
 // common/vehicle/logic/Dijkstra.ts
 import { Edge } from "@/types/edge";
+import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
 
 interface PerformanceStats {
   count: number;
@@ -19,6 +20,62 @@ const perfStats: PerformanceStats = {
   cacheHits: 0,
   cacheMisses: 0,
 };
+
+// ============================================================
+// Routing Strategy & BPR Configuration
+// ============================================================
+export type RoutingStrategy = "DISTANCE" | "BPR";
+
+export interface RoutingConfig {
+  strategy: RoutingStrategy;
+  /** BPR alpha parameter (default 0.15) */
+  bprAlpha: number;
+  /** BPR beta parameter (default 4.0) */
+  bprBeta: number;
+  /** Minimum capacity per edge (prevents division by zero) */
+  bprMinCapacity: number;
+}
+
+/**
+ * Per-call routing context. Passed to findShortestPath to support per-fab BPR.
+ */
+export interface RoutingContext {
+  config: RoutingConfig;
+  edgeVehicleQueue: IEdgeVehicleQueue;
+  vehicleSpacing: number;
+}
+
+export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
+  strategy: "DISTANCE",
+  bprAlpha: 0.15,
+  bprBeta: 4.0,
+  bprMinCapacity: 1,
+};
+
+/** Active context for current findShortestPath call (set before processNeighbors) */
+let activeCtx: RoutingContext | null = null;
+
+/**
+ * BPR cost function:
+ *   cost = freeFlowTime * (1 + alpha * (volume / capacity) ^ beta)
+ *
+ * freeFlowTime = edge.distance
+ * volume = number of vehicles currently on the edge
+ * capacity = edge.distance / vehicleSpacing
+ */
+function bprCost(edge: Edge, edgeIndex1Based: number): number {
+  const distance = edge.distance;
+  if (!activeCtx || activeCtx.config.strategy === "DISTANCE") {
+    return distance;
+  }
+
+  const { bprAlpha, bprBeta, bprMinCapacity } = activeCtx.config;
+  const volume = activeCtx.edgeVehicleQueue.getCount(edgeIndex1Based);
+  const capacity = Math.max(bprMinCapacity, Math.floor(distance / activeCtx.vehicleSpacing));
+  const ratio = volume / capacity;
+
+  return distance * (1 + bprAlpha * Math.pow(ratio, bprBeta));
+}
 
 // ============================================================
 // Min-Heap Priority Queue (reusable, minimal GC pressure)
@@ -174,12 +231,14 @@ function resetArrays(size: number): void {
  * @param startEdgeIndex Index of the starting edge (1-based)
  * @param endEdgeIndex Index of the destination edge (1-based)
  * @param edgeArray Full array of all edges (0-based array)
+ * @param routingCtx Optional per-fab routing context for BPR cost. If omitted, uses DISTANCE strategy.
  * @returns Array of edge INDICES (1-based) representing the path (start -> ... -> end), or null if no path found.
  */
 export function findShortestPath(
   startEdgeIndex: number,
   endEdgeIndex: number,
-  edgeArray: Edge[]
+  edgeArray: Edge[],
+  routingCtx?: RoutingContext
 ): number[] | null {
   const startTime = performance.now();
 
@@ -194,14 +253,21 @@ export function findShortestPath(
     return [startEdgeIndex];
   }
 
-  // Check cache first
-  const cached = getCachedPath(startEdgeIndex, endEdgeIndex);
-  if (cached !== undefined) {
-    perfStats.cacheHits++;
-    recordPerformance(performance.now() - startTime);
-    return cached ? [...cached] : null; // Return copy to prevent mutation
+  const isBpr = routingCtx && routingCtx.config.strategy === "BPR";
+
+  // Check cache first (skip cache for BPR — congestion is dynamic)
+  if (!isBpr) {
+    const cached = getCachedPath(startEdgeIndex, endEdgeIndex);
+    if (cached !== undefined) {
+      perfStats.cacheHits++;
+      recordPerformance(performance.now() - startTime);
+      return cached ? [...cached] : null; // Return copy to prevent mutation
+    }
   }
   perfStats.cacheMisses++;
+
+  // Set active context for processNeighbors → bprCost
+  activeCtx = routingCtx ?? null;
 
   // Use array length + 1 to accommodate 1-based indexing
   const n = edgeArray.length + 1;
@@ -224,11 +290,16 @@ export function findShortestPath(
     processNeighbors(u, cost, edgeArray);
   }
 
+  // Clear active context
+  activeCtx = null;
+
   // Reconstruct path
   const result = reconstructPath(startEdgeIndex, endEdgeIndex);
 
-  // Cache the result
-  setCachedPath(startEdgeIndex, endEdgeIndex, result);
+  // Cache the result (skip for BPR — congestion changes every frame)
+  if (!isBpr) {
+    setCachedPath(startEdgeIndex, endEdgeIndex, result);
+  }
 
   recordPerformance(performance.now() - startTime);
   return result;
@@ -244,7 +315,7 @@ function processNeighbors(u: number, cost: number, edgeArray: Edge[]): void {
     // v is 1-based, convert to 0-based for array access
     if (v < 1 || !edgeArray[v - 1]) continue;
 
-    const weight = edgeArray[v - 1].distance;
+    const weight = bprCost(edgeArray[v - 1], v);
     const alt = cost + weight;
 
     if (alt < distArray[v]) {

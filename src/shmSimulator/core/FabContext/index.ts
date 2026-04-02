@@ -7,6 +7,7 @@ import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
+import { DEFAULT_ROUTING_CONFIG, type RoutingContext } from "@/common/vehicle/logic/Dijkstra";
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
 import { EngineStore } from "../EngineStore";
@@ -67,6 +68,9 @@ export class FabContext {
   private readonly vehicleBayLoopMap: Map<number, VehicleBayLoop> = new Map();
   private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
+
+  // === Routing Context (per-fab BPR) ===
+  private routingContext!: RoutingContext;
 
   // === SimLogger ===
   private simLogger: SimLogger | null = null;
@@ -130,6 +134,22 @@ export class FabContext {
       this.fabOffset = params.fabOffset ?? { x: 0, y: 0 };
     }
 
+    // Per-fab routing context (Dijkstra BPR)
+    this.routingContext = {
+      config: {
+        ...DEFAULT_ROUTING_CONFIG,
+        ...(this.config.routingStrategy && { strategy: this.config.routingStrategy }),
+        ...(this.config.routingBprAlpha !== undefined && { bprAlpha: this.config.routingBprAlpha }),
+        ...(this.config.routingBprBeta !== undefined && { bprBeta: this.config.routingBprBeta }),
+      },
+      edgeVehicleQueue: this.edgeVehicleQueue,
+      vehicleSpacing: this.config.bodyLength + (this.config.vehicleSpacing ?? 0.6),
+    };
+    this.autoMgr.routingContext = this.routingContext;
+    if (this.config.routingRerouteInterval !== undefined) {
+      this.autoMgr.rerouteInterval = this.config.routingRerouteInterval;
+    }
+
     // SIMPLE_LOOP 모드: 차량별 순환 경로 구축
     buildVehicleLoopMap(
       this.vehicleLoopMap,
@@ -180,6 +200,21 @@ export class FabContext {
 
     // 초기 데이터를 렌더 버퍼에 복사
     this.writeToRenderRegion();
+  }
+
+  /**
+   * Update routing config at runtime (per-fab BPR params)
+   */
+  updateRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, rerouteInterval?: number): void {
+    this.routingContext.config = {
+      ...this.routingContext.config,
+      strategy,
+      ...(bprAlpha !== undefined && { bprAlpha }),
+      ...(bprBeta !== undefined && { bprBeta }),
+    };
+    if (rerouteInterval !== undefined) {
+      this.autoMgr.rerouteInterval = rerouteInterval;
+    }
   }
 
   /**

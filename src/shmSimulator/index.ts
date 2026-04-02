@@ -396,6 +396,16 @@ export class ShmSimulatorController {
   }
 
   /**
+   * Update routing config (strategy + BPR params) at runtime.
+   * If fabId is given, only that fab is updated.
+   */
+  setRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number): void {
+    if (!this.worker) return;
+    const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval };
+    this.worker.postMessage(message);
+  }
+
+  /**
    * Dispose the controller and terminate worker
    */
   dispose(): void {

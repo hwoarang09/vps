@@ -47,7 +47,7 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
   Statistics: [
     {
       id: "stats-realtime",
-      label: "Realtime",
+      label: "Fab Stats",
       shortcutLabel: "r",
       iconFn: () => pngIcon(imgSim),
     },

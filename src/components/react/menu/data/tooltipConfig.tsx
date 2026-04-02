@@ -24,7 +24,7 @@ export const tooltipsByLevel: {
     "maploader-menu-2": "맵 데이터 가져오기",
     "maploader-menu-3": "맵 데이터 내보내기",
 
-    "stats-realtime": "실시간 모니터링 대시보드",
+    "stats-realtime": "Fab별 실시간 통계 (평균속도 등)",
     "stats-db": "DB 이력 조회 (운행/반송/Lock)",
 
     "vehicle-menu-1": "전체 차량 현황",
@@ -77,5 +77,8 @@ export const tooltipsByLevel: {
     "transfer-3": "랜덤 목적지 반송",
     "transfer-4": "MQTT 외부 제어 반송",
     "transfer-5": "자동 경로 배정 반송",
+    "params-movement": "직선/곡선 속도·가속도 설정",
+    "params-lock": "Lock 거리·전략 설정",
+    "params-routing": "길찾기 가중치 전략",
   },
 };
