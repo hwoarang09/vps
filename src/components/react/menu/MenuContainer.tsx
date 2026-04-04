@@ -7,6 +7,7 @@ import MenuLevel3 from "./MenuLevel3";
 
 import VehicleTest from "../../test/VehicleTest/VehicleTest";
 import TransportScheduleModal from "./panels/TransportScheduleModal";
+import FabStatsPanel from "./panels/FabStatsPanel";
 import DataPanel from "../DataPanel/DataPanel";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
@@ -18,11 +19,20 @@ const MenuContainer: React.FC = () => {
   const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
   const { loadConfig } = useMqttStore();
   const [showDataPanel, setShowDataPanel] = useState(false);
+  const [showFabStats, setShowFabStats] = useState(false);
 
   // Load MQTT config on mount and auto-connect
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  // stats-realtime 메뉴 클릭 시 FabStats 플로팅 토글
+  useEffect(() => {
+    if (activeSubMenu === "stats-realtime") {
+      setShowFabStats(prev => !prev);
+      setActiveSubMenu(null);
+    }
+  }, [activeSubMenu, setActiveSubMenu]);
 
   // stats-db 메뉴 클릭 시 DataPanel 토글 (독립 state)
   // DataPanel 열릴 때 RightPanel(Vehicle Search)도 함께 열기
@@ -104,6 +114,11 @@ const MenuContainer: React.FC = () => {
         <TransportScheduleModal
           onClose={() => setActiveSubMenu(null)}
         />
+      )}
+
+      {/* Fab Stats - 중앙 플로팅 패널 (ESC로만 닫힘) */}
+      {showFabStats && (
+        <FabStatsPanel onClose={() => setShowFabStats(false)} />
       )}
 
       {/* DB History - 왼쪽 사이드 패널 (ESC로만 닫힘) */}

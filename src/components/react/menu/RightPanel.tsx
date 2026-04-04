@@ -12,7 +12,6 @@ import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 import OperationMapPanel from "./panels/OperationMapPanel";
-import FabStatsPanel from "./panels/FabStatsPanel";
 import MovementParamsPanel from "./panels/params/MovementParamsPanel";
 import LockParamsPanel from "./panels/params/LockParamsPanel";
 import RoutingParamsPanel from "./panels/params/RoutingParamsPanel";
@@ -187,11 +186,6 @@ const RightPanel: React.FC = () => {
     // Operation Map/CFG Panel
     if (activeSubMenu === "operation-menu-6") {
       return <OperationMapPanel />;
-    }
-
-    // Statistics > Fab Stats
-    if (activeSubMenu === "stats-realtime") {
-      return <FabStatsPanel />;
     }
 
     // 다른 메뉴들의 경우

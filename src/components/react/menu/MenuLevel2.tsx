@@ -46,6 +46,7 @@ const MenuLevel2: React.FC = () => {
       const shouldNotOpenRightPanel =
         hasThirdLevelMenu || // LV3가 있으면 RightPanel 불필요
         menuId === "operation-menu-2" || // Schedule - 중앙 모달 사용
+        menuId === "stats-realtime" ||   // Fab Stats - 플로팅 패널 사용
         menuId.startsWith("test-"); // All test menus
 
       if (hasThirdLevelMenu) {
