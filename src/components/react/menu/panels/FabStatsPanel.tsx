@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import {
   VEHICLE_DATA_SIZE,
@@ -10,6 +10,10 @@ import {
   TrafficState,
   HitZone,
 } from "@/common/vehicle/initialize/constants";
+import {
+  BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line,
+} from "recharts";
 import FloatingPanel from "../shared/FloatingPanel";
 import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
 
@@ -20,15 +24,12 @@ import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
 interface FabStats {
   fabId: string;
   vehicleCount: number;
-  // Speed
   avgSpeed: number;
   maxSpeed: number;
-  minSpeed: number;   // 움직이는 차량 중 최소
-  // Movement Status
+  minSpeed: number;
   movingCount: number;
   stoppedCount: number;
   pausedCount: number;
-  // Job State 분포
   jobIdle: number;
   jobMoveToLoad: number;
   jobLoading: number;
@@ -36,22 +37,23 @@ interface FabStats {
   jobUnloading: number;
   jobError: number;
   jobInitializing: number;
-  // Traffic State 분포
   trafficFree: number;
   trafficWaiting: number;
   trafficAcquired: number;
-  // Stop Reason 주요 항목
   stopLocked: number;
   stopSensored: number;
   stopIdle: number;
   stopPathBlocked: number;
   stopDestReached: number;
   stopLoadOnOff: number;
-  // Sensor
-  sensorCollisionCount: number;  // HIT_ZONE != NONE
-  // Path
+  sensorCollisionCount: number;
   avgPathRemaining: number;
   maxPathRemaining: number;
+}
+
+interface HistoryPoint {
+  t: number; // seconds since start
+  [key: string]: number; // fabId -> value
 }
 
 // ============================================================================
@@ -87,19 +89,16 @@ function computeFabStats(
   for (let i = 0; i < vehicleCount; i++) {
     const ptr = (startIdx + i) * VEHICLE_DATA_SIZE;
 
-    // Speed
     const velocity = fullData[ptr + MovementData.VELOCITY];
     totalSpeed += velocity;
     if (velocity > stats.maxSpeed) stats.maxSpeed = velocity;
     if (velocity >= 0.01 && velocity < stats.minSpeed) stats.minSpeed = velocity;
 
-    // Moving Status
     const ms = fullData[ptr + MovementData.MOVING_STATUS];
     if (ms === 0) stats.stoppedCount++;
     else if (ms === 1) stats.movingCount++;
     else if (ms === 2) stats.pausedCount++;
 
-    // Job State
     const js = fullData[ptr + LogicData.JOB_STATE];
     if (js === JobState.IDLE) stats.jobIdle++;
     else if (js === JobState.MOVE_TO_LOAD) stats.jobMoveToLoad++;
@@ -109,13 +108,11 @@ function computeFabStats(
     else if (js === JobState.ERROR) stats.jobError++;
     else if (js === JobState.INITIALIZING) stats.jobInitializing++;
 
-    // Traffic State
     const ts = fullData[ptr + LogicData.TRAFFIC_STATE];
     if (ts === TrafficState.FREE) stats.trafficFree++;
     else if (ts === TrafficState.WAITING) stats.trafficWaiting++;
     else if (ts === TrafficState.ACQUIRED) stats.trafficAcquired++;
 
-    // Stop Reason (bitmask)
     const sr = fullData[ptr + LogicData.STOP_REASON];
     if (sr & StopReason.LOCKED) stats.stopLocked++;
     if (sr & StopReason.SENSORED) stats.stopSensored++;
@@ -124,11 +121,9 @@ function computeFabStats(
     if (sr & StopReason.DESTINATION_REACHED) stats.stopDestReached++;
     if ((sr & StopReason.LOAD_ON) || (sr & StopReason.LOAD_OFF)) stats.stopLoadOnOff++;
 
-    // Sensor collision
     const hitZone = fullData[ptr + SensorData.HIT_ZONE];
     if (hitZone !== HitZone.NONE) stats.sensorCollisionCount++;
 
-    // Path remaining
     const pathRem = fullData[ptr + LogicData.PATH_REMAINING];
     totalPath += pathRem;
     if (pathRem > stats.maxPathRemaining) stats.maxPathRemaining = pathRem;
@@ -142,10 +137,9 @@ function computeFabStats(
 }
 
 // ============================================================================
-// Sub-components
+// Sub-components (Card view)
 // ============================================================================
 
-/** 작은 수치 표시 */
 const Stat: React.FC<{ label: string; value: string | number; color?: string }> = ({
   label, value, color = "text-gray-300",
 }) => (
@@ -155,7 +149,6 @@ const Stat: React.FC<{ label: string; value: string | number; color?: string }> 
   </div>
 );
 
-/** 비율 바 */
 const RatioBar: React.FC<{ ratio: number; color: string; label?: string }> = ({ ratio, color, label }) => (
   <div className="flex items-center gap-1.5">
     {label && <span className="text-[10px] text-gray-500 w-14 shrink-0">{label}</span>}
@@ -167,7 +160,6 @@ const RatioBar: React.FC<{ ratio: number; color: string; label?: string }> = ({ 
   </div>
 );
 
-/** 가로 분포 바 */
 const DistributionBar: React.FC<{ items: { count: number; color: string; label: string }[]; total: number }> = ({ items, total }) => {
   if (total === 0) return null;
   return (
@@ -205,23 +197,19 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
 
   return (
     <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-      {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold text-accent-orange">{fab.fabId}</span>
         <span className="text-[10px] text-gray-500">{n} vehicles</span>
       </div>
 
-      {/* Speed */}
       <div className="grid grid-cols-3 gap-x-3 mb-2">
         <Stat label="Avg" value={`${fab.avgSpeed.toFixed(2)} m/s`} color="text-accent-cyan font-bold" />
         <Stat label="Max" value={`${fab.maxSpeed.toFixed(2)}`} color="text-white" />
         <Stat label="Min" value={`${fab.minSpeed.toFixed(2)}`} color="text-gray-400" />
       </div>
 
-      {/* Speed bar */}
       <RatioBar ratio={fab.avgSpeed / Math.max(fab.maxSpeed, 1)} color="bg-accent-cyan" label="Speed" />
 
-      {/* Moving / Stopped */}
       <div className="mt-2">
         <DistributionBar
           total={n}
@@ -233,7 +221,6 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         />
       </div>
 
-      {/* Job State */}
       <div className="mt-2">
         <span className="text-[10px] text-gray-600 font-medium">Job State</span>
         <DistributionBar
@@ -250,7 +237,6 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         />
       </div>
 
-      {/* Traffic State */}
       <div className="mt-2">
         <span className="text-[10px] text-gray-600 font-medium">Traffic</span>
         <DistributionBar
@@ -263,7 +249,6 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         />
       </div>
 
-      {/* Stop Reasons */}
       {fab.stoppedCount > 0 && (
         <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-0.5">
           <Stat label="Locked" value={fab.stopLocked} color={fab.stopLocked > 0 ? "text-amber-400" : "text-gray-600"} />
@@ -275,7 +260,6 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         </div>
       )}
 
-      {/* Sensor & Path */}
       <div className="mt-2 grid grid-cols-2 gap-x-3">
         <Stat label="Collision" value={fab.sensorCollisionCount} color={fab.sensorCollisionCount > 0 ? "text-red-400" : "text-gray-600"} />
         <Stat label="Avg Path" value={`${fab.avgPathRemaining.toFixed(0)}m`} color="text-gray-300" />
@@ -285,8 +269,176 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
 };
 
 // ============================================================================
+// Compare Tab (Bar Chart)
+// ============================================================================
+
+const COMPARE_METRICS = [
+  { key: "avgSpeed", label: "Avg Speed", unit: "m/s" },
+  { key: "movingRate", label: "Moving %", unit: "%" },
+  { key: "stoppedRate", label: "Stopped %", unit: "%" },
+  { key: "waitingRate", label: "Waiting %", unit: "%" },
+  { key: "stopLocked", label: "Locked", unit: "" },
+  { key: "stopSensored", label: "Sensor Stop", unit: "" },
+  { key: "sensorCollisionCount", label: "Collision", unit: "" },
+  { key: "avgPathRemaining", label: "Avg Path", unit: "m" },
+] as const;
+
+type MetricKey = typeof COMPARE_METRICS[number]["key"];
+
+const FAB_COLORS = [
+  "#06b6d4", "#f59e0b", "#8b5cf6", "#22c55e", "#ef4444",
+  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
+];
+
+function buildCompareData(fabStatsList: FabStats[]): Record<string, number | string>[] {
+  return fabStatsList.map((fab, i) => {
+    const n = fab.vehicleCount || 1;
+    return {
+      name: fab.fabId,
+      avgSpeed: +fab.avgSpeed.toFixed(2),
+      movingRate: +((fab.movingCount / n) * 100).toFixed(1),
+      stoppedRate: +((fab.stoppedCount / n) * 100).toFixed(1),
+      waitingRate: +((fab.trafficWaiting / n) * 100).toFixed(1),
+      stopLocked: fab.stopLocked,
+      stopSensored: fab.stopSensored,
+      sensorCollisionCount: fab.sensorCollisionCount,
+      avgPathRemaining: +fab.avgPathRemaining.toFixed(0),
+      _color: FAB_COLORS[i % FAB_COLORS.length],
+    };
+  });
+}
+
+const CompareTab: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) => {
+  const [metric, setMetric] = useState<MetricKey>("avgSpeed");
+  const data = buildCompareData(fabStatsList);
+  const metricInfo = COMPARE_METRICS.find(m => m.key === metric)!;
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Metric selector */}
+      <div className="flex flex-wrap gap-1 mb-3 shrink-0">
+        {COMPARE_METRICS.map((m) => (
+          <button key={m.key}
+            onClick={() => setMetric(m.key)}
+            className={`px-2 py-1 rounded text-[11px] border transition-all ${
+              metric === m.key
+                ? "bg-accent-cyan text-white border-accent-cyan font-bold"
+                : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+            <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} />
+            <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} width={45}
+              tickFormatter={(v) => metricInfo.unit === "%" ? `${v}%` : String(v)} />
+            <Tooltip
+              contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: "#fff", fontWeight: "bold" }}
+              formatter={(value) => [`${value}${metricInfo.unit ? ` ${metricInfo.unit}` : ""}`, metricInfo.label]}
+            />
+            <Bar dataKey={metric} radius={[4, 4, 0, 0]} maxBarSize={60}>
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry._color as string} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Trend Tab (Line Chart with history buffer)
+// ============================================================================
+
+const TREND_METRICS = [
+  { key: "avgSpeed", label: "Avg Speed", unit: "m/s" },
+  { key: "movingRate", label: "Moving %", unit: "%" },
+  { key: "stoppedRate", label: "Stopped %", unit: "%" },
+  { key: "waitingRate", label: "Waiting %", unit: "%" },
+  { key: "collisionCount", label: "Collision", unit: "" },
+] as const;
+
+type TrendMetricKey = typeof TREND_METRICS[number]["key"];
+
+const MAX_HISTORY = 120; // 120 * 500ms = 60 seconds
+
+const TrendTab: React.FC<{
+  fabStatsList: FabStats[];
+  history: React.MutableRefObject<Map<TrendMetricKey, HistoryPoint[]>>;
+  elapsed: number;
+}> = ({ fabStatsList, history, elapsed }) => {
+  const [metric, setMetric] = useState<TrendMetricKey>("avgSpeed");
+  const metricInfo = TREND_METRICS.find(m => m.key === metric)!;
+  const data = history.current.get(metric) ?? [];
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Metric selector */}
+      <div className="flex flex-wrap gap-1 mb-3 shrink-0">
+        {TREND_METRICS.map((m) => (
+          <button key={m.key}
+            onClick={() => setMetric(m.key)}
+            className={`px-2 py-1 rounded text-[11px] border transition-all ${
+              metric === m.key
+                ? "bg-accent-purple text-white border-accent-purple font-bold"
+                : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+        <span className="text-[10px] text-gray-600 self-center ml-2">
+          {elapsed.toFixed(0)}s / {(MAX_HISTORY * 0.5).toFixed(0)}s window
+        </span>
+      </div>
+
+      {/* Chart */}
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+            <XAxis dataKey="t" tick={{ fill: "#9ca3af", fontSize: 10 }}
+              tickFormatter={(v) => `${v}s`} />
+            <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} width={45}
+              tickFormatter={(v) => metricInfo.unit === "%" ? `${v}%` : String(v)} />
+            <Tooltip
+              contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: "#fff", fontWeight: "bold" }}
+              labelFormatter={(v) => `${v}s`}
+              formatter={(value, name) => [`${(+(value ?? 0)).toFixed(2)}${metricInfo.unit ? ` ${metricInfo.unit}` : ""}`, name]}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {fabStatsList.map((fab, i) => (
+              <Line key={fab.fabId} type="monotone" dataKey={fab.fabId}
+                stroke={FAB_COLORS[i % FAB_COLORS.length]}
+                strokeWidth={2} dot={false} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // Main Panel
 // ============================================================================
+
+type TabKey = "cards" | "compare" | "trend";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "cards", label: "Cards" },
+  { key: "compare", label: "Compare" },
+  { key: "trend", label: "Trend" },
+];
 
 function getCenterDefaults() {
   const w = Math.round(window.innerWidth * 0.65);
@@ -300,8 +452,44 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const controller = useShmSimulatorStore((s) => s.controller);
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
   const [fabStatsList, setFabStatsList] = useState<FabStats[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [tab, setTab] = useState<TabKey>("cards");
   const [defaults] = useState(getCenterDefaults);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
+  const [elapsed, setElapsed] = useState(0);
+
+  // History buffer for trend
+  const historyRef = useRef<Map<TrendMetricKey, HistoryPoint[]>>(new Map(
+    TREND_METRICS.map(m => [m.key, []])
+  ));
+
+  const pushHistory = useCallback((statsList: FabStats[]) => {
+    const t = +((Date.now() - startTimeRef.current) / 1000).toFixed(1);
+    setElapsed(t);
+
+    for (const m of TREND_METRICS) {
+      const buf = historyRef.current.get(m.key)!;
+      const point: HistoryPoint = { t };
+      for (const fab of statsList) {
+        const n = fab.vehicleCount || 1;
+        if (m.key === "avgSpeed") point[fab.fabId] = +fab.avgSpeed.toFixed(2);
+        else if (m.key === "movingRate") point[fab.fabId] = +((fab.movingCount / n) * 100).toFixed(1);
+        else if (m.key === "stoppedRate") point[fab.fabId] = +((fab.stoppedCount / n) * 100).toFixed(1);
+        else if (m.key === "waitingRate") point[fab.fabId] = +((fab.trafficWaiting / n) * 100).toFixed(1);
+        else if (m.key === "collisionCount") point[fab.fabId] = fab.sensorCollisionCount;
+      }
+      buf.push(point);
+      if (buf.length > MAX_HISTORY) buf.shift();
+    }
+  }, []);
+
+  useEffect(() => {
+    startTimeRef.current = Date.now();
+    // Clear history on mount
+    for (const m of TREND_METRICS) {
+      historyRef.current.set(m.key, []);
+    }
+  }, []);
 
   useEffect(() => {
     const update = () => {
@@ -321,6 +509,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         stats.push(computeFabStats(fabId, fullData, assignment.vehicleRegion.offset, vehicleCount));
       }
       setFabStatsList(stats);
+      pushHistory(stats);
     };
 
     update();
@@ -328,9 +517,8 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       intervalRef.current = setInterval(update, 500);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [controller, isRunning]);
+  }, [controller, isRunning, pushHistory]);
 
-  // 전체 합산
   const total = fabStatsList.reduce(
     (acc, f) => ({
       vehicles: acc.vehicles + f.vehicleCount,
@@ -340,9 +528,25 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     { vehicles: 0, moving: 0, stopped: 0 },
   );
 
+  const tabBar = (
+    <div className="flex border-b border-gray-700 bg-gray-800/40 px-4">
+      {TABS.map(t => (
+        <button
+          key={t.key}
+          onClick={() => setTab(t.key)}
+          className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+            tab === t.key
+              ? "border-accent-cyan text-accent-cyan"
+              : "border-transparent text-gray-500 hover:text-gray-300"
+          }`}
+        >{t.label}</button>
+      ))}
+    </div>
+  );
+
   return (
     <FloatingPanel
-      title="Fab 실시간 통계"
+      title="Fab Stats"
       onClose={onClose}
       dragResizeOpts={{
         defaultX: defaults.x, defaultY: defaults.y,
@@ -359,17 +563,26 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         ) : undefined
       }
+      subHeader={tabBar}
     >
       {fabStatsList.length === 0 ? (
         <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
-          시뮬레이션이 실행중이지 않습니다.
+          No simulation running.
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          {fabStatsList.map((fab) => (
-            <FabCard key={fab.fabId} fab={fab} />
-          ))}
-        </div>
+        <>
+          {tab === "cards" && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              {fabStatsList.map((fab) => (
+                <FabCard key={fab.fabId} fab={fab} />
+              ))}
+            </div>
+          )}
+          {tab === "compare" && <CompareTab fabStatsList={fabStatsList} />}
+          {tab === "trend" && (
+            <TrendTab fabStatsList={fabStatsList} history={historyRef} elapsed={elapsed} />
+          )}
+        </>
       )}
     </FloatingPanel>
   );

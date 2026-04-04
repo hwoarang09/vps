@@ -1,7 +1,7 @@
 {
   "name": "vos_r3f",
   "private": true,
-  "version": "0.3.54",
+  "version": "0.3.55",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -34,6 +34,7 @@
     "r3f-perf": "^7.2.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.181.2",
