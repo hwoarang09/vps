@@ -1,7 +1,6 @@
 // components/react/menu/MenuLevel3.tsx
 import React from "react";
 import { useMenuStore } from "@store/ui/menuStore";
-import { useVehicleArrayStore } from "@store/vehicle/arrayMode/vehicleStore";
 import { MenuButton } from "./shared";
 import { menuLevel3Config } from "./data/menuLevel3Config";
 import { tooltipsByLevel } from "./data/tooltipConfig";
@@ -9,7 +8,6 @@ import { menuContainerVariants } from "./shared/menuStyles";
 
 const MenuLevel3: React.FC = () => {
   const { activeSubMenu, activeMainMenuCenterX, activeThirdMenu, setActiveThirdMenu, setRightPanelOpen } = useMenuStore();
-  const { transferMode, setTransferMode } = useVehicleArrayStore();
 
   if (!activeSubMenu) return null;
 
@@ -17,12 +15,8 @@ const MenuLevel3: React.FC = () => {
   if (!menuItems || menuItems.length === 0) return null;
 
   const handleClick = (item: (typeof menuItems)[number]) => {
-    if (item.transferMode !== undefined) {
-      setTransferMode(item.transferMode);
-    } else {
-      setActiveThirdMenu(item.id);
-      setRightPanelOpen(true);
-    }
+    setActiveThirdMenu(item.id);
+    setRightPanelOpen(true);
   };
 
   // Compute left position: same as LV2
@@ -40,8 +34,7 @@ const MenuLevel3: React.FC = () => {
     <div className="fixed bottom-[170px] z-50" style={positionStyle}>
       <div className={menuContainerVariants({ level: 2 })}>
         {menuItems.map((item) => {
-          const isActive = (item.transferMode !== undefined && transferMode === item.transferMode)
-            || (item.transferMode === undefined && activeThirdMenu === item.id);
+          const isActive = activeThirdMenu === item.id;
 
           return (
             <MenuButton

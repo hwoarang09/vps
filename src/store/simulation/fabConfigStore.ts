@@ -14,6 +14,7 @@ import {
   getCurveAcceleration,
   type GrantStrategy,
 } from "@/config/worker/simulationConfig";
+import { TransferMode } from "@/common/vehicle/initialize/constants";
 import {
   DEFAULT_SENSOR_PRESETS,
   type SensorPreset,
@@ -106,6 +107,7 @@ export interface FabConfigOverride {
   movement?: MovementConfigOverride;
   sensor?: SensorConfigOverride;
   routing?: Partial<RoutingConfig>;
+  transferMode?: TransferMode;
 }
 
 /**
@@ -143,6 +145,9 @@ interface FabConfigStore {
   // Routing 설정
   routingConfig: RoutingConfig;
 
+  // Transfer Mode 설정 (global default)
+  transferModeConfig: TransferMode;
+
   // 모달 상태
   isModalOpen: boolean;
 
@@ -153,6 +158,7 @@ interface FabConfigStore {
   clearAllOverrides: () => void;
   setModalOpen: (open: boolean) => void;
   setRoutingConfig: (config: Partial<RoutingConfig>) => void;
+  setTransferModeConfig: (mode: TransferMode) => void;
 
   // Getters
   getFabConfig: (fabIndex: number) => {
@@ -218,6 +224,8 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     rerouteInterval: 0,
   },
 
+  transferModeConfig: TransferMode.SIMPLE_LOOP,
+
   isModalOpen: false,
 
   setBaseConfig: (config) => {
@@ -257,6 +265,10 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     set((state) => ({
       routingConfig: { ...state.routingConfig, ...config },
     }));
+  },
+
+  setTransferModeConfig: (mode) => {
+    set({ transferModeConfig: mode });
   },
 
   /**

@@ -475,6 +475,25 @@ export class MultiWorkerController {
   /**
    * Update routing config. If fabId is given, only that fab is updated.
    */
+  setTransferMode(mode: TransferMode, fabId?: string): void {
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        const message: WorkerMessage = { type: "SET_TRANSFER_MODE", fabId, mode };
+        this.workers[workerIndex].worker.postMessage(message);
+      }
+    } else {
+      // Broadcast to all fabs
+      for (const [fId] of this.fabToWorkerMap) {
+        const workerIndex = this.fabToWorkerMap.get(fId);
+        if (workerIndex !== undefined && this.workers[workerIndex]) {
+          const message: WorkerMessage = { type: "SET_TRANSFER_MODE", fabId: fId, mode };
+          this.workers[workerIndex].worker.postMessage(message);
+        }
+      }
+    }
+  }
+
   setRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number): void {
     if (fabId) {
       const workerIndex = this.fabToWorkerMap.get(fabId);

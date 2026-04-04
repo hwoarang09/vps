@@ -66,12 +66,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       iconFn: () => pngIcon(imgBlueprint),
     },
     {
-      id: "operation-menu-7",
-      label: "Transfer",
-      shortcutLabel: "m",
-      iconFn: () => pngIcon(imgRouting),
-    },
-    {
       id: "operation-menu-8",
       label: "Params",
       shortcutLabel: "p",

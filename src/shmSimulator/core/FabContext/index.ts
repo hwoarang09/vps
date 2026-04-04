@@ -14,6 +14,7 @@ import { EngineStore } from "../EngineStore";
 import { SimLogger } from "@/logger";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
+import { TransferMode } from "@/common/vehicle/initialize/constants";
 import type { SimulationConfig, FabRenderOffset } from "../../types";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import { buildVehicleLoopMap, buildVehicleBayLoopMap } from "./loop-mode";
@@ -205,6 +206,10 @@ export class FabContext {
   /**
    * Update routing config at runtime (per-fab BPR params)
    */
+  setTransferMode(mode: TransferMode): void {
+    this.store.setTransferMode(mode);
+  }
+
   updateRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, rerouteInterval?: number): void {
     this.routingContext.config = {
       ...this.routingContext.config,

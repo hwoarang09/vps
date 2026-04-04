@@ -39,7 +39,6 @@ export const tooltipsByLevel: {
     "operation-menu-4": "알림 관리",
     "operation-menu-5": "운영 로그",
     "operation-menu-6": "레이아웃 불러오기",
-    "operation-menu-7": "반송 모드 설정",
     "operation-menu-8": "시뮬레이션 파라미터",
 
     "map-menu-1": "직선 도로 생성",
@@ -72,13 +71,9 @@ export const tooltipsByLevel: {
     "search-station": "스테이션 이름으로 검색",
   },
   3: {
-    "transfer-1": "단순 루프 반송",
-    "transfer-2": "순환 루프 반송",
-    "transfer-3": "랜덤 목적지 반송",
-    "transfer-4": "MQTT 외부 제어 반송",
-    "transfer-5": "자동 경로 배정 반송",
     "params-movement": "직선/곡선 속도·가속도 설정",
     "params-lock": "Lock 거리·전략 설정",
     "params-routing": "길찾기 가중치 전략",
+    "params-mode": "반송 모드 설정 (Global/Per-Fab)",
   },
 };

@@ -173,7 +173,12 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       handleRemoveFab(message.fabId);
       break;
     case "SET_TRANSFER_MODE":
-      // TODO: Implement per-fab transfer mode change
+      if (engine) {
+        const ctx = engine.getFabContext(message.fabId);
+        if (ctx) {
+          ctx.setTransferMode(message.mode);
+        }
+      }
       break;
     case "SET_RENDER_BUFFER":
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);

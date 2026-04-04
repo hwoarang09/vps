@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useMenuStore } from "@/store/ui/menuStore";
-import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { menuLevel2Config } from "../menu/data/menuLevel2Config";
 import { menuLevel3Config } from "../menu/data/menuLevel3Config";
@@ -137,14 +136,9 @@ const KeyboardShortcutHandler = () => {
         if (lv3Items && index < lv3Items.length) {
           e.preventDefault();
           const item = lv3Items[index];
-          // Transfer mode selection
-          if (item.transferMode !== undefined) {
-            useVehicleArrayStore.getState().setTransferMode(item.transferMode);
-          } else {
-            // Generic LV3: set third menu + open right panel
-            useMenuStore.getState().setActiveThirdMenu(item.id);
-            setRightPanelOpen(true);
-          }
+          // Generic LV3: set third menu + open right panel
+          useMenuStore.getState().setActiveThirdMenu(item.id);
+          setRightPanelOpen(true);
           return;
         }
       }

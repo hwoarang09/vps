@@ -16,7 +16,6 @@ import {
 } from "@/config/worker/simulationConfig";
 import { getWorkerCount } from "@/config/worker/workerConfig";
 import { getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
-import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { createFabGridSeparated } from "@/utils/fab/fabUtils";
 import { useCFGStore } from "@/store/system/cfgStore";
 
@@ -39,7 +38,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
   const edges = useEdgeStore((state) => state.edges);
   const nodes = useNodeStore((state) => state.nodes);
   const isPaused = useVehicleTestStore((state) => state.isPaused);
-  const transferMode = useVehicleArrayStore((state) => state.transferMode);
+  const transferMode = useFabConfigStore((state) => state.transferModeConfig);
   const stations = useStationStore((state) => state.stations);
 
   const {
