@@ -159,6 +159,8 @@ interface FabConfigStore {
   setModalOpen: (open: boolean) => void;
   setRoutingConfig: (config: Partial<RoutingConfig>) => void;
   setTransferModeConfig: (mode: TransferMode) => void;
+  /** baseConfig.movement 부분 업데이트 (Global 실시간 변경용) */
+  updateBaseMovement: (update: { linear?: Partial<BaseSimulationConfig['movement']['linear']>; curve?: Partial<BaseSimulationConfig['movement']['curve']> }) => void;
 
   // Getters
   getFabConfig: (fabIndex: number) => {
@@ -224,7 +226,7 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     rerouteInterval: 0,
   },
 
-  transferModeConfig: TransferMode.SIMPLE_LOOP,
+  transferModeConfig: TransferMode.LOOP,
 
   isModalOpen: false,
 
@@ -269,6 +271,18 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   setTransferModeConfig: (mode) => {
     set({ transferModeConfig: mode });
+  },
+
+  updateBaseMovement: (update) => {
+    set((state) => ({
+      baseConfig: {
+        ...state.baseConfig,
+        movement: {
+          linear: { ...state.baseConfig.movement.linear, ...update.linear },
+          curve: { ...state.baseConfig.movement.curve, ...update.curve },
+        },
+      },
+    }));
   },
 
   /**

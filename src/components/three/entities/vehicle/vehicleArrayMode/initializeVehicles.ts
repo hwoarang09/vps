@@ -110,7 +110,7 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
     store: createStoreAdapter(store),
     lockMgr: createLockMgrAdapter(),
     config: createVehicleInitConfig(),
-    transferMode: transferMode || TransferMode.SIMPLE_LOOP,
+    transferMode: transferMode || TransferMode.LOOP,
     updateSensorPoints: updateSensorPointsWrapper,
     // onVehicleCreated: removed to use batch update
   });

@@ -90,6 +90,8 @@ export interface SimulationConfig {
   curveAcceleration: number;
   approachMinSpeed: number;
   brakeMinSpeed: number;
+  /** 곡선 사전 감속에 사용할 감속도 (음수, m/s²) */
+  linearPreBrakeDeceleration?: number;
 
   // Spacing
   edgeMargin: number;
@@ -346,7 +348,9 @@ export type WorkerMessage =
   // Lock 정보 요청
   | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string }
   // Routing config 동적 변경 (fabId 생략 시 전체 fab에 적용)
-  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number };
+  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number }
+  // Movement config 동적 변경 (fabId 생략 시 전체 fab에 적용)
+  | { type: "SET_MOVEMENT_CONFIG"; fabId?: string; linearMaxSpeed?: number; linearAcceleration?: number; linearDeceleration?: number; preBrakeDeceleration?: number; curveMaxSpeed?: number; curveAcceleration?: number };
 
 // Worker -> Main Thread Messages
 export type MainMessage =

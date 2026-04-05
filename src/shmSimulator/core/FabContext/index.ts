@@ -16,6 +16,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
 import type { SimulationConfig, FabRenderOffset } from "../../types";
+import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
 import type { FabInitParams, SensorSectionOffsets } from "./types";
 import { buildVehicleLoopMap, buildVehicleBayLoopMap } from "./loop-mode";
 import { initializeFab, setupRenderBuffer } from "./initialization";
@@ -208,6 +209,37 @@ export class FabContext {
    */
   setTransferMode(mode: TransferMode): void {
     this.store.setTransferMode(mode);
+  }
+
+  updateMovementConfig(params: {
+    linearMaxSpeed?: number;
+    linearAcceleration?: number;
+    linearDeceleration?: number;
+    preBrakeDeceleration?: number;
+    curveMaxSpeed?: number;
+    curveAcceleration?: number;
+  }): void {
+    // config 객체 직접 갱신 → 다음 프레임부터 maxSpeed/curveAccel/preBrake 즉시 적용
+    if (params.linearMaxSpeed !== undefined) this.config.linearMaxSpeed = params.linearMaxSpeed;
+    if (params.linearAcceleration !== undefined) this.config.linearAcceleration = params.linearAcceleration;
+    if (params.linearDeceleration !== undefined) this.config.linearDeceleration = params.linearDeceleration;
+    if (params.preBrakeDeceleration !== undefined) this.config.linearPreBrakeDeceleration = params.preBrakeDeceleration;
+    if (params.curveMaxSpeed !== undefined) this.config.curveMaxSpeed = params.curveMaxSpeed;
+    if (params.curveAcceleration !== undefined) this.config.curveAcceleration = params.curveAcceleration;
+
+    // accel/decel은 차량별 Float32Array에 캐싱되어 있으므로 전체 차량 갱신
+    if (params.linearAcceleration !== undefined || params.linearDeceleration !== undefined) {
+      const data = this.vehicleDataArray.getData();
+      for (let i = 0; i < this.actualNumVehicles; i++) {
+        const ptr = i * VEHICLE_DATA_SIZE;
+        if (params.linearAcceleration !== undefined) {
+          data[ptr + MovementData.ACCELERATION] = params.linearAcceleration;
+        }
+        if (params.linearDeceleration !== undefined) {
+          data[ptr + MovementData.DECELERATION] = params.linearDeceleration;
+        }
+      }
+    }
   }
 
   updateRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, rerouteInterval?: number): void {

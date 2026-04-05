@@ -158,7 +158,7 @@ export class ShmSimulatorController {
         nodes: fabParams.nodes,
         vehicleConfigs: fabParams.vehicleConfigs ?? [],
         numVehicles: fabParams.numVehicles,
-        transferMode: fabParams.transferMode ?? TransferMode.SIMPLE_LOOP,
+        transferMode: fabParams.transferMode ?? TransferMode.LOOP,
         stationData: fabParams.stations as StationRawData[],
         bayLoopEntries: fabParams.bayLoopEntries,
       };
@@ -216,7 +216,7 @@ export class ShmSimulatorController {
       nodes: fabParams.nodes,
       vehicleConfigs: fabParams.vehicleConfigs ?? [],
       numVehicles: fabParams.numVehicles,
-      transferMode: fabParams.transferMode ?? TransferMode.SIMPLE_LOOP,
+      transferMode: fabParams.transferMode ?? TransferMode.LOOP,
       stationData: fabParams.stations as StationRawData[],
       bayLoopEntries: fabParams.bayLoopEntries,
     };

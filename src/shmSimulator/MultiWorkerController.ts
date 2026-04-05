@@ -281,7 +281,7 @@ export class MultiWorkerController {
       fabOffset: { fabIndex, col, row },
       vehicleConfigs: fabConfig.vehicleConfigs ?? [],
       numVehicles: fabConfig.numVehicles,
-      transferMode: fabConfig.transferMode ?? TransferMode.SIMPLE_LOOP,
+      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
       memoryAssignment: fabAssignment,
       bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
@@ -307,7 +307,7 @@ export class MultiWorkerController {
       fabOffset: undefined,
       vehicleConfigs: fabConfig.vehicleConfigs ?? [],
       numVehicles: fabConfig.numVehicles,
-      transferMode: fabConfig.transferMode ?? TransferMode.SIMPLE_LOOP,
+      transferMode: fabConfig.transferMode ?? TransferMode.LOOP,
       memoryAssignment: fabAssignment,
       bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
@@ -490,6 +490,27 @@ export class MultiWorkerController {
           const message: WorkerMessage = { type: "SET_TRANSFER_MODE", fabId: fId, mode };
           this.workers[workerIndex].worker.postMessage(message);
         }
+      }
+    }
+  }
+
+  setMovementConfig(params: {
+    linearMaxSpeed?: number;
+    linearAcceleration?: number;
+    linearDeceleration?: number;
+    preBrakeDeceleration?: number;
+    curveMaxSpeed?: number;
+    curveAcceleration?: number;
+  }, fabId?: string): void {
+    const msg: WorkerMessage = { type: "SET_MOVEMENT_CONFIG", fabId, ...params };
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        this.workers[workerIndex].worker.postMessage(msg);
+      }
+    } else {
+      for (const workerInfo of this.workers) {
+        workerInfo.worker.postMessage(msg);
       }
     }
   }

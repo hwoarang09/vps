@@ -204,6 +204,23 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
       }
       break;
+    case "SET_MOVEMENT_CONFIG":
+      if (engine) {
+        const params = {
+          linearMaxSpeed: message.linearMaxSpeed,
+          linearAcceleration: message.linearAcceleration,
+          linearDeceleration: message.linearDeceleration,
+          preBrakeDeceleration: message.preBrakeDeceleration,
+          curveMaxSpeed: message.curveMaxSpeed,
+          curveAcceleration: message.curveAcceleration,
+        };
+        if (message.fabId) {
+          engine.getFabContext(message.fabId)?.updateMovementConfig(params);
+        } else {
+          engine.forEachFab((ctx) => ctx.updateMovementConfig(params));
+        }
+      }
+      break;
     default:
   }
 };

@@ -7,12 +7,11 @@ import { panelCardVariants, panelTextVariants } from "../../shared/panelStyles";
 
 // ─── Mode definitions ───
 
-const MODE_LIST: { mode: TransferMode; label: string; tooltip: string; color: string }[] = [
-  { mode: TransferMode.SIMPLE_LOOP, label: "SIMPLE", tooltip: "edge 끝에서 다음 edge로 순환", color: "bg-blue-500 border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" },
-  { mode: TransferMode.LOOP, label: "LOOP", tooltip: "Bay Loop 경로를 반복 순환", color: "bg-green-500 border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" },
-  { mode: TransferMode.RANDOM, label: "RANDOM", tooltip: "Station 간 랜덤 반송", color: "bg-purple-500 border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" },
-  { mode: TransferMode.MQTT_CONTROL, label: "MQTT", tooltip: "외부 시스템에서 반송 명령 수신", color: "bg-amber-500 border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" },
-  { mode: TransferMode.AUTO_ROUTE, label: "AUTO", tooltip: "자동 경로 탐색 및 반송", color: "bg-cyan-500 border-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" },
+const MODE_LIST: { mode: TransferMode; label: string; desc: string; color: string }[] = [
+  { mode: TransferMode.LOOP, label: "LOOP", desc: "Bay Loop 경로를 반복 순환", color: "bg-green-500 border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" },
+  { mode: TransferMode.RANDOM, label: "RANDOM", desc: "Station 간 랜덤 반송", color: "bg-purple-500 border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" },
+  { mode: TransferMode.MQTT_CONTROL, label: "MQTT", desc: "외부 시스템에서 반송 명령 수신", color: "bg-amber-500 border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" },
+  { mode: TransferMode.AUTO_ROUTE, label: "AUTO", desc: "자동 경로 탐색 및 반송", color: "bg-cyan-500 border-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" },
 ];
 
 const ModeButton: React.FC<{
@@ -20,14 +19,14 @@ const ModeButton: React.FC<{
 }> = ({ item, active, onClick }) => (
   <button
     onClick={onClick}
-    title={item.tooltip}
-    className={`flex-1 px-2 py-2.5 text-xs font-bold border rounded transition-all ${
+    className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs border rounded transition-all ${
       active
         ? `${item.color} text-white`
         : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
     }`}
   >
-    {item.label}
+    <span className="font-bold w-[52px] shrink-0 text-left">{item.label}</span>
+    <span className={`text-[10px] ${active ? "text-white/80" : "text-gray-600"}`}>{item.desc}</span>
   </button>
 );
 
@@ -106,7 +105,7 @@ const ModeParamsPanel: React.FC = () => {
       {isGlobal && (
         <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
           <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER MODE</div>
-          <div className="flex gap-1 mt-2">
+          <div className="space-y-1 mt-2">
             {MODE_LIST.map((m) => (
               <ModeButton key={m.mode} item={m} active={transferModeConfig === m.mode}
                 onClick={() => updateGlobal(m.mode)} />
@@ -130,7 +129,7 @@ const ModeParamsPanel: React.FC = () => {
             )}
           </div>
           <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER MODE</div>
-          <div className="flex gap-1 mt-2">
+          <div className="space-y-1 mt-2">
             {MODE_LIST.map((m) => (
               <ModeButton key={m.mode} item={m} active={selectedEff === m.mode}
                 onClick={() => updateFab(selectedFabIndex, m.mode)} />
