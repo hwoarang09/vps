@@ -1,3 +1,73 @@
+# 반송 제어 시스템 구현 계획
+
+## 상태: UI 완료, Worker 로직 미구현
+
+## 개요
+- 반송 ON/OFF 토글 + 가동률/물량 제어 → Worker에 전달하여 실제 반송 비율 제어
+- OFF일 때: 모든 차량 LOOP만 순회
+- ON일 때: 설정된 모드(AUTO/MQTT)로 반송 명령 생성, idle 차량은 LOOP
+
+## 구현된 것 (UI Only)
+- `fabConfigStore.ts`: `transferEnabled`, `transferRateConfig` (mode, utilizationPercent, throughputPerHour)
+- `ModeParamsPanel.tsx`: 반송 ON/OFF 토글, AUTO/MQTT 모드 선택, 가동률/물량 입력
+
+## 구현할 것 (Worker 로직)
+
+### 1. transferEnabled → Worker 전달
+- `MultiWorkerController`에 `setTransferEnabled(enabled: boolean)` 추가
+- Worker message: `SET_TRANSFER_ENABLED`
+- `EngineStore`에 `transferEnabled: boolean` 추가
+- ON/OFF 토글 시 UI에서 controller 호출
+
+### 2. transferRateConfig → Worker 전달
+- `MultiWorkerController`에 `setTransferRateConfig(config)` 추가
+- Worker message: `SET_TRANSFER_RATE`
+- `EngineStore`에 `transferRateConfig` 추가
+
+### 3. AutoMgr 로직 변경 (핵심)
+현재: `autoMgr.update()` → idle 차량 발견 시 **무조건** 반송 할당
+변경:
+
+```
+autoMgr.update():
+  if (!transferEnabled):
+    return  ← 반송 OFF면 아무것도 안 함 (전부 LOOP)
+
+  if (rateMode === 'utilization'):
+    현재 반송 중인 차량 수 / 전체 차량 수 = 현재 가동률
+    현재 가동률 >= 목표% → 새 할당 skip
+    현재 가동률 < 목표% → 할당 진행
+
+  if (rateMode === 'throughput'):
+    목표 초당 반송 = throughputPerHour / 3600
+    이번 프레임에서 할당 가능한 수 = 누적 크레딧 기반
+    크레딧 부족 → skip
+    크레딧 있음 → 할당 + 크레딧 차감
+```
+
+### 4. idle 차량 LOOP 동작
+- `transferEnabled === false` 이거나, 반송 할당 대상이 아닌 차량 → LOOP
+- 현재 LOOP 로직: `processTransferQueue()` + `fillNextEdgesFromLoopMap()`
+- AutoMgr에서 반송 할당 안 된 차량은 기존 LOOP 흐름 그대로 유지
+
+### 5. 반송 완료 → LOOP 복귀
+- `hasPendingCommands(vehId) === false` (경로 소진) → idle 상태
+- idle + transferEnabled + 가동률/물량 여유 → 새 반송
+- idle + (OFF or 여유 없음) → LOOP 계속
+
+## 파일 변경 예상
+
+| 파일 | 변경 |
+|------|------|
+| `MultiWorkerController.ts` | setTransferEnabled, setTransferRateConfig 메서드 |
+| `worker.entry.ts` | SET_TRANSFER_ENABLED, SET_TRANSFER_RATE 핸들러 |
+| `EngineStore.ts` | transferEnabled, transferRateConfig 필드 |
+| `FabContext/index.ts` | autoMgr.update()에 enabled/rate 전달 |
+| `AutoMgr.ts` | 가동률/물량 기반 할당 로직 |
+| `ModeParamsPanel.tsx` | ON/OFF, rate 변경 시 controller 호출 |
+
+---
+
 # Log DB 개발 계획
 
 ## 상태: Phase 2 완료 (Phase 3 분석 스크립트 남음)

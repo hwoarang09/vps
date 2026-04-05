@@ -1,6 +1,43 @@
 # Transfer System - AI Context
 
-## 상태: Checkpoint targetEdge 추가 (2026-02-08)
+## 상태: 반송 정책 재설계 (2026-04-06)
+
+---
+
+## 0. 반송 정책 (핵심 개념)
+
+### 기본 원칙
+- **모든 차량의 기본 동작은 LOOP** (자기 bay 순회)
+- 반송 명령이 내려오면 해당 차량이 반송 수행
+- 반송 완료 후 다음 명령이 없으면 → 다시 LOOP 복귀
+
+### 반송 명령 생성 방식 (택 1)
+| 모드 | 설명 |
+|------|------|
+| `AUTO` | 시뮬레이터가 자동 반송 생성 (랜덤 목적지 + Dijkstra 경로) |
+| `MQTT` | 외부 시스템(MCS 등)에서 반송 명령 수신 |
+
+### 반송량 제어 (택 1)
+| 방식 | 설명 | 예시 |
+|------|------|------|
+| **가동률 기반** | 전체 차량 중 반송 중인 비율을 목표치로 유지 | "차량의 70%가 반송하도록" → 시스템이 반송 속도 자동 조절 |
+| **물량 기반** | 시간당 반송 건수를 고정 | "시간당 8000건" → idle 차량에 순차 할당, 차량 부족하면 대기 |
+
+### 시뮬레이션 목적
+- 주어진 맵에서 **시간당 N건 반송 시 최적 차량 대수**는?
+- 같은 조건에서 **BPR/라우팅 로직 변경 시 처리량 변화**는?
+- 차량 1대 = 약 2억 → 과잉 투입 방지가 핵심
+
+### 차량 상태 흐름
+```
+시뮬 시작
+  └─ 모든 차량 → LOOP (bay 순회)
+       └─ 반송 명령 할당 (idle 차량 중 선택)
+            └─ 반송 수행 (출발 → 도착)
+                 └─ 반송 완료
+                      ├─ 다음 명령 있음 → 반송 수행
+                      └─ 다음 명령 없음 → LOOP 복귀
+```
 
 ---
 
@@ -232,12 +269,21 @@ MOVE_SLOW: 1 << 4      // 0x10 - 감속 구간 (현재 미사용)
 
 ## 8. TransferMode별 동작
 
-| 모드 | pathBuffer | Checkpoint | NEXT_EDGE 방식 |
-|------|-----------|------------|----------------|
-| `AUTO_ROUTE` | O | O | checkpoint 기반 (initNextEdgesForStart + handleMovePrepare) |
-| `MQTT_CONTROL` | O | O | checkpoint 기반 (동일) |
-| `LOOP` | X | X | fillNextEdgesFromLoopMap (loopMap 기반) |
-| `RANDOM` | X | X | getNextEdgeRandomly (랜덤) |
+### 차량 상태별 동작 매핑
+| 차량 상태 | 동작 | pathBuffer | Checkpoint | NEXT_EDGE 방식 |
+|-----------|------|-----------|------------|----------------|
+| **IDLE (반송 없음)** | LOOP | X | X | fillNextEdgesFromLoopMap (loopMap 기반) |
+| **반송 중 (AUTO)** | AUTO_ROUTE | O | O | checkpoint 기반 (initNextEdgesForStart + handleMovePrepare) |
+| **반송 중 (MQTT)** | MQTT_CONTROL | O | O | checkpoint 기반 (동일) |
+| **반송 중 (RANDOM)** | RANDOM | O | O | checkpoint 기반 (동일) |
+
+### 반송 명령 생성 모드 (전역/per-fab 설정)
+| 모드 | 명령 생성 주체 | 설명 |
+|------|---------------|------|
+| `AUTO_ROUTE` | AutoMgr | idle 차량에 랜덤 목적지 반송 자동 생성 (Dijkstra 경로) |
+| `MQTT_CONTROL` | 외부 시스템 | MCS 등에서 MQTT로 반송 명령 수신 |
+
+> **Note:** LOOP은 더 이상 독립 모드가 아님. 모든 차량의 기본 동작이며, 반송 명령이 없을 때 자동으로 수행됨.
 
 ---
 

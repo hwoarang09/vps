@@ -135,6 +135,20 @@ export interface BaseSimulationConfig {
   };
 }
 
+/**
+ * 반송량 제어 방식
+ */
+export type TransferRateMode = 'utilization' | 'throughput';
+
+export interface TransferRateConfig {
+  /** 제어 방식: 가동률 기반 or 물량 기반 */
+  mode: TransferRateMode;
+  /** 가동률 기반: 반송 중인 차량 비율 (0~100%) */
+  utilizationPercent: number;
+  /** 물량 기반: 시간당 반송 건수 */
+  throughputPerHour: number;
+}
+
 interface FabConfigStore {
   // 기본 설정 (readonly, simulationConfig에서 로드)
   baseConfig: BaseSimulationConfig;
@@ -145,8 +159,14 @@ interface FabConfigStore {
   // Routing 설정
   routingConfig: RoutingConfig;
 
+  // Transfer ON/OFF
+  transferEnabled: boolean;
+
   // Transfer Mode 설정 (global default)
   transferModeConfig: TransferMode;
+
+  // Transfer Rate 설정
+  transferRateConfig: TransferRateConfig;
 
   // 모달 상태
   isModalOpen: boolean;
@@ -158,7 +178,9 @@ interface FabConfigStore {
   clearAllOverrides: () => void;
   setModalOpen: (open: boolean) => void;
   setRoutingConfig: (config: Partial<RoutingConfig>) => void;
+  setTransferEnabled: (enabled: boolean) => void;
   setTransferModeConfig: (mode: TransferMode) => void;
+  setTransferRateConfig: (config: Partial<TransferRateConfig>) => void;
   /** baseConfig.movement 부분 업데이트 (Global 실시간 변경용) */
   updateBaseMovement: (update: { linear?: Partial<BaseSimulationConfig['movement']['linear']>; curve?: Partial<BaseSimulationConfig['movement']['curve']> }) => void;
 
@@ -226,7 +248,15 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     rerouteInterval: 0,
   },
 
-  transferModeConfig: TransferMode.LOOP,
+  transferEnabled: false,
+
+  transferModeConfig: TransferMode.AUTO_ROUTE,
+
+  transferRateConfig: {
+    mode: 'utilization',
+    utilizationPercent: 50,
+    throughputPerHour: 4000,
+  },
 
   isModalOpen: false,
 
@@ -269,8 +299,18 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     }));
   },
 
+  setTransferEnabled: (enabled) => {
+    set({ transferEnabled: enabled });
+  },
+
   setTransferModeConfig: (mode) => {
     set({ transferModeConfig: mode });
+  },
+
+  setTransferRateConfig: (config) => {
+    set((state) => ({
+      transferRateConfig: { ...state.transferRateConfig, ...config },
+    }));
   },
 
   updateBaseMovement: (update) => {
