@@ -1,70 +1,227 @@
 # 반송 제어 시스템 구현 계획
 
-## 상태: UI 완료, Worker 로직 미구현
+## 상태: Phase 1 완료 (UI + Worker 전달), Phase 2 AutoMgr 로직 미구현
 
 ## 개요
-- 반송 ON/OFF 토글 + 가동률/물량 제어 → Worker에 전달하여 실제 반송 비율 제어
-- OFF일 때: 모든 차량 LOOP만 순회
-- ON일 때: 설정된 모드(AUTO/MQTT)로 반송 명령 생성, idle 차량은 LOOP
+- 모든 차량은 기본적으로 **LOOP** (bay 내 edge1↔edge2 왕복)를 돈다
+- 반송 ON이면: **LOOP 중인 차량을 중간에 빼서** 반송 경로로 전환
+- 반송 완료 후: 다시 LOOP로 복귀
+- 가동률/물량 설정에 따라 **동시 반송 차량 수를 제어**
 
-## 구현된 것 (UI Only)
-- `fabConfigStore.ts`: `transferEnabled`, `transferRateConfig` (mode, utilizationPercent, throughputPerHour)
-- `ModeParamsPanel.tsx`: 반송 ON/OFF 토글, AUTO/MQTT 모드 선택, 가동률/물량 입력
+## 핵심 개념: LOOP 차량의 반송 전환
 
-## 구현할 것 (Worker 로직)
-
-### 1. transferEnabled → Worker 전달
-- `MultiWorkerController`에 `setTransferEnabled(enabled: boolean)` 추가
-- Worker message: `SET_TRANSFER_ENABLED`
-- `EngineStore`에 `transferEnabled: boolean` 추가
-- ON/OFF 토글 시 UI에서 controller 호출
-
-### 2. transferRateConfig → Worker 전달
-- `MultiWorkerController`에 `setTransferRateConfig(config)` 추가
-- Worker message: `SET_TRANSFER_RATE`
-- `EngineStore`에 `transferRateConfig` 추가
-
-### 3. AutoMgr 로직 변경 (핵심)
-현재: `autoMgr.update()` → idle 차량 발견 시 **무조건** 반송 할당
-변경:
-
+### 차량 상태 구분
 ```
-autoMgr.update():
-  if (!transferEnabled):
-    return  ← 반송 OFF면 아무것도 안 함 (전부 LOOP)
-
-  if (rateMode === 'utilization'):
-    현재 반송 중인 차량 수 / 전체 차량 수 = 현재 가동률
-    현재 가동률 >= 목표% → 새 할당 skip
-    현재 가동률 < 목표% → 할당 진행
-
-  if (rateMode === 'throughput'):
-    목표 초당 반송 = throughputPerHour / 3600
-    이번 프레임에서 할당 가능한 수 = 누적 크레딧 기반
-    크레딧 부족 → skip
-    크레딧 있음 → 할당 + 크레딧 차감
+차량의 pending 데이터 구조:
+  1. reservedNextEdges — SHM NEXT_EDGE 슬롯에 이미 써놓은 edge (lock 잡혀있을 수 있음)
+  2. pathBuffer        — AutoMgr가 넣어준 미래 경로 (아직 reservedNextEdges로 안 옮김)
 ```
 
-### 4. idle 차량 LOOP 동작
-- `transferEnabled === false` 이거나, 반송 할당 대상이 아닌 차량 → LOOP
-- 현재 LOOP 로직: `processTransferQueue()` + `fillNextEdgesFromLoopMap()`
-- AutoMgr에서 반송 할당 안 된 차량은 기존 LOOP 흐름 그대로 유지
+### 전환 가능 조건
+- **reservedNextEdges만 남음** → 소진 대기. 곧 idle이 되므로 그때 반송 할당
+- **pathBuffer만 남음** → **교체 가능!** lock 미신청 상태이므로 안전
+- **둘 다 남음** → reservedNextEdges 소진 후 pathBuffer 시점에 교체
+- **둘 다 없음 (idle)** → 즉시 반송 할당 가능
 
-### 5. 반송 완료 → LOOP 복귀
-- `hasPendingCommands(vehId) === false` (경로 소진) → idle 상태
-- idle + transferEnabled + 가동률/물량 여유 → 새 반송
-- idle + (OFF or 여유 없음) → LOOP 계속
+### 안전한 교체 방법
+pathBuffer 교체 시 `applyPathToVehicle()`을 그대로 사용:
+1. `cancelObsoleteLocks()` — 새 경로에 없는 기존 lock 취소
+2. pathBuffer 덮어쓰기
+3. `buildCheckpoints()` — 새 경로 기반 checkpoint 재생성 (lock request 포함)
+4. `initNextEdgesForStart()` — 첫 NEXT_EDGE 채움
 
-## 파일 변경 예상
+reservedNextEdges는 **절대 건드리지 않음** → 자연스럽게 소진 후 pathBuffer(= 반송 경로)로 전환
 
-| 파일 | 변경 |
+## Phase 1: UI + Worker 전달 ✅ 완료
+
+### 구현 완료 항목
+- `fabConfigStore.ts`: `transferEnabled`, `transferRateConfig` (global + per-fab override)
+- `FabConfigOverride`: `transferEnabled?`, `transferRateConfig?` 추가
+- `ModeParamsPanel.tsx`: Global/Per-fab ON/OFF 토글, 가동률/물량 입력, controller 호출 연결
+- `types.ts`: `SET_TRANSFER_ENABLED`, `SET_TRANSFER_RATE` 메시지 타입
+- `MultiWorkerController.ts`: `setTransferEnabled()`, `setTransferRate()` (fabId optional)
+- `worker.entry.ts`: 두 메시지 핸들러 (per-fab or broadcast via `forEachFab`)
+- `EngineStore.ts`: `transferEnabled`, `transferRateMode`, `transferUtilizationPercent`, `transferThroughputPerHour` 필드 + setter
+- `FabContext/index.ts`: `setTransferEnabled()`, `setTransferRate()` 래퍼
+
+### 데이터 흐름 (완성)
+```
+UI (ModeParamsPanel)
+  → fabConfigStore (Zustand)
+  → controller.setTransferEnabled(enabled, fabId?)
+  → controller.setTransferRate(rateMode, util%, tph, fabId?)
+  → Worker postMessage
+  → worker.entry.ts handler
+  → FabContext.setTransferEnabled() / setTransferRate()
+  → EngineStore 필드 업데이트
+```
+
+## Phase 2: AutoMgr 반송 제어 로직 (구현 예정)
+
+### 2-1. update() 컨텍스트 확장
+
+현재 `autoMgr.update(ctx)` 파라미터:
+```ts
+ctx: {
+  mode: TransferMode;
+  numVehicles: number;
+  vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
+}
+```
+
+추가할 파라미터:
+```ts
+ctx: {
+  ...기존,
+  transferEnabled: boolean;           // EngineStore에서
+  transferRateMode: 'utilization' | 'throughput';
+  transferUtilizationPercent: number; // 0~100
+  transferThroughputPerHour: number;
+  dt: number;                         // 프레임 delta time (throughput 크레딧 계산용)
+}
+```
+
+### 2-2. 차량 상태 추적 (AutoMgr 내부 필드 추가)
+
+```ts
+// 반송 중인 차량 Set (반송 할당 시 add, 반송 완료 시 delete)
+private readonly transferringVehicles: Set<number> = new Set();
+
+// throughput 크레딧 (물량 모드용)
+private throughputCredit: number = 0;
+```
+
+### 2-3. update() 메인 흐름 변경
+
+```
+autoMgr.update(ctx):
+  // === 0. 반송 완료 체크 (매 프레임) ===
+  for (vehId of transferringVehicles):
+    if (!hasPendingCommands(vehId)):
+      transferringVehicles.delete(vehId)  // 반송 완료 → LOOP로 자동 복귀
+
+  // === 1. mode가 LOOP/AUTO_ROUTE가 아니면 return ===
+  if (mode !== AUTO_ROUTE && mode !== LOOP) return;
+
+  // === 2. 기존 LOOP 처리 (항상 실행) ===
+  //   idle 차량 (pending 없음) + transferring이 아닌 차량 → LOOP 경로 할당
+  for (각 차량, round-robin):
+    if (transferringVehicles.has(vehId)) continue;  // 반송 중이면 skip
+    if (hasPendingCommands(vehId)) continue;         // 아직 이동 중이면 skip
+    → checkAndAssignLoopRoute()                      // LOOP 경로 할당
+
+  // === 3. 반송 할당 (transferEnabled일 때만) ===
+  if (!transferEnabled) return;
+
+  canAssign = shouldAssignTransfer()  // 가동률/물량 체크
+  if (!canAssign) return;
+
+  // LOOP 중인 차량 중 반송 대상 선택
+  for (각 차량, round-robin):
+    if (transferringVehicles.has(vehId)) continue;  // 이미 반송 중
+    if (!isSwappable(vehId)) continue;               // 교체 불가 (reservedNextEdges만 남은 경우 등)
+
+    → pathBuffer clear + assignRandomDestination()
+    → transferringVehicles.add(vehId)
+    → canAssign 재체크, 불가면 break
+```
+
+### 2-4. shouldAssignTransfer() — 가동률/물량 판정
+
+```ts
+private shouldAssignTransfer(ctx): boolean {
+  const transferCount = this.transferringVehicles.size;
+  const totalVehicles = ctx.numVehicles;
+
+  if (ctx.transferRateMode === 'utilization') {
+    // 현재 가동률 = 반송 중 차량 / 전체 차량
+    const currentUtil = (transferCount / totalVehicles) * 100;
+    return currentUtil < ctx.transferUtilizationPercent;
+  }
+
+  if (ctx.transferRateMode === 'throughput') {
+    // 크레딧 누적: 매 프레임 dt * (목표/3600) 만큼 증가
+    this.throughputCredit += ctx.dt * (ctx.transferThroughputPerHour / 3600);
+    // 크레딧 상한 = 10 (버스트 제한)
+    this.throughputCredit = Math.min(this.throughputCredit, 10);
+    return this.throughputCredit >= 1;
+  }
+
+  return false;
+}
+```
+
+### 2-5. isSwappable() — 교체 가능 판정
+
+```ts
+private isSwappable(vehId: number, transferMgr: TransferMgr): boolean {
+  // reservedNextEdges가 남아있으면 교체 불가 (lock 잡혀있을 수 있음)
+  const reserved = transferMgr.getReservedNextEdges(vehId);  // 새 메서드 필요
+  if (reserved && reserved.length > 0) return false;
+
+  // pathBuffer만 남아있거나, 둘 다 없으면 교체 가능
+  return true;
+}
+```
+
+**주의**: `TransferMgr`에 `getReservedNextEdges(vehId)` 또는 `hasReservedNextEdges(vehId)` 메서드 추가 필요
+
+### 2-6. 반송 할당 시 pathBuffer 교체
+
+```ts
+// 1. 기존 pathBuffer clear
+transferMgr.clearVehiclePath(vehId);  // 새 메서드 필요 (pathBuffer만 0으로)
+
+// 2. assignRandomDestination() 호출
+//    → 내부에서 applyPathToVehicle() → cancelObsoleteLocks() + pathBuffer 덮어쓰기 + checkpoint 재생성
+this.assignRandomDestination(vehId, currentEdgeIdx, ...);
+
+// 3. 반송 중 등록
+this.transferringVehicles.add(vehId);
+
+// 4. throughput 크레딧 차감 (물량 모드)
+if (ctx.transferRateMode === 'throughput') {
+  this.throughputCredit -= 1;
+}
+```
+
+### 2-7. 반송 완료 → LOOP 복귀
+
+별도 처리 불필요:
+- 반송 경로 소진 → `hasPendingCommands() === false`
+- update() 첫 부분에서 `transferringVehicles.delete(vehId)`
+- 다음 프레임에서 LOOP 할당 로직이 이 차량을 잡아서 LOOP 경로 할당
+
+## Phase 2 파일 변경 계획
+
+| 파일 | 변경 내용 |
+|------|-----------|
+| `AutoMgr.ts` | transferringVehicles Set, throughputCredit, shouldAssignTransfer(), isSwappable(), update() 흐름 변경 |
+| `TransferMgr/index.ts` | `hasReservedNextEdges(vehId)` 메서드 추가, `clearVehiclePath(vehId)` 메서드 추가 |
+| `FabContext/simulation-step.ts` | autoMgr.update() 호출 시 transferEnabled, rateMode, util%, tph, dt 전달 |
+
+## Phase 2 구현 순서
+
+| Step | 내용 | 파일 |
+|------|------|------|
+| 1 | TransferMgr에 `hasReservedNextEdges()`, `clearVehiclePath()` 추가 | TransferMgr/index.ts |
+| 2 | AutoMgr 내부 필드 추가 (transferringVehicles, throughputCredit) | AutoMgr.ts |
+| 3 | AutoMgr.update() ctx 타입 확장 | AutoMgr.ts |
+| 4 | AutoMgr.update() 메인 흐름 재구성 (LOOP 먼저 → 반송 판정 → 교체) | AutoMgr.ts |
+| 5 | shouldAssignTransfer(), isSwappable() 구현 | AutoMgr.ts |
+| 6 | simulation-step.ts에서 EngineStore 값 전달 | simulation-step.ts |
+| 7 | 통합 테스트 (LOOP→반송→LOOP 전환 확인) | - |
+
+## 엣지 케이스
+
+| 상황 | 처리 |
 |------|------|
-| `MultiWorkerController.ts` | setTransferEnabled, setTransferRateConfig 메서드 |
-| `worker.entry.ts` | SET_TRANSFER_ENABLED, SET_TRANSFER_RATE 핸들러 |
-| `EngineStore.ts` | transferEnabled, transferRateConfig 필드 |
-| `FabContext/index.ts` | autoMgr.update()에 enabled/rate 전달 |
-| `AutoMgr.ts` | 가동률/물량 기반 할당 로직 |
-| `ModeParamsPanel.tsx` | ON/OFF, rate 변경 시 controller 호출 |
+| 반송 중 transferEnabled OFF | 현재 반송은 완료까지 유지, 새 반송만 안 내림 |
+| 가동률 50%→10% 변경 | 이미 반송 중인 차량은 완료까지 유지, 초과분이 자연 소진될 때까지 새 할당 안 함 |
+| stations 없음 | assignRandomDestination() return false → 반송 불가, LOOP 유지 |
+| 차량 1대뿐 | 가동률 100% = 1대 반송, 50% = 0대 (반올림 정책 결정 필요) |
+| pathBuffer도 reservedNextEdges도 없는 idle | 바로 반송 할당 가능 (isSwappable = true) |
+| MQTT 모드 | AUTO_ROUTE와 별개 — 외부 명령 기반이므로 가동률/물량 제어 대상 아님 (추후 결정) |
 
 ---
 

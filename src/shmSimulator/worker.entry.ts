@@ -180,6 +180,26 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
       }
       break;
+    case "SET_TRANSFER_ENABLED":
+      if (engine) {
+        if (message.fabId) {
+          const ctx = engine.getFabContext(message.fabId);
+          if (ctx) ctx.setTransferEnabled(message.enabled);
+        } else {
+          engine.forEachFab((ctx) => ctx.setTransferEnabled(message.enabled));
+        }
+      }
+      break;
+    case "SET_TRANSFER_RATE":
+      if (engine) {
+        if (message.fabId) {
+          const ctx = engine.getFabContext(message.fabId);
+          if (ctx) ctx.setTransferRate(message.rateMode, message.utilizationPercent, message.throughputPerHour);
+        } else {
+          engine.forEachFab((ctx) => ctx.setTransferRate(message.rateMode, message.utilizationPercent, message.throughputPerHour));
+        }
+      }
+      break;
     case "SET_RENDER_BUFFER":
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
       break;

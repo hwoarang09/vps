@@ -108,6 +108,8 @@ export interface FabConfigOverride {
   sensor?: SensorConfigOverride;
   routing?: Partial<RoutingConfig>;
   transferMode?: TransferMode;
+  transferEnabled?: boolean;
+  transferRateConfig?: Partial<TransferRateConfig>;
 }
 
 /**

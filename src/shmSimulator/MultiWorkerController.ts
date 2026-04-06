@@ -494,6 +494,40 @@ export class MultiWorkerController {
     }
   }
 
+  setTransferEnabled(enabled: boolean, fabId?: string): void {
+    const msg: WorkerMessage = { type: "SET_TRANSFER_ENABLED", fabId, enabled };
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        this.workers[workerIndex].worker.postMessage(msg);
+      }
+    } else {
+      for (const [fId] of this.fabToWorkerMap) {
+        const workerIndex = this.fabToWorkerMap.get(fId);
+        if (workerIndex !== undefined && this.workers[workerIndex]) {
+          this.workers[workerIndex].worker.postMessage({ ...msg, fabId: fId });
+        }
+      }
+    }
+  }
+
+  setTransferRate(rateMode: 'utilization' | 'throughput', utilizationPercent?: number, throughputPerHour?: number, fabId?: string): void {
+    const msg: WorkerMessage = { type: "SET_TRANSFER_RATE", fabId, rateMode, utilizationPercent, throughputPerHour };
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        this.workers[workerIndex].worker.postMessage(msg);
+      }
+    } else {
+      for (const [fId] of this.fabToWorkerMap) {
+        const workerIndex = this.fabToWorkerMap.get(fId);
+        if (workerIndex !== undefined && this.workers[workerIndex]) {
+          this.workers[workerIndex].worker.postMessage({ ...msg, fabId: fId });
+        }
+      }
+    }
+  }
+
   setMovementConfig(params: {
     linearMaxSpeed?: number;
     linearAcceleration?: number;

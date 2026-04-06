@@ -338,6 +338,8 @@ export type WorkerMessage =
   | { type: "DISPOSE" }
   | { type: "COMMAND"; /** Unique identifier for the fab */ fabId: string; payload: unknown }
   | { type: "SET_TRANSFER_MODE"; /** Unique identifier for the fab */ fabId: string; mode: TransferMode }
+  | { type: "SET_TRANSFER_ENABLED"; fabId?: string; enabled: boolean }
+  | { type: "SET_TRANSFER_RATE"; fabId?: string; rateMode: 'utilization' | 'throughput'; utilizationPercent?: number; throughputPerHour?: number }
   // 렌더 버퍼 설정 (초기화 후 한 번만)
   | { type: "SET_RENDER_BUFFER"; vehicleRenderBuffer: SharedArrayBuffer; sensorRenderBuffer: SharedArrayBuffer; fabAssignments: FabRenderAssignment[]; totalVehicles: number }
   // Fab 동적 관리

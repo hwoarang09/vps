@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useFabConfigStore, type FabConfigOverride, type TransferRateMode } from "@/store/simulation/fabConfigStore";
+import { useFabConfigStore, type FabConfigOverride, type TransferRateMode, type TransferRateConfig } from "@/store/simulation/fabConfigStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useFabStore } from "@/store/map/fabStore";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
@@ -83,6 +83,49 @@ const NumberInput: React.FC<{
   );
 };
 
+const OnOffButton: React.FC<{ enabled: boolean; onClick: () => void }> = ({ enabled, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`px-3 py-1 text-xs font-bold rounded border transition-all ${
+      enabled
+        ? "bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_8px_rgba(34,197,94,0.3)]"
+        : "bg-panel-bg-solid border-panel-border text-gray-500 hover:text-gray-300"
+    }`}
+  >
+    {enabled ? "ON" : "OFF"}
+  </button>
+);
+
+// ─── Transfer Rate Config Section ───
+
+const TransferRateSection: React.FC<{
+  rateConfig: TransferRateConfig;
+  onChangeMode: (mode: TransferRateMode) => void;
+  onChangeValue: (update: Partial<TransferRateConfig>) => void;
+}> = ({ rateConfig, onChangeMode, onChangeValue }) => (
+  <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
+    <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER RATE</div>
+    <div className="mt-2 space-y-2">
+      <RateToggle active={rateConfig.mode} onChange={onChangeMode} />
+      {rateConfig.mode === "utilization" ? (
+        <NumberInput
+          label="목표 가동률"
+          value={rateConfig.utilizationPercent}
+          unit="%"
+          onChange={(v) => onChangeValue({ utilizationPercent: Math.max(0, Math.min(100, v)) })}
+        />
+      ) : (
+        <NumberInput
+          label="반송량"
+          value={rateConfig.throughputPerHour}
+          unit="/h"
+          onChange={(v) => onChangeValue({ throughputPerHour: Math.max(0, v) })}
+        />
+      )}
+    </div>
+  </div>
+);
+
 // ─── Main Panel ───
 
 const GLOBAL = "global";
@@ -98,49 +141,113 @@ const ModeParamsPanel: React.FC = () => {
   const { fabs } = useFabStore();
   const [selected, setSelected] = useState<string>(GLOBAL);
 
-  const pushToWorker = (fabId: string | undefined, mode: TransferMode) => {
-    if (!controller) return;
-    controller.setTransferMode(mode, fabId);
+  // === Worker push helpers ===
+  const pushMode = (fabId: string | undefined, mode: TransferMode) => {
+    controller?.setTransferMode(mode, fabId);
+  };
+  const pushEnabled = (fabId: string | undefined, enabled: boolean) => {
+    controller?.setTransferEnabled(enabled, fabId);
+  };
+  const pushRate = (fabId: string | undefined, rateConfig: TransferRateConfig) => {
+    controller?.setTransferRate(
+      rateConfig.mode,
+      rateConfig.utilizationPercent,
+      rateConfig.throughputPerHour,
+      fabId,
+    );
   };
 
-  // === Global ===
-  const updateGlobal = (mode: TransferMode) => {
+  // === Global handlers ===
+  const handleGlobalEnabled = (enabled: boolean) => {
+    setTransferEnabled(enabled);
+    pushEnabled(undefined, enabled);
+  };
+  const handleGlobalMode = (mode: TransferMode) => {
     setTransferModeConfig(mode);
-    pushToWorker(undefined, mode);
+    pushMode(undefined, mode);
+  };
+  const handleGlobalRateMode = (mode: TransferRateMode) => {
+    const updated = { ...transferRateConfig, mode };
+    setTransferRateConfig({ mode });
+    pushRate(undefined, updated);
+  };
+  const handleGlobalRateValue = (update: Partial<TransferRateConfig>) => {
+    const updated = { ...transferRateConfig, ...update };
+    setTransferRateConfig(update);
+    pushRate(undefined, updated);
   };
 
-  // === Per-fab ===
-  const getEffective = (fabIndex: number): TransferMode => {
+  // === Per-fab helpers ===
+  const getFabId = (fabIndex: number): string | undefined => {
+    return controller?.getFabIds()[fabIndex];
+  };
+  const getEffectiveMode = (fabIndex: number): TransferMode => {
     return fabOverrides[fabIndex]?.transferMode ?? transferModeConfig;
   };
-
-  const updateFab = (fabIndex: number, mode: TransferMode) => {
-    const override: FabConfigOverride = JSON.parse(JSON.stringify(fabOverrides[fabIndex] || {}));
-    override.transferMode = mode;
-    setFabOverride(fabIndex, override);
-
-    if (controller) {
-      const fabId = controller.getFabIds()[fabIndex];
-      if (fabId) pushToWorker(fabId, mode);
-    }
+  const getEffectiveEnabled = (fabIndex: number): boolean => {
+    return fabOverrides[fabIndex]?.transferEnabled ?? transferEnabled;
+  };
+  const getEffectiveRate = (fabIndex: number): TransferRateConfig => {
+    const ovr = fabOverrides[fabIndex]?.transferRateConfig;
+    return {
+      mode: ovr?.mode ?? transferRateConfig.mode,
+      utilizationPercent: ovr?.utilizationPercent ?? transferRateConfig.utilizationPercent,
+      throughputPerHour: ovr?.throughputPerHour ?? transferRateConfig.throughputPerHour,
+    };
   };
 
-  const clearFab = (fabIndex: number) => {
+  const updateFabOverride = (fabIndex: number, patch: Partial<FabConfigOverride>) => {
+    const override: FabConfigOverride = JSON.parse(JSON.stringify(fabOverrides[fabIndex] || {}));
+    Object.assign(override, patch);
+    setFabOverride(fabIndex, override);
+  };
+
+  const handleFabEnabled = (fabIndex: number, enabled: boolean) => {
+    updateFabOverride(fabIndex, { transferEnabled: enabled });
+    const fabId = getFabId(fabIndex);
+    if (fabId) pushEnabled(fabId, enabled);
+  };
+  const handleFabMode = (fabIndex: number, mode: TransferMode) => {
+    updateFabOverride(fabIndex, { transferMode: mode });
+    const fabId = getFabId(fabIndex);
+    if (fabId) pushMode(fabId, mode);
+  };
+  const handleFabRateMode = (fabIndex: number, rateMode: TransferRateMode) => {
+    const current = getEffectiveRate(fabIndex);
+    const updated = { ...current, mode: rateMode };
+    updateFabOverride(fabIndex, { transferRateConfig: updated });
+    const fabId = getFabId(fabIndex);
+    if (fabId) pushRate(fabId, updated);
+  };
+  const handleFabRateValue = (fabIndex: number, update: Partial<TransferRateConfig>) => {
+    const current = getEffectiveRate(fabIndex);
+    const updated = { ...current, ...update };
+    updateFabOverride(fabIndex, { transferRateConfig: updated });
+    const fabId = getFabId(fabIndex);
+    if (fabId) pushRate(fabId, updated);
+  };
+  const clearFabOverrides = (fabIndex: number) => {
     const override: FabConfigOverride = JSON.parse(JSON.stringify(fabOverrides[fabIndex] || {}));
     delete override.transferMode;
+    delete override.transferEnabled;
+    delete override.transferRateConfig;
     setFabOverride(fabIndex, override);
-    if (controller) {
-      const fabId = controller.getFabIds()[fabIndex];
-      if (fabId) pushToWorker(fabId, transferModeConfig);
+    const fabId = getFabId(fabIndex);
+    if (fabId) {
+      pushMode(fabId, transferModeConfig);
+      pushEnabled(fabId, transferEnabled);
+      pushRate(fabId, transferRateConfig);
     }
   };
 
   const isGlobal = selected === GLOBAL;
   const selectedFabIndex = isGlobal ? null : Number(selected);
-  const selectedEff = selectedFabIndex !== null ? getEffective(selectedFabIndex) : null;
-  const hasOverride = selectedFabIndex !== null && fabOverrides[selectedFabIndex]?.transferMode !== undefined;
+  const hasFabOverride = (fi: number) =>
+    fabOverrides[fi]?.transferMode !== undefined ||
+    fabOverrides[fi]?.transferEnabled !== undefined ||
+    fabOverrides[fi]?.transferRateConfig !== undefined;
 
-  // ─── Mode selector (shared between global / per-fab) ───
+  // ─── Mode selector (shared) ───
   const renderModeSelector = (activeMode: TransferMode, onSelect: (m: TransferMode) => void) => (
     <>
       <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER MODE</div>
@@ -155,20 +262,11 @@ const ModeParamsPanel: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      {/* ─── 반송 ON/OFF ─── */}
+      {/* ─── Global 반송 ON/OFF ─── */}
       <div className={`${panelCardVariants({ variant: transferEnabled ? "highlight" : "default", padding: "sm" })}`}>
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-white">반송</span>
-          <button
-            onClick={() => setTransferEnabled(!transferEnabled)}
-            className={`px-3 py-1 text-xs font-bold rounded border transition-all ${
-              transferEnabled
-                ? "bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_8px_rgba(34,197,94,0.3)]"
-                : "bg-panel-bg-solid border-panel-border text-gray-500 hover:text-gray-300"
-            }`}
-          >
-            {transferEnabled ? "ON" : "OFF"}
-          </button>
+          <span className="text-xs font-bold text-white">반송 (Global)</span>
+          <OnOffButton enabled={transferEnabled} onClick={() => handleGlobalEnabled(!transferEnabled)} />
         </div>
         <div className="text-[10px] text-gray-500 mt-1">
           {transferEnabled
@@ -177,98 +275,95 @@ const ModeParamsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── 반송 OFF면 여기서 끝 ─── */}
-      {!transferEnabled ? null : (
+      {/* ─── Fab Selector ─── */}
+      <select
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        className="w-full px-3 py-2 rounded text-sm font-bold bg-panel-bg-solid text-white border border-accent-cyan/50 focus:border-accent-cyan focus:outline-none"
+      >
+        <option value={GLOBAL}>Global</option>
+        {fabs.map((fab) => (
+          <option key={fab.fabIndex} value={String(fab.fabIndex)}>
+            Fab {fab.fabIndex}{hasFabOverride(fab.fabIndex) ? " *" : ""}
+          </option>
+        ))}
+      </select>
+
+      {/* ─── Global Settings ─── */}
+      {isGlobal && (
         <>
-          {/* ─── Fab Selector ─── */}
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="w-full px-3 py-2 rounded text-sm font-bold bg-panel-bg-solid text-white border border-accent-cyan/50 focus:border-accent-cyan focus:outline-none"
-          >
-            <option value={GLOBAL}>Global</option>
+          <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
+            {renderModeSelector(transferModeConfig, handleGlobalMode)}
+          </div>
+          <TransferRateSection
+            rateConfig={transferRateConfig}
+            onChangeMode={handleGlobalRateMode}
+            onChangeValue={handleGlobalRateValue}
+          />
+        </>
+      )}
+
+      {/* ─── Per-Fab Settings ─── */}
+      {!isGlobal && selectedFabIndex !== null && (
+        <div className={`${panelCardVariants({ variant: hasFabOverride(selectedFabIndex) ? "highlight" : "default", padding: "sm" })} space-y-3`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-accent-orange">Fab {selectedFabIndex}</span>
+            {hasFabOverride(selectedFabIndex) ? (
+              <button onClick={() => clearFabOverrides(selectedFabIndex)}
+                className="text-[10px] text-gray-500 hover:text-gray-300 border border-gray-600 px-1.5 py-0.5 rounded">
+                reset to global
+              </button>
+            ) : (
+              <span className="text-[10px] text-gray-600">Global 설정 사용 중</span>
+            )}
+          </div>
+
+          {/* Per-fab ON/OFF */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400">반송</span>
+            <OnOffButton
+              enabled={getEffectiveEnabled(selectedFabIndex)}
+              onClick={() => handleFabEnabled(selectedFabIndex, !getEffectiveEnabled(selectedFabIndex))}
+            />
+          </div>
+
+          {/* Per-fab Mode */}
+          {renderModeSelector(getEffectiveMode(selectedFabIndex), (m) => handleFabMode(selectedFabIndex, m))}
+
+          {/* Per-fab Rate */}
+          <TransferRateSection
+            rateConfig={getEffectiveRate(selectedFabIndex)}
+            onChangeMode={(m) => handleFabRateMode(selectedFabIndex, m)}
+            onChangeValue={(u) => handleFabRateValue(selectedFabIndex, u)}
+          />
+        </div>
+      )}
+
+      {/* ─── Override Summary ─── */}
+      {fabs.some(f => hasFabOverride(f.fabIndex)) && (
+        <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
+          <div className={panelTextVariants({ variant: "muted", size: "xs" })}>OVERRIDE SUMMARY</div>
+          <div className="mt-1 space-y-0.5">
             {fabs.map((fab) => {
-              const hasOvr = fabOverrides[fab.fabIndex]?.transferMode !== undefined;
+              if (!hasFabOverride(fab.fabIndex)) return null;
+              const ovr = fabOverrides[fab.fabIndex];
+              const parts: string[] = [];
+              if (ovr?.transferEnabled !== undefined) parts.push(ovr.transferEnabled ? "ON" : "OFF");
+              if (ovr?.transferMode) parts.push(ovr.transferMode);
+              if (ovr?.transferRateConfig) {
+                const r = ovr.transferRateConfig;
+                if (r.mode === "utilization" && r.utilizationPercent !== undefined) parts.push(`${r.utilizationPercent}%`);
+                else if (r.mode === "throughput" && r.throughputPerHour !== undefined) parts.push(`${r.throughputPerHour}/h`);
+              }
               return (
-                <option key={fab.fabIndex} value={String(fab.fabIndex)}>
-                  Fab {fab.fabIndex}{hasOvr ? " *" : ""}
-                </option>
+                <div key={fab.fabIndex} className="flex justify-between text-[10px]">
+                  <span className="text-accent-orange">Fab {fab.fabIndex}</span>
+                  <span className="text-gray-400 font-mono">{parts.join(" · ")}</span>
+                </div>
               );
             })}
-          </select>
-
-          {/* ─── Global ─── */}
-          {isGlobal && (
-            <>
-              <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
-                {renderModeSelector(transferModeConfig, updateGlobal)}
-              </div>
-
-              {/* ─── Transfer Rate ─── */}
-              <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
-                <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER RATE</div>
-                <div className="mt-2 space-y-2">
-                  <RateToggle
-                    active={transferRateConfig.mode}
-                    onChange={(mode) => setTransferRateConfig({ mode })}
-                  />
-                  {transferRateConfig.mode === "utilization" ? (
-                    <NumberInput
-                      label="목표 가동률"
-                      value={transferRateConfig.utilizationPercent}
-                      unit="%"
-                      onChange={(v) => setTransferRateConfig({ utilizationPercent: Math.max(0, Math.min(100, v)) })}
-                    />
-                  ) : (
-                    <NumberInput
-                      label="반송량"
-                      value={transferRateConfig.throughputPerHour}
-                      unit="/h"
-                      onChange={(v) => setTransferRateConfig({ throughputPerHour: Math.max(0, v) })}
-                    />
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ─── Per-Fab ─── */}
-          {!isGlobal && selectedFabIndex !== null && selectedEff !== null && (
-            <div className={`${panelCardVariants({ variant: hasOverride ? "highlight" : "default", padding: "sm" })}`}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-accent-orange">Fab {selectedFabIndex}</span>
-                {hasOverride ? (
-                  <button onClick={() => clearFab(selectedFabIndex)}
-                    className="text-[10px] text-gray-500 hover:text-gray-300 border border-gray-600 px-1.5 py-0.5 rounded">
-                    reset to global
-                  </button>
-                ) : (
-                  <span className="text-[10px] text-gray-600">Global 설정 사용 중</span>
-                )}
-              </div>
-              {renderModeSelector(selectedEff, (m) => updateFab(selectedFabIndex, m))}
-            </div>
-          )}
-
-          {/* ─── Override Summary ─── */}
-          {fabs.some(f => fabOverrides[f.fabIndex]?.transferMode !== undefined) && (
-            <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
-              <div className={panelTextVariants({ variant: "muted", size: "xs" })}>OVERRIDE SUMMARY</div>
-              <div className="mt-1 space-y-0.5">
-                {fabs.map((fab) => {
-                  const tm = fabOverrides[fab.fabIndex]?.transferMode;
-                  if (tm === undefined) return null;
-                  return (
-                    <div key={fab.fabIndex} className="flex justify-between text-[10px]">
-                      <span className="text-accent-orange">Fab {fab.fabIndex}</span>
-                      <span className="text-gray-400 font-mono">{tm}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );

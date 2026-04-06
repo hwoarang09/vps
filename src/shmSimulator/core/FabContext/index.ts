@@ -211,6 +211,14 @@ export class FabContext {
     this.store.setTransferMode(mode);
   }
 
+  setTransferEnabled(enabled: boolean): void {
+    this.store.setTransferEnabled(enabled);
+  }
+
+  setTransferRate(rateMode: 'utilization' | 'throughput', utilizationPercent?: number, throughputPerHour?: number): void {
+    this.store.setTransferRate(rateMode, utilizationPercent, throughputPerHour);
+  }
+
   updateMovementConfig(params: {
     linearMaxSpeed?: number;
     linearAcceleration?: number;

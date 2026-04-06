@@ -13,6 +13,10 @@ export class EngineStore implements IVehicleStore {
 
   public actualNumVehicles: number = 0;
   public transferMode: TransferMode = TransferMode.LOOP;
+  public transferEnabled: boolean = false;
+  public transferRateMode: 'utilization' | 'throughput' = 'utilization';
+  public transferUtilizationPercent: number = 50;
+  public transferThroughputPerHour: number = 4000;
 
   /**
    * @param maxVehicles - 최대 vehicle 수
@@ -67,6 +71,16 @@ export class EngineStore implements IVehicleStore {
 
   setTransferMode(mode: TransferMode): void {
     this.transferMode = mode;
+  }
+
+  setTransferEnabled(enabled: boolean): void {
+    this.transferEnabled = enabled;
+  }
+
+  setTransferRate(rateMode: 'utilization' | 'throughput', utilizationPercent?: number, throughputPerHour?: number): void {
+    this.transferRateMode = rateMode;
+    if (utilizationPercent !== undefined) this.transferUtilizationPercent = utilizationPercent;
+    if (throughputPerHour !== undefined) this.transferThroughputPerHour = throughputPerHour;
   }
 
   // === Vehicle Position/Rotation ===
