@@ -3,7 +3,9 @@ import {
   VEHICLE_DATA_SIZE,
   MovementData,
   TransferMode,
-  LogicData
+  LogicData,
+  JobState,
+  OrderData,
 } from "@/common/vehicle/initialize/constants";
 import { TransferMgr, VehicleCommand, IVehicleDataArray, VehicleBayLoop } from "./TransferMgr";
 import { findShortestPath, type RoutingContext } from "./Dijkstra";
@@ -43,6 +45,24 @@ export type OnPathFoundCallback = (
   pathLen: number
 ) => void;
 
+/** AutoMgr.update() context */
+export interface AutoMgrUpdateContext {
+  mode: TransferMode;
+  numVehicles: number;
+  vehicleDataArray: IVehicleDataArray;
+  edgeArray: Edge[];
+  edgeNameToIndex: Map<string, number>;
+  transferMgr: TransferMgr;
+  lockMgr?: LockMgr;
+  vehicleBayLoopMap?: Map<number, VehicleBayLoop>;
+  // Transfer control (Phase 2)
+  transferEnabled: boolean;
+  transferRateMode: 'utilization' | 'throughput';
+  transferUtilizationPercent: number;
+  transferThroughputPerHour: number;
+  dt: number;
+}
+
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
@@ -51,6 +71,11 @@ export class AutoMgr {
   private nextVehicleIndex = 0;
   // Path finding count in current frame
   private pathFindCountThisFrame = 0;
+
+  // --- Transfer control (Phase 2) ---
+  private readonly transferringVehicles: Set<number> = new Set();
+  private throughputCredit = 0;
+  private nextOrderId = 1;
   /** Path 발견 콜백 (SimLogger 연결용) */
   onPathFound?: OnPathFoundCallback;
   /** Per-fab routing context for BPR cost */
@@ -92,41 +117,46 @@ export class AutoMgr {
 
   /**
    * Main update loop for Auto Routing.
-   * Checks if vehicles need new destinations and assigns them.
-   * Uses round-robin and per-frame limit to prevent performance spikes.
+   * Flow: transfer completion check → LOOP assign → transfer assign
    */
-  update(ctx: {
-    mode: TransferMode;
-    numVehicles: number;
-    vehicleDataArray: IVehicleDataArray;
-    edgeArray: Edge[];
-    edgeNameToIndex: Map<string, number>;
-    transferMgr: TransferMgr;
-    lockMgr?: LockMgr;
-    vehicleBayLoopMap?: Map<number, VehicleBayLoop>;
-  }) {
-    const { mode, numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap } = ctx;
+  update(ctx: AutoMgrUpdateContext) {
+    const {
+      mode, numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex,
+      transferMgr, lockMgr, vehicleBayLoopMap,
+      transferEnabled,
+    } = ctx;
     if (mode !== TransferMode.AUTO_ROUTE && mode !== TransferMode.LOOP) return;
     if (numVehicles === 0) return;
 
     // Reset per-frame counter
     this.pathFindCountThisFrame = 0;
 
-    // Reroute check: detect edge transitions and trigger reroute if interval is set
+    // === 0. Transfer completion check ===
+    for (const vehId of this.transferringVehicles) {
+      if (!transferMgr.hasPendingCommands(vehId)) {
+        this.transferringVehicles.delete(vehId);
+        // Clear order data + set IDLE
+        const data = vehicleDataArray.getData();
+        const ptr = vehId * VEHICLE_DATA_SIZE;
+        data[ptr + LogicData.JOB_STATE] = JobState.IDLE;
+        data[ptr + OrderData.ORDER_ID] = 0;
+        data[ptr + OrderData.ORDER_SRC_STATION] = 0;
+        data[ptr + OrderData.ORDER_DEST_STATION] = 0;
+      }
+    }
+
+    // Reroute check
     if (this.rerouteInterval > 0) {
       this.checkReroutes(numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
     }
 
-    // Process vehicles in round-robin fashion with limit
+    // === 1. LOOP assign (always — skip transferring vehicles) ===
     const startIndex = this.nextVehicleIndex;
-
     for (let i = 0; i < numVehicles; i++) {
-      // Check if we've hit the per-frame limit
-      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) {
-        break;
-      }
-
+      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
       const vehId = (startIndex + i) % numVehicles;
+
+      if (this.transferringVehicles.has(vehId)) continue;
 
       let didAssign = false;
       if (mode === TransferMode.LOOP && vehicleBayLoopMap) {
@@ -139,11 +169,84 @@ export class AutoMgr {
         );
       }
 
-      // Update next starting index for round-robin
       if (didAssign) {
         this.nextVehicleIndex = (vehId + 1) % numVehicles;
       }
     }
+
+    // === 2. Transfer assign (only when enabled) ===
+    if (!transferEnabled) return;
+    if (this.stations.length === 0) return;
+
+    for (let i = 0; i < numVehicles; i++) {
+      if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
+      if (!this.shouldAssignTransfer(ctx)) break;
+
+      const vehId = (startIndex + i) % numVehicles;
+      if (this.transferringVehicles.has(vehId)) continue;
+      if (!this.isSwappable(vehId, transferMgr)) continue;
+
+      const data = vehicleDataArray.getData();
+      const ptr = vehId * VEHICLE_DATA_SIZE;
+      const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+      if (currentEdgeIdx < 1) continue;
+
+      // Pick random src & dest stations (different from each other)
+      const srcStationIdx = Math.floor(Math.random() * this.stations.length);
+      let destStationIdx = Math.floor(Math.random() * (this.stations.length - 1));
+      if (destStationIdx >= srcStationIdx) destStationIdx++;
+
+      // Clear existing path and assign transfer route (to random station)
+      transferMgr.clearVehiclePath(vehId);
+      if (lockMgr) {
+        this.cancelObsoleteLocks(vehId, [], edgeArray, lockMgr);
+      }
+
+      const assigned = this.assignRandomDestination(
+        vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+      );
+      if (!assigned) continue;
+
+      // Set transfer state
+      this.transferringVehicles.add(vehId);
+      const orderId = this.nextOrderId++;
+      data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_LOAD;
+      data[ptr + OrderData.ORDER_ID] = orderId;
+      data[ptr + OrderData.ORDER_SRC_STATION] = srcStationIdx + 1;  // 1-based
+      data[ptr + OrderData.ORDER_DEST_STATION] = destStationIdx + 1; // 1-based
+
+      // Deduct throughput credit
+      if (ctx.transferRateMode === 'throughput') {
+        this.throughputCredit -= 1;
+      }
+    }
+  }
+
+  /**
+   * 가동률/물량 기준으로 반송 할당 가능 여부 판정
+   */
+  private shouldAssignTransfer(ctx: AutoMgrUpdateContext): boolean {
+    const transferCount = this.transferringVehicles.size;
+
+    if (ctx.transferRateMode === 'utilization') {
+      const currentUtil = (transferCount / ctx.numVehicles) * 100;
+      return currentUtil < ctx.transferUtilizationPercent;
+    }
+
+    if (ctx.transferRateMode === 'throughput') {
+      this.throughputCredit += ctx.dt * (ctx.transferThroughputPerHour / 3600);
+      this.throughputCredit = Math.min(this.throughputCredit, 10); // burst cap
+      return this.throughputCredit >= 1;
+    }
+
+    return false;
+  }
+
+  /**
+   * 교체 가능 판정: reservedNextEdges가 남아있으면 lock 잡혀있을 수 있으므로 불가
+   */
+  private isSwappable(vehId: number, transferMgr: TransferMgr): boolean {
+    return !transferMgr.hasReservedNextEdges(vehId);
   }
 
   /**
@@ -389,6 +492,8 @@ export class AutoMgr {
   dispose(): void {
     this.stations = [];
     this.vehicleDestinations.clear();
+    this.transferringVehicles.clear();
+    this.throughputCredit = 0;
   }
 
   private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {

@@ -306,6 +306,10 @@ export class FabContext {
       store: {
         moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
         transferMode: this.store.transferMode,
+        transferEnabled: this.store.transferEnabled,
+        transferRateMode: this.store.transferRateMode,
+        transferUtilizationPercent: this.store.transferUtilizationPercent,
+        transferThroughputPerHour: this.store.transferThroughputPerHour,
       },
       simLogger: this.simLogger,
       edgeEnterTimes: this.edgeEnterTimes,

@@ -33,6 +33,18 @@
  * | CURRENT_CP_RATIO   | Float32 | 28     | Logic      | Current checkpoint ratio (0.0~1.0)    |
  * | CURRENT_CP_FLAGS   | Float32 | 29     | Logic      | Current checkpoint flags (mutable)    |
  * | CURRENT_CP_TARGET  | Float32 | 30     | Logic      | Current checkpoint targetEdge (1-based)|
+ * | ORDER_ID           | Float32 | 31     | Order      | Transfer order ID (0 = none)          |
+ * | ORDER_SRC_STATION  | Float32 | 32     | Order      | Pickup station index (0 = none)       |
+ * | ORDER_DEST_STATION | Float32 | 33     | Order      | Drop station index (0 = none)         |
+ * | ORDER_DEST_EDGE    | Float32 | 34     | Order      | Target edge ID for order              |
+ * | MOVE_TO_PICKUP_TS  | Float32 | 35     | Order      | Timestamp: start move to pickup       |
+ * | PICKUP_ARRIVE_TS   | Float32 | 36     | Order      | Timestamp: arrive at pickup           |
+ * | PICKUP_START_TS    | Float32 | 37     | Order      | Timestamp: start pickup               |
+ * | PICKUP_DONE_TS     | Float32 | 38     | Order      | Timestamp: pickup done                |
+ * | MOVE_TO_DROP_TS    | Float32 | 39     | Order      | Timestamp: start move to drop         |
+ * | DROP_ARRIVE_TS     | Float32 | 40     | Order      | Timestamp: arrive at drop             |
+ * | DROP_START_TS      | Float32 | 41     | Order      | Timestamp: start drop                 |
+ * | DROP_DONE_TS       | Float32 | 42     | Order      | Timestamp: drop done                  |
  */
 
 // ============================================================================
@@ -216,6 +228,8 @@ export const LogicData = {
 let _oPtr = _lPtr;
 export const OrderData = {
   ORDER_ID: _oPtr++,
+  ORDER_SRC_STATION: _oPtr++,
+  ORDER_DEST_STATION: _oPtr++,
   ORDER_DEST_EDGE: _oPtr++,
   MOVE_TO_PICKUP_TS: _oPtr++,
   PICKUP_ARRIVE_TS: _oPtr++,

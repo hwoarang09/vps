@@ -42,6 +42,10 @@ export interface SimulationStepContext {
   store: {
     moveVehicleToEdge: (vehId: number, edgeIndex: number) => void;
     transferMode: TransferMode;
+    transferEnabled: boolean;
+    transferRateMode: 'utilization' | 'throughput';
+    transferUtilizationPercent: number;
+    transferThroughputPerHour: number;
   };
   // Logger
   simLogger: SimLogger | null;
@@ -186,6 +190,11 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     transferMgr,
     lockMgr,
     vehicleBayLoopMap,
+    transferEnabled: store.transferEnabled,
+    transferRateMode: store.transferRateMode,
+    transferUtilizationPercent: store.transferUtilizationPercent,
+    transferThroughputPerHour: store.transferThroughputPerHour,
+    dt: clampedDelta,
   });
 
   // 5. Replay Snapshot (0.5초 주기 + 속도 0 전환 감지)

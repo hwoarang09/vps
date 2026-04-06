@@ -101,6 +101,14 @@ export class TransferMgr {
     return false;
   }
 
+  /**
+   * Check if the vehicle has reserved next edges (lock may be held).
+   */
+  hasReservedNextEdges(vehId: number): boolean {
+    const queue = this.reservedNextEdges.get(vehId);
+    return !!queue && queue.length > 0;
+  }
+
   clearQueue() {
     this.transferQueue = [];
     this.reservedNextEdges.clear();
