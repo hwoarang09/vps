@@ -408,14 +408,87 @@ LOOP#1 nextEdgeIdx=0 nextState=1                  ← 영구 stuck (nextState=1=
 
 ---
 
-## 14. 다음 작업
+## 14. 반송 실행 흐름 (2단계 Pickup/Dropoff)
+
+### 설계 원칙 (2026-04-09 확정)
+
+- "대기"는 아무것도 안 하는 게 아니라 **픽업/드롭 명령 실행** 중인 것
+- 타이머는 `setTimeout` 대신 **update() 루프 내 tick 기반**으로 처리
+  - 이유: setTimeout은 wall clock 기준이고 차량이 많을 때 타이머 이벤트 적체 위험
+  - AutoMgr 내부 `Map<vehId, dwellEndTime>` 하나로 모든 차량 관리
+- "도착" 감지는 콜백/메시지 없이 **`hasPendingCommands() === false`** 체크로 처리
+
+### 상태 전이 흐름
+
+```
+LOOP
+  └─ [반송 할당]
+       └─ MOVE_TO_LOAD     ← src station으로 Dijkstra 경로 할당
+            └─ hasPendingCommands() === false (도착 감지)
+                 └─ LOADING         ← JOB_STATE 변경 + dwellEndTime 기록
+                      └─ now >= dwellEndTime (픽업 완료)
+                           └─ MOVE_TO_UNLOAD  ← dest station으로 경로 할당
+                                └─ hasPendingCommands() === false
+                                     └─ IDLE → LOOP 복귀
+```
+
+### update() 루프 내 처리 순서
+
+```
+=== 0. 반송 완료 체크 ===
+for vehId in transferringVehicles:
+  if JOB_STATE === MOVE_TO_LOAD  && !hasPendingCommands(vehId):
+    → JOB_STATE = LOADING
+    → dwellTimers[vehId] = now + dwellMs
+
+  if JOB_STATE === LOADING && now >= dwellTimers[vehId]:
+    → dest station으로 경로 할당 (assignDestination)
+    → JOB_STATE = MOVE_TO_UNLOAD
+
+  if JOB_STATE === MOVE_TO_UNLOAD && !hasPendingCommands(vehId):
+    → JOB_STATE = IDLE
+    → ORDER_ID/SRC/DEST = 0
+    → transferringVehicles.delete(vehId)
+    // 다음 프레임 LOOP 할당 로직이 잡아감
+
+=== 1. LOOP 할당 (transferring 아닌 차량만) ===
+=== 2. 반송 신규 할당 ===
+```
+
+### AutoMgr 추가 필드
+
+```ts
+private readonly dwellTimers: Map<number, number> = new Map(); // vehId → endTime (ms)
+private dwellMs = 7000; // 기본 7초, 설정 가능
+```
+
+### 2단계 경로 할당 구조
+
+- 1단계 (src): `assignStationRoute(vehId, srcStation)` → `MOVE_TO_LOAD`
+- 2단계 (dest): `assignStationRoute(vehId, destStation)` → `MOVE_TO_UNLOAD`
+- 두 단계 모두 내부적으로 `applyPathToVehicle()` 사용 (동일 로직)
+
+### OrderData SHM 필드 용도
+
+| 필드 | 값 | 시점 |
+|------|-----|------|
+| `ORDER_ID` | 1-based 주문 번호 | 반송 할당 시 |
+| `ORDER_SRC_STATION` | src station index (1-based) | 반송 할당 시 |
+| `ORDER_DEST_STATION` | dest station index (1-based) | 반송 할당 시 |
+| `ORDER_DEST_EDGE` | dest edge index (1-based) | 반송 할당 시 |
+
+---
+
+## 15. 다음 작업
 
 ### 미완료
 - [x] FabContext에서 LockMgr.init() 호출 시 pathBuffer 전달 (2026-02-08 수정 완료)
 - [x] Checkpoint에 targetEdge 추가 → handleMovePrepare 추측 제거 (2026-02-08 수정 완료)
+- [x] AutoMgr Phase 2: transferringVehicles, shouldAssignTransfer, isSwappable (0.3.59)
+- [ ] **AutoMgr 2단계 반송 실행: LOADING dwell 타이머 + MOVE_TO_UNLOAD 경로 할당** ← 현재 작업
 - [ ] initNextEdgesForStart에서 시작 위치 이전 checkpoint 선처리 (짧은 edge 1프레임 지연 방지)
 - [ ] LOCK_REQUEST/LOCK_WAIT에서 TARGET_RATIO 설정 (grant 못 받으면 waitRatio, 받으면 1.0)
-- [ ] 실제 동작 테스트 (단일 차량, merge 통과, 다중 차량 lock 경쟁)
+- [ ] 실제 동작 테스트 (LOOP→반송→LOOP 전환 확인)
 
 ### 성능 최적화 (우선순위 낮음)
 - [ ] Ratio 정수 변환 (Float → Int 0~10000)

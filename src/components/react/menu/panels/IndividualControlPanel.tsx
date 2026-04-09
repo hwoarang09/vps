@@ -12,7 +12,7 @@ import {
     SensorData as ShmSensorData,
     LogicData as ShmLogicData,
 } from "@/common/vehicle/memory/VehicleDataArrayBase";
-import { NEXT_EDGE_COUNT } from "@/common/vehicle/initialize/constants";
+import { NEXT_EDGE_COUNT, OrderData } from "@/common/vehicle/initialize/constants";
 import type { Edge as FullEdge } from "@/types/edge";
 import { EdgeType } from "@/types";
 import { PresetIndex } from "@/store/vehicle/arrayMode/sensorPresets";
@@ -95,6 +95,10 @@ const readShmVehicleData = (data: Float32Array, vehicleIndex: number) => {
             stopReason: data[ptr + ShmLogicData.STOP_REASON],
             destinationEdge: data[ptr + ShmLogicData.DESTINATION_EDGE],
             pathRemaining: data[ptr + ShmLogicData.PATH_REMAINING],
+            jobState: data[ptr + ShmLogicData.JOB_STATE],
+            orderId: data[ptr + OrderData.ORDER_ID],
+            orderSrcStation: data[ptr + OrderData.ORDER_SRC_STATION],
+            orderDestStation: data[ptr + OrderData.ORDER_DEST_STATION],
         },
     };
 };
@@ -161,11 +165,22 @@ const findNearestMergeWait = (
 };
 
 // ─── Tab: Basic ─────────────────────────────────────────
+const JOB_STATE_LABEL: Record<number, { label: string; color: string }> = {
+    0: { label: "INIT",          color: "text-gray-500" },
+    1: { label: "IDLE",          color: "text-gray-400" },
+    2: { label: "MOVE_TO_LOAD",  color: "text-blue-400" },
+    3: { label: "LOADING",       color: "text-yellow-400 animate-pulse" },
+    4: { label: "MOVE_TO_UNLOAD",color: "text-purple-400" },
+    5: { label: "UNLOADING",     color: "text-yellow-400 animate-pulse" },
+    6: { label: "ERROR",         color: "text-red-500 font-bold" },
+};
+
 const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
     const {
         vehicleId, vehicleIndex, status, velocity, acceleration, deceleration,
         currentEdgeName, currentEdgeIdx, currentEdge, nextEdgeName, nextEdgeIdx,
         destinationEdgeName, pathRemaining, isShmMode, trafficState, stopReasons,
+        jobState, orderId, orderSrcStation, orderDestStation,
     } = data;
 
     const railType = currentEdge
@@ -210,6 +225,28 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
                     <span>Destination</span>
                     <span className="font-mono">{destinationEdgeName} (Hops: {pathRemaining?.toFixed(0)})</span>
                 </div>
+            )}
+
+            {isShmMode && (
+                <>
+                    <div className="my-1.5 border-t border-panel-border" />
+                    <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Job State</span>
+                        <span className={`font-mono font-bold ${(JOB_STATE_LABEL[jobState] ?? JOB_STATE_LABEL[0]).color}`}>
+                            {(JOB_STATE_LABEL[jobState] ?? { label: String(jobState) }).label}
+                        </span>
+                    </div>
+                    {orderId > 0 && (
+                        <div className="flex justify-between text-xs text-gray-500 mt-0.5">
+                            <span>Order #{orderId}</span>
+                            <span className="font-mono">
+                                S<span className="text-blue-400">{orderSrcStation}</span>
+                                {" → "}
+                                D<span className="text-purple-400">{orderDestStation}</span>
+                            </span>
+                        </div>
+                    )}
+                </>
             )}
 
             <div className="my-1.5 border-t border-panel-border" />
@@ -464,6 +501,10 @@ interface VehicleData {
     mergeWaitInfo: MergeWaitInfo | null;
     isShmMode: boolean;
     zonePoints: { name: string; pts: any }[] | null;
+    jobState: number;
+    orderId: number;
+    orderSrcStation: number;
+    orderDestStation: number;
 }
 
 // ─── VehicleMonitor ─────────────────────────────────────
@@ -534,6 +575,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     let currentEdgeIdx: number, currentEdgeRatio: number, nextEdgeIdx: number, collisionTarget: number;
     let destinationEdgeIdx: number | undefined, pathRemaining: number | undefined;
     let nextEdges: number[] = [];
+    let jobState = 0, orderId = 0, orderSrcStation = 0, orderDestStation = 0;
 
     if (isShmMode) {
         const data = useShmSimulatorStore.getState().getVehicleFullData();
@@ -556,6 +598,10 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         collisionTarget = vData.sensor.collisionTarget;
         destinationEdgeIdx = vData.logic.destinationEdge;
         pathRemaining = vData.logic.pathRemaining;
+        jobState = vData.logic.jobState;
+        orderId = vData.logic.orderId;
+        orderSrcStation = vData.logic.orderSrcStation;
+        orderDestStation = vData.logic.orderDestStation;
     } else {
         const vData = vehicleDataArray.get(vehicleIndex);
         status = vData.movement.movingStatus;
@@ -638,6 +684,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         destinationEdgeName, pathRemaining, sensorPreset, hitZone,
         collisionTarget, targetEdgeInfo, targetRatioInfo,
         trafficState, stopReasons, mergeWaitInfo, isShmMode, zonePoints,
+        jobState, orderId, orderSrcStation, orderDestStation,
     };
 
     // Update edge highlight for selected vehicle

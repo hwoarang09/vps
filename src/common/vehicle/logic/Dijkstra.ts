@@ -47,8 +47,8 @@ export interface RoutingContext {
 
 export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   strategy: "DISTANCE",
-  bprAlpha: 0.15,
-  bprBeta: 4.0,
+  bprAlpha: 4,
+  bprBeta: 8,
   bprMinCapacity: 1,
 };
 

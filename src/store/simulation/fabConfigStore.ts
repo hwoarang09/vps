@@ -245,8 +245,8 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   routingConfig: {
     strategy: 'DISTANCE',
-    bprAlpha: 0.15,
-    bprBeta: 4.0,
+    bprAlpha: 4,
+    bprBeta: 8,
     rerouteInterval: 0,
   },
 

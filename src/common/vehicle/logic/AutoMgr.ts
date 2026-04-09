@@ -76,6 +76,12 @@ export class AutoMgr {
   private readonly transferringVehicles: Set<number> = new Set();
   private throughputCredit = 0;
   private nextOrderId = 1;
+  // vehId → dwell 종료 시각 (ms, Date.now() 기준)
+  private readonly dwellTimers: Map<number, number> = new Map();
+  // vehId → LOADING 완료 후 이동할 dest station
+  private readonly pendingDestStation: Map<number, StationTarget> = new Map();
+  /** pickup/dropoff 대기 시간 (ms). 기본 7초. */
+  dwellMs = 7000;
   /** Path 발견 콜백 (SimLogger 연결용) */
   onPathFound?: OnPathFoundCallback;
   /** Per-fab routing context for BPR cost */
@@ -131,17 +137,44 @@ export class AutoMgr {
     // Reset per-frame counter
     this.pathFindCountThisFrame = 0;
 
-    // === 0. Transfer completion check ===
+    // === 0. Transfer state machine (매 프레임 tick 기반) ===
+    const data = vehicleDataArray.getData();
+    const now = Date.now();
     for (const vehId of this.transferringVehicles) {
-      if (!transferMgr.hasPendingCommands(vehId)) {
-        this.transferringVehicles.delete(vehId);
-        // Clear order data + set IDLE
-        const data = vehicleDataArray.getData();
-        const ptr = vehId * VEHICLE_DATA_SIZE;
+      const ptr = vehId * VEHICLE_DATA_SIZE;
+      const jobState = data[ptr + LogicData.JOB_STATE];
+
+      if (jobState === JobState.MOVE_TO_LOAD && !transferMgr.hasPendingCommands(vehId)) {
+        // src station 도착 → 픽업 시작 (LOADING + dwell 타이머)
+        data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
+        this.dwellTimers.set(vehId, now + this.dwellMs);
+      }
+
+      else if (jobState === JobState.LOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
+        // 픽업 완료 → dest station으로 경로 할당
+        const destStation = this.pendingDestStation.get(vehId);
+        if (destStation) {
+          const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+          const assigned = this.assignToStation(
+            vehId, destStation, currentEdgeIdx,
+            vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+          );
+          if (assigned) {
+            data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_UNLOAD;
+            this.dwellTimers.delete(vehId);
+            this.pendingDestStation.delete(vehId);
+          }
+        }
+      }
+
+      else if (jobState === JobState.MOVE_TO_UNLOAD && !transferMgr.hasPendingCommands(vehId)) {
+        // dest station 도착 → 반송 완료, IDLE + LOOP 복귀
         data[ptr + LogicData.JOB_STATE] = JobState.IDLE;
         data[ptr + OrderData.ORDER_ID] = 0;
         data[ptr + OrderData.ORDER_SRC_STATION] = 0;
         data[ptr + OrderData.ORDER_DEST_STATION] = 0;
+        this.transferringVehicles.delete(vehId);
+        this.dwellTimers.delete(vehId);
       }
     }
 
@@ -186,29 +219,34 @@ export class AutoMgr {
       if (this.transferringVehicles.has(vehId)) continue;
       if (!this.isSwappable(vehId, transferMgr)) continue;
 
-      const data = vehicleDataArray.getData();
       const ptr = vehId * VEHICLE_DATA_SIZE;
       const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
       if (currentEdgeIdx < 1) continue;
 
       // Pick random src & dest stations (different from each other)
-      const srcStationIdx = Math.floor(Math.random() * this.stations.length);
-      let destStationIdx = Math.floor(Math.random() * (this.stations.length - 1));
+      const stationCount = this.stations.length;
+      const srcStationIdx = Math.floor(Math.random() * stationCount);
+      let destStationIdx = Math.floor(Math.random() * (stationCount - 1));
       if (destStationIdx >= srcStationIdx) destStationIdx++;
 
-      // Clear existing path and assign transfer route (to random station)
+      const srcStation = this.stations[srcStationIdx];
+      const destStation = this.stations[destStationIdx];
+
+      // Clear existing path + obsolete locks, then assign src station route
       transferMgr.clearVehiclePath(vehId);
       if (lockMgr) {
         this.cancelObsoleteLocks(vehId, [], edgeArray, lockMgr);
       }
 
-      const assigned = this.assignRandomDestination(
-        vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+      const assigned = this.assignToStation(
+        vehId, srcStation, currentEdgeIdx,
+        vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
       );
       if (!assigned) continue;
 
-      // Set transfer state
+      // Set MOVE_TO_LOAD state + store dest for phase 2
       this.transferringVehicles.add(vehId);
+      this.pendingDestStation.set(vehId, destStation);
       const orderId = this.nextOrderId++;
       data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_LOAD;
       data[ptr + OrderData.ORDER_ID] = orderId;
@@ -247,6 +285,39 @@ export class AutoMgr {
    */
   private isSwappable(vehId: number, transferMgr: TransferMgr): boolean {
     return !transferMgr.hasReservedNextEdges(vehId);
+  }
+
+  /**
+   * 특정 station으로 경로를 찾아 차량에 적용
+   */
+  private assignToStation(
+    vehId: number,
+    station: StationTarget,
+    currentEdgeIdx: number,
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
+  ): boolean {
+    if (currentEdgeIdx < 1) return false;
+    if (currentEdgeIdx === station.edgeIndex) return false;
+
+    this.pathFindCountThisFrame++;
+    const pathIndices = findShortestPath(currentEdgeIdx, station.edgeIndex, edgeArray, this.routingContext);
+    if (!pathIndices || pathIndices.length === 0) return false;
+
+    this.applyPathToVehicle({
+      vehId,
+      pathIndices,
+      candidate: station,
+      vehicleDataArray,
+      edgeArray,
+      edgeNameToIndex,
+      transferMgr,
+      lockMgr,
+    });
+    return true;
   }
 
   /**
@@ -493,6 +564,8 @@ export class AutoMgr {
     this.stations = [];
     this.vehicleDestinations.clear();
     this.transferringVehicles.clear();
+    this.dwellTimers.clear();
+    this.pendingDestStation.clear();
     this.throughputCredit = 0;
   }
 
