@@ -25,6 +25,7 @@ import {
 } from "../shared/panelStyles";
 import { twMerge } from "tailwind-merge";
 import { useVehicleEdgeHighlightStore } from "@/store/ui/vehicleEdgeHighlightStore";
+import { useStationStore } from "@/store/map/stationStore";
 
 // Helper to decode StopReason bitmask
 const getStopReasons = (reasonMask: number): string[] => {
@@ -182,6 +183,9 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
         destinationEdgeName, pathRemaining, isShmMode, trafficState, stopReasons,
         jobState, orderId, orderSrcStation, orderDestStation,
     } = data;
+    const stations = useStationStore((s) => s.stations);
+    const srcName = orderSrcStation > 0 ? (stations[orderSrcStation - 1]?.station_name ?? `#${orderSrcStation}`) : null;
+    const destName = orderDestStation > 0 ? (stations[orderDestStation - 1]?.station_name ?? `#${orderDestStation}`) : null;
 
     const railType = currentEdge
         ? (currentEdge.vos_rail_type === EdgeType.LINEAR ? "Str" : "Curve")
@@ -243,14 +247,16 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
                                 {(JOB_STATE_LABEL[jobState] ?? { label: String(jobState) }).label}
                             </span>
                         </div>
-                        {orderId > 0 && (
-                            <div className="flex justify-between text-xs text-gray-400 mt-0.5">
-                                <span>Order #{orderId}</span>
-                                <span className="font-mono">
-                                    S<span className="text-pink-300 font-bold">{orderSrcStation}</span>
-                                    {" → "}
-                                    D<span className="text-yellow-300 font-bold">{orderDestStation}</span>
-                                </span>
+                        {orderId > 0 && srcName && destName && (
+                            <div className="flex flex-col gap-0.5 mt-0.5 text-xs">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Order #{orderId}</span>
+                                </div>
+                                <div className="flex items-center gap-1 font-mono">
+                                    <span className="text-pink-300 font-bold truncate">{srcName}</span>
+                                    <span className="text-gray-500 shrink-0">→</span>
+                                    <span className="text-yellow-300 font-bold truncate">{destName}</span>
+                                </div>
                             </div>
                         )}
                     </div>
