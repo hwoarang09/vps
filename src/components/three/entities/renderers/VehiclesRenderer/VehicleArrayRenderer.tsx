@@ -10,6 +10,12 @@ import { VehicleSystemType } from "@/types/vehicle";
 import { VEHICLE_RENDER_SIZE } from "@/shmSimulator/MemoryLayoutManager";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useMenuStore } from "@/store/ui/menuStore";
+import { useVisualizationStore } from "@/store/ui/visualizationStore";
+import {
+  VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
+  LogicData as ShmLogicData,
+  JobState,
+} from "@/common/vehicle/initialize/constants";
 
 // GLSL에서 사용할 DEG_TO_RAD 상수 (Math.PI / 180)
 const DEG_TO_RAD_GLSL = "0.017453292519943295";
@@ -42,7 +48,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   const bodyLength = config.body?.length ?? 1.2;
   const bodyWidth = config.body?.width ?? 0.6;
   const bodyHeight = config.body?.height ?? 0.3;
-  const vehicleColor = 0x00ff00; // Green color
+  const vehicleColor = 0xffffff; // White base — actual color set per-instance via setColorAt
 
   // instanceData: vec4 (x, y, z, rotation_deg)
   const instanceDataRef = useRef<THREE.InstancedBufferAttribute | null>(null);
@@ -152,9 +158,29 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     };
   }, [bodyGeometry, bodyMaterial]);
 
+  // Job state → color 매핑 (tempColor 재사용으로 Zero-GC)
+  const tempColor = useMemo(() => new THREE.Color(), []);
+
+  const getJobStateColor = (jobState: number, pulse: number): THREE.Color => {
+    switch (jobState) {
+      case JobState.MOVE_TO_LOAD:
+        return tempColor.setRGB(1.0, 0.0, 0.5);                      // 진분홍
+      case JobState.LOADING:
+        return tempColor.setRGB(1.0, pulse * 0.3, 0.5 + pulse * 0.5); // 분홍 깜빡
+      case JobState.MOVE_TO_UNLOAD:
+        return tempColor.setRGB(1.0, 0.6, 0.0);                      // 주황
+      case JobState.UNLOADING:
+        return tempColor.setRGB(1.0, 0.4 + pulse * 0.6, 0.0);        // 주황 깜빡
+      case JobState.ERROR:
+        return tempColor.setRGB(1.0, 0.0, 0.0);                      // 빨강
+      default:
+        return tempColor.setRGB(1.0, 1.0, 1.0);                      // 흰색 (IDLE)
+    }
+  };
+
   // Update instanced attributes every frame
   // SharedMemory 모드: 레이아웃이 동일하므로 set()으로 한 번에 복사
-  useFrame(() => {
+  useFrame((state) => {
     const instanceDataAttr = instanceDataRef.current;
     if (!instanceDataAttr) return;
 
@@ -166,9 +192,19 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const dataArr = instanceDataAttr.array as Float32Array;
 
     if (isSharedMemory) {
-      // SharedMemory 모드: 레이아웃이 동일 (4 floats per vehicle)
-      // for 루프 없이 한 번에 복사
       dataArr.set(data.subarray(0, actualNumVehicles * VEHICLE_RENDER_SIZE));
+
+      // JOB_STATE 기반 per-vehicle 색 업데이트
+      const bodyMesh = bodyMeshRef.current;
+      const fullData = useShmSimulatorStore.getState().getVehicleFullData();
+      if (bodyMesh && fullData) {
+        const pulse = (Math.sin(state.clock.elapsedTime * 6) + 1) * 0.5; // 0~1 깜빡임
+        for (let i = 0; i < actualNumVehicles; i++) {
+          const jobState = fullData[i * SHM_VEHICLE_DATA_SIZE + ShmLogicData.JOB_STATE];
+          bodyMesh.setColorAt(i, getJobStateColor(jobState, pulse));
+        }
+        if (bodyMesh.instanceColor) bodyMesh.instanceColor.needsUpdate = true;
+      }
     } else {
       // Array 모드: 22 floats per vehicle → 4 floats per vehicle 변환 필요
       for (let i = 0; i < actualNumVehicles; i++) {
@@ -187,6 +223,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   // Selection glow outline for selected vehicle (multi-layer fake bloom)
   const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
+  const showSensorBox = useVisualizationStore((s) => s.showSensorBox);
   const glowGroupRef = useRef<THREE.Group>(null);
 
   // 15-layer glow: dense layers so individual lines blend seamlessly
@@ -303,7 +340,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
           />
         ))}
       </group>
-      <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />
+      {showSensorBox && <SensorDebugRenderer numVehicles={actualNumVehicles} mode={mode} />}
     </>
   );
 };

@@ -166,13 +166,13 @@ const findNearestMergeWait = (
 
 // ─── Tab: Basic ─────────────────────────────────────────
 const JOB_STATE_LABEL: Record<number, { label: string; color: string }> = {
-    0: { label: "INIT",          color: "text-gray-500" },
-    1: { label: "IDLE",          color: "text-gray-400" },
-    2: { label: "MOVE_TO_LOAD",  color: "text-blue-400" },
-    3: { label: "LOADING",       color: "text-yellow-400 animate-pulse" },
-    4: { label: "MOVE_TO_UNLOAD",color: "text-purple-400" },
-    5: { label: "UNLOADING",     color: "text-yellow-400 animate-pulse" },
-    6: { label: "ERROR",         color: "text-red-500 font-bold" },
+    0: { label: "INIT",           color: "text-gray-500" },
+    1: { label: "IDLE",           color: "text-gray-400" },
+    2: { label: "MOVE_TO_LOAD",   color: "text-pink-400 font-bold text-sm" },
+    3: { label: "● LOADING",      color: "text-pink-300 font-bold text-sm animate-pulse" },
+    4: { label: "MOVE_TO_UNLOAD", color: "text-yellow-300 font-bold text-sm" },
+    5: { label: "● UNLOADING",    color: "text-yellow-200 font-bold text-sm animate-pulse" },
+    6: { label: "ERROR",          color: "text-red-500 font-bold text-sm" },
 };
 
 const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
@@ -230,22 +230,30 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
             {isShmMode && (
                 <>
                     <div className="my-1.5 border-t border-panel-border" />
-                    <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">Job State</span>
-                        <span className={`font-mono font-bold ${(JOB_STATE_LABEL[jobState] ?? JOB_STATE_LABEL[0]).color}`}>
-                            {(JOB_STATE_LABEL[jobState] ?? { label: String(jobState) }).label}
-                        </span>
-                    </div>
-                    {orderId > 0 && (
-                        <div className="flex justify-between text-xs text-gray-500 mt-0.5">
-                            <span>Order #{orderId}</span>
-                            <span className="font-mono">
-                                S<span className="text-blue-400">{orderSrcStation}</span>
-                                {" → "}
-                                D<span className="text-purple-400">{orderDestStation}</span>
+                    <div className={`rounded px-2 py-1 ${
+                        jobState === 2 ? "bg-pink-500/20 border border-pink-500/40" :
+                        jobState === 3 ? "bg-pink-500/30 border border-pink-400/60" :
+                        jobState === 4 ? "bg-yellow-500/20 border border-yellow-500/40" :
+                        jobState === 5 ? "bg-yellow-500/30 border border-yellow-400/60" :
+                        "bg-transparent"
+                    }`}>
+                        <div className="flex justify-between">
+                            <span className="text-gray-400 text-xs">Job State</span>
+                            <span className={`font-mono ${(JOB_STATE_LABEL[jobState] ?? JOB_STATE_LABEL[0]).color}`}>
+                                {(JOB_STATE_LABEL[jobState] ?? { label: String(jobState) }).label}
                             </span>
                         </div>
-                    )}
+                        {orderId > 0 && (
+                            <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+                                <span>Order #{orderId}</span>
+                                <span className="font-mono">
+                                    S<span className="text-pink-300 font-bold">{orderSrcStation}</span>
+                                    {" → "}
+                                    D<span className="text-yellow-300 font-bold">{orderDestStation}</span>
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </>
             )}
 

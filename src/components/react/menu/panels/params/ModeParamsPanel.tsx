@@ -146,6 +146,7 @@ const ModeParamsPanel: React.FC = () => {
     controller?.setTransferMode(mode, fabId);
   };
   const pushEnabled = (fabId: string | undefined, enabled: boolean) => {
+    console.log(`[ModeParamsPanel] pushEnabled: enabled=${enabled}, fabId=${fabId}, controller=${!!controller}`);
     controller?.setTransferEnabled(enabled, fabId);
   };
   const pushRate = (fabId: string | undefined, rateConfig: TransferRateConfig) => {

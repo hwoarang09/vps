@@ -299,6 +299,11 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       label: "Deadlock Zone",
       iconFn: () => pngIcon(imgSignal),
     },
+    {
+      id: "vis-sensor-box",
+      label: "Sensor Box",
+      iconFn: () => pngIcon(imgTrains),
+    },
   ],
   DevTools: [
     {

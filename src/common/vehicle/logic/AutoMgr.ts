@@ -208,8 +208,15 @@ export class AutoMgr {
     }
 
     // === 2. Transfer assign (only when enabled) ===
-    if (!transferEnabled) return;
-    if (this.stations.length === 0) return;
+    if (!transferEnabled) {
+      console.log('[AutoMgr] transfer skip: transferEnabled=false');
+      return;
+    }
+    if (this.stations.length === 0) {
+      console.log('[AutoMgr] transfer skip: no stations');
+      return;
+    }
+    console.log(`[AutoMgr] transfer assign check: stations=${this.stations.length}, transferring=${this.transferringVehicles.size}/${numVehicles}, util%=${ctx.transferUtilizationPercent}`);
 
     for (let i = 0; i < numVehicles; i++) {
       if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
@@ -242,6 +249,7 @@ export class AutoMgr {
         vehId, srcStation, currentEdgeIdx,
         vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
       );
+      console.log(`[AutoMgr] assignToStation veh=${vehId} src=${srcStation.name}(edge${srcStation.edgeIndex}) curEdge=${currentEdgeIdx} -> ${assigned}`);
       if (!assigned) continue;
 
       // Set MOVE_TO_LOAD state + store dest for phase 2

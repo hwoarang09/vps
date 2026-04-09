@@ -181,9 +181,11 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
       break;
     case "SET_TRANSFER_ENABLED":
+      console.log(`[worker.entry] SET_TRANSFER_ENABLED received: enabled=${message.enabled}, fabId=${message.fabId}, engine=${!!engine}`);
       if (engine) {
         if (message.fabId) {
           const ctx = engine.getFabContext(message.fabId);
+          console.log(`[worker.entry] SET_TRANSFER_ENABLED: ctx found=${!!ctx} for fabId=${message.fabId}`);
           if (ctx) ctx.setTransferEnabled(message.enabled);
         } else {
           engine.forEachFab((ctx) => ctx.setTransferEnabled(message.enabled));

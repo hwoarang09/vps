@@ -495,16 +495,20 @@ export class MultiWorkerController {
   }
 
   setTransferEnabled(enabled: boolean, fabId?: string): void {
+    console.log(`[MultiWorkerController] setTransferEnabled: enabled=${enabled}, fabId=${fabId}, fabToWorkerMap.size=${this.fabToWorkerMap.size}`);
     const msg: WorkerMessage = { type: "SET_TRANSFER_ENABLED", fabId, enabled };
     if (fabId) {
       const workerIndex = this.fabToWorkerMap.get(fabId);
       if (workerIndex !== undefined && this.workers[workerIndex]) {
         this.workers[workerIndex].worker.postMessage(msg);
+      } else {
+        console.warn(`[MultiWorkerController] setTransferEnabled: no worker for fabId=${fabId}`);
       }
     } else {
       for (const [fId] of this.fabToWorkerMap) {
         const workerIndex = this.fabToWorkerMap.get(fId);
         if (workerIndex !== undefined && this.workers[workerIndex]) {
+          console.log(`[MultiWorkerController] setTransferEnabled: posting to fabId=${fId}`);
           this.workers[workerIndex].worker.postMessage({ ...msg, fabId: fId });
         }
       }
