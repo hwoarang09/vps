@@ -3,6 +3,7 @@
 
 import type { Edge } from "@/types/edge";
 import type { TransferMode } from "@/common/vehicle/initialize/constants";
+import type { OrphanedLockLogCtx } from "../LockMgr/lock-handlers";
 
 /**
  * Path buffer layout constants
@@ -47,6 +48,7 @@ export interface ProcessPathCommandContext {
 export interface ILockMgrForNextEdge {
   isMergeNode(nodeName: string): boolean;
   checkGrant(nodeName: string, vehId: number): boolean;
+  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, logCtx?: OrphanedLockLogCtx): void;
 }
 
 /** fillNextEdges Context */

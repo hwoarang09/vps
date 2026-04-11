@@ -549,6 +549,22 @@ export class TransferMgr {
     return true;
   }
 
+  /** 새 경로에서 merge node 집합 반환 */
+  private getMergeNodesInPath(
+    edgeIndices: number[],
+    edgeArray: Edge[],
+    lockMgr: ILockMgrForNextEdge
+  ): Set<string> {
+    const mergeNodes = new Set<string>();
+    for (const edgeIdx of edgeIndices) {
+      const edge = edgeArray[edgeIdx - 1];
+      if (edge && lockMgr.isMergeNode(edge.to_node)) {
+        mergeNodes.add(edge.to_node);
+      }
+    }
+    return mergeNodes;
+  }
+
   private processPathCommand(ctx: ProcessPathCommandContext) {
     // 구조 분해
     const { vehId, path, currentEdge, edgeArray, edgeNameToIndex, data, ptr, lockMgr } = ctx;
@@ -560,6 +576,33 @@ export class TransferMgr {
     const edgeIndices = this.validatePathConnectivity(path, currentEdge, edgeArray, edgeNameToIndex);
     if (!edgeIndices) {
       return;
+    }
+
+    // 새 경로에 없는 merge node의 orphaned lock 즉시 해제
+    if (lockMgr) {
+      const mergeNodesInNewPath = this.getMergeNodesInPath(edgeIndices, edgeArray, lockMgr);
+
+      // 로그용 old/new path edge 이름 (최대 5개)
+      const edgeName = (idx: number) => {
+        const e = edgeArray[idx - 1];
+        return e ? e.edge_name : `E${idx}`;
+      };
+      const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+      const oldEdges: string[] = [];
+      if (this.pathBufferFromAutoMgr) {
+        const pathPtr = vehId * MAX_PATH_LENGTH;
+        const oldLen = this.pathBufferFromAutoMgr[pathPtr + PATH_LEN];
+        for (let i = 0; i < oldLen && i < 5; i++) {
+          oldEdges.push(edgeName(this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]));
+        }
+      }
+      const newEdges = edgeIndices.slice(0, 5).map(edgeName);
+
+      lockMgr.releaseOrphanedLocks(vehId, mergeNodesInNewPath, {
+        oldEdges,
+        newEdges,
+        currentEdgeName: edgeName(currentEdgeIdx),
+      });
     }
 
     // Write to path buffer

@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
-import { checkAutoRelease, requestLockInternal } from "./lock-handlers";
+import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks, type OrphanedLockLogCtx } from "./lock-handlers";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
 import { LogicData, MovementData, MovingStatus, StopReason, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
@@ -144,6 +144,14 @@ export class LockMgr {
    */
   isMergeNode(nodeName: string): boolean {
     return this.state.mergeNodes.has(nodeName);
+  }
+
+  /**
+   * 경로 변경 시 새 경로에 없는 orphaned lock 즉시 해제
+   * TransferMgr.processPathCommand() 에서 호출
+   */
+  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, logCtx?: OrphanedLockLogCtx): void {
+    releaseOrphanedLocks(vehicleId, newPathMergeNodes, this.state, this.eName, logCtx);
   }
 
   /**

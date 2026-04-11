@@ -76,6 +76,8 @@ export class AutoMgr {
   private readonly transferringVehicles: Set<number> = new Set();
   private throughputCredit = 0;
   private nextOrderId = 1;
+  /** 할당량 가득 찼을 때 쿨다운 (초) — 5초 내 재시도 방지 */
+  private transferCheckCooldown = 0;
   // vehId → dwell 종료 시각 (ms, Date.now() 기준)
   private readonly dwellTimers: Map<number, number> = new Map();
   // vehId → LOADING 완료 후 이동할 dest station
@@ -208,19 +210,16 @@ export class AutoMgr {
     }
 
     // === 2. Transfer assign (only when enabled) ===
-    if (!transferEnabled) {
-      console.log('[AutoMgr] transfer skip: transferEnabled=false');
-      return;
-    }
-    if (this.stations.length === 0) {
-      console.log('[AutoMgr] transfer skip: no stations');
-      return;
-    }
-    console.log(`[AutoMgr] transfer assign check: stations=${this.stations.length}, transferring=${this.transferringVehicles.size}/${numVehicles}, util%=${ctx.transferUtilizationPercent}`);
+    if (!transferEnabled || this.stations.length === 0) return;
 
+    // 쿨다운: 할당량 가득 찼을 때 5초 대기
+    this.transferCheckCooldown = Math.max(0, this.transferCheckCooldown - ctx.dt);
+    if (this.transferCheckCooldown > 0) return;
+
+    let quotaFull = false;
     for (let i = 0; i < numVehicles; i++) {
       if (this.pathFindCountThisFrame >= MAX_PATH_FINDS_PER_FRAME) break;
-      if (!this.shouldAssignTransfer(ctx)) break;
+      if (!this.shouldAssignTransfer(ctx)) { quotaFull = true; break; }
 
       const vehId = (startIndex + i) % numVehicles;
       if (this.transferringVehicles.has(vehId)) continue;
@@ -249,7 +248,6 @@ export class AutoMgr {
         vehId, srcStation, currentEdgeIdx,
         vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
       );
-      console.log(`[AutoMgr] assignToStation veh=${vehId} src=${srcStation.name}(edge${srcStation.edgeIndex}) curEdge=${currentEdgeIdx} -> ${assigned}`);
       if (!assigned) continue;
 
       // Set MOVE_TO_LOAD state + store dest for phase 2
@@ -265,6 +263,11 @@ export class AutoMgr {
       if (ctx.transferRateMode === 'throughput') {
         this.throughputCredit -= 1;
       }
+    }
+
+    // 할당량이 가득 찼으면 5초 쿨다운
+    if (quotaFull) {
+      this.transferCheckCooldown = 5.0;
     }
   }
 
@@ -575,6 +578,7 @@ export class AutoMgr {
     this.dwellTimers.clear();
     this.pendingDestStation.clear();
     this.throughputCredit = 0;
+    this.transferCheckCooldown = 0;
   }
 
   private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {

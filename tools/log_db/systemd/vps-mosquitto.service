@@ -4,6 +4,7 @@ Before=vps-logapi.service
 
 [Service]
 Type=simple
+User=mosquitto
 ExecStart=/usr/sbin/mosquitto -c /home/vosui/vosui/vps/tools/log_db/broker/mosquitto.conf
 Restart=on-failure
 RestartSec=3

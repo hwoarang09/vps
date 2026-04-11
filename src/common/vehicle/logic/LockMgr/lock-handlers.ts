@@ -359,3 +359,61 @@ export function checkAutoRelease(
     }
   }
 }
+
+export interface OrphanedLockLogCtx {
+  oldEdges: string[];   // 구 경로 첫 N개 edge 이름
+  newEdges: string[];   // 새 경로 첫 N개 edge 이름
+  currentEdgeName: string;
+}
+
+/**
+ * 경로 변경 시 새 경로에 없는 merge node의 orphaned lock 즉시 해제
+ * processPathCommand() 에서 새 경로 설정 직전에 호출
+ */
+export function releaseOrphanedLocks(
+  vehicleId: number,
+  newPathMergeNodes: Set<string>,
+  state: LockMgrState,
+  eName: (idx: number) => string,
+  logCtx?: OrphanedLockLogCtx
+): void {
+  const releases = state.pendingReleases.get(vehicleId);
+  if (!releases || releases.length === 0) return;
+
+  for (let i = releases.length - 1; i >= 0; i--) {
+    const { nodeName } = releases[i];
+    if (newPathMergeNodes.has(nodeName)) continue; // 새 경로에 있음 → 유지
+
+    const holder = state.locks.get(nodeName);
+    if (holder === vehicleId) {
+      // lock 보유 중 → release + 다음 차량 grant
+      releaseLockInternal(nodeName, vehicleId, state);
+      emitLockEvent(state, vehicleId, nodeName, LockEventType.RELEASE);
+      grantNextInQueue(nodeName, state, eName);
+      if (logCtx) {
+        console.warn(
+          `[LockMgr] VEH ${vehicleId}: orphaned lock RELEASED — ${nodeName}` +
+          ` | edge: ${logCtx.currentEdgeName}` +
+          ` | old: [${logCtx.oldEdges.join('→')}]` +
+          ` → new: [${logCtx.newEdges.join('→')}]`
+        );
+      }
+    } else {
+      // 큐에 있지만 아직 grant 안 됨 → 큐에서만 제거
+      cancelFromQueue(nodeName, vehicleId, state);
+      if (logCtx) {
+        console.warn(
+          `[LockMgr] VEH ${vehicleId}: orphaned lock CANCELLED (queue) — ${nodeName}` +
+          ` | edge: ${logCtx.currentEdgeName}` +
+          ` | old: [${logCtx.oldEdges.join('→')}]` +
+          ` → new: [${logCtx.newEdges.join('→')}]`
+        );
+      }
+    }
+    releases.splice(i, 1);
+  }
+
+  if (releases.length === 0) {
+    state.pendingReleases.delete(vehicleId);
+  }
+}

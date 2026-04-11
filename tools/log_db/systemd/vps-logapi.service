@@ -1,12 +1,13 @@
 [Unit]
-Description=VPS Log API (FastAPI port 8200)
+Description=VPS Log API (FastAPI port 8201)
 After=vps-logdb.service vps-mosquitto.service
 Requires=vps-logdb.service vps-mosquitto.service
 
 [Service]
 Type=simple
+User=vosui
 WorkingDirectory=/home/vosui/vosui/vps/tools/log_db/api
-ExecStart=/home/vosui/.local/bin/uvicorn main:app --host 0.0.0.0 --port 8200
+ExecStart=/home/vosui/.local/bin/uvicorn main:app --host 0.0.0.0 --port 8201
 Restart=on-failure
 RestartSec=3
 

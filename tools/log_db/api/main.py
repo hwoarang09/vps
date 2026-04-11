@@ -1,9 +1,10 @@
-"""VPS Log DB — FastAPI 서버 (port 8200) + MQTT subscriber (tcp://localhost:9883)"""
+"""VPS Log DB — FastAPI 서버 (port 8200) + MQTT subscriber"""
 
 from contextlib import asynccontextmanager
 from functools import partial
 import asyncio
 import json
+import os
 import threading
 
 import paho.mqtt.client as mqtt
@@ -13,6 +14,19 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from ingest import parse_and_insert
+
+# ---------------------------------------------------------------------------
+# Config (환경변수 우선, fallback은 로컬 기본값)
+# ---------------------------------------------------------------------------
+
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = int(os.environ.get("DB_PORT", "5433"))
+DB_NAME = os.environ.get("DB_NAME", "vps_logs")
+DB_USER = os.environ.get("DB_USER", "vps")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "vps")
+
+MQTT_BROKER_HOST = os.environ.get("MQTT_HOST", "localhost")
+MQTT_BROKER_PORT = int(os.environ.get("MQTT_PORT", "9883"))
 
 # ---------------------------------------------------------------------------
 # DB connection pool (ThreadedConnectionPool for thread-safety)
@@ -39,8 +53,6 @@ async def run_in_thread(fn, *args):
 # MQTT subscriber
 # ---------------------------------------------------------------------------
 
-MQTT_BROKER_HOST = "localhost"
-MQTT_BROKER_PORT = 9883
 MQTT_TOPIC_LOGS = "VPS/logs/+/+"       # VPS/logs/{session_id}/{event_type}
 MQTT_TOPIC_SESSION = "VPS/logs/session" # 세션 등록
 
@@ -135,11 +147,11 @@ async def lifespan(_app: FastAPI):
     pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=2,
         maxconn=8,
-        dbname="vps_logs",
-        user="vps",
-        password="vps",
-        host="localhost",
-        port=5433,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
     )
     print("[log_db] PostgreSQL pool ready")
 
