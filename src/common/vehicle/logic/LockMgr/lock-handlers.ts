@@ -347,7 +347,18 @@ export function checkAutoRelease(
           emitLockEvent(state, vehId, info.nodeName, LockEventType.RELEASE);
           grantNextInQueue(info.nodeName, state, eName);
         } else {
-          // lock 안 잡고 있음 → 큐에서만 제거 (cancel)
+          // lock 미보유 상태에서 releaseEdge 도달
+          // STOP_REASON=LOCKED이고 이 노드를 기다리는 중이면 cancel 금지
+          // (다른 차량이 holder인 채로 exit edge에 진입한 경우 - grant 전에 cancelFromQueue
+          //  가 조기 발화하면 GRANT를 못 받게 됨)
+          const stopReason = data[ptr + LogicData.STOP_REASON];
+          if (stopReason & StopReason.LOCKED) {
+            const targetEdgeIdx = Math.trunc(data[ptr + LogicData.CURRENT_CP_TARGET]);
+            const targetEdge = targetEdgeIdx >= 1 ? state.edges[targetEdgeIdx - 1] : null;
+            if (targetEdge?.from_node === info.nodeName) {
+              continue; // 이 lock을 기다리는 중 → cancel 안 함
+            }
+          }
           cancelFromQueue(info.nodeName, vehId, state);
         }
         releases.splice(i, 1);

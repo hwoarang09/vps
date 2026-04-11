@@ -244,13 +244,13 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
   fabOverrides: {},
 
   routingConfig: {
-    strategy: 'DISTANCE',
+    strategy: 'BPR',
     bprAlpha: 4,
     bprBeta: 8,
     rerouteInterval: 0,
   },
 
-  transferEnabled: false,
+  transferEnabled: true,
 
   transferModeConfig: TransferMode.AUTO_ROUTE,
 
