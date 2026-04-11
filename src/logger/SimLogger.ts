@@ -126,7 +126,6 @@ export class SimLogger {
   /** mode + events 설정 기반으로 활성화할 EventType 결정 */
   private _resolveEnabledEvents(): Set<EventType> {
     const ev = this.config.events ?? {};
-    const isDev = this.config.mode === 'dev';
     const enabled = new Set<EventType>();
 
     // ML events
@@ -136,9 +135,9 @@ export class SimLogger {
     if (ev.replaySnapshot !== false)               enabled.add(EventType.ML_REPLAY_SNAPSHOT);
     // DEV events (기본: dev 모드일 때만)
     if (ev.vehState === true)                      enabled.add(EventType.DEV_VEH_STATE);
-    if (ev.path ?? isDev)                          enabled.add(EventType.DEV_PATH);
+    if (ev.path !== false)                         enabled.add(EventType.DEV_PATH);      // 기본 on (ml 포함)
     if (ev.lockDetail === true)                    enabled.add(EventType.DEV_LOCK_DETAIL);
-    if (ev.transfer ?? isDev)                      enabled.add(EventType.DEV_TRANSFER);
+    if (ev.transfer !== false)                     enabled.add(EventType.DEV_TRANSFER);  // 기본 on (ml 포함)
     if (ev.edgeQueue === true)                     enabled.add(EventType.DEV_EDGE_QUEUE);
 
     return enabled;
