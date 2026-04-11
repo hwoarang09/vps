@@ -91,8 +91,11 @@ export function handleLockRequest(
     state.pendingReleases.set(vehicleId, []);
   }
   const releases = state.pendingReleases.get(vehicleId)!;
-  // 중복 등록 방지
-  if (!releases.some(r => r.nodeName === nodeName)) {
+  // 중복 등록 방지 및 경로 변경 시 targetEdge 갱신
+  const existing = releases.find(r => r.nodeName === nodeName);
+  if (existing) {
+    existing.releaseEdgeIdx = targetEdgeIdx;
+  } else {
     releases.push({ nodeName, releaseEdgeIdx: targetEdgeIdx });
   }
 
@@ -222,14 +225,16 @@ export function handleMovePrepare(
  * - PREP: 실행 (nextEdges 채우기 - 필수!)
  * - REQ: 실행 (lock 요청)
  * - RELEASE: 실행 (lock 해제)
- * - WAIT: 스킵 (이미 지나간 지점, 대기 불가)
+ * - WAIT: 락 없으면 현재 위치에서 즉시 정지 (miss해도 락 없으면 멈춰야 함)
+ *
+ * @returns true = 다음 CP로 이동 가능, false = 차량이 LOCK_WAIT 대기 중 (CP 유지)
  */
 export function handleMissedCheckpoint(
   vehicleId: number,
   state: LockMgrState,
   cpFlags: number,
   eName: (idx: number) => string
-): void {
+): boolean {
   if (cpFlags & CheckpointFlags.MOVE_PREPARE) {
     handleMovePrepare(vehicleId, state);
   }
@@ -240,8 +245,13 @@ export function handleMissedCheckpoint(
     handleLockRequest(vehicleId, state);
   }
   if (cpFlags & CheckpointFlags.LOCK_WAIT) {
-    // WAIT는 이미 지나간 지점이므로 스킵
+    // 이미 지나쳤더라도 락 없으면 현재 위치에서 즉시 정지
+    const granted = handleLockWait(vehicleId, state);
+    if (!granted) {
+      return false; // CP 유지, 다음 프레임에서 재시도
+    }
   }
+  return true;
 }
 
 // ============================================================================
@@ -335,7 +345,7 @@ export function checkAutoRelease(
 
   for (const [vehId, releases] of state.pendingReleases) {
     const ptr = vehId * VEHICLE_DATA_SIZE;
-    const currentEdge = data[ptr + MovementData.CURRENT_EDGE];
+    const currentEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
 
     for (let i = releases.length - 1; i >= 0; i--) {
       const info = releases[i];

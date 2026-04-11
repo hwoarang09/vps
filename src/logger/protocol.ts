@@ -17,6 +17,7 @@ export enum EventType {
   DEV_LOCK_DETAIL = 12,
   DEV_TRANSFER = 13,
   DEV_EDGE_QUEUE = 14,
+  DEV_CHECKPOINT = 15,
 }
 
 // ============================================================================
@@ -33,6 +34,7 @@ export enum EventType {
  * DEV_LOCK_DETAIL (20B): ts(4) vehId(4) nodeIdx(2) type(1) pad(1) holderVehId(4) waitMs(4)
  * DEV_TRANSFER (16B): ts(4) vehId(4) fromEdge(4) toEdge(4)
  * DEV_EDGE_QUEUE (16B): ts(4) edgeId(4) vehId(4) count(2) type(1) pad(1)
+ * DEV_CHECKPOINT (24B): ts(4) vehId(4) cpEdge(2) cpFlags(1) action(1) cpRatio(f4) currentEdge(4) currentRatio(f4)
  */
 export const RECORD_SIZE: Record<EventType, number> = {
   [EventType.ML_ORDER_COMPLETE]: 44,
@@ -44,6 +46,7 @@ export const RECORD_SIZE: Record<EventType, number> = {
   [EventType.DEV_LOCK_DETAIL]: 20,
   [EventType.DEV_TRANSFER]: 16,
   [EventType.DEV_EDGE_QUEUE]: 16,
+  [EventType.DEV_CHECKPOINT]: 24,
 };
 
 // ============================================================================
@@ -72,6 +75,7 @@ export const ALL_EVENT_TYPES: EventType[] = [
   EventType.DEV_LOCK_DETAIL,
   EventType.DEV_TRANSFER,
   EventType.DEV_EDGE_QUEUE,
+  EventType.DEV_CHECKPOINT,
 ];
 
 // ============================================================================
@@ -88,6 +92,7 @@ const EVENT_FILE_SUFFIX: Record<EventType, string> = {
   [EventType.DEV_LOCK_DETAIL]: 'lock_detail',
   [EventType.DEV_TRANSFER]: 'transfer',
   [EventType.DEV_EDGE_QUEUE]: 'edge_queue',
+  [EventType.DEV_CHECKPOINT]: 'checkpoint',
 };
 
 /** 이벤트 타입별 파일명 생성 */

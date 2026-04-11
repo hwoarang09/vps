@@ -9,6 +9,7 @@ import type {
   MergeLockNode,
   GrantStrategy,
   OnLockEventCallback,
+  OnCheckpointEventCallback,
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
@@ -78,6 +79,13 @@ export class LockMgr {
    */
   setOnLockEvent(callback: OnLockEventCallback): void {
     this.state.onLockEvent = callback;
+  }
+
+  /**
+   * Checkpoint 이벤트 콜백 설정 (SimLogger 연결용)
+   */
+  setOnCheckpointEvent(callback: OnCheckpointEventCallback): void {
+    this.state.onCheckpointEvent = callback;
   }
 
   /**

@@ -578,16 +578,20 @@ export class TransferMgr {
       return;
     }
 
+    const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+    const edgeIndicesWithCurrent = currentEdgeIdx > 0
+      ? [currentEdgeIdx, ...edgeIndices]
+      : edgeIndices;
+
     // 새 경로에 없는 merge node의 orphaned lock 즉시 해제
     if (lockMgr) {
-      const mergeNodesInNewPath = this.getMergeNodesInPath(edgeIndices, edgeArray, lockMgr);
+      const mergeNodesInNewPath = this.getMergeNodesInPath(edgeIndicesWithCurrent, edgeArray, lockMgr);
 
       // 로그용 old/new path edge 이름 (최대 5개)
       const edgeName = (idx: number) => {
         const e = edgeArray[idx - 1];
         return e ? e.edge_name : `E${idx}`;
       };
-      const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
       const oldEdges: string[] = [];
       if (this.pathBufferFromAutoMgr) {
         const pathPtr = vehId * MAX_PATH_LENGTH;
@@ -617,10 +621,6 @@ export class TransferMgr {
       // Checkpoint 생성 (경로가 설정되는 시점에 한 번만)
       // 현재 edge를 포함하여 builder가 첫 edge 진입 checkpoint도 생성하도록 함
       if (this.checkpointBuffer && lockMgr) {
-        const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-        const edgeIndicesWithCurrent = currentEdgeIdx > 0
-          ? [currentEdgeIdx, ...edgeIndices]
-          : edgeIndices;
         this.buildCheckpoints(vehId, edgeIndicesWithCurrent, edgeArray, lockMgr, data, ptr);
       }
 

@@ -97,6 +97,9 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     lockMgr.setOnLockEvent((vehId, nodeIdx, eventType, waitMs) => {
       simLogger.logLock(simulationTime, vehId, nodeIdx, eventType, waitMs);
     });
+    lockMgr.setOnCheckpointEvent((vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio) => {
+      simLogger.logCheckpoint(simulationTime, vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio);
+    });
   }
 
   // 1. Collision Check (충돌 감지 → 멈출지 결정)

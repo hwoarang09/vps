@@ -24,6 +24,7 @@ export interface LogEvents {
   lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
   transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
   edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
+  checkpoint?: boolean;       // DEV_CHECKPOINT (기본: true)
 }
 
 export interface LogTargets {
@@ -139,6 +140,7 @@ export class SimLogger {
     if (ev.lockDetail === true)                    enabled.add(EventType.DEV_LOCK_DETAIL);
     if (ev.transfer !== false)                     enabled.add(EventType.DEV_TRANSFER);  // 기본 on (ml 포함)
     if (ev.edgeQueue === true)                     enabled.add(EventType.DEV_EDGE_QUEUE);
+    if (ev.checkpoint !== false)                   enabled.add(EventType.DEV_CHECKPOINT); // 기본 on
 
     return enabled;
   }
@@ -286,6 +288,22 @@ export class SimLogger {
     buf.view.setUint8(off + 14, type);
     buf.view.setUint8(off + 15, 0); // padding
     this._increment(buf, EventType.DEV_EDGE_QUEUE);
+  }
+
+  /** checkpoint 이벤트 (24B): ts vehId cpEdge cpFlags action cpRatio currentEdge currentRatio */
+  logCheckpoint(ts: number, vehId: number, cpEdge: number, cpFlags: number, action: number, cpRatio: number, currentEdge: number, currentRatio: number): void {
+    const buf = this.eventBuffers.get(EventType.DEV_CHECKPOINT);
+    if (!buf) return;
+    const off = buf.count * buf.recordSize;
+    buf.view.setUint32(off + 0, ts, true);
+    buf.view.setUint32(off + 4, vehId, true);
+    buf.view.setUint16(off + 8, cpEdge, true);
+    buf.view.setUint8(off + 10, cpFlags);
+    buf.view.setUint8(off + 11, action);
+    buf.view.setFloat32(off + 12, cpRatio, true);
+    buf.view.setUint32(off + 16, currentEdge, true);
+    buf.view.setFloat32(off + 20, currentRatio, true);
+    this._increment(buf, EventType.DEV_CHECKPOINT);
   }
 
   // ============================================================================

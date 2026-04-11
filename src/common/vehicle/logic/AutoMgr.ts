@@ -6,6 +6,7 @@ import {
   LogicData,
   JobState,
   OrderData,
+  MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 import { TransferMgr, VehicleCommand, IVehicleDataArray, VehicleBayLoop } from "./TransferMgr";
 import { findShortestPath, type RoutingContext } from "./Dijkstra";
@@ -16,6 +17,7 @@ import { LockMgr } from "./LockMgr";
 interface StationTarget {
   name: string;
   edgeIndex: number;
+  ratio: number;
 }
 
 // Maximum number of path findings per frame to prevent spikes
@@ -25,7 +27,7 @@ const MAX_PATH_FINDS_PER_FRAME = 10;
 interface ApplyPathContext {
   vehId: number;
   pathIndices: number[];
-  candidate: { name: string; edgeIndex: number };
+  candidate: StationTarget;
   vehicleDataArray: IVehicleDataArray;
   edgeArray: Edge[];
   edgeNameToIndex: Map<string, number>;
@@ -66,7 +68,7 @@ export interface AutoMgrUpdateContext {
 export class AutoMgr {
   private stations: StationTarget[] = [];
   // Vehicle ID -> Current Destination info
-  private readonly vehicleDestinations: Map<number, { stationName: string, edgeIndex: number }> = new Map();
+  private readonly vehicleDestinations: Map<number, StationTarget> = new Map();
   // Round-robin index for fair vehicle processing
   private nextVehicleIndex = 0;
   // Path finding count in current frame
@@ -82,6 +84,8 @@ export class AutoMgr {
   private readonly dwellTimers: Map<number, number> = new Map();
   // vehId → LOADING 완료 후 이동할 dest station
   private readonly pendingDestStation: Map<number, StationTarget> = new Map();
+  // vehId → pickup station (for detecting station edge entry during MOVE_TO_LOAD)
+  private readonly pendingSrcStation: Map<number, StationTarget> = new Map();
   /** pickup/dropoff 대기 시간 (ms). 기본 7초. */
   dwellMs = 7000;
   /** Path 발견 콜백 (SimLogger 연결용) */
@@ -115,7 +119,8 @@ export class AutoMgr {
         if (edgeIdx !== undefined) {
           this.stations.push({
             name: station.station_name,
-            edgeIndex: edgeIdx
+            edgeIndex: edgeIdx,
+            ratio: parseFloat(station.nearest_edge_distance) || 0.5
           });
         }
       }
@@ -145,36 +150,71 @@ export class AutoMgr {
     for (const vehId of this.transferringVehicles) {
       const ptr = vehId * VEHICLE_DATA_SIZE;
       const jobState = data[ptr + LogicData.JOB_STATE];
+      const isStopped = data[ptr + MovementData.MOVING_STATUS] === MovingStatus.STOPPED;
 
-      if (jobState === JobState.MOVE_TO_LOAD && !transferMgr.hasPendingCommands(vehId)) {
-        // src station 도착 → 픽업 시작 (LOADING + dwell 타이머)
-        data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
-        this.dwellTimers.set(vehId, now + this.dwellMs);
-      }
+      const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
 
-      else if (jobState === JobState.LOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
-        // 픽업 완료 → dest station으로 경로 할당
-        const destStation = this.pendingDestStation.get(vehId);
-        if (destStation) {
-          const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-          const assigned = this.assignToStation(
-            vehId, destStation, currentEdgeIdx,
-            vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
-          );
-          if (assigned) {
-            data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_UNLOAD;
-            this.dwellTimers.delete(vehId);
-            this.pendingDestStation.delete(vehId);
+      // --- MOVE_TO_LOAD: pre-load dest path when entering src station edge ---
+      if (jobState === JobState.MOVE_TO_LOAD) {
+        const srcStation = this.pendingSrcStation.get(vehId);
+        if (srcStation && currentEdgeIdx === srcStation.edgeIndex) {
+          // On station edge — pre-load dest path for merge lock acquisition
+          const destStation = this.pendingDestStation.get(vehId);
+          if (destStation) {
+            this.preloadNextPath(
+              vehId, srcStation, destStation,
+              vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+            );
           }
+          // Stop at station
+          data[ptr + MovementData.TARGET_RATIO] = srcStation.ratio;
+          this.pendingSrcStation.delete(vehId);
+        } else if (!srcStation && isStopped) {
+          // Pre-load done, vehicle stopped at src → start LOADING
+          data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
+          this.dwellTimers.set(vehId, now + this.dwellMs);
         }
       }
 
-      else if (jobState === JobState.MOVE_TO_UNLOAD && !transferMgr.hasPendingCommands(vehId)) {
-        // dest station 도착 → 반송 완료, IDLE + LOOP 복귀
+      // --- LOADING complete: resume with existing pathBuffer (no re-pathfind) ---
+      else if (jobState === JobState.LOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
+        data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_UNLOAD;
+        data[ptr + MovementData.TARGET_RATIO] = 1;
+        data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+        this.dwellTimers.delete(vehId);
+        // vehicleDestinations already set to destStation by preloadNextPath
+        this.pendingDestStation.delete(vehId);
+      }
+
+      // --- MOVE_TO_UNLOAD: pre-load loop path when entering dest station edge ---
+      else if (jobState === JobState.MOVE_TO_UNLOAD) {
+        const destStation = this.vehicleDestinations.get(vehId);
+        if (destStation && currentEdgeIdx === destStation.edgeIndex
+          && !this.dwellTimers.has(vehId)) {
+          // Just entered dest station edge — pre-load loop path
+          this.preloadLoopPath(
+            vehId, destStation,
+            vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+          );
+          // Stop at dest station
+          data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
+          // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
+          this.dwellTimers.set(vehId, Infinity);
+        } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex) {
+          // Stopped at dest station → start UNLOADING
+          data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
+          this.dwellTimers.set(vehId, now + this.dwellMs);
+        }
+      }
+
+      // --- UNLOADING complete: resume with existing loop pathBuffer ---
+      else if (jobState === JobState.UNLOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
         data[ptr + LogicData.JOB_STATE] = JobState.IDLE;
         data[ptr + OrderData.ORDER_ID] = 0;
         data[ptr + OrderData.ORDER_SRC_STATION] = 0;
         data[ptr + OrderData.ORDER_DEST_STATION] = 0;
+        data[ptr + MovementData.TARGET_RATIO] = 1;
+        data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
         this.transferringVehicles.delete(vehId);
         this.dwellTimers.delete(vehId);
       }
@@ -250,8 +290,9 @@ export class AutoMgr {
       );
       if (!assigned) continue;
 
-      // Set MOVE_TO_LOAD state + store dest for phase 2
+      // Set MOVE_TO_LOAD state + store src & dest for phases
       this.transferringVehicles.add(vehId);
+      this.pendingSrcStation.set(vehId, srcStation);
       this.pendingDestStation.set(vehId, destStation);
       const orderId = this.nextOrderId++;
       data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_LOAD;
@@ -312,7 +353,62 @@ export class AutoMgr {
     lockMgr?: LockMgr
   ): boolean {
     if (currentEdgeIdx < 1) return false;
-    if (currentEdgeIdx === station.edgeIndex) return false;
+
+    const ptr = vehId * VEHICLE_DATA_SIZE;
+    const data = vehicleDataArray.getData();
+    const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+
+    if (currentEdgeIdx === station.edgeIndex) {
+      if (station.ratio >= currentRatio) {
+        // Already on the target edge and station is ahead. Move forward.
+        transferMgr.clearVehiclePath(vehId);
+        if (lockMgr) {
+          this.cancelObsoleteLocks(vehId, [currentEdgeIdx], edgeArray, lockMgr);
+        }
+        this.vehicleDestinations.set(vehId, station);
+
+        data[ptr + MovementData.TARGET_RATIO] = station.ratio;
+
+        const currentStatus = data[ptr + MovementData.MOVING_STATUS];
+        if (currentStatus === MovingStatus.STOPPED) {
+          data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+        }
+
+        return true;
+      } else {
+        // Station is behind us on the same edge. We must loop around.
+        const currentEdge = edgeArray[currentEdgeIdx - 1];
+        if (!currentEdge || !currentEdge.nextEdgeIndices || currentEdge.nextEdgeIndices.length === 0) {
+          return false; // Cannot loop around if there's no next edge
+        }
+
+        let bestPath: number[] | null = null;
+        for (const nextIdx of currentEdge.nextEdgeIndices) {
+          this.pathFindCountThisFrame++;
+          const p = findShortestPath(nextIdx, station.edgeIndex, edgeArray, this.routingContext);
+          if (p && p.length > 0) {
+            // We found a loop back to the current edge
+            if (!bestPath || p.length < bestPath.length - 1) {
+              bestPath = [currentEdgeIdx, ...p];
+            }
+          }
+        }
+
+        if (!bestPath) return false;
+
+        this.applyPathToVehicle({
+          vehId,
+          pathIndices: bestPath,
+          candidate: station,
+          vehicleDataArray,
+          edgeArray,
+          edgeNameToIndex,
+          transferMgr,
+          lockMgr,
+        });
+        return true;
+      }
+    }
 
     this.pathFindCountThisFrame++;
     const pathIndices = findShortestPath(currentEdgeIdx, station.edgeIndex, edgeArray, this.routingContext);
@@ -374,6 +470,12 @@ export class AutoMgr {
       // Skip if already at destination
       if (currentEdge === dest.edgeIndex) continue;
 
+      // Skip reroute for vehicles at station (pre-loaded path must be preserved)
+      const jobState = data[ptr + LogicData.JOB_STATE];
+      if (jobState === JobState.LOADING || jobState === JobState.UNLOADING) continue;
+      // MOVE_TO_LOAD on src station edge: pre-loaded dest path, don't reroute
+      if (jobState === JobState.MOVE_TO_LOAD && !this.pendingSrcStation.has(vehId)) continue;
+
       this.pathFindCountThisFrame++;
       const pathIndices = findShortestPath(currentEdge, dest.edgeIndex, edgeArray, this.routingContext);
       if (!pathIndices || pathIndices.length <= 1) continue;
@@ -381,7 +483,7 @@ export class AutoMgr {
       this.applyPathToVehicle({
         vehId,
         pathIndices,
-        candidate: { name: dest.stationName, edgeIndex: dest.edgeIndex },
+        candidate: dest,
         vehicleDataArray,
         edgeArray,
         edgeNameToIndex,
@@ -469,6 +571,7 @@ export class AutoMgr {
     const candidate = {
       name: destEdge ? `${loopInfo.bayName}:${destEdge.edge_name}` : loopInfo.bayName,
       edgeIndex: destEdgeIdx,
+      ratio: 0.5
     };
 
     this.applyPathToVehicle({
@@ -549,10 +652,10 @@ export class AutoMgr {
       this.cancelObsoleteLocks(vehId, pathIndices, edgeArray, lockMgr);
     }
 
-    const pathCommand = this.constructPathCommand(pathIndices, edgeArray);
+    const pathCommand = this.constructPathCommand(pathIndices, edgeArray, candidate.ratio);
     const command: VehicleCommand = { path: pathCommand };
 
-    this.vehicleDestinations.set(vehId, { stationName: candidate.name, edgeIndex: candidate.edgeIndex });
+    this.vehicleDestinations.set(vehId, candidate);
 
     // Path 발견 로그
     this.onPathFound?.(vehId, candidate.edgeIndex, pathIndices.length);
@@ -569,6 +672,81 @@ export class AutoMgr {
   }
 
   /**
+   * Pre-load dest path into pathBuffer when vehicle enters src station edge.
+   * This ensures merge locks after the station are acquired before the vehicle departs.
+   */
+  private preloadNextPath(
+    vehId: number,
+    srcStation: StationTarget,
+    destStation: StationTarget,
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
+  ): void {
+    this.pathFindCountThisFrame++;
+    const pathIndices = findShortestPath(srcStation.edgeIndex, destStation.edgeIndex, edgeArray, this.routingContext);
+    if (!pathIndices || pathIndices.length === 0) return;
+
+    // Apply path: pathBuffer = [src+1..dest], checkpoint includes merge locks
+    this.applyPathToVehicle({
+      vehId,
+      pathIndices,
+      candidate: destStation,
+      vehicleDataArray,
+      edgeArray,
+      edgeNameToIndex,
+      transferMgr,
+      lockMgr,
+    });
+  }
+
+  /**
+   * Pre-load loop path into pathBuffer when vehicle enters dest station edge.
+   * This ensures merge locks after the dropoff station are acquired before the vehicle departs.
+   */
+  private preloadLoopPath(
+    vehId: number,
+    destStation: StationTarget,
+    vehicleDataArray: IVehicleDataArray,
+    edgeArray: Edge[],
+    edgeNameToIndex: Map<string, number>,
+    transferMgr: TransferMgr,
+    lockMgr?: LockMgr
+  ): void {
+    // Find a random loop destination (any station different from current)
+    if (this.stations.length === 0) return;
+    const stationCount = this.stations.length;
+    const startOffset = Math.floor(Math.random() * stationCount);
+    let loopDest: StationTarget | null = null;
+
+    for (let i = 0; i < stationCount; i++) {
+      const candidate = this.stations[(startOffset + i) % stationCount];
+      if (candidate.edgeIndex !== destStation.edgeIndex || stationCount === 1) {
+        loopDest = candidate;
+        break;
+      }
+    }
+    if (!loopDest) return;
+
+    this.pathFindCountThisFrame++;
+    const pathIndices = findShortestPath(destStation.edgeIndex, loopDest.edgeIndex, edgeArray, this.routingContext);
+    if (!pathIndices || pathIndices.length === 0) return;
+
+    this.applyPathToVehicle({
+      vehId,
+      pathIndices,
+      candidate: loopDest,
+      vehicleDataArray,
+      edgeArray,
+      edgeNameToIndex,
+      transferMgr,
+      lockMgr,
+    });
+  }
+
+  /**
    * Dispose all internal data to allow garbage collection
    */
   dispose(): void {
@@ -577,11 +755,12 @@ export class AutoMgr {
     this.transferringVehicles.clear();
     this.dwellTimers.clear();
     this.pendingDestStation.clear();
+    this.pendingSrcStation.clear();
     this.throughputCredit = 0;
     this.transferCheckCooldown = 0;
   }
 
-  private constructPathCommand(pathIndices: number[], edgeArray: Edge[]): Array<{ edgeId: string; targetRatio?: number }> {
+  private constructPathCommand(pathIndices: number[], edgeArray: Edge[], finalRatio?: number): Array<{ edgeId: string; targetRatio?: number }> {
     const pathCommand: Array<{ edgeId: string; targetRatio?: number }> = [];
 
     // Construct command from path (start from 1 as 0 is current edge in the path array)
@@ -595,7 +774,7 @@ export class AutoMgr {
 
       pathCommand.push({
         edgeId: edge.edge_name,
-        targetRatio: isLast ? 0.5 : undefined
+        targetRatio: isLast ? (finalRatio ?? 0.5) : undefined
       });
     }
 

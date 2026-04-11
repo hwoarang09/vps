@@ -4,9 +4,11 @@
 import {
   CheckpointFlags,
   LogicData,
+  MovementData,
   VEHICLE_DATA_SIZE,
 } from "@/common/vehicle/initialize/constants";
 import type { CheckpointState, LockMgrState } from "./types";
+import { CheckpointAction } from "./types";
 import {
   ensureCheckpointLoaded,
   checkCheckpointReached,
@@ -19,6 +21,23 @@ import {
   handleLockWait,
   handleMissedCheckpoint,
 } from "./lock-handlers";
+
+/** Emit checkpoint event if callback is set */
+function emitCheckpointEvent(
+  state: LockMgrState,
+  vehicleId: number,
+  cpEdge: number,
+  cpFlags: number,
+  action: number,
+  cpRatio: number,
+): void {
+  if (!state.onCheckpointEvent || !state.vehicleDataArray) return;
+  const data = state.vehicleDataArray;
+  const ptr = vehicleId * VEHICLE_DATA_SIZE;
+  const currentEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+  const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+  state.onCheckpointEvent(vehicleId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio);
+}
 
 /**
  * Checkpoint 기반 락 처리 - 핵심 알고리즘
@@ -68,7 +87,11 @@ export function processCheckpoint(
 
     if (reachResult.missed) {
       // 놓친 CP 처리
-      handleMissedCheckpoint(vehicleId, state, cpState.flags, eName);
+      emitCheckpointEvent(state, vehicleId, cpState.edge, cpState.flags, CheckpointAction.MISS, cpState.ratio);
+      const shouldAdvance = handleMissedCheckpoint(vehicleId, state, cpState.flags, eName);
+      if (!shouldAdvance) {
+        return; // LOCK_WAIT miss: 락 없어서 현재 위치 정지, CP 유지
+      }
       data[ptr + LogicData.CURRENT_CP_FLAGS] = 0;
       loadNextCheckpoint(vehicleId, state);
       continue; // 다음 CP도 놓쳤을 수 있음
@@ -80,6 +103,7 @@ export function processCheckpoint(
     }
 
     // 3. ✅ Checkpoint 도달! - Flag 처리
+    emitCheckpointEvent(state, vehicleId, cpState.edge, cpState.flags, CheckpointAction.HIT, cpState.ratio);
     processCheckpointFlags(vehicleId, state, cpState, eName);
 
     // 4. 다음 checkpoint 로드
@@ -133,6 +157,8 @@ function processCheckpointFlags(
     if (granted) {
       cpFlags &= ~CheckpointFlags.LOCK_WAIT;
       data[ptr + LogicData.CURRENT_CP_FLAGS] = cpFlags;
+    } else {
+      emitCheckpointEvent(state, vehicleId, cpState.edge, cpFlags, CheckpointAction.WAIT_BLOCKED, cpState.ratio);
     }
   }
 }

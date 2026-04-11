@@ -55,6 +55,35 @@ export type OnLockEventCallback = (
   waitMs: number
 ) => void;
 
+/**
+ * Checkpoint 이벤트 콜백 타입
+ * @param vehId - Vehicle ID
+ * @param cpEdge - Checkpoint edge (1-based)
+ * @param cpFlags - Checkpoint flags bitmask
+ * @param action - 0=LOADED, 1=HIT, 2=MISS, 3=WAITING, 4=WAIT_BLOCKED
+ * @param cpRatio - Checkpoint ratio
+ * @param currentEdge - Current vehicle edge
+ * @param currentRatio - Current vehicle ratio
+ */
+export type OnCheckpointEventCallback = (
+  vehId: number,
+  cpEdge: number,
+  cpFlags: number,
+  action: number,
+  cpRatio: number,
+  currentEdge: number,
+  currentRatio: number
+) => void;
+
+/** Checkpoint action constants */
+export const CheckpointAction = {
+  LOADED: 0,
+  HIT: 1,
+  MISS: 2,
+  WAITING: 3,
+  WAIT_BLOCKED: 4,
+} as const;
+
 /** Lock event type constants */
 export const LockEventType = {
   REQUEST: 0,
@@ -81,6 +110,8 @@ export interface LockMgrState {
   waitingVehicles: Set<number>;
   /** Lock 이벤트 콜백 (SimLogger 연결용) */
   onLockEvent?: OnLockEventCallback;
+  /** Checkpoint 이벤트 콜백 (SimLogger 연결용) */
+  onCheckpointEvent?: OnCheckpointEventCallback;
   /** Node name → index (0-based) 맵 */
   nodeNameToIndex?: Map<string, number>;
 }

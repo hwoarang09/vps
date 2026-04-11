@@ -32,6 +32,7 @@ EVENT_TYPES = {
     12: ('DEV_LOCK_DETAIL',   20, '<IIHBxII',  ['ts','veh_id','node_idx','type','holder_veh_id','wait_ms']),
     13: ('DEV_TRANSFER',      16, '<IIII',     ['ts','veh_id','from_edge','to_edge']),
     14: ('DEV_EDGE_QUEUE',    16, '<IIIHBx',   ['ts','edge_id','veh_id','count','type']),
+    15: ('DEV_CHECKPOINT',    24, '<IIHBBfIf', ['ts','veh_id','cp_edge','cp_flags','action','cp_ratio','current_edge','current_ratio']),
 }
 
 FILE_SUFFIX_MAP = {
@@ -44,10 +45,13 @@ FILE_SUFFIX_MAP = {
     'lock_detail':  12,
     'transfer':     13,
     'edge_queue':   14,
+    'checkpoint':   15,
 }
 
 JOB_STATE_NAMES = {0:'INIT', 1:'IDLE', 2:'MOVE_TO_LOAD', 3:'LOADING', 4:'MOVE_TO_UNLOAD', 5:'UNLOADING'}
 LOCK_EVENT_NAMES = {0:'REQ', 1:'GRANT', 2:'RELEASE', 3:'WAIT'}
+CHECKPOINT_ACTION_NAMES = {0:'LOADED', 1:'HIT', 2:'MISS', 3:'WAITING', 4:'WAIT_BLOCKED'}
+CHECKPOINT_FLAG_NAMES = {1:'REQ', 2:'WAIT', 4:'REL', 8:'PREP', 16:'SLOW'}
 
 
 def parse_file(path: Path) -> tuple[str, list[dict]]:
@@ -150,6 +154,12 @@ def cmd_vehicle_timeline(data: dict, veh_id: int, ts_from: int, ts_to: int):
         if not (ts_from <= r['ts'] <= ts_to): continue
         events.append((r['ts'], 'LOCK', r))
 
+    # Checkpoint events
+    for r in data.get('checkpoint', []):
+        if r['veh_id'] != veh_id: continue
+        if not (ts_from <= r['ts'] <= ts_to): continue
+        events.append((r['ts'], 'CP', r))
+
     if not events:
         print(f"  No events for veh {veh_id} in [{fmt_ts(ts_from)} ~ {fmt_ts(ts_to)}]")
         return
@@ -185,6 +195,15 @@ def cmd_vehicle_timeline(data: dict, veh_id: int, ts_from: int, ts_to: int):
             wait = f"  wait={fmt_ms(r['wait_ms'])}" if r.get('wait_ms', 0) > 0 else ""
             if r['event_type'] in (1, 3):  # GRANT, WAIT만 출력 (너무 많으면 노이즈)
                 print(f"{prefix} LOCK_{ename:<7}  node={r['node_idx']:>4}{wait}")
+
+        elif kind == 'CP':
+            aname = CHECKPOINT_ACTION_NAMES.get(r['action'], str(r['action']))
+            flags = []
+            for bit, name in CHECKPOINT_FLAG_NAMES.items():
+                if r['cp_flags'] & bit:
+                    flags.append(name)
+            fstr = '|'.join(flags) if flags else 'NONE'
+            print(f"{prefix} CP_{aname:<12} cpEdge={r['cp_edge']:>4}@{r['cp_ratio']:.3f} [{fstr}]  curEdge={r['current_edge']:>4}@{r['current_ratio']:.3f}")
 
     # 마지막 edge 확인 - stuck 여부
     edge_transits = [(r['ts'], r['edge_id']) for ts, kind, r in events if kind == 'EDGE']
