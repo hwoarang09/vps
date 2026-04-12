@@ -131,7 +131,7 @@ let testSettingConfig: TestSettingConfig = {
       name: "Y Short Switch",
       description: "Y-switch short track test",
       mapName: "y_short",
-      numVehicles: 6,
+      numVehicles: 200,
       transferMode: TransferMode.AUTO_ROUTE,
       camera: {
         position: [10, -10, 30],
@@ -143,7 +143,7 @@ let testSettingConfig: TestSettingConfig = {
       name: "COP Test",
       description: "COP track test",
       mapName: "cop",
-      numVehicles: 10,
+      numVehicles: 200,
       transferMode: TransferMode.AUTO_ROUTE,
       camera: {
         position: [10, -10, 30],

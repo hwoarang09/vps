@@ -148,10 +148,8 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
               fromEdge.distance
             );
           }
-          // DEV_TRANSFER 로그 기록
-          if (logger.isDevMode()) {
-            logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
-          }
+          // DEV_TRANSFER 로그 기록 (enabledEvents 기반 — 버퍼 없으면 logTransfer 내부에서 무시)
+          logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
           // 새 edge 진입 시간 기록
           edgeEnterTimes.set(vehId, timestamp);
         }
@@ -179,7 +177,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   updateMovement(movementCtx);
 
   // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
-  if (simLogger?.isDevMode()) {
+  if (simLogger) {
     autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
       simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
     };

@@ -215,8 +215,21 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         fabVehicleCounts[fabId] = controller.getActualNumVehicles(fabId);
       }
 
+      // Apply transfer settings from UI store to workers
+      const {
+        transferEnabled: uiTransferEnabled,
+        transferRateConfig: uiTransferRate,
+        fabOverrides,
+        routingConfig: globalRc,
+      } = useFabConfigStore.getState();
+      controller.setTransferEnabled(uiTransferEnabled);
+      controller.setTransferRate(
+        uiTransferRate.mode,
+        uiTransferRate.utilizationPercent,
+        uiTransferRate.throughputPerHour,
+      );
+
       // Apply per-fab routing overrides from fabConfigStore
-      const { fabOverrides, routingConfig: globalRc } = useFabConfigStore.getState();
       for (let i = 0; i < allFabIds.length; i++) {
         const routing = fabOverrides[i]?.routing;
         if (routing) {

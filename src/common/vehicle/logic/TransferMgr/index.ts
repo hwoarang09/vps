@@ -243,6 +243,17 @@ export class TransferMgr {
         // If no valid next edge found (0 is invalid sentinel in 1-based indexing)
         // In MQTT_CONTROL mode, this effectively stops/waits if no command is present
         data[ptr + MovementData.NEXT_EDGE_STATE] = NextEdgeState.EMPTY;
+
+        // 디버그: 경로 소진 감지
+        const ratio = data[ptr + MovementData.EDGE_RATIO];
+        if (ratio >= 0.95) {
+          const pathLen = this.pathBufferFromAutoMgr
+            ? this.pathBufferFromAutoMgr[vehId * MAX_PATH_LENGTH + PATH_LEN]
+            : -1;
+          console.warn(
+            `[TransferMgr] veh${vehId} stuck: edge=${currentEdgeIdx} ratio=${ratio.toFixed(2)} pathLen=${pathLen} nextEdge=0`
+          );
+        }
       } else {
         // 5개의 next edge를 채우기
         this.fillNextEdges({
@@ -365,10 +376,16 @@ export class TransferMgr {
       (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE);
 
     if (usePathBuffer) {
-      // 새 설계: checkpoint 기반으로 NEXT_EDGE 관리
-      // initNextEdgesForStart는 processPathCommand에서 이미 호출됨
-      // 여기서는 아무것도 안 함 (checkpoint에서 관리)
-      // checkpoint based - no-op
+      // Checkpoint 시스템이 MOVE_PREPARE를 놓친 경우의 안전장치
+      // pathBuffer에서 최소 1개 edge를 NEXT_EDGE_0에 설정하여
+      // PENDING 상태에서 영구 정지되는 것을 방지
+      const { data, ptr, firstNextEdgeIndex } = ctx;
+      data[ptr + nextEdgeOffsets[0]] = firstNextEdgeIndex;
+      for (let i = 1; i < nextEdgeOffsets.length; i++) {
+        data[ptr + nextEdgeOffsets[i]] = 0;
+      }
+      data[ptr + MovementData.NEXT_EDGE_STATE] =
+        firstNextEdgeIndex > 0 ? NextEdgeState.READY : NextEdgeState.EMPTY;
     } else {
       this.fillNextEdgesFromLoopMap(ctx, nextEdgeOffsets);
     }

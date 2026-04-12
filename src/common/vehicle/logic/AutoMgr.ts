@@ -7,6 +7,7 @@ import {
   JobState,
   OrderData,
   MovingStatus,
+  NextEdgeState,
 } from "@/common/vehicle/initialize/constants";
 import { TransferMgr, VehicleCommand, IVehicleDataArray, VehicleBayLoop } from "./TransferMgr";
 import { findShortestPath, type RoutingContext } from "./Dijkstra";
@@ -86,6 +87,8 @@ export class AutoMgr {
   private readonly pendingDestStation: Map<number, StationTarget> = new Map();
   // vehId → pickup station (for detecting station edge entry during MOVE_TO_LOAD)
   private readonly pendingSrcStation: Map<number, StationTarget> = new Map();
+  // vehId → actual dest station (preserved across preloadLoopPath which overwrites vehicleDestinations)
+  private readonly actualDestStation: Map<number, StationTarget> = new Map();
   /** pickup/dropoff 대기 시간 (ms). 기본 7초. */
   dwellMs = 7000;
   /** Path 발견 콜백 (SimLogger 연결용) */
@@ -161,6 +164,8 @@ export class AutoMgr {
           // On station edge — pre-load dest path for merge lock acquisition
           const destStation = this.pendingDestStation.get(vehId);
           if (destStation) {
+            // Save actual dest station before preloadNextPath overwrites vehicleDestinations
+            this.actualDestStation.set(vehId, destStation);
             this.preloadNextPath(
               vehId, srcStation, destStation,
               vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
@@ -188,7 +193,10 @@ export class AutoMgr {
 
       // --- MOVE_TO_UNLOAD: pre-load loop path when entering dest station edge ---
       else if (jobState === JobState.MOVE_TO_UNLOAD) {
-        const destStation = this.vehicleDestinations.get(vehId);
+        // Use actualDestStation (preserved from preloadNextPath) because
+        // preloadLoopPath overwrites vehicleDestinations with the loop destination
+        const destStation = this.actualDestStation.get(vehId)
+          ?? this.vehicleDestinations.get(vehId);
         if (destStation && currentEdgeIdx === destStation.edgeIndex
           && !this.dwellTimers.has(vehId)) {
           // Just entered dest station edge — pre-load loop path
@@ -217,6 +225,7 @@ export class AutoMgr {
         data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
         this.transferringVehicles.delete(vehId);
         this.dwellTimers.delete(vehId);
+        this.actualDestStation.delete(vehId);
       }
     }
 
@@ -475,6 +484,8 @@ export class AutoMgr {
       if (jobState === JobState.LOADING || jobState === JobState.UNLOADING) continue;
       // MOVE_TO_LOAD on src station edge: pre-loaded dest path, don't reroute
       if (jobState === JobState.MOVE_TO_LOAD && !this.pendingSrcStation.has(vehId)) continue;
+      // MOVE_TO_UNLOAD on dest station edge: pre-loaded loop path, don't reroute
+      if (jobState === JobState.MOVE_TO_UNLOAD && this.dwellTimers.has(vehId)) continue;
 
       this.pathFindCountThisFrame++;
       const pathIndices = findShortestPath(currentEdge, dest.edgeIndex, edgeArray, this.routingContext);
@@ -509,6 +520,15 @@ export class AutoMgr {
     const data = vehicleDataArray.getData();
     const ptr = vehId * VEHICLE_DATA_SIZE;
     const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+
+    // 디버그: STOPPED + 경로 없음 감지
+    const movingStatus = data[ptr + MovementData.MOVING_STATUS];
+    const nextEdgeState = data[ptr + MovementData.NEXT_EDGE_STATE];
+    if (movingStatus === MovingStatus.STOPPED && nextEdgeState === NextEdgeState.EMPTY) {
+      console.warn(
+        `[AutoMgr] veh${vehId} idle+stopped: edge=${currentEdgeIdx} ratio=${data[ptr + MovementData.EDGE_RATIO].toFixed(2)} → assigning new route`
+      );
+    }
 
     // Assign random destination
     return this.assignRandomDestination(vehId, currentEdgeIdx, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr);
@@ -756,6 +776,7 @@ export class AutoMgr {
     this.dwellTimers.clear();
     this.pendingDestStation.clear();
     this.pendingSrcStation.clear();
+    this.actualDestStation.clear();
     this.throughputCredit = 0;
     this.transferCheckCooldown = 0;
   }
