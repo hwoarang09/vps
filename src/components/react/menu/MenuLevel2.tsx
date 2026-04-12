@@ -23,7 +23,7 @@ const MenuLevel2: React.FC = () => {
 
   const menuItems = menuLevel2Config[activeMainMenu] || [];
 
-  const { togglePerfLeft, togglePerfRight, showPerfLeft, toggleSensorBox, showSensorBox } = useVisualizationStore();
+  const { togglePerfLeft, togglePerfRight, showPerfLeft, toggleSensorBox, showSensorBox, toggleFabLabels, showFabLabels } = useVisualizationStore();
 
   const handleLevel2MenuClick = (menuId: string) => {
     // vis-performance: 직접 토글 (RightPanel 사용 안 함)
@@ -35,6 +35,11 @@ const MenuLevel2: React.FC = () => {
     // vis-sensor-box: 직접 토글
     if (menuId === "vis-sensor-box") {
       toggleSensorBox();
+      return;
+    }
+    // vis-fab-labels: 직접 토글
+    if (menuId === "vis-fab-labels") {
+      toggleFabLabels();
       return;
     }
 
@@ -89,6 +94,7 @@ const MenuLevel2: React.FC = () => {
             isActive={
               item.id === "vis-performance" ? showPerfLeft :
               item.id === "vis-sensor-box" ? showSensorBox :
+              item.id === "vis-fab-labels" ? showFabLabels :
               activeSubMenu === item.id
             }
             onClick={() => handleLevel2MenuClick(item.id)}

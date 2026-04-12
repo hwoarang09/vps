@@ -229,16 +229,36 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         uiTransferRate.throughputPerHour,
       );
 
-      // Apply per-fab routing overrides from fabConfigStore
+      // Apply per-fab overrides from fabConfigStore
       for (let i = 0; i < allFabIds.length; i++) {
-        const routing = fabOverrides[i]?.routing;
-        if (routing) {
+        const ovr = fabOverrides[i];
+        if (!ovr) continue;
+        const fabId = allFabIds[i];
+
+        // Per-fab transfer overrides
+        if (ovr.transferEnabled !== undefined) {
+          controller.setTransferEnabled(ovr.transferEnabled, fabId);
+        }
+        if (ovr.transferMode !== undefined) {
+          controller.setTransferMode(ovr.transferMode, fabId);
+        }
+        if (ovr.transferRateConfig) {
+          controller.setTransferRate(
+            ovr.transferRateConfig.mode ?? uiTransferRate.mode,
+            ovr.transferRateConfig.utilizationPercent ?? uiTransferRate.utilizationPercent,
+            ovr.transferRateConfig.throughputPerHour ?? uiTransferRate.throughputPerHour,
+            fabId,
+          );
+        }
+
+        // Per-fab routing overrides
+        if (ovr.routing) {
           controller.setRoutingConfig(
-            routing.strategy ?? globalRc.strategy,
-            routing.bprAlpha ?? globalRc.bprAlpha,
-            routing.bprBeta ?? globalRc.bprBeta,
-            allFabIds[i],
-            routing.rerouteInterval ?? globalRc.rerouteInterval,
+            ovr.routing.strategy ?? globalRc.strategy,
+            ovr.routing.bprAlpha ?? globalRc.bprAlpha,
+            ovr.routing.bprBeta ?? globalRc.bprBeta,
+            fabId,
+            ovr.routing.rerouteInterval ?? globalRc.rerouteInterval,
           );
         }
       }

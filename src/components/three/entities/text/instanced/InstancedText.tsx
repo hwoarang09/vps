@@ -34,6 +34,7 @@ interface Props {
   /** false면 billboard 회전 없이 바닥(XY평면)에 고정 */
   readonly billboard?: boolean;
   readonly opacity?: number;
+  readonly renderOrder?: number;
 }
 
 // Flat 모드용 고정값 (XY 평면에 깔림, 글자는 X축 방향)
@@ -52,6 +53,7 @@ export default function InstancedText({
   fabOffsetRef,
   billboard = true,
   opacity = 1,
+  renderOrder: renderOrderProp,
 }: Props) {
   // Render Phase에서 데이터 계산 (Buffer Overflow 방지)
   const prevGroupsLengthRef = React.useRef(0);
@@ -165,7 +167,7 @@ export default function InstancedText({
       color={color}
       bgColor={bgColor}
       font={font}
-      renderOrder={billboard ? RENDER_ORDER_TEXT : 0}
+      renderOrder={renderOrderProp ?? (billboard ? RENDER_ORDER_TEXT : 0)}
       depthTest={!billboard}
       opacity={opacity}
     />

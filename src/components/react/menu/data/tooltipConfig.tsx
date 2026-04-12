@@ -63,6 +63,7 @@ export const tooltipsByLevel: {
     "vis-traffic-flow": "트래픽 흐름 시각화",
     "vis-deadlock-zone": "데드락 존 표시",
     "vis-sensor-box": "차량 센서 박스 표시/숨기기",
+    "vis-fab-labels": "Fab 라벨 오버레이 표시/숨기기",
 
     "devtools-lock": "노드별 Lock 상태 확인",
 

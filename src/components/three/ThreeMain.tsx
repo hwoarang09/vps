@@ -10,6 +10,7 @@ import MapRenderer from "./entities/renderers/MapRenderer";
 import Floor from "./scene/Floor";
 import AxisHelper from "./scene/AxisHelper";
 import TextRenderer from "./entities/renderers/TextRenderer";
+import FabLabelRenderer from "./entities/renderers/FabLabelRenderer";
 import VehicleSystem from "./entities/vehicle/VehicleSystem";
 
 import CameraController from "./scene/Camera/cameraController";
@@ -64,6 +65,9 @@ const ThreeScene: React.FC = () => {
 
         {/* Text rendering - displays node and edge labels (scale from renderConfig.json) */}
         <TextRenderer />
+
+        {/* Fab label overlay - shows fab index, col/row for each fab */}
+        <FabLabelRenderer />
 
         {/* Vehicle System - Conditionally rendered when test is active */}
         <VehicleSystemRenderer />
