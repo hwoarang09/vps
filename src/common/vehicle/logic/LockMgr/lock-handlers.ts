@@ -423,8 +423,14 @@ export function releaseOrphanedLocks(
   for (let i = releases.length - 1; i >= 0; i--) {
     const { nodeName, releaseEdgeIdx } = releases[i];
 
+    const holder = state.locks.get(nodeName);
+
     if (newPathMergeNodes.has(nodeName)) {
-      // 신 경로에도 있는 merge → 직진/우회 판별
+      // 신 경로에도 있는 merge
+      if (holder === vehicleId) {
+        continue; // HOLDER → 무조건 유지 (이미 잡은 lock은 안 품)
+      }
+      // 큐 대기 중 → 직진/우회 판별
       let posInPath = -1;
       for (let j = 0; j < newPathEdges.length; j++) {
         if (newPathEdges[j] === releaseEdgeIdx) {
@@ -433,13 +439,12 @@ export function releaseOrphanedLocks(
         }
       }
       if (posInPath >= 0 && posInPath < MAX_DIRECT_MERGE_EDGES) {
-        continue; // 직진 경로 → lock/queue 유지
+        continue; // 직진 경로 → queue 유지
       }
-      // 우회 경로 → release/cancel (아래 공통 로직)
+      // 우회 경로 → cancel (아래 공통 로직)
     }
 
-    // 신 경로에 없는 merge 또는 우회 경로 → 제거
-    const holder = state.locks.get(nodeName);
+    // 신 경로에 없는 merge 또는 우회 큐 대기 → 제거
     if (holder === vehicleId) {
       releaseLockInternal(nodeName, vehicleId, state);
       emitLockEvent(state, vehicleId, nodeName, LockEventType.RELEASE);
