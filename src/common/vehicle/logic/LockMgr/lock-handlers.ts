@@ -397,13 +397,22 @@ export interface OrphanedLockLogCtx {
   currentEdgeName: string;
 }
 
+/** merge까지 "직진"으로 간주하는 최대 edge 수 */
+const MAX_DIRECT_MERGE_EDGES = 10;
+
 /**
- * 경로 변경 시 새 경로에 없는 merge node의 orphaned lock 즉시 해제
+ * 경로 변경 시 orphaned lock 처리
+ * - 신 경로에 없는 merge → 무조건 release/cancel
+ * - 신 경로에 있는 merge:
+ *   - 직진 경로 (releaseEdge가 가까이) → 유지
+ *   - 우회 경로 (releaseEdge가 멀리/없음) → release/cancel
+ *
  * processPathCommand() 에서 새 경로 설정 직전에 호출
  */
 export function releaseOrphanedLocks(
   vehicleId: number,
   newPathMergeNodes: Set<string>,
+  newPathEdges: number[],
   state: LockMgrState,
   eName: (idx: number) => string,
   logCtx?: OrphanedLockLogCtx
@@ -412,12 +421,26 @@ export function releaseOrphanedLocks(
   if (!releases || releases.length === 0) return;
 
   for (let i = releases.length - 1; i >= 0; i--) {
-    const { nodeName } = releases[i];
-    if (newPathMergeNodes.has(nodeName)) continue; // 새 경로에 있음 → 유지
+    const { nodeName, releaseEdgeIdx } = releases[i];
 
+    if (newPathMergeNodes.has(nodeName)) {
+      // 신 경로에도 있는 merge → 직진/우회 판별
+      let posInPath = -1;
+      for (let j = 0; j < newPathEdges.length; j++) {
+        if (newPathEdges[j] === releaseEdgeIdx) {
+          posInPath = j;
+          break;
+        }
+      }
+      if (posInPath >= 0 && posInPath < MAX_DIRECT_MERGE_EDGES) {
+        continue; // 직진 경로 → lock/queue 유지
+      }
+      // 우회 경로 → release/cancel (아래 공통 로직)
+    }
+
+    // 신 경로에 없는 merge 또는 우회 경로 → 제거
     const holder = state.locks.get(nodeName);
     if (holder === vehicleId) {
-      // lock 보유 중 → release + 다음 차량 grant
       releaseLockInternal(nodeName, vehicleId, state);
       emitLockEvent(state, vehicleId, nodeName, LockEventType.RELEASE);
       grantNextInQueue(nodeName, state, eName);
@@ -430,7 +453,6 @@ export function releaseOrphanedLocks(
         );
       }
     } else {
-      // 큐에 있지만 아직 grant 안 됨 → 큐에서만 제거
       cancelFromQueue(nodeName, vehicleId, state);
       if (logCtx) {
         console.warn(

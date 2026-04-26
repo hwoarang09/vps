@@ -48,7 +48,7 @@ export interface ProcessPathCommandContext {
 export interface ILockMgrForNextEdge {
   isMergeNode(nodeName: string): boolean;
   checkGrant(nodeName: string, vehId: number): boolean;
-  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, logCtx?: OrphanedLockLogCtx): void;
+  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, newPathEdges: number[], logCtx?: OrphanedLockLogCtx): void;
 }
 
 /** fillNextEdges Context */

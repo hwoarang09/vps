@@ -619,7 +619,7 @@ export class TransferMgr {
       }
       const newEdges = edgeIndices.slice(0, 5).map(edgeName);
 
-      lockMgr.releaseOrphanedLocks(vehId, mergeNodesInNewPath, {
+      lockMgr.releaseOrphanedLocks(vehId, mergeNodesInNewPath, edgeIndices, {
         oldEdges,
         newEdges,
         currentEdgeName: edgeName(currentEdgeIdx),

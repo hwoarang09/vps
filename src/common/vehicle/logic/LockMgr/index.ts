@@ -158,8 +158,8 @@ export class LockMgr {
    * 경로 변경 시 새 경로에 없는 orphaned lock 즉시 해제
    * TransferMgr.processPathCommand() 에서 호출
    */
-  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, logCtx?: OrphanedLockLogCtx): void {
-    releaseOrphanedLocks(vehicleId, newPathMergeNodes, this.state, this.eName, logCtx);
+  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, newPathEdges: number[], logCtx?: OrphanedLockLogCtx): void {
+    releaseOrphanedLocks(vehicleId, newPathMergeNodes, newPathEdges, this.state, this.eName, logCtx);
   }
 
   /**
