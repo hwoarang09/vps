@@ -36,6 +36,7 @@ export interface LogTargets {
 export interface SimLoggerConfig {
   sessionId: string;
   workerId: number;
+  fabId?: string;            // fab 식별자 (파일명에 포함, 예: "fab_0")
   mode: 'ml' | 'dev';       // ml = ML이벤트만, dev = ML+디버그 전체
   vehStateHz?: 10 | 30 | 60; // dev mode veh_state 기록 빈도 (기본: 30)
   targets?: LogTargets;
@@ -88,7 +89,7 @@ export class SimLogger {
         const bufferBytes = FLUSH_THRESHOLD * recordSize;
         const buffer = new ArrayBuffer(bufferBytes);
 
-        const fileName = getFileName(this.config.sessionId, eventType);
+        const fileName = getFileName(this.config.sessionId, eventType, this.config.fabId);
         const fileHandle = await root.getFileHandle(fileName, { create: true });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let handle: any;
@@ -132,6 +133,7 @@ export class SimLogger {
         this.config.sessionId,
         this.config.mode,
         this.config.targets?.mqttUrl,
+        this.config.fabId,
       );
       await this.dbShipper.start(this.config.mode);
     }

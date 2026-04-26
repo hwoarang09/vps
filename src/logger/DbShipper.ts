@@ -1,6 +1,6 @@
 // logger/DbShipper.ts
 // Worker에서 MQTT(ws)로 로그 레코드를 batch publish
-// 토픽: VPS/logs/{sessionId}/{eventType} (binary payload)
+// 토픽: VPS/logs/{sessionId}[/{fabId}]/{eventType} (binary payload)
 // 세션등록: VPS/logs/session (JSON payload)
 
 import mqtt from 'mqtt';
@@ -20,6 +20,7 @@ interface ShipperBuffer {
 
 export class DbShipper {
   private readonly sessionId: string;
+  private readonly fabId: string | undefined;
   private readonly mqttUrl: string;
   private client: mqtt.MqttClient | null = null;
   private readonly buffers = new Map<EventType, ShipperBuffer>();
@@ -28,8 +29,9 @@ export class DbShipper {
   private disabled = false;
   private connected = false;
 
-  constructor(sessionId: string, mode: 'ml' | 'dev', mqttUrl?: string) {
+  constructor(sessionId: string, mode: 'ml' | 'dev', mqttUrl?: string, fabId?: string) {
     this.sessionId = sessionId;
+    this.fabId = fabId;
     this.mqttUrl = mqttUrl ?? DEFAULT_MQTT_URL;
 
     const eventTypes = mode === 'ml' ? ML_EVENT_TYPES : ALL_EVENT_TYPES;
@@ -58,6 +60,7 @@ export class DbShipper {
       'VPS/logs/session',
       JSON.stringify({
         session_id: this.sessionId,
+        fab_id: this.fabId,
         mode,
         vehicle_count: vehicleCount,
         map_name: mapName,
@@ -157,7 +160,8 @@ export class DbShipper {
       return;
     }
 
-    const topic = `VPS/logs/${this.sessionId}/${eventType}`;
+    const fabPart = this.fabId ? `/${this.fabId}` : '';
+    const topic = `VPS/logs/${this.sessionId}${fabPart}/${eventType}`;
     // mqtt.js 타입은 Buffer를 요구하지만 브라우저에서는 Uint8Array로 동작
     this.client.publish(topic, data as unknown as Buffer, { qos: 1 }, (err) => {
       if (err) {

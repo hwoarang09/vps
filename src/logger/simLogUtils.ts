@@ -127,12 +127,28 @@ function extractSuffix(fileName: string): string | null {
   return null;
 }
 
-/** 파일명에서 sessionId 추출 */
+/** 파일명에서 sessionId 추출 (fabId 부분 제외) */
 export function extractSessionId(fileName: string): string | null {
   const stem = fileName.replace('.bin', '');
   for (const suffix of KNOWN_SUFFIXES) {
     if (stem.endsWith(`_${suffix}`)) {
-      return stem.slice(0, -(suffix.length + 1)); // remove "_suffix"
+      const prefix = stem.slice(0, -(suffix.length + 1)); // remove "_suffix"
+      // fabId가 포함된 경우 제거: "20260426_2251_fab_0" → "20260426_2251"
+      const fabMatch = prefix.match(/^(.+?)_(fab_\d+)$/);
+      return fabMatch ? fabMatch[1] : prefix;
+    }
+  }
+  return null;
+}
+
+/** 파일명에서 fabId 추출 (없으면 null) */
+export function extractFabId(fileName: string): string | null {
+  const stem = fileName.replace('.bin', '');
+  for (const suffix of KNOWN_SUFFIXES) {
+    if (stem.endsWith(`_${suffix}`)) {
+      const prefix = stem.slice(0, -(suffix.length + 1));
+      const fabMatch = prefix.match(/_(fab_\d+)$/);
+      return fabMatch ? fabMatch[1] : null;
     }
   }
   return null;

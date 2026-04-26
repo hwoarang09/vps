@@ -19,4 +19,5 @@ export {
   deleteSimLogFile,
   clearAllSimLogs,
   extractSessionId,
+  extractFabId,
 } from './simLogUtils';

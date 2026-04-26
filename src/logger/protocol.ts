@@ -95,9 +95,10 @@ const EVENT_FILE_SUFFIX: Record<EventType, string> = {
   [EventType.DEV_CHECKPOINT]: 'checkpoint',
 };
 
-/** 이벤트 타입별 파일명 생성 */
-export function getFileName(sessionId: string, eventType: EventType): string {
-  return `${sessionId}_${EVENT_FILE_SUFFIX[eventType]}.bin`;
+/** 이벤트 타입별 파일명 생성 (fabId 포함) */
+export function getFileName(sessionId: string, eventType: EventType, fabId?: string): string {
+  const fabPart = fabId ? `_${fabId}` : '';
+  return `${sessionId}${fabPart}_${EVENT_FILE_SUFFIX[eventType]}.bin`;
 }
 
 /** 파일명에서 이벤트 타입 suffix 추출 */
