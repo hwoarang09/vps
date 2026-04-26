@@ -69,6 +69,7 @@ const CameraController: React.FC = () => {
   }, [camera, controls, position, target]); // Include dependencies
 
   // Stop following vehicle when user interacts with camera (drag, zoom, etc.)
+  // Also sync actual camera position to store on orbit change
   useEffect(() => {
     if (!controls) return;
     const orbitControls = controls as OrbitControls;
@@ -80,11 +81,20 @@ const CameraController: React.FC = () => {
       }
     };
 
+    // OrbitControls가 카메라를 조작할 때마다 store에 실제 위치 동기화
+    const handleChange = () => {
+      const store = useCameraStore.getState();
+      store.setPosition(camera.position);
+      store.setTarget(orbitControls.target);
+    };
+
     orbitControls.addEventListener('start', handleStart);
+    orbitControls.addEventListener('change', handleChange);
     return () => {
       orbitControls.removeEventListener('start', handleStart);
+      orbitControls.removeEventListener('change', handleChange);
     };
-  }, [controls, stopFollowingVehicle]);
+  }, [controls, stopFollowingVehicle, camera]);
 
   // Z-up 보정 (항상 유지)
   useEffect(() => {

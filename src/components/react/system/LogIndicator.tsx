@@ -33,13 +33,13 @@ const LogIndicator: React.FC = () => {
             onMouseLeave={hideTooltip}
             className={twMerge(
               menuButtonVariants({ active: isOpen, size: "small" }),
-              "w-10 h-10"
+              "w-9 h-9"
             )}
           >
             <Binary size={18} className={isOpen ? "text-white" : "text-purple-400"} />
           </button>
           {isOpen && (
-            <div className="absolute top-12 right-0">
+            <div className="absolute top-12" style={{ right: "calc(100% + 8px)" }}>
               <SimLogFileManager isOpen={true} onToggle={() => setIsOpen(false)} hideButton={true} />
             </div>
           )}

@@ -14,6 +14,8 @@ import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
 import MqttStatusIndicator from "../system/MqttStatusIndicator";
 import LogIndicator from "../system/LogIndicator";
+import QuickViewToolbar from "./QuickViewToolbar";
+import KpiHud from "./KpiHud";
 
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
@@ -62,6 +64,12 @@ const MenuContainer: React.FC = () => {
 
       {/* Log Indicator - Top Right */}
       <LogIndicator />
+
+      {/* Quick View Toolbar - Top Right, below LogIndicator */}
+      <QuickViewToolbar />
+
+      {/* KPI HUD - Top Left, below MqttStatusIndicator */}
+      <KpiHud />
 
       {/* Top area - empty for now */}
       <div

@@ -70,6 +70,14 @@ export class SimLogger {
   }
 
   async init(): Promise<void> {
+    // 이전 init의 잔여 handle이 있으면 먼저 정리
+    if (this.eventBuffers.size > 0) {
+      for (const buf of this.eventBuffers.values()) {
+        try { buf.handle?.close(); } catch { /* ignore */ }
+      }
+      this.eventBuffers.clear();
+    }
+
     const eventTypes = [...this.enabledEvents];
 
     if (this.useOpfs) {
@@ -83,7 +91,14 @@ export class SimLogger {
         const fileName = getFileName(this.config.sessionId, eventType);
         const fileHandle = await root.getFileHandle(fileName, { create: true });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const handle = await (fileHandle as any).createSyncAccessHandle();
+        let handle: any;
+        try {
+          handle = await (fileHandle as any).createSyncAccessHandle();
+        } catch {
+          // 이전 세션의 handle이 아직 열려있을 수 있음 — 잠시 후 재시도
+          await new Promise((r) => setTimeout(r, 100));
+          handle = await (fileHandle as any).createSyncAccessHandle();
+        }
         const fileSize = (handle as { getSize(): number }).getSize();
 
         this.eventBuffers.set(eventType, {

@@ -413,9 +413,29 @@ export function releaseOrphanedLocks(
 
   for (let i = releases.length - 1; i >= 0; i--) {
     const { nodeName } = releases[i];
-    if (newPathMergeNodes.has(nodeName)) continue; // 새 경로에 있음 → 유지
-
     const holder = state.locks.get(nodeName);
+
+    if (newPathMergeNodes.has(nodeName)) {
+      // 새 경로에도 있는 merge node
+      if (holder === vehicleId) {
+        continue; // GRANT 받은 lock → 유지 (이미 잡은 건 풀 이유 없음)
+      }
+      // 아직 GRANT 안 받음 (큐 대기 중) → 큐에서 cancel
+      // 신 경로의 LOCK_REQUEST checkpoint에서 물리적 순서에 맞게 다시 REQ
+      cancelFromQueue(nodeName, vehicleId, state);
+      if (logCtx) {
+        console.warn(
+          `[LockMgr] VEH ${vehicleId}: pending lock REQUEUED (path change) — ${nodeName}` +
+          ` | edge: ${logCtx.currentEdgeName}` +
+          ` | old: [${logCtx.oldEdges.join('→')}]` +
+          ` → new: [${logCtx.newEdges.join('→')}]`
+        );
+      }
+      releases.splice(i, 1);
+      continue;
+    }
+
+    // 새 경로에 없는 merge node → 완전 제거
     if (holder === vehicleId) {
       // lock 보유 중 → release + 다음 차량 grant
       releaseLockInternal(nodeName, vehicleId, state);

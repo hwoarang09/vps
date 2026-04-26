@@ -83,7 +83,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     updateTrigger,
   } = useTextStore();
 
-  const { fabs, findNearestFab } = useFabStore();
+  const { fabs, findNearestFab, setActiveFabIndex } = useFabStore();
 
   // Fab offset ref (InstancedText에 전달, useFrame 내에서 동적 변경)
   const fabOffsetRef = useRef({ x: 0, y: 0 });
@@ -119,6 +119,9 @@ const MapTextRenderer: React.FC<Props> = (props) => {
 
     console.log(`[MapText] FAB CHANGED: ${prevIndex} → ${nearestFabIndex}`);
     console.log(`[MapText] Moving text offset to: (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})`);
+
+    // KPI HUD 등 React UI 동기화
+    setActiveFabIndex(nearestFabIndex);
 
     // offset ref 업데이트 (InstancedText의 useFrame에서 읽어서 적용)
     fabOffsetRef.current.x = offsetX;
