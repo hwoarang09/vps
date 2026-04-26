@@ -126,6 +126,16 @@ export function handleLockWait(
   const nodeName = targetEdge.from_node;
   if (!state.mergeNodes.has(nodeName)) return true; // merge가 아니면 통과
 
+  // 이미 target edge 위에 있다 = merge를 이미 통과했다 → 대기 불필요
+  // (경로 변경으로 이미 통과한 merge에 대해 missed LOCK_WAIT가 발동하는 경우 방지)
+  const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+  if (currentEdgeIdx === targetEdgeIdx) {
+    state.waitingVehicles.delete(vehicleId);
+    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+    data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    return true;
+  }
+
   // lock holder 확인: 다른 차량이 잡고 있으면 대기, 비어있거나 내가 잡고 있으면 통과
   const holder = state.locks.get(nodeName);
   const blocked = holder !== undefined && holder !== vehicleId;
