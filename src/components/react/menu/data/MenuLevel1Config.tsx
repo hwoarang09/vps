@@ -8,8 +8,6 @@ import {
 import imgStatistics from "@/assets/icons/game/menu-statistics.svg";
 import imgSearch from "@/assets/icons/game/sim-inspect.svg";
 import imgOperation from "@/assets/icons/game/menu-routing.png";
-import imgMapBuilder from "@/assets/icons/game/menu-train-tracks.svg";
-import imgLayoutBuilder from "@/assets/icons/game/menu-cut.png";
 import imgVisualization from "@/assets/icons/game/shape-stack.png";
 import imgDevTools from "@/assets/icons/game/menu-devtools-gear.svg";
 
@@ -44,20 +42,6 @@ export const menuLevel1Groups: MenuLevel1Item[][] = [
       shortcutLabel: "f",
 
       iconFn: () => pngIcon(imgSearch),
-    },
-  ],
-  [
-    {
-      id: "MapBuilder",
-      label: "MapBuilder",
-
-      iconFn: () => pngIcon(imgMapBuilder),
-    },
-    {
-      id: "LayoutBuilder",
-      label: "LayoutBuilder",
-
-      iconFn: () => pngIcon(imgLayoutBuilder),
     },
   ],
   [

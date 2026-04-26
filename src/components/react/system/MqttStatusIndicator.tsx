@@ -50,7 +50,7 @@ const MqttStatusIndicator: React.FC = () => {
   };
 
   return (
-    <div className="fixed top-4 left-4 z-50">
+    <div className="fixed top-4 left-[200px] z-50">
       {/* Main Status Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}

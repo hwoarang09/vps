@@ -126,7 +126,7 @@ export const PerformanceMonitorUI: React.FC = () => {
         position: "fixed",
         ...(position
           ? { left: `${position.x}px`, top: `${position.y}px` }
-          : { top: "56px", left: "16px" }),
+          : { bottom: "160px", left: "16px" }),
         padding: "10px 14px",
         backgroundColor: "rgba(0, 0, 0, 0.75)",
         color: "white",

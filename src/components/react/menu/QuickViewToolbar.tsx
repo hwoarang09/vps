@@ -2,12 +2,13 @@
 // TODO: vis-heatmap, vis-traffic-flow, vis-deadlock-zone are not yet wired in
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
-import React from "react";
-import { Activity, Radar, Tag } from "lucide-react";
+import React, { useState } from "react";
+import { Activity, Radar, Tag, Binary } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { menuButtonVariants, menuContainerVariants } from "./shared/menuStyles";
 import { twMerge } from "tailwind-merge";
+import SimLogFileManager from "@/components/test/VehicleTest/SimLogFileManager";
 
 interface ToggleItem {
   id: string;
@@ -23,6 +24,7 @@ const QuickViewToolbar: React.FC = () => {
     togglePerfLeft, togglePerfRight, toggleSensorBox, toggleFabLabels,
   } = useVisualizationStore();
   const { showTooltip, hideTooltip } = useMenuStore();
+  const [logOpen, setLogOpen] = useState(false);
 
   const items: ToggleItem[] = [
     {
@@ -48,18 +50,19 @@ const QuickViewToolbar: React.FC = () => {
     },
   ];
 
-  const handleMouseEnter = (e: React.MouseEvent, item: ToggleItem) => {
+  const handleMouseEnter = (e: React.MouseEvent, id: string, tooltip: string) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(item.id, item.tooltip, { x: rect.left - 8, y: rect.top + rect.height / 2 }, 2);
+    showTooltip(id, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom + 4 }, 2);
   };
 
   return (
     <div
       className={twMerge(
         menuContainerVariants({ level: 2 }),
-        "fixed top-[4.5rem] right-4 z-50 flex-col items-center gap-2 p-2 space-x-0",
+        "fixed top-4 right-4 z-50 flex-row items-center gap-1.5 p-1.5 space-x-0",
       )}
     >
+      {/* Visualization toggles */}
       {items.map((item) => {
         const isActive = item.getActive();
         return (
@@ -70,13 +73,36 @@ const QuickViewToolbar: React.FC = () => {
               "w-9 h-9 mx-0",
             )}
             onClick={item.action}
-            onMouseEnter={(e) => handleMouseEnter(e, item)}
+            onMouseEnter={(e) => handleMouseEnter(e, item.id, item.tooltip)}
             onMouseLeave={hideTooltip}
           >
             {item.icon}
           </button>
         );
       })}
+
+      {/* Divider */}
+      <div className="w-px h-6 bg-gray-600/50" />
+
+      {/* SimLog button (was LogIndicator) */}
+      <div className="relative">
+        <button
+          onClick={() => setLogOpen(!logOpen)}
+          onMouseEnter={(e) => handleMouseEnter(e, "simlogs", "SimLogger Files")}
+          onMouseLeave={hideTooltip}
+          className={twMerge(
+            menuButtonVariants({ active: logOpen }),
+            "w-9 h-9 mx-0",
+          )}
+        >
+          <Binary size={16} className={logOpen ? "text-white" : "text-purple-400"} />
+        </button>
+        {logOpen && (
+          <div className="absolute top-12" style={{ right: 0 }}>
+            <SimLogFileManager isOpen={true} onToggle={() => setLogOpen(false)} hideButton={true} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

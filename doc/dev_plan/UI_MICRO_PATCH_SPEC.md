@@ -9,7 +9,7 @@
 - 디자인 토큰은 `src/components/react/menu/shared/menuStyles.ts`의 `menuButtonVariants`, `menuContainerVariants` 그대로 사용. 새 스타일 만들지 않는다.
 - 모든 새 컴포넌트는 `position: fixed` 기반으로 3D 뷰포트 위에 떠 있음.
 
-## Phase 1: QuickViewToolbar (우상단 세로 토글)
+## Phase 1: QuickViewToolbar (우상단 세로 토글) -- DONE
 
 ### 위치
 - `LogIndicator` 바로 아래 (LogIndicator는 `fixed top-4 right-4 z-50`에 있음)
@@ -53,7 +53,7 @@
 
 ---
 
-## Phase 2: KPI HUD (좌상단 active fab 기반)
+## Phase 2: KPI HUD (좌상단 active fab 기반) -- DONE
 
 ### 위치
 - `MqttStatusIndicator`는 좌상단에 이미 있음 (위치 확인 후 충돌 안 나게 배치)
@@ -101,9 +101,9 @@
 
 ---
 
-## Phase 3 (시간 남으면): Cmd+K Command Palette
+## Phase 3: Cmd+K Command Palette -- DONE
 
-1일 안에 못 들어가면 **Phase 1, 2 끝내고 Phase 3는 다음 작업으로 넘김**. 무리하지 말 것.
+`cmdk` 라이브러리 기반. Cmd+K / Ctrl+K 단축키로 열림.
 
 ### 라이브러리
 - `cmdk` (npm install cmdk)
@@ -143,9 +143,9 @@
 
 ---
 
-## Phase 3 (시간 남으면): Cmd+K Command Palette
+## Phase 3: Cmd+K Command Palette -- DONE
 
-1일 안에 못 들어가면 **Phase 1, 2 끝내고 Phase 3는 다음 작업으로 넘김**. 무리하지 말 것.
+`cmdk` 라이브러리 기반. Cmd+K / Ctrl+K 단축키로 열림.
 
 ---
 

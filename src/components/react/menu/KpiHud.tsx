@@ -138,7 +138,7 @@ const KpiHud: React.FC = () => {
     <div
       className={twMerge(
         menuContainerVariants({ level: 2 }),
-        "fixed top-16 left-4 z-50 flex-col items-stretch p-3 min-w-[160px]",
+        "fixed top-4 left-4 z-50 flex-col items-stretch p-3 min-w-[160px]",
       )}
     >
       {/* Fab Selector */}

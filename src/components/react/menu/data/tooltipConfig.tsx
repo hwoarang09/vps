@@ -12,8 +12,6 @@ export const tooltipsByLevel: {
     Statistics: "통계 및 분석",
     Search: "검색",
     Operation: "운영 관리",
-    MapBuilder: "도로 편집기",
-    LayoutBuilder: "레이아웃 편집기",
     MQTT: "MQTT 연결 관리",
     Visualization: "시각화 옵션",
     DevTools: "개발자 도구",
@@ -40,20 +38,6 @@ export const tooltipsByLevel: {
     "operation-menu-5": "운영 로그",
     "operation-menu-6": "레이아웃 불러오기",
     "operation-menu-8": "시뮬레이션 파라미터",
-
-    "map-menu-1": "직선 도로 생성",
-    "map-menu-2": "90° 곡선 도로",
-    "map-menu-3": "180° 곡선 도로",
-    "map-menu-4": "S자 곡선 도로",
-    "map-menu-5": "H자 교차로",
-    "map-menu-6": "R자 회전교차로",
-    "map-menu-7": "다중 교차로",
-    "map-menu-8": "교량 및 고가도로",
-    "map-menu-9": "사용자 정의 도로",
-
-    "layout-menu-1": "Bay 생성기",
-    "layout-menu-2": "Station 생성기",
-    "layout-menu-3": "Equipment 생성기",
 
     "mqtt-connection": "MQTT 브로커 연결 관리",
 

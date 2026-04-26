@@ -13,13 +13,13 @@ import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
 import MqttStatusIndicator from "../system/MqttStatusIndicator";
-import LogIndicator from "../system/LogIndicator";
 import QuickViewToolbar from "./QuickViewToolbar";
 import KpiHud from "./KpiHud";
+import CommandPalette from "./CommandPalette";
 
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
-  const { loadConfig } = useMqttStore();
+  const { loadConfig, isConnected: mqttConnected } = useMqttStore();
   const [showDataPanel, setShowDataPanel] = useState(false);
   const [showFabStats, setShowFabStats] = useState(false);
 
@@ -59,31 +59,14 @@ const MenuContainer: React.FC = () => {
 
   return (
     <>
-      {/* MQTT Status Indicator - Top Left */}
-      <MqttStatusIndicator />
+      {/* MQTT Status Indicator - only visible when connected */}
+      {mqttConnected && <MqttStatusIndicator />}
 
-      {/* Log Indicator - Top Right */}
-      <LogIndicator />
-
-      {/* Quick View Toolbar - Top Right, below LogIndicator */}
+      {/* Quick View Toolbar + SimLog - Top Right, horizontal */}
       <QuickViewToolbar />
 
       {/* KPI HUD - Top Left, below MqttStatusIndicator */}
       <KpiHud />
-
-      {/* Top area - empty for now */}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 30,
-          height: 80,
-        }}
-      >
-        {/* Add other components here if needed */}
-      </div>
 
       {/* Level 1 Menu (Bottom) */}
       <MenuLevel1 />
@@ -99,7 +82,7 @@ const MenuContainer: React.FC = () => {
         <div
           style={{
             position: "fixed",
-            top: 110,
+            top: 70,
             right: 10,
             bottom: 140, // Extra space for bottom menu
             width: 320,
@@ -133,6 +116,9 @@ const MenuContainer: React.FC = () => {
       {showDataPanel && (
         <DataPanel onClose={() => setShowDataPanel(false)} />
       )}
+
+      {/* Command Palette - Cmd+K / Ctrl+K */}
+      <CommandPalette />
     </>
   );
 };
