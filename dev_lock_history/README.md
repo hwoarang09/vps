@@ -33,3 +33,4 @@ dev_lock_history/
 | v0.3.72 | [v0.3.72_straight_detour](v0.3.72_straight_detour/) | 직진/우회 판별 도입 → HOLDER에도 적용되는 버그 |
 | v0.3.73 | [v0.3.73_holder_keep](v0.3.73_holder_keep/) | HOLDER 무조건 유지 → WAIT 상태 차량 cancel 문제 미해결 |
 | v0.3.74 | [v0.3.74_wait_cancel_deadlock](v0.3.74_wait_cancel_deadlock/) | WAIT 상태 차량이 경로 변경 시 큐에서 제거되어 deadlock |
+| v0.3.75 | [v0.3.75_physical_position](v0.3.75_physical_position/) | 근본 수정: 물리적 위치 기반 직진/우회 판별 |

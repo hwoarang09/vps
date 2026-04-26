@@ -422,7 +422,7 @@ export function releaseOrphanedLocks(
   if (!releases || releases.length === 0) return;
 
   for (let i = releases.length - 1; i >= 0; i--) {
-    const { nodeName, releaseEdgeIdx } = releases[i];
+    const { nodeName } = releases[i];
 
     const holder = state.locks.get(nodeName);
 
@@ -435,18 +435,35 @@ export function releaseOrphanedLocks(
       if (state.waitingVehicles.has(vehicleId)) {
         continue;
       }
-      // 큐 대기 중 → 직진/우회 판별
-      let posInPath = -1;
+      // 물리적 위치 기반 직진/우회 판별 (v0.3.75)
+      // 구 경로의 releaseEdgeIdx 대신 차량의 현재 edge → merge 거리로 판단
+      const data = state.vehicleDataArray;
+      const curEdge = data ? Math.trunc(data[vehicleId * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE]) : 0;
+
+      // 새 경로에서 차량 현재 위치
+      let vehPos = -1;
       for (let j = 0; j < newPathEdges.length; j++) {
-        if (newPathEdges[j] === releaseEdgeIdx) {
-          posInPath = j;
-          break;
+        if (newPathEdges[j] === curEdge) { vehPos = j; break; }
+      }
+      // 새 경로에서 merge node 위치 (to_node === nodeName인 edge)
+      let mergePos = -1;
+      for (let j = 0; j < newPathEdges.length; j++) {
+        const edge = state.edges[newPathEdges[j] - 1];
+        if (edge && edge.to_node === nodeName) { mergePos = j; break; }
+      }
+
+      if (mergePos >= 0) {
+        const dist = vehPos >= 0 ? (mergePos - vehPos) : mergePos;
+        if (dist >= 0 && dist < MAX_DIRECT_MERGE_EDGES) {
+          // 가까움 → 큐 유지 + releaseEdgeIdx를 새 경로 기준으로 갱신
+          const nextIdx = mergePos + 1;
+          if (nextIdx < newPathEdges.length) {
+            releases[i].releaseEdgeIdx = newPathEdges[nextIdx];
+          }
+          continue;
         }
       }
-      if (posInPath >= 0 && posInPath < MAX_DIRECT_MERGE_EDGES) {
-        continue; // 직진 경로 → queue 유지
-      }
-      // 우회 경로 → cancel (아래 공통 로직)
+      // 멀거나 merge 못 찾음 → cancel (아래 공통 로직)
     }
 
     // 신 경로에 없는 merge 또는 우회 큐 대기 → 제거
