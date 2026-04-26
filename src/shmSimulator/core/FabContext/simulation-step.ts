@@ -97,8 +97,8 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   } = ctx;
   // 0. Lock 이벤트 콜백 설정 (SimLogger 연결)
   if (simLogger) {
-    lockMgr.setOnLockEvent((vehId, nodeIdx, eventType, waitMs) => {
-      simLogger.logLock(simulationTime, vehId, nodeIdx, eventType, waitMs);
+    lockMgr.setOnLockEvent((vehId, nodeIdx, eventType, waitMs, holderVehId) => {
+      simLogger.logLock(simulationTime, vehId, nodeIdx, eventType, waitMs, holderVehId);
     });
     lockMgr.setOnCheckpointEvent((vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio) => {
       simLogger.logCheckpoint(simulationTime, vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio);

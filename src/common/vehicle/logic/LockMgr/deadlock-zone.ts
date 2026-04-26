@@ -76,6 +76,6 @@ export function grantNextInQueue(
   // GRANT 이벤트 emit
   if (state.onLockEvent && state.nodeNameToIndex) {
     const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
-    state.onLockEvent(nextVeh, nodeIdx, LockEventType.GRANT, 0);
+    state.onLockEvent(nextVeh, nodeIdx, LockEventType.GRANT, 0, -1);
   }
 }

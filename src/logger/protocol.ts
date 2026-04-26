@@ -27,7 +27,7 @@ export enum EventType {
 /**
  * ML_ORDER_COMPLETE (44B): orderId(4) vehId(4) destEdge(4) moveToPickupTs(4) pickupArriveTs(4) pickupStartTs(4) pickupDoneTs(4) moveToDropTs(4) dropArriveTs(4) dropStartTs(4) dropDoneTs(4)
  * ML_EDGE_TRANSIT (24B): ts(4) vehId(4) edgeId(4) enterTs(4) exitTs(4) edgeLen(f32,4)
- * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) pad(1) waitMs(4)
+ * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) holderHint(1) waitMs(4)
  * ML_REPLAY_SNAPSHOT (36B): ts(4) vehId(4) x(f4) y(f4) z(f4) edgeIdx(4) ratio(f4) speed(f4) status(4)
  * DEV_VEH_STATE (44B): ts(4) vehId(4) x(f4) y(f4) z(f4) edge(f4) ratio(f4) speed(f4) movingStatus(f4) trafficState(f4) jobState(f4)
  * DEV_PATH (16B): ts(4) vehId(4) destEdge(4) pathLen(4)

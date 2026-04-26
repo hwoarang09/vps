@@ -10,6 +10,7 @@ VPS 로그 통합 분석 스크립트
   python analyze.py logs/SESSION_ID/ --stuck              # 멈춘 차량 탐지
   python analyze.py logs/SESSION_ID/ --transfers          # 반송 현황 요약
   python analyze.py logs/SESSION_ID/ --veh 13 --raw       # 원시 레코드 출력
+  python analyze.py logs/SESSION_ID/ --deadlock --pair 41 108 --node 260  # deadlock 분석
 """
 
 import argparse
@@ -25,7 +26,7 @@ from collections import defaultdict
 EVENT_TYPES = {
     1:  ('ML_ORDER_COMPLETE', 44, '<III8I',    ['order_id','veh_id','dest_edge','move_to_pickup_ts','pickup_arrive_ts','pickup_start_ts','pickup_done_ts','move_to_drop_ts','drop_arrive_ts','drop_start_ts','drop_done_ts']),
     3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf',   ['ts','veh_id','edge_id','enter_ts','exit_ts','edge_len']),
-    4:  ('ML_LOCK',           16, '<IIHBxI',   ['ts','veh_id','node_idx','event_type','wait_ms']),
+    4:  ('ML_LOCK',           16, '<IIHBBI',   ['ts','veh_id','node_idx','event_type','holder_hint','wait_ms']),
     5:  ('ML_REPLAY_SNAPSHOT',36, '<IIfffIffI',['ts','veh_id','x','y','z','edge_idx','ratio','speed','status']),
     10: ('DEV_VEH_STATE',     44, '<II9f',     ['ts','veh_id','x','y','z','edge','ratio','speed','moving_status','traffic_state','job_state']),
     11: ('DEV_PATH',          16, '<IIII',     ['ts','veh_id','dest_edge','path_len']),
@@ -193,8 +194,12 @@ def cmd_vehicle_timeline(data: dict, veh_id: int, ts_from: int, ts_to: int):
         elif kind == 'LOCK':
             ename = LOCK_EVENT_NAMES.get(r['event_type'], str(r['event_type']))
             wait = f"  wait={fmt_ms(r['wait_ms'])}" if r.get('wait_ms', 0) > 0 else ""
+            holder = ""
+            if r['event_type'] == 3:  # WAIT
+                hh = r.get('holder_hint', 255)
+                holder = f"  holder=veh{hh}" if hh < 255 else "  holder=?"
             if r['event_type'] in (1, 3):  # GRANT, WAIT만 출력 (너무 많으면 노이즈)
-                print(f"{prefix} LOCK_{ename:<7}  node={r['node_idx']:>4}{wait}")
+                print(f"{prefix} LOCK_{ename:<7}  node={r['node_idx']:>4}{wait}{holder}")
 
         elif kind == 'CP':
             aname = CHECKPOINT_ACTION_NAMES.get(r['action'], str(r['action']))
@@ -299,6 +304,110 @@ def cmd_transfers(data: dict):
         print(f"  Top 목적지 edges: {top_dests}")
 
 
+def cmd_deadlock(data: dict, veh_ids: list[int], node_id: int | None = None):
+    """두 차량의 deadlock 분석: lock 이력, edge 경로, 미해제 lock, 접점 노드"""
+    locks = data.get('lock', [])
+    edges = data.get('edge_transit', [])
+    transfers = data.get('transfer', [])
+    paths = data.get('path', [])
+
+    if not locks and not edges:
+        print("  lock/edge_transit 로그 없음")
+        return
+
+    for vid in veh_ids:
+        # ── 1. 전체 edge 경로 ──
+        veh_edges = sorted([r for r in edges if r['veh_id'] == vid], key=lambda x: x['ts'])
+        veh_locks = sorted([r for r in locks if r['veh_id'] == vid], key=lambda x: x['ts'])
+        veh_paths = sorted([r for r in paths if r['veh_id'] == vid], key=lambda x: x['ts'])
+        veh_xfers = sorted([r for r in transfers if r['veh_id'] == vid], key=lambda x: x['ts'])
+
+        print(f"\n{'='*80}")
+        print(f"  VEHICLE {vid}")
+        print(f"{'='*80}")
+
+        # 경로 할당 이력
+        if veh_paths:
+            print(f"\n  [경로 할당] ({len(veh_paths)}건)")
+            for r in veh_paths:
+                print(f"    {fmt_ts(r['ts'])}  dest_edge={r['dest_edge']:>4}  path_len={r['path_len']}")
+
+        # Edge 경로 (마지막 30건 + 전체 edge 목록 요약)
+        EDGE_TAIL = 30
+        print(f"\n  [Edge 경로] ({len(veh_edges)}건, 마지막 {min(EDGE_TAIL, len(veh_edges))}건 표시)")
+        if len(veh_edges) > EDGE_TAIL:
+            print(f"    ... ({len(veh_edges) - EDGE_TAIL}건 생략)")
+        for r in veh_edges[-EDGE_TAIL:]:
+            dur = r['exit_ts'] - r['enter_ts']
+            print(f"    {fmt_ts(r['ts'])}  edge={r['edge_id']:>4}  dur={fmt_ms(dur):>8}  len={r['edge_len']:>5.1f}m")
+        # 전체 edge 목록 한 줄 요약
+        all_edge_ids = [r['edge_id'] for r in veh_edges]
+        print(f"  [전체 edge 순서] {' → '.join(str(e) for e in all_edge_ids)}")
+
+        # 마지막 위치
+        if veh_xfers:
+            last = veh_xfers[-1]
+            print(f"\n  [마지막 transfer] {fmt_ts(last['ts'])}  edge {last['from_edge']} → {last['to_edge']}")
+        if veh_edges:
+            last = veh_edges[-1]
+            print(f"  [마지막 edge exit] {fmt_ts(last['exit_ts'])}  edge={last['edge_id']}")
+
+        # Lock 이벤트 (전체)
+        print(f"\n  [Lock 이벤트] ({len(veh_locks)}건)")
+        for r in veh_locks:
+            ename = LOCK_EVENT_NAMES.get(r['event_type'], str(r['event_type']))
+            mark = ''
+            if node_id is not None and r['node_idx'] == node_id:
+                mark = f'  ◀◀◀ TARGET NODE {node_id}'
+            holder = ''
+            if r['event_type'] == 3:  # WAIT
+                hh = r.get('holder_hint', 255)
+                holder = f'  holder=veh{hh}' if hh < 255 else '  holder=?'
+            print(f"    {fmt_ts(r['ts'])}  LOCK_{ename:<7}  node={r['node_idx']:>4}{holder}{mark}")
+
+        # 미해제 lock 감지
+        node_state: dict[int, tuple[int, int]] = {}  # node → (last_ts, last_event)
+        for r in veh_locks:
+            node_state[r['node_idx']] = (r['ts'], r['event_type'])
+        unreleased = [(n, ts, et) for n, (ts, et) in node_state.items() if et != 2]
+        if unreleased:
+            print(f"\n  [미해제 Lock]")
+            for n, ts, et in sorted(unreleased, key=lambda x: x[1]):
+                ename = LOCK_EVENT_NAMES.get(et, str(et))
+                print(f"    node={n:>4}  상태={ename}  at {fmt_ts(ts)}")
+        else:
+            print(f"\n  [미해제 Lock] 없음 (전부 정상 해제)")
+
+    # ── 공통 노드 분석 ──
+    if len(veh_ids) >= 2:
+        v1, v2 = veh_ids[0], veh_ids[1]
+        nodes_v1 = set(r['node_idx'] for r in locks if r['veh_id'] == v1)
+        nodes_v2 = set(r['node_idx'] for r in locks if r['veh_id'] == v2)
+        common = sorted(nodes_v1 & nodes_v2)
+        print(f"\n{'='*80}")
+        print(f"  공통 Lock 노드 (veh {v1} ∩ veh {v2}): {common}")
+
+        # 타겟 노드 lock 시간순 비교
+        target = node_id if node_id is not None else (common[0] if common else None)
+        if target is not None:
+            print(f"\n  [Node {target} Lock 시간순 (veh {v1} & {v2})]")
+            node_events = sorted(
+                [r for r in locks if r['node_idx'] == target and r['veh_id'] in veh_ids],
+                key=lambda x: x['ts']
+            )
+            for r in node_events:
+                ename = LOCK_EVENT_NAMES.get(r['event_type'], str(r['event_type']))
+                print(f"    {fmt_ts(r['ts'])}  veh={r['veh_id']:>3}  LOCK_{ename}")
+
+        # 공통 edge 분석
+        edges_v1 = set(r['edge_id'] for r in edges if r['veh_id'] == v1)
+        edges_v2 = set(r['edge_id'] for r in edges if r['veh_id'] == v2)
+        common_edges = sorted(edges_v1 & edges_v2)
+        print(f"\n  공통 Edge (veh {v1} ∩ veh {v2}): {len(common_edges)}개")
+        if common_edges:
+            print(f"    {common_edges}")
+
+
 def cmd_raw(data: dict, veh_id: int, ts_from: int, ts_to: int, limit: int = 50):
     """특정 차량의 원시 레코드 출력"""
     print(f"\n=== Raw Records for veh {veh_id} ===")
@@ -344,6 +453,9 @@ def main():
     parser.add_argument('--to',   dest='ts_to',   default='999999999', help='종료 시간')
     parser.add_argument('--stuck', action='store_true', help='멈춘 차량 탐지')
     parser.add_argument('--transfers', action='store_true', help='반송 현황 요약')
+    parser.add_argument('--deadlock', action='store_true', help='deadlock 분석 (--pair 필수)')
+    parser.add_argument('--pair', type=int, nargs='+', metavar='VEH', help='분석할 차량 ID 목록 (예: --pair 41 108)')
+    parser.add_argument('--node', type=int, help='타겟 노드 ID (deadlock 분석용, 0-based)')
     parser.add_argument('--raw', action='store_true', help='원시 레코드 출력')
     parser.add_argument('--limit', type=int, default=50, help='raw 모드 최대 출력 수')
     args = parser.parse_args()
@@ -362,7 +474,12 @@ def main():
     ts_from = parse_ts(args.ts_from)
     ts_to   = parse_ts(args.ts_to)
 
-    if args.stuck:
+    if args.deadlock:
+        if not args.pair or len(args.pair) < 2:
+            print("[ERROR] --deadlock 에는 --pair VEH1 VEH2 필요", file=sys.stderr)
+            sys.exit(1)
+        cmd_deadlock(data, args.pair, args.node)
+    elif args.stuck:
         cmd_stuck(data)
     elif args.transfers:
         cmd_transfers(data)

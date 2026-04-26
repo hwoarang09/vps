@@ -53,6 +53,9 @@ interface EventBuffer {
   fileOffset: number;     // 파일에 쓴 누적 bytes
 }
 
+/** 주기적 flush 간격 (ms) - 데이터 유실 방지 */
+const PERIODIC_FLUSH_INTERVAL = 10_000; // 10초
+
 export class SimLogger {
   private readonly config: SimLoggerConfig;
   private readonly eventBuffers = new Map<EventType, EventBuffer>();
@@ -62,6 +65,7 @@ export class SimLogger {
   private readonly useDb: boolean;
   private initialized = false;
   private frameCount = 0;
+  private flushTimerId: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: SimLoggerConfig) {
     this.config = config;
@@ -138,6 +142,9 @@ export class SimLogger {
       await this.dbShipper.start(this.config.mode);
     }
 
+    // 주기적 flush 타이머 (데이터 유실 방지)
+    this.flushTimerId = setInterval(() => this.flush(), PERIODIC_FLUSH_INTERVAL);
+
     this.initialized = true;
   }
 
@@ -201,7 +208,7 @@ export class SimLogger {
     this._increment(buf, EventType.ML_EDGE_TRANSIT);
   }
 
-  logLock(ts: number, vehId: number, nodeIdx: number, lockEventType: number, waitMs: number): void {
+  logLock(ts: number, vehId: number, nodeIdx: number, lockEventType: number, waitMs: number, holderVehId: number = -1): void {
     const buf = this.eventBuffers.get(EventType.ML_LOCK);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
@@ -209,7 +216,8 @@ export class SimLogger {
     buf.view.setUint32(off + 4, vehId, true);
     buf.view.setUint16(off + 8, nodeIdx, true);
     buf.view.setUint8(off + 10, lockEventType);
-    buf.view.setUint8(off + 11, 0); // padding
+    // holderHint: WAIT 시 holder vehId (uint8, 255=없음/초과)
+    buf.view.setUint8(off + 11, holderVehId >= 0 && holderVehId < 255 ? holderVehId : 255);
     buf.view.setUint32(off + 12, waitMs, true);
     this._increment(buf, EventType.ML_LOCK);
   }
@@ -334,6 +342,10 @@ export class SimLogger {
   }
 
   dispose(): void {
+    if (this.flushTimerId !== null) {
+      clearInterval(this.flushTimerId);
+      this.flushTimerId = null;
+    }
     this.flush();
     for (const buf of this.eventBuffers.values()) {
       buf.handle?.close();

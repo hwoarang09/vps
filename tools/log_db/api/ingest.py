@@ -12,7 +12,7 @@ import struct
 # ---------------------------------------------------------------------------
 
 # ML_EDGE_TRANSIT = 3, 24B: ts(i4) vehId(i4) edgeId(i4) enterTs(i4) exitTs(i4) edgeLen(f4)
-# ML_LOCK = 4, 16B: ts(i4) vehId(i4) nodeIdx(h2) eventType(b1) pad(b1) waitMs(i4)
+# ML_LOCK = 4, 16B: ts(i4) vehId(i4) nodeIdx(h2) eventType(b1) holderHint(b1) waitMs(i4)
 # DEV_TRANSFER = 13, 16B: ts(i4) vehId(i4) fromEdge(i4) toEdge(i4)
 # DEV_PATH = 11, 16B: ts(i4) vehId(i4) destEdge(i4) pathLen(i4)
 
@@ -24,12 +24,12 @@ EVENT_CONFIG = {
         "table": "ml_edge_transit",
         "columns": ["ts", "veh_id", "edge_id", "enter_ts", "exit_ts", "edge_len"],
     },
-    # ML_LOCK (16B): Uint32 Uint32 Uint16 Uint8 Uint8(pad) Uint32
+    # ML_LOCK (16B): Uint32 Uint32 Uint16 Uint8 Uint8(holderHint) Uint32
     4: {
         "size": 16,
         "fmt": "<IIHBBI",
         "table": "ml_lock",
-        "columns": ["ts", "veh_id", "node_idx", "event_type", "_pad", "wait_ms"],
+        "columns": ["ts", "veh_id", "node_idx", "event_type", "holder_hint", "wait_ms"],
     },
     # ML_REPLAY_SNAPSHOT (36B): Uint32 Uint32 Float32×5 Uint32 Float32 Float32 Uint32
     5: {

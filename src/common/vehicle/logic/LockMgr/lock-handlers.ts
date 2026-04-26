@@ -22,11 +22,12 @@ function emitLockEvent(
   vehId: number,
   nodeName: string,
   eventType: number,
-  waitMs: number = 0
+  waitMs: number = 0,
+  holderVehId: number = -1
 ): void {
   if (!state.onLockEvent || !state.nodeNameToIndex) return;
   const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
-  state.onLockEvent(vehId, nodeIdx, eventType, waitMs);
+  state.onLockEvent(vehId, nodeIdx, eventType, waitMs, holderVehId);
 }
 
 /**
@@ -158,10 +159,10 @@ export function handleLockWait(
     data[ptr + MovementData.VELOCITY] = 0;
     data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
     data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
-    // WAIT 이벤트는 최초 진입 시 1회만 emit
+    // WAIT 이벤트는 최초 진입 시 1회만 emit (holder 정보 포함)
     if (!state.waitingVehicles.has(vehicleId)) {
       state.waitingVehicles.add(vehicleId);
-      emitLockEvent(state, vehicleId, nodeName, LockEventType.WAIT);
+      emitLockEvent(state, vehicleId, nodeName, LockEventType.WAIT, 0, holder);
     }
     return false;
   }
@@ -429,6 +430,10 @@ export function releaseOrphanedLocks(
       // 신 경로에도 있는 merge
       if (holder === vehicleId) {
         continue; // HOLDER → 무조건 유지 (이미 잡은 lock은 안 품)
+      }
+      // WAIT 상태 = 이미 merge 직전에 정지 → 큐 유지 (cancel하면 priority inversion)
+      if (state.waitingVehicles.has(vehicleId)) {
+        continue;
       }
       // 큐 대기 중 → 직진/우회 판별
       let posInPath = -1;

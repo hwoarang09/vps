@@ -47,12 +47,14 @@ export interface ReachCheckResult {
  * @param nodeIdx - Node index (0-based)
  * @param eventType - 0=REQUEST, 1=GRANT, 2=RELEASE, 3=WAIT
  * @param waitMs - 대기 시간 (ms), WAIT 이벤트에서만 유효
+ * @param holderVehId - Lock holder Vehicle ID (-1 = 없음, WAIT 이벤트에서 유효)
  */
 export type OnLockEventCallback = (
   vehId: number,
   nodeIdx: number,
   eventType: number,
-  waitMs: number
+  waitMs: number,
+  holderVehId: number
 ) => void;
 
 /**
