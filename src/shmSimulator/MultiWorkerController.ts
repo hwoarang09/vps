@@ -19,6 +19,17 @@ import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
 import { listSimLogFiles, downloadSimLogFile, deleteSimLogFile, clearAllSimLogs, type SimLogFileInfo } from "@/logger";
 
+/** Order stats data received from worker */
+export interface OrderStatsData {
+  simulationTime: number;
+  completed: number;
+  throughputPerHour: number;
+  leadTimeP50: number;
+  leadTimeP95: number;
+  leadTimeMean: number;
+  totalPathChanges: number;
+}
+
 /**
  * Fab 초기화 파라미터 (MultiWorkerController용)
  */
@@ -111,6 +122,7 @@ export class MultiWorkerController {
   private onErrorCallback: ((error: string) => void) | null = null;
   private onUnusualMoveCallback: ((data: UnusualMoveData) => void) | null = null;
   private onLogSessionCallback: ((sessionId: string) => void) | null = null;
+  private onOrderStatsCallback: ((fabId: string, stats: OrderStatsData) => void) | null = null;
 
   // Rule D.1: Add readonly modifier - never reassigned after constructor
   // Lock 테이블 요청 대기
@@ -130,6 +142,24 @@ export class MultiWorkerController {
 
   onLogSession(callback: (sessionId: string) => void): void {
     this.onLogSessionCallback = callback;
+  }
+
+  onOrderStats(callback: (fabId: string, stats: OrderStatsData) => void): void {
+    this.onOrderStatsCallback = callback;
+  }
+
+  resetOrderStats(fabId?: string): void {
+    const message: WorkerMessage = { type: "RESET_ORDER_STATS", fabId };
+    if (fabId) {
+      const workerIndex = this.fabToWorkerMap.get(fabId);
+      if (workerIndex !== undefined && this.workers[workerIndex]) {
+        this.workers[workerIndex].worker.postMessage(message);
+      }
+    } else {
+      for (const workerInfo of this.workers) {
+        workerInfo.worker.postMessage(message);
+      }
+    }
   }
 
   /**
@@ -422,6 +452,18 @@ export class MultiWorkerController {
       case "LOG_SESSION_STARTED":
         this.onLogSessionCallback?.(message.sessionId);
         break;
+
+      case "ORDER_STATS":
+        this.onOrderStatsCallback?.(message.fabId, {
+          simulationTime: message.simulationTime,
+          completed: message.completed,
+          throughputPerHour: message.throughputPerHour,
+          leadTimeP50: message.leadTimeP50,
+          leadTimeP95: message.leadTimeP95,
+          leadTimeMean: message.leadTimeMean,
+          totalPathChanges: message.totalPathChanges,
+        });
+        break;
     }
   }
 
@@ -553,15 +595,15 @@ export class MultiWorkerController {
     }
   }
 
-  setRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number): void {
+  setRoutingConfig(strategy: 'DISTANCE' | 'BPR' | 'EWMA', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number, ewmaAlpha?: number): void {
     if (fabId) {
       const workerIndex = this.fabToWorkerMap.get(fabId);
       if (workerIndex !== undefined && this.workers[workerIndex]) {
-        const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval };
+        const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval, ewmaAlpha };
         this.workers[workerIndex].worker.postMessage(message);
       }
     } else {
-      const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", strategy, bprAlpha, bprBeta, rerouteInterval };
+      const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", strategy, bprAlpha, bprBeta, rerouteInterval, ewmaAlpha };
       for (const workerInfo of this.workers) {
         workerInfo.worker.postMessage(message);
       }

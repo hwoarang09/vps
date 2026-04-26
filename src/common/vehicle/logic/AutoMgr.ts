@@ -64,6 +64,7 @@ export interface AutoMgrUpdateContext {
   transferUtilizationPercent: number;
   transferThroughputPerHour: number;
   dt: number;
+  simulationTime: number;
 }
 
 export class AutoMgr {
@@ -108,6 +109,11 @@ export class AutoMgr {
   private readonly lastEdge: Map<number, number> = new Map();
   // Per-vehicle: edge transitions since last reroute
   private readonly edgesSinceReroute: Map<number, number> = new Map();
+  // Path change tracking (oscillation measurement)
+  private readonly lastPath: Map<number, number[]> = new Map();
+  private readonly pathChangeCount: Map<number, number> = new Map();
+  // Order completion stats (throughput + lead time)
+  private orderStats = { completed: 0, leadTimes: [] as number[], resetSimTime: 0 };
 
   /**
    * Initializes available stations for routing.
@@ -139,7 +145,7 @@ export class AutoMgr {
     const {
       mode, numVehicles, vehicleDataArray, edgeArray, edgeNameToIndex,
       transferMgr, lockMgr, vehicleBayLoopMap,
-      transferEnabled,
+      transferEnabled, simulationTime,
     } = ctx;
     if (mode !== TransferMode.AUTO_ROUTE && mode !== TransferMode.LOOP) return;
     if (numVehicles === 0) return;
@@ -177,6 +183,8 @@ export class AutoMgr {
         } else if (!srcStation && isStopped) {
           // Pre-load done, vehicle stopped at src → start LOADING
           data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
+          data[ptr + OrderData.PICKUP_ARRIVE_TS] = simulationTime;
+          data[ptr + OrderData.PICKUP_START_TS] = simulationTime;
           this.dwellTimers.set(vehId, now + this.dwellMs);
         }
       }
@@ -184,6 +192,8 @@ export class AutoMgr {
       // --- LOADING complete: resume with existing pathBuffer (no re-pathfind) ---
       else if (jobState === JobState.LOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
         data[ptr + LogicData.JOB_STATE] = JobState.MOVE_TO_UNLOAD;
+        data[ptr + OrderData.PICKUP_DONE_TS] = simulationTime;
+        data[ptr + OrderData.MOVE_TO_DROP_TS] = simulationTime;
         data[ptr + MovementData.TARGET_RATIO] = 1;
         data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
         this.dwellTimers.delete(vehId);
@@ -211,12 +221,22 @@ export class AutoMgr {
         } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex) {
           // Stopped at dest station → start UNLOADING
           data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
+          data[ptr + OrderData.DROP_ARRIVE_TS] = simulationTime;
+          data[ptr + OrderData.DROP_START_TS] = simulationTime;
           this.dwellTimers.set(vehId, now + this.dwellMs);
         }
       }
 
       // --- UNLOADING complete: resume with existing loop pathBuffer ---
       else if (jobState === JobState.UNLOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
+        // Record lead time before clearing order data
+        const moveToPickupTs = data[ptr + OrderData.MOVE_TO_PICKUP_TS];
+        data[ptr + OrderData.DROP_DONE_TS] = simulationTime;
+        if (moveToPickupTs > 0) {
+          this.orderStats.completed++;
+          this.orderStats.leadTimes.push(simulationTime - moveToPickupTs);
+        }
+
         data[ptr + LogicData.JOB_STATE] = JobState.IDLE;
         data[ptr + OrderData.ORDER_ID] = 0;
         data[ptr + OrderData.ORDER_SRC_STATION] = 0;
@@ -308,6 +328,7 @@ export class AutoMgr {
       data[ptr + OrderData.ORDER_ID] = orderId;
       data[ptr + OrderData.ORDER_SRC_STATION] = srcStationIdx + 1;  // 1-based
       data[ptr + OrderData.ORDER_DEST_STATION] = destStationIdx + 1; // 1-based
+      data[ptr + OrderData.MOVE_TO_PICKUP_TS] = simulationTime;
 
       // Deduct throughput credit
       if (ctx.transferRateMode === 'throughput') {
@@ -490,6 +511,13 @@ export class AutoMgr {
       this.pathFindCountThisFrame++;
       const pathIndices = findShortestPath(currentEdge, dest.edgeIndex, edgeArray, this.routingContext);
       if (!pathIndices || pathIndices.length <= 1) continue;
+
+      // Path change detection (oscillation tracking)
+      const prevPath = this.lastPath.get(vehId);
+      if (prevPath && !pathsEqual(prevPath, pathIndices)) {
+        this.pathChangeCount.set(vehId, (this.pathChangeCount.get(vehId) ?? 0) + 1);
+      }
+      this.lastPath.set(vehId, pathIndices.slice());
 
       this.applyPathToVehicle({
         vehId,
@@ -769,6 +797,29 @@ export class AutoMgr {
   /**
    * Dispose all internal data to allow garbage collection
    */
+  /** Order completion stats for KPI reporting */
+  getOrderStats(): { completed: number; leadTimes: number[]; resetSimTime: number } {
+    return this.orderStats;
+  }
+
+  /** Reset order stats (for skipping warmup period) */
+  resetOrderStats(simulationTime: number): void {
+    this.orderStats = { completed: 0, leadTimes: [], resetSimTime: simulationTime };
+    this.pathChangeCount.clear();
+  }
+
+  /** Total path changes across all vehicles (oscillation measurement) */
+  getTotalPathChanges(): number {
+    let total = 0;
+    for (const count of this.pathChangeCount.values()) total += count;
+    return total;
+  }
+
+  /** Per-vehicle path change counts */
+  getPathChangeCount(): Map<number, number> {
+    return this.pathChangeCount;
+  }
+
   dispose(): void {
     this.stations = [];
     this.vehicleDestinations.clear();
@@ -779,6 +830,8 @@ export class AutoMgr {
     this.actualDestStation.clear();
     this.throughputCredit = 0;
     this.transferCheckCooldown = 0;
+    this.lastPath.clear();
+    this.pathChangeCount.clear();
   }
 
   private constructPathCommand(pathIndices: number[], edgeArray: Edge[], finalRatio?: number): Array<{ edgeId: string; targetRatio?: number }> {
@@ -859,4 +912,12 @@ export class AutoMgr {
       lockMgr.cancelLock(nodeName, vehId);
     }
   }
+}
+
+function pathsEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }

@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import FloatingPanel from "../shared/FloatingPanel";
 import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
+import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 
 // ============================================================================
 // Types
@@ -193,6 +194,7 @@ const DistributionBar: React.FC<{ items: { count: number; color: string; label: 
 
 const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
   const n = fab.vehicleCount;
+  const orderStats = useOrderStatsStore((s) => s.fabStats[fab.fabId]);
   if (n === 0) return null;
 
   return (
@@ -201,6 +203,22 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         <span className="text-xs font-bold text-accent-orange">{fab.fabId}</span>
         <span className="text-[10px] text-gray-500">{n} vehicles</span>
       </div>
+
+      {/* Transfer KPI */}
+      {orderStats && orderStats.completed > 0 && (
+        <div className="mb-2 p-1.5 rounded bg-panel-bg-solid/50 border border-green-900/30">
+          <span className="text-[10px] text-green-400 font-medium">Transfer KPI</span>
+          <div className="grid grid-cols-2 gap-x-3 mt-1">
+            <Stat label="Completed" value={orderStats.completed} color="text-green-300" />
+            <Stat label="Throughput" value={`${orderStats.throughputPerHour.toFixed(0)}/hr`} color="text-green-300 font-bold" />
+          </div>
+          <div className="grid grid-cols-3 gap-x-3 mt-1">
+            <Stat label="LT p50" value={`${orderStats.leadTimeP50.toFixed(1)}s`} color="text-accent-cyan" />
+            <Stat label="LT p95" value={`${orderStats.leadTimeP95.toFixed(1)}s`} color="text-amber-400" />
+            <Stat label="LT mean" value={`${orderStats.leadTimeMean.toFixed(1)}s`} color="text-gray-300" />
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-x-3 mb-2">
         <Stat label="Avg" value={`${fab.avgSpeed.toFixed(2)} m/s`} color="text-accent-cyan font-bold" />
@@ -560,6 +578,15 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <span>Total <span className="text-white font-bold">{total.vehicles}</span></span>
             <span>Moving <span className="text-accent-green font-bold">{total.moving}</span></span>
             <span>Stopped <span className="text-amber-400 font-bold">{total.stopped}</span></span>
+            <button
+              onClick={() => {
+                controller?.resetOrderStats();
+                useOrderStatsStore.getState().resetAll();
+              }}
+              className="px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
+            >
+              Reset KPI
+            </button>
           </div>
         ) : undefined
       }

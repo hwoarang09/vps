@@ -89,7 +89,7 @@ export interface SensorConfigOverride {
 /**
  * Routing (길찾기) 설정
  */
-export type RoutingStrategy = 'DISTANCE' | 'BPR';
+export type RoutingStrategy = 'DISTANCE' | 'BPR' | 'EWMA';
 
 export interface RoutingConfig {
   strategy: RoutingStrategy;
@@ -97,6 +97,8 @@ export interface RoutingConfig {
   bprBeta: number;
   /** 경로 재탐색 주기 (edge 수). 0=도착 시만 */
   rerouteInterval: number;
+  /** EWMA smoothing factor (0.0~1.0) */
+  ewmaAlpha: number;
 }
 
 /**
@@ -248,6 +250,7 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     bprAlpha: 4,
     bprBeta: 8,
     rerouteInterval: 0,
+    ewmaAlpha: 0.1,
   },
 
   transferEnabled: true,

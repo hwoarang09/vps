@@ -12,6 +12,7 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { SimLogger } from "@/logger";
+import type { EdgeStatsTracker } from "@/common/vehicle/logic/EdgeStatsTracker";
 import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
 
 /**
@@ -49,6 +50,8 @@ export interface SimulationStepContext {
   };
   // Logger
   simLogger: SimLogger | null;
+  // EWMA tracker (per-fab)
+  edgeStatsTracker: EdgeStatsTracker;
   // Edge enter time tracking (vehId → simulationTime when vehicle entered current edge)
   edgeEnterTimes: Map<number, number>;
   // Timers
@@ -133,27 +136,28 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     clampedDelta,
     config,
     simulationTime,
-    onEdgeTransit: logger
-      ? (vehId, fromEdgeIndex, toEdgeIndex, timestamp) => {
-          // edge transit 로그 기록
-          const fromEdge = fromEdgeIndex >= 1 ? edges[fromEdgeIndex - 1] : undefined;
-          if (fromEdge) {
-            const enterTs = edgeEnterTimes.get(vehId) ?? 0;
-            logger.logEdgeTransit(
-              timestamp,
-              vehId,
-              fromEdgeIndex,
-              enterTs,
-              timestamp,
-              fromEdge.distance
-            );
+    onEdgeTransit: (vehId, fromEdgeIndex, toEdgeIndex, timestamp) => {
+      const fromEdge = fromEdgeIndex >= 1 ? edges[fromEdgeIndex - 1] : undefined;
+      if (fromEdge) {
+        const enterTs = edgeEnterTimes.get(vehId) ?? 0;
+        // EWMA tracker: 항상 관측 (logger 유무 무관)
+        if (enterTs > 0) {
+          const transitSec = timestamp - enterTs;
+          if (transitSec > 0) {
+            ctx.edgeStatsTracker.observe(fromEdgeIndex, transitSec);
           }
-          // DEV_TRANSFER 로그 기록 (enabledEvents 기반 — 버퍼 없으면 logTransfer 내부에서 무시)
-          logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
-          // 새 edge 진입 시간 기록
-          edgeEnterTimes.set(vehId, timestamp);
         }
-      : undefined,
+        // Logger: 있을 때만 기록
+        if (logger) {
+          logger.logEdgeTransit(timestamp, vehId, fromEdgeIndex, enterTs, timestamp, fromEdge.distance);
+        }
+      }
+      if (logger) {
+        logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
+      }
+      // 새 edge 진입 시간 기록 (항상)
+      edgeEnterTimes.set(vehId, timestamp);
+    },
     onUnusualMove: (event) => {
       // Worker에서 Main Thread로 UnusualMove 이벤트 전송
       const data: UnusualMoveData = {
@@ -196,6 +200,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     transferUtilizationPercent: store.transferUtilizationPercent,
     transferThroughputPerHour: store.transferThroughputPerHour,
     dt: clampedDelta,
+    simulationTime,
   });
 
   // 5. Replay Snapshot (0.5초 주기 + 속도 0 전환 감지)

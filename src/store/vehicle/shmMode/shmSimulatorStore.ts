@@ -10,6 +10,7 @@ import type { Node } from "@/types";
 import { getSimulationConfig } from "@/config/worker/simulationConfig";
 import { MQTT_WS_URL } from "@/config/logConfig";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
+import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -177,6 +178,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
 
     controller.onLogSession((sessionId) => {
       set({ currentSessionId: sessionId });
+    });
+
+    controller.onOrderStats((fabId, stats) => {
+      useOrderStatsStore.getState().updateFabStats(fabId, stats);
     });
 
     try {

@@ -399,9 +399,9 @@ export class ShmSimulatorController {
    * Update routing config (strategy + BPR params) at runtime.
    * If fabId is given, only that fab is updated.
    */
-  setRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number): void {
+  setRoutingConfig(strategy: 'DISTANCE' | 'BPR' | 'EWMA', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number, ewmaAlpha?: number): void {
     if (!this.worker) return;
-    const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval };
+    const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval, ewmaAlpha };
     this.worker.postMessage(message);
   }
 

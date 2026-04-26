@@ -150,12 +150,14 @@ export interface SimulationConfig {
   };
 
   // Routing parameters
-  /** 길찾기 전략: DISTANCE (길이 기반) 또는 BPR (혼잡도 기반) */
-  routingStrategy?: 'DISTANCE' | 'BPR';
+  /** 길찾기 전략: DISTANCE (free-flow time) | BPR (혼잡도) | EWMA (실측) */
+  routingStrategy?: 'DISTANCE' | 'BPR' | 'EWMA';
   /** BPR alpha 파라미터 (기본 0.15) */
   routingBprAlpha?: number;
   /** BPR beta 파라미터 (기본 4.0) */
   routingBprBeta?: number;
+  /** EWMA smoothing factor (0.0~1.0, 기본 0.1) */
+  routingEwmaAlpha?: number;
   /** 경로 재탐색 주기 (edge 수). 0=도착 시만, 1=매 edge, N=N edge마다 */
   routingRerouteInterval?: number;
 
@@ -350,9 +352,11 @@ export type WorkerMessage =
   // Lock 정보 요청
   | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string }
   // Routing config 동적 변경 (fabId 생략 시 전체 fab에 적용)
-  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number }
+  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR' | 'EWMA'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number; ewmaAlpha?: number }
   // Movement config 동적 변경 (fabId 생략 시 전체 fab에 적용)
-  | { type: "SET_MOVEMENT_CONFIG"; fabId?: string; linearMaxSpeed?: number; linearAcceleration?: number; linearDeceleration?: number; preBrakeDeceleration?: number; curveMaxSpeed?: number; curveAcceleration?: number };
+  | { type: "SET_MOVEMENT_CONFIG"; fabId?: string; linearMaxSpeed?: number; linearAcceleration?: number; linearDeceleration?: number; preBrakeDeceleration?: number; curveMaxSpeed?: number; curveAcceleration?: number }
+  // Order stats reset (fabId 생략 시 전체 fab)
+  | { type: "RESET_ORDER_STATS"; fabId?: string };
 
 // Worker -> Main Thread Messages
 export type MainMessage =
@@ -389,7 +393,8 @@ export type MainMessage =
   | { type: "FAB_REMOVED"; /** Unique identifier for the fab */ fabId: string }
   | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData }
   | { type: "UNUSUAL_MOVE"; data: UnusualMoveData }
-  | { type: "LOG_SESSION_STARTED"; sessionId: string; fabId: string };
+  | { type: "LOG_SESSION_STARTED"; sessionId: string; fabId: string }
+  | { type: "ORDER_STATS"; fabId: string; simulationTime: number; completed: number; throughputPerHour: number; leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; totalPathChanges: number };
 
 // UnusualMove 이벤트 데이터
 export interface UnusualMoveData {

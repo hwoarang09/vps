@@ -48,6 +48,14 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       shortcutLabel: "d",
       iconFn: () => pngIcon(imgLabel),
     },
+    {
+      id: "stats-kpi-export",
+      label: "Export KPI",
+      iconFn: (isActive?: boolean) => (
+        <FileCheck size={ICON_SIZE_LARGE}
+          style={{ stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR, strokeWidth: 2 }} />
+      ),
+    },
   ],
   Operation: [
     {

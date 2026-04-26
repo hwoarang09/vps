@@ -7,7 +7,8 @@ import { EdgeVehicleQueue } from "@/common/vehicle/memory/EdgeVehicleQueue";
 import { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
-import { DEFAULT_ROUTING_CONFIG, type RoutingContext } from "@/common/vehicle/logic/Dijkstra";
+import { DEFAULT_ROUTING_CONFIG, type RoutingContext, type RoutingStrategy } from "@/common/vehicle/logic/Dijkstra";
+import { EdgeStatsTracker } from "@/common/vehicle/logic/EdgeStatsTracker";
 import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
 import { EngineStore } from "../EngineStore";
@@ -71,8 +72,9 @@ export class FabContext {
   private readonly config: SimulationConfig;
   private actualNumVehicles: number = 0;
 
-  // === Routing Context (per-fab BPR) ===
+  // === Routing Context (per-fab BPR / EWMA) ===
   private routingContext!: RoutingContext;
+  private readonly edgeStatsTracker: EdgeStatsTracker;
 
   // === SimLogger ===
   private simLogger: SimLogger | null = null;
@@ -83,6 +85,9 @@ export class FabContext {
 
   // === Edge Enter Time Tracking (vehId → simulationTime) ===
   private readonly edgeEnterTimes: Map<number, number> = new Map();
+
+  // === Order Stats Flush Timer ===
+  private lastOrderStatsFlush = 0;
 
   // === Replay Snapshot State ===
   private lastReplaySnapshotTime = 0;
@@ -104,6 +109,9 @@ export class FabContext {
     this.dispatchMgr = new DispatchMgr(this.transferMgr);
     this.routingMgr = new RoutingMgr(this.dispatchMgr);
     this.autoMgr = new AutoMgr();
+    this.edgeStatsTracker = new EdgeStatsTracker({
+      ewmaAlpha: params.config.routingEwmaAlpha ?? 0.1,
+    });
 
     this.init(params);
   }
@@ -136,16 +144,20 @@ export class FabContext {
       this.fabOffset = params.fabOffset ?? { x: 0, y: 0 };
     }
 
-    // Per-fab routing context (Dijkstra BPR)
+    // Per-fab routing context (Dijkstra BPR / EWMA)
     this.routingContext = {
       config: {
         ...DEFAULT_ROUTING_CONFIG,
         ...(this.config.routingStrategy && { strategy: this.config.routingStrategy }),
         ...(this.config.routingBprAlpha !== undefined && { bprAlpha: this.config.routingBprAlpha }),
         ...(this.config.routingBprBeta !== undefined && { bprBeta: this.config.routingBprBeta }),
+        ...(this.config.routingEwmaAlpha !== undefined && { ewmaAlpha: this.config.routingEwmaAlpha }),
       },
       edgeVehicleQueue: this.edgeVehicleQueue,
       vehicleSpacing: this.config.bodyLength + (this.config.vehicleSpacing ?? 0.6),
+      linearMaxSpeed: this.config.linearMaxSpeed,
+      curveMaxSpeed: this.config.curveMaxSpeed,
+      edgeStatsTracker: this.edgeStatsTracker,
     };
     this.autoMgr.routingContext = this.routingContext;
     if (this.config.routingRerouteInterval !== undefined) {
@@ -250,13 +262,17 @@ export class FabContext {
     }
   }
 
-  updateRoutingConfig(strategy: 'DISTANCE' | 'BPR', bprAlpha?: number, bprBeta?: number, rerouteInterval?: number): void {
+  updateRoutingConfig(strategy: RoutingStrategy, bprAlpha?: number, bprBeta?: number, rerouteInterval?: number, ewmaAlpha?: number): void {
     this.routingContext.config = {
       ...this.routingContext.config,
       strategy,
       ...(bprAlpha !== undefined && { bprAlpha }),
       ...(bprBeta !== undefined && { bprBeta }),
+      ...(ewmaAlpha !== undefined && { ewmaAlpha }),
     };
+    if (ewmaAlpha !== undefined) {
+      this.edgeStatsTracker.updateConfig({ ewmaAlpha });
+    }
     if (rerouteInterval !== undefined) {
       this.autoMgr.rerouteInterval = rerouteInterval;
     }
@@ -312,6 +328,7 @@ export class FabContext {
         transferThroughputPerHour: this.store.transferThroughputPerHour,
       },
       simLogger: this.simLogger,
+      edgeStatsTracker: this.edgeStatsTracker,
       edgeEnterTimes: this.edgeEnterTimes,
       collisionCheckTimers: this.collisionCheckTimers,
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
@@ -324,7 +341,13 @@ export class FabContext {
     this.lastReplaySnapshotTime = ctx.lastReplaySnapshotTime;
     this.prevVehicleSpeeds = ctx.prevVehicleSpeeds;
 
-    // 5. Write to Render Buffer (렌더링 데이터)
+    // 5. Order stats flush (1초마다)
+    if (simulationTime - this.lastOrderStatsFlush >= 1.0) {
+      this.flushOrderStats(simulationTime);
+      this.lastOrderStatsFlush = simulationTime;
+    }
+
+    // 6. Write to Render Buffer (렌더링 데이터)
     this.writeToRenderRegion();
   }
 
@@ -342,6 +365,28 @@ export class FabContext {
       fabOffsetY: this.fabOffset.y,
       sectionOffsets: this.sectionOffsets,
     });
+  }
+
+  private flushOrderStats(simulationTime: number): void {
+    const stats = this.autoMgr.getOrderStats();
+    const elapsed = simulationTime - stats.resetSimTime;
+    const sorted = stats.leadTimes.slice().sort((a, b) => a - b);
+    globalThis.postMessage({
+      type: "ORDER_STATS",
+      fabId: this.fabId,
+      simulationTime,
+      completed: stats.completed,
+      throughputPerHour: elapsed > 0 ? (stats.completed / elapsed) * 3600 : 0,
+      leadTimeP50: percentileSorted(sorted, 0.5),
+      leadTimeP95: percentileSorted(sorted, 0.95),
+      leadTimeMean: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
+      totalPathChanges: this.autoMgr.getTotalPathChanges(),
+    });
+  }
+
+  resetOrderStats(simulationTime: number): void {
+    this.autoMgr.resetOrderStats(simulationTime);
+    this.lastOrderStatsFlush = simulationTime;
   }
 
   handleCommand(command: unknown): void {
@@ -365,6 +410,7 @@ export class FabContext {
     this.transferMgr.clearQueue();
     this.dispatchMgr.dispose();
     this.autoMgr.dispose();
+    this.edgeStatsTracker.reset();
 
     this.edges = [];
     this.nodes = [];
@@ -409,6 +455,12 @@ export class FabContext {
       nodes,
     };
   }
+}
+
+function percentileSorted(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
 }
 
 // Re-export types

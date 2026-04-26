@@ -216,12 +216,12 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (message.fabId) {
           // Per-fab update
           engine.getFabContext(message.fabId)?.updateRoutingConfig(
-            message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval
+            message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha
           );
         } else {
           // Broadcast to all fabs
           engine.forEachFab((ctx) => {
-            ctx.updateRoutingConfig(message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval);
+            ctx.updateRoutingConfig(message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha);
           });
         }
       }
@@ -240,6 +240,16 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           engine.getFabContext(message.fabId)?.updateMovementConfig(params);
         } else {
           engine.forEachFab((ctx) => ctx.updateMovementConfig(params));
+        }
+      }
+      break;
+    case "RESET_ORDER_STATS":
+      if (engine) {
+        const simTime = engine.getSimulationTime?.() ?? 0;
+        if (message.fabId) {
+          engine.getFabContext(message.fabId)?.resetOrderStats(simTime);
+        } else {
+          engine.forEachFab((ctx) => ctx.resetOrderStats(simTime));
         }
       }
       break;

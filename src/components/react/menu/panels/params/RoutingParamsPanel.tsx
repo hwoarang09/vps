@@ -49,16 +49,25 @@ const StrategyToggle: React.FC<{
           : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
       }`}>
       DISTANCE
-      <span className="block text-[10px] font-normal mt-0.5 opacity-70">edge.distance</span>
+      <span className="block text-[10px] font-normal mt-0.5 opacity-70">free-flow time</span>
     </button>
     <button onClick={() => onChange("BPR")}
-      className={`flex-1 px-3 py-2 rounded-r text-xs font-bold border transition-all ${
+      className={`flex-1 px-3 py-2 text-xs font-bold border transition-all ${
         strategy === "BPR"
           ? "bg-amber-500 text-white border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"
           : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
       }`}>
       BPR
-      <span className="block text-[10px] font-normal mt-0.5 opacity-70">d*(1+a*(V/C)^b)</span>
+      <span className="block text-[10px] font-normal mt-0.5 opacity-70">t0*(1+a*(V/C)^b)</span>
+    </button>
+    <button onClick={() => onChange("EWMA")}
+      className={`flex-1 px-3 py-2 rounded-r text-xs font-bold border transition-all ${
+        strategy === "EWMA"
+          ? "bg-green-500 text-white border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+          : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
+      }`}>
+      EWMA
+      <span className="block text-[10px] font-normal mt-0.5 opacity-70">observed avg</span>
     </button>
   </div>
 );
@@ -68,11 +77,23 @@ const BprParams: React.FC<{
 }> = ({ alpha, beta, onAlpha, onBeta, enabled }) => (
   <div className={`mt-2 transition-opacity ${enabled ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
     <div className="mb-2 text-[10px] text-gray-500 font-mono">
-      cost = d * (1 + <span className="text-accent-cyan">a</span> * (V/C)<sup className="text-accent-cyan">b</sup>)
+      cost = t0 * (1 + <span className="text-accent-cyan">a</span> * (V/C)<sup className="text-accent-cyan">b</sup>)
     </div>
     <BprParamInput label="a (alpha)" value={alpha} onChange={onAlpha} description="혼잡 가중치" />
     <BprParamInput label="b (beta)" value={beta} onChange={onBeta} description="혼잡 민감도" />
     <div className="text-[10px] text-gray-600">V = edge 위 차량 수, C = edge길이 / 차량간격</div>
+  </div>
+);
+
+const EwmaParams: React.FC<{
+  alpha: number; onAlpha: (v: number) => void; enabled: boolean;
+}> = ({ alpha, onAlpha, enabled }) => (
+  <div className={`mt-2 transition-opacity ${enabled ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+    <div className="mb-2 text-[10px] text-gray-500 font-mono">
+      cost = EWMA(<span className="text-green-400">a</span> * new + (1-<span className="text-green-400">a</span>) * old)
+    </div>
+    <BprParamInput label="a (alpha)" value={alpha} onChange={onAlpha} description="EWMA 반응속도" />
+    <div className="text-[10px] text-gray-600">α가 클수록 최근 통과 차량의 소요시간이 더 크게 반영 (민감)<br/>작을수록 과거 값 유지 (안정)</div>
   </div>
 );
 
@@ -129,7 +150,7 @@ const RerouteSelector: React.FC<{
 
 // ─── Main Panel ───
 
-type FullRouting = { strategy: RoutingStrategy; bprAlpha: number; bprBeta: number; rerouteInterval: number };
+type FullRouting = { strategy: RoutingStrategy; bprAlpha: number; bprBeta: number; rerouteInterval: number; ewmaAlpha: number };
 const GLOBAL = "global";
 
 const RoutingParamsPanel: React.FC = () => {
@@ -140,7 +161,7 @@ const RoutingParamsPanel: React.FC = () => {
 
   const pushToWorker = (fabId: string | undefined, cfg: FullRouting) => {
     if (!controller) return;
-    controller.setRoutingConfig(cfg.strategy, cfg.bprAlpha, cfg.bprBeta, fabId, cfg.rerouteInterval);
+    controller.setRoutingConfig(cfg.strategy, cfg.bprAlpha, cfg.bprBeta, fabId, cfg.rerouteInterval, cfg.ewmaAlpha);
   };
 
   // === Global ===
@@ -157,6 +178,7 @@ const RoutingParamsPanel: React.FC = () => {
       bprAlpha: r?.bprAlpha ?? routingConfig.bprAlpha,
       bprBeta: r?.bprBeta ?? routingConfig.bprBeta,
       rerouteInterval: r?.rerouteInterval ?? routingConfig.rerouteInterval,
+      ewmaAlpha: r?.ewmaAlpha ?? routingConfig.ewmaAlpha,
     };
   };
 
@@ -218,6 +240,10 @@ const RoutingParamsPanel: React.FC = () => {
               enabled={routingConfig.strategy === "BPR"} />
           </div>
           <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
+            <EwmaParams alpha={routingConfig.ewmaAlpha} onAlpha={(v) => updateGlobal({ ewmaAlpha: v })}
+              enabled={routingConfig.strategy === "EWMA"} />
+          </div>
+          <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
             <RerouteSelector value={routingConfig.rerouteInterval} onChange={(v) => updateGlobal({ rerouteInterval: v })} />
           </div>
         </>
@@ -248,6 +274,11 @@ const RoutingParamsPanel: React.FC = () => {
               enabled={selectedEff.strategy === "BPR"} />
           </div>
           <div className={`${panelCardVariants({ variant: hasOverride ? "highlight" : "default", padding: "sm" })}`}>
+            <EwmaParams alpha={selectedEff.ewmaAlpha}
+              onAlpha={(v) => updateFab(selectedFabIndex, { ewmaAlpha: v })}
+              enabled={selectedEff.strategy === "EWMA"} />
+          </div>
+          <div className={`${panelCardVariants({ variant: hasOverride ? "highlight" : "default", padding: "sm" })}`}>
             <RerouteSelector value={selectedEff.rerouteInterval}
               onChange={(v) => updateFab(selectedFabIndex, { rerouteInterval: v })} />
           </div>
@@ -269,6 +300,7 @@ const RoutingParamsPanel: React.FC = () => {
                   <span className="text-gray-400 font-mono">
                     {eff.strategy} rr={eff.rerouteInterval}
                     {eff.strategy === "BPR" ? ` a=${eff.bprAlpha} b=${eff.bprBeta}` : ""}
+                    {eff.strategy === "EWMA" ? ` a=${eff.ewmaAlpha}` : ""}
                   </span>
                 </div>
               );
@@ -284,6 +316,7 @@ const RoutingParamsPanel: React.FC = () => {
           <div>Reroute 0 = 경로 생성 시 1회만</div>
           <div>Reroute N = N edge 지날 때마다 재탐색</div>
           <div>BPR + Reroute 조합 시 혼잡 우회 효과</div>
+          <div>EWMA = 실측 통과시간 기반 동적 cost</div>
         </div>
       </div>
     </div>
