@@ -142,9 +142,9 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
         const enterTs = edgeEnterTimes.get(vehId) ?? 0;
         // EWMA tracker: 항상 관측 (logger 유무 무관)
         if (enterTs > 0) {
-          const transitSec = timestamp - enterTs;
-          if (transitSec > 0) {
-            ctx.edgeStatsTracker.observe(fromEdgeIndex, transitSec);
+          const transitMs = timestamp - enterTs;
+          if (transitMs > 0) {
+            ctx.edgeStatsTracker.observe(fromEdgeIndex, transitMs / 1000);
           }
         }
         // Logger: 있을 때만 기록
