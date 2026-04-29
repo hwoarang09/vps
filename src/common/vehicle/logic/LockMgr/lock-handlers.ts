@@ -398,15 +398,49 @@ export interface OrphanedLockLogCtx {
   currentEdgeName: string;
 }
 
-/** merge까지 "직진"으로 간주하는 최대 edge 수 */
-const MAX_DIRECT_MERGE_EDGES = 10;
+/** merge까지 "직진"으로 간주하는 최대 물리 거리 (m) */
+const MAX_DIRECT_MERGE_DIST = 20;
+
+/**
+ * 새 경로에서 현재 edge → merge edge까지 물리 거리(m) 계산
+ * @returns 거리(m), 계산 불가 시 Infinity
+ */
+function calcPhysicalDistToMerge(
+  curEdge: number,
+  newPathEdges: number[],
+  nodeName: string,
+  edges: LockMgrState['edges'],
+): { dist: number; mergePos: number } {
+  // 새 경로에서 차량 현재 위치
+  let vehPos = -1;
+  for (let j = 0; j < newPathEdges.length; j++) {
+    if (newPathEdges[j] === curEdge) { vehPos = j; break; }
+  }
+  // 새 경로에서 merge node 위치 (to_node === nodeName인 edge)
+  let mergePos = -1;
+  for (let j = 0; j < newPathEdges.length; j++) {
+    const edge = edges[newPathEdges[j] - 1];
+    if (edge && edge.to_node === nodeName) { mergePos = j; break; }
+  }
+
+  if (mergePos < 0) return { dist: Infinity, mergePos: -1 };
+
+  const startPos = vehPos >= 0 ? vehPos + 1 : 0; // 현재 edge 제외, 다음부터 합산
+  let totalDist = 0;
+  for (let j = startPos; j <= mergePos; j++) {
+    const edge = edges[newPathEdges[j] - 1];
+    if (edge) totalDist += edge.distance;
+  }
+  return { dist: totalDist, mergePos };
+}
 
 /**
  * 경로 변경 시 orphaned lock 처리
  * - 신 경로에 없는 merge → 무조건 release/cancel
  * - 신 경로에 있는 merge:
- *   - 직진 경로 (releaseEdge가 가까이) → 유지
- *   - 우회 경로 (releaseEdge가 멀리/없음) → release/cancel
+ *   - 물리 거리 가까움 (< MAX_DIRECT_MERGE_DIST) → 유지
+ *   - 멀거나 못 찾음 → release/cancel
+ *   - WAIT 상태 (이미 merge 직전 정지) → 무조건 유지
  *
  * processPathCommand() 에서 새 경로 설정 직전에 호출
  */
@@ -427,43 +461,24 @@ export function releaseOrphanedLocks(
     const holder = state.locks.get(nodeName);
 
     if (newPathMergeNodes.has(nodeName)) {
-      // 신 경로에도 있는 merge
-      if (holder === vehicleId) {
-        continue; // HOLDER → 무조건 유지 (이미 잡은 lock은 안 품)
-      }
       // WAIT 상태 = 이미 merge 직전에 정지 → 큐 유지 (cancel하면 priority inversion)
       if (state.waitingVehicles.has(vehicleId)) {
         continue;
       }
-      // 물리적 위치 기반 직진/우회 판별 (v0.3.75)
-      // 구 경로의 releaseEdgeIdx 대신 차량의 현재 edge → merge 거리로 판단
+      // 물리 거리 기반 직진/우회 판별
       const data = state.vehicleDataArray;
       const curEdge = data ? Math.trunc(data[vehicleId * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE]) : 0;
+      const { dist, mergePos } = calcPhysicalDistToMerge(curEdge, newPathEdges, nodeName, state.edges);
 
-      // 새 경로에서 차량 현재 위치
-      let vehPos = -1;
-      for (let j = 0; j < newPathEdges.length; j++) {
-        if (newPathEdges[j] === curEdge) { vehPos = j; break; }
-      }
-      // 새 경로에서 merge node 위치 (to_node === nodeName인 edge)
-      let mergePos = -1;
-      for (let j = 0; j < newPathEdges.length; j++) {
-        const edge = state.edges[newPathEdges[j] - 1];
-        if (edge && edge.to_node === nodeName) { mergePos = j; break; }
-      }
-
-      if (mergePos >= 0) {
-        const dist = vehPos >= 0 ? (mergePos - vehPos) : mergePos;
-        if (dist >= 0 && dist < MAX_DIRECT_MERGE_EDGES) {
-          // 가까움 → 큐 유지 + releaseEdgeIdx를 새 경로 기준으로 갱신
-          const nextIdx = mergePos + 1;
-          if (nextIdx < newPathEdges.length) {
-            releases[i].releaseEdgeIdx = newPathEdges[nextIdx];
-          }
-          continue;
+      if (dist < MAX_DIRECT_MERGE_DIST) {
+        // 가까움 → 유지 + releaseEdgeIdx를 새 경로 기준으로 갱신
+        const nextIdx = mergePos + 1;
+        if (nextIdx < newPathEdges.length) {
+          releases[i].releaseEdgeIdx = newPathEdges[nextIdx];
         }
+        continue;
       }
-      // 멀거나 merge 못 찾음 → cancel (아래 공통 로직)
+      // 멀거나 merge 못 찾음 → release/cancel (아래 공통 로직)
     }
 
     // 신 경로에 없는 merge 또는 우회 큐 대기 → 제거
