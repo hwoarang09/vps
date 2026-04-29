@@ -47,6 +47,8 @@ export class TransferMgr {
   private checkpointBuffer: Float32Array | null = null;
   // 곡선 감속 상태 (단순화)
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
+  // 이번 프레임에서 경로 변경된 차량 (checkpoint rebuild 후 lock 재처리 필요)
+  private readonly _pathChangedVehicles: Set<number> = new Set();
 
   /**
    * Set path buffer reference (called from EngineStore or FabContext)
@@ -648,6 +650,19 @@ export class TransferMgr {
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
+
+    // 경로 변경 차량 추적 (simulation-step에서 lock 재처리용)
+    this._pathChangedVehicles.add(vehId);
+  }
+
+  /** 이번 프레임에서 경로 변경된 차량 목록 */
+  getPathChangedVehicles(): ReadonlySet<number> {
+    return this._pathChangedVehicles;
+  }
+
+  /** 프레임 끝에서 초기화 */
+  clearPathChangedVehicles(): void {
+    this._pathChangedVehicles.clear();
   }
 
   /**

@@ -203,6 +203,15 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     simulationTime,
   });
 
+  // 4.5. 경로 변경된 차량 lock 재처리 (checkpoint rebuild 후 missed checkpoint 즉시 처리)
+  const pathChanged = transferMgr.getPathChangedVehicles();
+  if (pathChanged.size > 0) {
+    for (const vehId of pathChanged) {
+      lockMgr.processLock(vehId, { default: 'FIFO' });
+    }
+    transferMgr.clearPathChangedVehicles();
+  }
+
   // 5. Replay Snapshot (0.5초 주기 + 속도 0 전환 감지)
   if (simLogger?.isReplayEnabled()) {
     const REPLAY_INTERVAL = 0.5; // seconds
