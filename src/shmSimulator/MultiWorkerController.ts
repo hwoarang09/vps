@@ -797,10 +797,23 @@ export class MultiWorkerController {
   }
 
   /**
-   * Flush: SimLogger는 Worker dispose 시 자동 flush
+   * Flush all worker log buffers to OPFS
    */
-  flushLogs(): void {
-    // no-op: SimLogger flushes on dispose
+  async flushLogs(): Promise<void> {
+    if (this.workers.length === 0) return;
+    const promises = this.workers.map(w =>
+      new Promise<void>(resolve => {
+        const handler = (e: MessageEvent<MainMessage>) => {
+          if (e.data.type === "LOGS_FLUSHED") {
+            w.worker.removeEventListener("message", handler);
+            resolve();
+          }
+        };
+        w.worker.addEventListener("message", handler);
+        w.worker.postMessage({ type: "FLUSH_LOGS" } as WorkerMessage);
+      })
+    );
+    await Promise.all(promises);
   }
 
   /**
@@ -811,9 +824,10 @@ export class MultiWorkerController {
   }
 
   /**
-   * Download specific SimLogger .bin file
+   * Download specific SimLogger .bin file (flushes worker buffers first)
    */
   async downloadLogFile(fileName: string): Promise<void> {
+    await this.flushLogs();
     await downloadSimLogFile(fileName);
   }
 

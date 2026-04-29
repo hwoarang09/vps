@@ -393,6 +393,10 @@ export class FabContext {
     this.routingMgr.receiveMessage(command);
   }
 
+  flushLogs(): void {
+    this.simLogger?.flush();
+  }
+
   dispose(): void {
     // SimLogger 정리
     if (this.simLogger) {

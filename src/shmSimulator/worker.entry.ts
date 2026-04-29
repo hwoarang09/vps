@@ -253,6 +253,12 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
       }
       break;
+    case "FLUSH_LOGS":
+      if (engine) {
+        engine.flushLogs();
+      }
+      globalThis.postMessage({ type: "LOGS_FLUSHED" } as MainMessage);
+      break;
     default:
   }
 };

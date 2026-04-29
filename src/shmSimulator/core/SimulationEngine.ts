@@ -407,6 +407,12 @@ export class SimulationEngine {
     }
   }
 
+  flushLogs(): void {
+    for (const context of this.fabContexts.values()) {
+      context.flushLogs();
+    }
+  }
+
   /**
    * Dispose the engine
    */

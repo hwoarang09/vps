@@ -356,7 +356,8 @@ export type WorkerMessage =
   // Movement config 동적 변경 (fabId 생략 시 전체 fab에 적용)
   | { type: "SET_MOVEMENT_CONFIG"; fabId?: string; linearMaxSpeed?: number; linearAcceleration?: number; linearDeceleration?: number; preBrakeDeceleration?: number; curveMaxSpeed?: number; curveAcceleration?: number }
   // Order stats reset (fabId 생략 시 전체 fab)
-  | { type: "RESET_ORDER_STATS"; fabId?: string };
+  | { type: "RESET_ORDER_STATS"; fabId?: string }
+  | { type: "FLUSH_LOGS" };
 
 // Worker -> Main Thread Messages
 export type MainMessage =
@@ -394,7 +395,8 @@ export type MainMessage =
   | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData }
   | { type: "UNUSUAL_MOVE"; data: UnusualMoveData }
   | { type: "LOG_SESSION_STARTED"; sessionId: string; fabId: string }
-  | { type: "ORDER_STATS"; fabId: string; simulationTime: number; completed: number; throughputPerHour: number; leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; totalPathChanges: number };
+  | { type: "ORDER_STATS"; fabId: string; simulationTime: number; completed: number; throughputPerHour: number; leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; totalPathChanges: number }
+  | { type: "LOGS_FLUSHED" };
 
 // UnusualMove 이벤트 데이터
 export interface UnusualMoveData {
