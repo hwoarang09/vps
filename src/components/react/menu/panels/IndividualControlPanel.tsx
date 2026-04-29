@@ -220,6 +220,10 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
                 <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx})</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500">
+                <span>Ratio / Pos</span>
+                <span className="font-mono">{data.currentEdgeRatio.toFixed(3)} / {currentEdge ? (data.currentEdgeRatio * currentEdge.distance).toFixed(1) : "?"}m</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-500">
                 <span>Next Edge</span>
                 <span className="font-mono">{nextEdgeName} {nextEdgeIdx !== -1 ? `(#${nextEdgeIdx})` : ""}</span>
             </div>
@@ -851,10 +855,15 @@ const IndividualControlPanel: React.FC = () => {
 
     useEffect(() => {
         if (selectedVehicleId !== null) {
-            setFoundVehicleIndex(selectedVehicleId);
-            setSearchTerm(`VEH${String(selectedVehicleId).padStart(5, '0')}`);
+            // click에서 들어오는 selectedVehicleId는 render buffer index
+            // worker buffer index로 변환하여 사용
+            const workerIdx = isShmMode
+                ? (shmController?.renderIndexToWorkerIndex(selectedVehicleId) ?? selectedVehicleId)
+                : selectedVehicleId;
+            setFoundVehicleIndex(workerIdx);
+            setSearchTerm(String(workerIdx));
         }
-    }, [selectedVehicleId]);
+    }, [selectedVehicleId, isShmMode, shmController]);
 
     return (
         <div className="flex flex-col h-full">

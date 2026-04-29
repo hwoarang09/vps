@@ -18,6 +18,7 @@ import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import type { StationRawData } from "@/types/station";
 import { listSimLogFiles, downloadSimLogFile, deleteSimLogFile, clearAllSimLogs, type SimLogFileInfo } from "@/logger";
+import { VEHICLE_DATA_SIZE } from "@/common/vehicle/memory/VehicleDataArrayBase";
 
 /** Order stats data received from worker */
 export interface OrderStatsData {
@@ -758,6 +759,53 @@ export class MultiWorkerController {
       workerIndex: w.workerIndex,
       fabIds: w.fabIds,
     }));
+  }
+
+  /**
+   * Render buffer global index → Worker buffer global index 변환
+   * Render는 actualVehicles 기준, Worker는 maxVehicles 기준 연속 배치
+   * @returns worker buffer index, or -1 if invalid
+   */
+  renderIndexToWorkerIndex(renderIndex: number): number {
+    if (!this.renderLayout || !this.layout) return renderIndex; // fallback
+
+    let renderOffset = 0;
+    for (const ra of this.renderLayout.fabRenderAssignments) {
+      if (renderIndex < renderOffset + ra.actualVehicles) {
+        const localIdx = renderIndex - renderOffset;
+        // Find worker buffer offset for this fab
+        const fabAssignment = this.layout.fabAssignments.get(ra.fabId);
+        if (!fabAssignment) return -1;
+        const workerVehOffset = fabAssignment.vehicleRegion.offset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+        return workerVehOffset + localIdx;
+      }
+      renderOffset += ra.actualVehicles;
+    }
+    return -1;
+  }
+
+  /**
+   * Worker buffer global index → Render buffer global index 변환
+   * @returns render buffer index, or -1 if invalid
+   */
+  workerIndexToRenderIndex(workerIndex: number): number {
+    if (!this.renderLayout || !this.layout) return workerIndex; // fallback
+
+    for (const ra of this.renderLayout.fabRenderAssignments) {
+      const fabAssignment = this.layout.fabAssignments.get(ra.fabId);
+      if (!fabAssignment) continue;
+      const workerVehOffset = fabAssignment.vehicleRegion.offset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+      if (workerIndex >= workerVehOffset && workerIndex < workerVehOffset + ra.actualVehicles) {
+        const localIdx = workerIndex - workerVehOffset;
+        // Find render offset for this fab
+        let renderOffset = 0;
+        for (const ra2 of this.renderLayout.fabRenderAssignments) {
+          if (ra2.fabId === ra.fabId) return renderOffset + localIdx;
+          renderOffset += ra2.actualVehicles;
+        }
+      }
+    }
+    return -1;
   }
 
   getIsRunning(): boolean {
