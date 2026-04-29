@@ -25,6 +25,7 @@ import type {
   VehicleCommand,
   ReservedEdge,
   CurveBrakeState,
+  PathChangeInfo,
 } from "./types";
 import {
   MAX_PATH_LENGTH,
@@ -47,8 +48,8 @@ export class TransferMgr {
   private checkpointBuffer: Float32Array | null = null;
   // 곡선 감속 상태 (단순화)
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
-  // 이번 프레임에서 경로 변경된 차량 (checkpoint rebuild 후 lock 재처리 필요)
-  private readonly _pathChangedVehicles: Set<number> = new Set();
+  // 이번 프레임에서 경로 변경된 차량 (Step 4.5 lock 재정합용)
+  private readonly _pathChangedVehicles: Map<number, PathChangeInfo> = new Map();
 
   /**
    * Set path buffer reference (called from EngineStore or FabContext)
@@ -602,29 +603,17 @@ export class TransferMgr {
       ? [currentEdgeIdx, ...edgeIndices]
       : edgeIndices;
 
-    // 새 경로에 없는 merge node의 orphaned lock 즉시 해제
+    // 경로 변경 정보 저장 (Step 4.5에서 lock 재정합용)
     if (lockMgr) {
       const mergeNodesInNewPath = this.getMergeNodesInPath(edgeIndicesWithCurrent, edgeArray, lockMgr);
-
-      // 로그용 old/new path edge 이름 (최대 5개)
-      const edgeName = (idx: number) => {
-        const e = edgeArray[idx - 1];
-        return e ? e.edge_name : `E${idx}`;
-      };
-      const oldEdges: string[] = [];
-      if (this.pathBufferFromAutoMgr) {
-        const pathPtr = vehId * MAX_PATH_LENGTH;
-        const oldLen = this.pathBufferFromAutoMgr[pathPtr + PATH_LEN];
-        for (let i = 0; i < oldLen && i < 5; i++) {
-          oldEdges.push(edgeName(this.pathBufferFromAutoMgr[pathPtr + PATH_EDGES_START + i]));
-        }
-      }
-      const newEdges = edgeIndices.slice(0, 5).map(edgeName);
-
-      lockMgr.releaseOrphanedLocks(vehId, mergeNodesInNewPath, edgeIndicesWithCurrent, {
-        oldEdges,
-        newEdges,
-        currentEdgeName: edgeName(currentEdgeIdx),
+      this._pathChangedVehicles.set(vehId, {
+        newPathEdges: [...edgeIndicesWithCurrent],
+        newPathMergeNodes: mergeNodesInNewPath,
+      });
+    } else {
+      this._pathChangedVehicles.set(vehId, {
+        newPathEdges: [...edgeIndicesWithCurrent],
+        newPathMergeNodes: new Set(),
       });
     }
 
@@ -650,13 +639,10 @@ export class TransferMgr {
     }
 
     data[ptr + MovementData.TARGET_RATIO] = 1;
-
-    // 경로 변경 차량 추적 (simulation-step에서 lock 재처리용)
-    this._pathChangedVehicles.add(vehId);
   }
 
   /** 이번 프레임에서 경로 변경된 차량 목록 */
-  getPathChangedVehicles(): ReadonlySet<number> {
+  getPathChangedVehicles(): ReadonlyMap<number, PathChangeInfo> {
     return this._pathChangedVehicles;
   }
 

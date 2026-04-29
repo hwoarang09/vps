@@ -13,7 +13,8 @@ import type {
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
-import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks, type OrphanedLockLogCtx } from "./lock-handlers";
+import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks } from "./lock-handlers";
+import type { PathChangeInfo } from "../TransferMgr/types";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
 import { LogicData, MovementData, MovingStatus, StopReason, VEHICLE_DATA_SIZE } from "@/common/vehicle/initialize/constants";
@@ -155,11 +156,13 @@ export class LockMgr {
   }
 
   /**
-   * 경로 변경 시 새 경로에 없는 orphaned lock 즉시 해제
-   * TransferMgr.processPathCommand() 에서 호출
+   * Step 4.5: 경로 변경된 차량의 lock 정합성 일괄 처리
+   * (1) orphaned lock 정리 (신 경로에 없는 merge release/cancel)
+   * (2) missed checkpoint 즉시 처리 (rebuild된 checkpoint 중 이미 지나친 것)
    */
-  releaseOrphanedLocks(vehicleId: number, newPathMergeNodes: Set<string>, newPathEdges: number[], logCtx?: OrphanedLockLogCtx): void {
-    releaseOrphanedLocks(vehicleId, newPathMergeNodes, newPathEdges, this.state, this.eName, logCtx);
+  processPathChange(vehicleId: number, info: PathChangeInfo): void {
+    releaseOrphanedLocks(vehicleId, info.newPathMergeNodes, info.newPathEdges, this.state, this.eName);
+    processCheckpoint(vehicleId, this.state, this.eName);
   }
 
   /**

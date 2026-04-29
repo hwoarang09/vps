@@ -203,11 +203,11 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     simulationTime,
   });
 
-  // 4.5. 경로 변경된 차량 lock 재처리 (checkpoint rebuild 후 missed checkpoint 즉시 처리)
+  // 4.5. 경로 변경된 차량 lock 재정합 (orphan 정리 + missed checkpoint 즉시 처리)
   const pathChanged = transferMgr.getPathChangedVehicles();
   if (pathChanged.size > 0) {
-    for (const vehId of pathChanged) {
-      lockMgr.processLock(vehId, { default: 'FIFO' });
+    for (const [vehId, info] of pathChanged) {
+      lockMgr.processPathChange(vehId, info);
     }
     transferMgr.clearPathChangedVehicles();
   }
