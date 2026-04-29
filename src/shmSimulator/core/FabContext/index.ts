@@ -376,10 +376,10 @@ export class FabContext {
       fabId: this.fabId,
       simulationTime,
       completed: stats.completed,
-      throughputPerHour: elapsed > 0 ? (stats.completed / elapsed) * 3600 : 0,
-      leadTimeP50: percentileSorted(sorted, 0.5),
-      leadTimeP95: percentileSorted(sorted, 0.95),
-      leadTimeMean: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
+      throughputPerHour: elapsed > 0 ? (stats.completed / elapsed) * 3_600_000 : 0,
+      leadTimeP50: percentileSorted(sorted, 0.5) / 1000,
+      leadTimeP95: percentileSorted(sorted, 0.95) / 1000,
+      leadTimeMean: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length / 1000 : 0,
       totalPathChanges: this.autoMgr.getTotalPathChanges(),
     });
   }
