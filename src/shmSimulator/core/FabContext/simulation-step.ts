@@ -101,7 +101,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
       simLogger.logLock(simulationTime, vehId, nodeIdx, eventType, waitMs, holderVehId);
     });
     lockMgr.setOnCheckpointEvent((vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio) => {
-      simLogger.logCheckpoint(simulationTime, vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio);
+      simLogger.logCheckpoint({ ts: simulationTime, vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio });
     });
   }
 
@@ -121,8 +121,6 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   lockMgr.updateAll(actualNumVehicles, { default: 'FIFO' });
 
   // 3. Movement Update (1,2에서 멈추지 않은 차량만 이동)
-  const logger = simLogger;
-
   const movementCtx: MovementUpdateContext = {
     vehicleDataArray,
     sensorPointArray,
@@ -148,12 +146,12 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
           }
         }
         // Logger: 있을 때만 기록
-        if (logger) {
-          logger.logEdgeTransit(timestamp, vehId, fromEdgeIndex, enterTs, timestamp, fromEdge.distance);
+        if (simLogger) {
+          simLogger.logEdgeTransit(timestamp, vehId, fromEdgeIndex, enterTs, timestamp, fromEdge.distance);
         }
       }
-      if (logger) {
-        logger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
+      if (simLogger) {
+        simLogger.logTransfer(timestamp, vehId, fromEdgeIndex, toEdgeIndex);
       }
       // 새 edge 진입 시간 기록 (항상)
       edgeEnterTimes.set(vehId, timestamp);
@@ -224,14 +222,17 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
 
       if (doPeriodicSnapshot || stoppedNow) {
         const pos = vehicleDataArray.getPosition(i);
-        simLogger.logReplaySnapshot(
-          simulationTime, i,
-          pos.x, pos.y, pos.z,
-          vehicleDataArray.getData()[i * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE],
-          vehicleDataArray.getEdgeRatio(i),
+        simLogger.logReplaySnapshot({
+          ts: simulationTime,
+          vehId: i,
+          x: pos.x,
+          y: pos.y,
+          z: pos.z,
+          edgeIdx: vehicleDataArray.getData()[i * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE],
+          ratio: vehicleDataArray.getEdgeRatio(i),
           speed,
-          vehicleDataArray.getMovingStatus(i),
-        );
+          status: vehicleDataArray.getMovingStatus(i),
+        });
       }
 
       if (ctx.prevVehicleSpeeds) {

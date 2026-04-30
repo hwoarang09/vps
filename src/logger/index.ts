@@ -1,7 +1,16 @@
 // logger/index.ts
 // SimLogger 기반 단일 로그 시스템
 
-export { SimLogger, type SimLoggerConfig, type LogTargets, type LogEvents } from './SimLogger';
+export {
+  SimLogger,
+  type SimLoggerConfig,
+  type LogTargets,
+  type LogEvents,
+  type LogOrderCompleteParams,
+  type LogVehStateParams,
+  type LogReplaySnapshotParams,
+  type LogCheckpointParams,
+} from './SimLogger';
 export { DbShipper } from './DbShipper';
 export {
   EventType,

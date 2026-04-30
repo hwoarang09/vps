@@ -13,6 +13,61 @@ import {
 } from './protocol';
 import { DbShipper } from './DbShipper';
 
+// ============================================================================
+// Context Object Interfaces (Max 7 params 규칙 준수)
+// ============================================================================
+
+export interface LogOrderCompleteParams {
+  orderId: number;
+  vehId: number;
+  destEdge: number;
+  moveToPickupTs: number;
+  pickupArriveTs: number;
+  pickupStartTs: number;
+  pickupDoneTs: number;
+  moveToDropTs: number;
+  dropArriveTs: number;
+  dropStartTs: number;
+  dropDoneTs: number;
+}
+
+export interface LogVehStateParams {
+  ts: number;
+  vehId: number;
+  x: number;
+  y: number;
+  z: number;
+  edge: number;
+  ratio: number;
+  speed: number;
+  movingStatus: number;
+  trafficState: number;
+  jobState: number;
+}
+
+export interface LogReplaySnapshotParams {
+  ts: number;
+  vehId: number;
+  x: number;
+  y: number;
+  z: number;
+  edgeIdx: number;
+  ratio: number;
+  speed: number;
+  status: number;
+}
+
+export interface LogCheckpointParams {
+  ts: number;
+  vehId: number;
+  cpEdge: number;
+  cpFlags: number;
+  action: number;
+  cpRatio: number;
+  currentEdge: number;
+  currentRatio: number;
+}
+
 /** 이벤트별 enable 플래그 */
 export interface LogEvents {
   edgeTransit?: boolean;      // ML_EDGE_TRANSIT (기본: true)
@@ -173,25 +228,21 @@ export class SimLogger {
   // ML 이벤트
   // ============================================================================
 
-  logOrderComplete(
-    orderId: number, vehId: number, destEdge: number,
-    moveToPickupTs: number, pickupArriveTs: number, pickupStartTs: number, pickupDoneTs: number,
-    moveToDropTs: number, dropArriveTs: number, dropStartTs: number, dropDoneTs: number,
-  ): void {
+  logOrderComplete(p: LogOrderCompleteParams): void {
     const buf = this.eventBuffers.get(EventType.ML_ORDER_COMPLETE);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, orderId, true);
-    buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setUint32(off + 8, destEdge, true);
-    buf.view.setUint32(off + 12, moveToPickupTs, true);
-    buf.view.setUint32(off + 16, pickupArriveTs, true);
-    buf.view.setUint32(off + 20, pickupStartTs, true);
-    buf.view.setUint32(off + 24, pickupDoneTs, true);
-    buf.view.setUint32(off + 28, moveToDropTs, true);
-    buf.view.setUint32(off + 32, dropArriveTs, true);
-    buf.view.setUint32(off + 36, dropStartTs, true);
-    buf.view.setUint32(off + 40, dropDoneTs, true);
+    buf.view.setUint32(off + 0, p.orderId, true);
+    buf.view.setUint32(off + 4, p.vehId, true);
+    buf.view.setUint32(off + 8, p.destEdge, true);
+    buf.view.setUint32(off + 12, p.moveToPickupTs, true);
+    buf.view.setUint32(off + 16, p.pickupArriveTs, true);
+    buf.view.setUint32(off + 20, p.pickupStartTs, true);
+    buf.view.setUint32(off + 24, p.pickupDoneTs, true);
+    buf.view.setUint32(off + 28, p.moveToDropTs, true);
+    buf.view.setUint32(off + 32, p.dropArriveTs, true);
+    buf.view.setUint32(off + 36, p.dropStartTs, true);
+    buf.view.setUint32(off + 40, p.dropDoneTs, true);
     this._increment(buf, EventType.ML_ORDER_COMPLETE);
   }
 
@@ -223,19 +274,19 @@ export class SimLogger {
   }
 
   /** 리플레이용 스냅샷 (36B): ts vehId x y z edgeIdx ratio speed status */
-  logReplaySnapshot(ts: number, vehId: number, x: number, y: number, z: number, edgeIdx: number, ratio: number, speed: number, status: number): void {
+  logReplaySnapshot(p: LogReplaySnapshotParams): void {
     const buf = this.eventBuffers.get(EventType.ML_REPLAY_SNAPSHOT);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
-    buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setFloat32(off + 8, x, true);
-    buf.view.setFloat32(off + 12, y, true);
-    buf.view.setFloat32(off + 16, z, true);
-    buf.view.setUint32(off + 20, edgeIdx, true);
-    buf.view.setFloat32(off + 24, ratio, true);
-    buf.view.setFloat32(off + 28, speed, true);
-    buf.view.setUint32(off + 32, status, true);
+    buf.view.setUint32(off + 0, p.ts, true);
+    buf.view.setUint32(off + 4, p.vehId, true);
+    buf.view.setFloat32(off + 8, p.x, true);
+    buf.view.setFloat32(off + 12, p.y, true);
+    buf.view.setFloat32(off + 16, p.z, true);
+    buf.view.setUint32(off + 20, p.edgeIdx, true);
+    buf.view.setFloat32(off + 24, p.ratio, true);
+    buf.view.setFloat32(off + 28, p.speed, true);
+    buf.view.setUint32(off + 32, p.status, true);
     this._increment(buf, EventType.ML_REPLAY_SNAPSHOT);
   }
 
@@ -248,21 +299,21 @@ export class SimLogger {
   // Dev 이벤트
   // ============================================================================
 
-  logVehState(ts: number, vehId: number, x: number, y: number, z: number, edge: number, ratio: number, speed: number, movingStatus: number, trafficState: number, jobState: number): void {
+  logVehState(p: LogVehStateParams): void {
     const buf = this.eventBuffers.get(EventType.DEV_VEH_STATE);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
-    buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setFloat32(off + 8, x, true);
-    buf.view.setFloat32(off + 12, y, true);
-    buf.view.setFloat32(off + 16, z, true);
-    buf.view.setFloat32(off + 20, edge, true);
-    buf.view.setFloat32(off + 24, ratio, true);
-    buf.view.setFloat32(off + 28, speed, true);
-    buf.view.setFloat32(off + 32, movingStatus, true);
-    buf.view.setFloat32(off + 36, trafficState, true);
-    buf.view.setFloat32(off + 40, jobState, true);
+    buf.view.setUint32(off + 0, p.ts, true);
+    buf.view.setUint32(off + 4, p.vehId, true);
+    buf.view.setFloat32(off + 8, p.x, true);
+    buf.view.setFloat32(off + 12, p.y, true);
+    buf.view.setFloat32(off + 16, p.z, true);
+    buf.view.setFloat32(off + 20, p.edge, true);
+    buf.view.setFloat32(off + 24, p.ratio, true);
+    buf.view.setFloat32(off + 28, p.speed, true);
+    buf.view.setFloat32(off + 32, p.movingStatus, true);
+    buf.view.setFloat32(off + 36, p.trafficState, true);
+    buf.view.setFloat32(off + 40, p.jobState, true);
     this._increment(buf, EventType.DEV_VEH_STATE);
   }
 
@@ -316,18 +367,18 @@ export class SimLogger {
   }
 
   /** checkpoint 이벤트 (24B): ts vehId cpEdge cpFlags action cpRatio currentEdge currentRatio */
-  logCheckpoint(ts: number, vehId: number, cpEdge: number, cpFlags: number, action: number, cpRatio: number, currentEdge: number, currentRatio: number): void {
+  logCheckpoint(p: LogCheckpointParams): void {
     const buf = this.eventBuffers.get(EventType.DEV_CHECKPOINT);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
-    buf.view.setUint32(off + 4, vehId, true);
-    buf.view.setUint16(off + 8, cpEdge, true);
-    buf.view.setUint8(off + 10, cpFlags);
-    buf.view.setUint8(off + 11, action);
-    buf.view.setFloat32(off + 12, cpRatio, true);
-    buf.view.setUint32(off + 16, currentEdge, true);
-    buf.view.setFloat32(off + 20, currentRatio, true);
+    buf.view.setUint32(off + 0, p.ts, true);
+    buf.view.setUint32(off + 4, p.vehId, true);
+    buf.view.setUint16(off + 8, p.cpEdge, true);
+    buf.view.setUint8(off + 10, p.cpFlags);
+    buf.view.setUint8(off + 11, p.action);
+    buf.view.setFloat32(off + 12, p.cpRatio, true);
+    buf.view.setUint32(off + 16, p.currentEdge, true);
+    buf.view.setFloat32(off + 20, p.currentRatio, true);
     this._increment(buf, EventType.DEV_CHECKPOINT);
   }
 
