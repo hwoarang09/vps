@@ -14,7 +14,7 @@ import {
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "../TransferMgr";
 import type { LockMgrState } from "./types";
 import { LockEventType } from "./types";
-import { isVehicleInDeadlockZone, grantNextInQueue } from "./deadlock-zone";
+import { grantNextInQueue } from "./deadlock-zone";
 
 /** Lock 이벤트를 콜백에 전달 */
 function emitLockEvent(
@@ -83,6 +83,9 @@ export function handleLockRequest(
   const nodeName = targetEdge.from_node;
   if (!state.mergeNodes.has(nodeName)) return true;
 
+  // Deadlock zone merge → checkpoint REQ 스킵 (gate에서 자동 처리)
+  if (state.deadlockZoneMerges?.has(nodeName)) return true;
+
   // Lock 요청
   requestLockInternal(nodeName, vehicleId, state);
   emitLockEvent(state, vehicleId, nodeName, LockEventType.REQUEST);
@@ -127,6 +130,9 @@ export function handleLockWait(
   const nodeName = targetEdge.from_node;
   if (!state.mergeNodes.has(nodeName)) return true; // merge가 아니면 통과
 
+  // Deadlock zone merge → checkpoint WAIT 스킵 (gate에서 자동 처리)
+  if (state.deadlockZoneMerges?.has(nodeName)) return true;
+
   // 이미 target edge 위에 있다 = merge를 이미 통과했다 → 대기 불필요
   // (경로 변경으로 이미 통과한 merge에 대해 missed LOCK_WAIT가 발동하는 경우 방지)
   const currentEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
@@ -142,19 +148,6 @@ export function handleLockWait(
   const blocked = holder !== undefined && holder !== vehicleId;
 
   if (blocked) {
-    // Deadlock zone preemption: 나=zone-internal, holder=zone-external → 선점
-    const iAmInZone = isVehicleInDeadlockZone(vehicleId, state);
-    const holderInZone = isVehicleInDeadlockZone(holder, state);
-
-    if (iAmInZone && !holderInZone) {
-      // holder의 lock 회수 → 나에게 grant (holder는 큐에 잔류)
-      state.locks.set(nodeName, vehicleId);
-      state.waitingVehicles.delete(vehicleId);
-      data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
-      data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
-      return true;
-    }
-
     // 다른 차량이 lock 보유 → 강제 정지
     data[ptr + MovementData.VELOCITY] = 0;
     data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;

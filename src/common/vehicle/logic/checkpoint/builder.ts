@@ -302,6 +302,38 @@ function createCheckpointsForOthers(
 }
 
 /**
+ * Deadlock zone entry 대기 지점 찾기
+ * incoming edge의 deadlockZoneId로 zone을 식별하고,
+ * 같은 zone의 entry edge (branch node 직전)를 반환
+ *
+ * @returns entry 지점 (edgeId, ratio, pathIdx) 또는 null
+ */
+function findDeadlockZoneEntry(
+  targetIdx: number,
+  path: number[],
+  edges: Edge[],
+): { edgeId: number; ratio: number; pathIdx: number } | null {
+  const incomingEdge = edges[path[targetIdx - 1]];
+  if (!incomingEdge?.deadlockZoneId) return null;
+  const zoneId = incomingEdge.deadlockZoneId;
+
+  for (let i = targetIdx - 1; i >= 1; i--) {
+    const edgeId = path[i];
+    const edge = edges[edgeId];
+    if (!edge) continue;
+    if (edge.isDeadlockZoneEntry && edge.deadlockZoneId === zoneId) {
+      // entry edge 끝에서 대기 (branch node 0.5m 전)
+      const ENTRY_WAIT_OFFSET = 0.5;
+      const ratio = edge.distance > ENTRY_WAIT_OFFSET
+        ? 1 - ENTRY_WAIT_OFFSET / edge.distance
+        : 0;
+      return { edgeId, ratio, pathIdx: i };
+    }
+  }
+  return null;
+}
+
+/**
  * LOCK_WAIT checkpoint 생성
  */
 function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
@@ -316,6 +348,19 @@ function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
     edges,
   } = params;
 
+  // ── Deadlock zone: zone entry에서 대기 ──
+  const dzEntry = findDeadlockZoneEntry(targetIdx, path, edges);
+  if (dzEntry) {
+    checkpoints.push({
+      edge: dzEntry.edgeId,
+      ratio: dzEntry.ratio,
+      flags: CheckpointFlags.LOCK_WAIT,
+      targetEdge: targetEdgeId,
+    });
+    return;
+  }
+
+  // ── 일반 합류 ──
   if (isCurveIncoming) {
     // 곡선 합류: 곡선의 fn (ratio 0)에서 대기
     checkpoints.push({
@@ -387,6 +432,13 @@ export function buildCheckpoints(
     const isCurveIncoming = isCurveEdge(incomingEdge);
 
     // ========================================
+    // Deadlock zone 사전 탐지
+    // ========================================
+    const dzEntry = isStartFromMergeNode
+      ? findDeadlockZoneEntry(targetIdx, path, edges)
+      : null;
+
+    // ========================================
     // 1. MOVE_PREPARE & LOCK_REQUEST
     // ========================================
     const requestPoint = findRequestPoint(
@@ -398,7 +450,27 @@ export function buildCheckpoints(
       isTargetCurve
     );
 
-    if (isStartFromMergeNode && isCurveIncoming) {
+    if (dzEntry) {
+      // ── Deadlock zone ──
+      // MOVE_PREPARE: 기존 위치 (merge 직전)
+      checkpoints.push({
+        edge: requestPoint.edgeId,
+        ratio: requestPoint.ratio,
+        flags: CheckpointFlags.MOVE_PREPARE,
+        targetEdge: targetEdgeId,
+      });
+      // LOCK_REQUEST: zone entry 앞에서 요청
+      const dzReqPoint = findRequestPoint(
+        dzEntry.pathIdx, path, edges,
+        opts.straightRequestDistance, opts.curveRequestDistance, false
+      );
+      checkpoints.push({
+        edge: dzReqPoint.edgeId,
+        ratio: dzReqPoint.ratio,
+        flags: CheckpointFlags.LOCK_REQUEST,
+        targetEdge: targetEdgeId,
+      });
+    } else if (isStartFromMergeNode && isCurveIncoming) {
       createCheckpointsForCurveMerge(checkpoints, requestPoint, targetIdx, targetEdgeId, path, edges, opts);
     } else if (isStartFromMergeNode && isTargetCurve) {
       createCheckpointsForStraightMergeCurveTarget(checkpoints, requestPoint, targetIdx, targetEdgeId, path, edges, opts);

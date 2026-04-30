@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
 import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks } from "./lock-handlers";
+import { updateDeadlockZoneGates } from "./deadlock-zone";
 import type { PathChangeInfo } from "../TransferMgr/types";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
@@ -73,6 +74,9 @@ export class LockMgr {
 
     // merge node 목록 구축
     this.buildMergeNodes();
+
+    // deadlock zone merge 감지
+    this.buildDeadlockZoneMerges();
   }
 
   /**
@@ -116,6 +120,9 @@ export class LockMgr {
   updateAll(numVehicles: number, policy: LockPolicy = DEFAULT_LOCK_POLICY): void {
     // 자동 해제 체크 (checkpoint 처리 전에)
     checkAutoRelease(this.state, this.eName);
+
+    // Deadlock zone gate: 직전 edge 도착 시 자동 REQ/GRANT/STOP, 통과 후 자동 RELEASE
+    updateDeadlockZoneGates(numVehicles, this.state, this.eName);
 
     for (let i = 0; i < numVehicles; i++) {
       this.processLock(i, policy);
@@ -277,6 +284,45 @@ export class LockMgr {
   initFromEdges(edges: Edge[]): void {
     this.state.edges = edges;
     this.buildMergeNodes();
+    this.buildDeadlockZoneMerges();
+  }
+
+  /**
+   * Edge topology에서 deadlock zone merge 노드 감지
+   * 조건: 분기점 A, D가 같은 합류점 2개(B, C)로 분기 → B, C가 deadlock zone merge
+   */
+  private buildDeadlockZoneMerges(): void {
+    const dzMerges = new Set<string>();
+    const edges = this.state.edges;
+    const mergeNodes = this.state.mergeNodes;
+
+    // 분기점 → toNode 집합
+    const divergeToNodes = new Map<string, Set<string>>();
+    for (const edge of edges) {
+      if (!divergeToNodes.has(edge.from_node)) divergeToNodes.set(edge.from_node, new Set());
+      divergeToNodes.get(edge.from_node)!.add(edge.to_node);
+    }
+
+    // 분기점 (outgoing >= 2)
+    const divergeNodes: string[] = [];
+    for (const [node, toNodes] of divergeToNodes) {
+      if (toNodes.size >= 2) divergeNodes.push(node);
+    }
+
+    // 분기점 쌍 중 같은 합류점 2개로 분기하는 경우 감지
+    for (let i = 0; i < divergeNodes.length; i++) {
+      const toA = divergeToNodes.get(divergeNodes[i])!;
+      for (let j = i + 1; j < divergeNodes.length; j++) {
+        const toD = divergeToNodes.get(divergeNodes[j])!;
+        const common = [...toA].filter(n => toD.has(n));
+        if (common.length === 2 && mergeNodes.has(common[0]) && mergeNodes.has(common[1])) {
+          dzMerges.add(common[0]);
+          dzMerges.add(common[1]);
+        }
+      }
+    }
+
+    this.state.deadlockZoneMerges = dzMerges;
   }
 
   checkGrant(_nodeName: string, _vehId: number): boolean {

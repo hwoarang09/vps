@@ -88,25 +88,14 @@ const MapTextRenderer: React.FC<Props> = (props) => {
   // Fab offset ref (InstancedText에 전달, useFrame 내에서 동적 변경)
   const fabOffsetRef = useRef({ x: 0, y: 0 });
   const lastFabIndexRef = useRef(0);
-  const lastLogTimeRef = useRef(0);
-
   // 카메라 위치에 따라 fab offset 업데이트 (React re-render 없음)
-  useFrame(({ camera, clock }) => {
+  useFrame(({ camera }) => {
     if (fabs.length <= 1) return;
 
     const nearestFabIndex = findNearestFab(camera.position.x, camera.position.y);
 
-    // 1초에 한 번씩 현재 fab index 로그
-    const now = clock.getElapsedTime();
-    if (now - lastLogTimeRef.current >= 1) {
-      lastLogTimeRef.current = now;
-      console.log(`[MapText] nearestFabIndex: ${nearestFabIndex}, camera: (${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)})`);
-    }
-
     if (nearestFabIndex === lastFabIndexRef.current) return;
 
-    // fab index가 바뀔 때 로그
-    const prevIndex = lastFabIndexRef.current;
     lastFabIndexRef.current = nearestFabIndex;
 
     // fab 0 기준 offset 계산
@@ -116,9 +105,6 @@ const MapTextRenderer: React.FC<Props> = (props) => {
 
     const offsetX = activeFab.centerX - fab0.centerX;
     const offsetY = activeFab.centerY - fab0.centerY;
-
-    console.log(`[MapText] FAB CHANGED: ${prevIndex} → ${nearestFabIndex}`);
-    console.log(`[MapText] Moving text offset to: (${offsetX.toFixed(0)}, ${offsetY.toFixed(0)})`);
 
     // KPI HUD 등 React UI 동기화
     setActiveFabIndex(nearestFabIndex);

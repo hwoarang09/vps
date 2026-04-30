@@ -101,7 +101,7 @@ export class DbShipper {
       });
 
       this.client.on('reconnect', () => {
-        console.log('[DbShipper] MQTT reconnecting...');
+        // silent reconnect
       });
     });
   }

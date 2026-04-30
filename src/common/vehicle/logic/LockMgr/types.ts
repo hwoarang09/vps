@@ -116,6 +116,8 @@ export interface LockMgrState {
   onCheckpointEvent?: OnCheckpointEventCallback;
   /** Node name → index (0-based) 맵 */
   nodeNameToIndex?: Map<string, number>;
+  /** Deadlock zone merge 노드 이름 Set */
+  deadlockZoneMerges?: Set<string>;
 }
 
 // ============================================================================
