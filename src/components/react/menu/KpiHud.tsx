@@ -132,10 +132,11 @@ const KpiHud: React.FC = () => {
   const fabIds = controller.getFabIds?.() ?? [];
   if (fabIds.length === 0) return null;
 
-  // Config stores (reactive — 설정 변경 시 즉시 반영)
-  const transferModeConfig = useFabConfigStore((s) => s.transferModeConfig);
-  const routingConfig = useFabConfigStore((s) => s.routingConfig);
-  const transferRateConfig = useFabConfigStore((s) => s.transferRateConfig);
+  // Config stores (reactive)
+  const globalTransferMode = useFabConfigStore((s) => s.transferModeConfig);
+  const globalRoutingConfig = useFabConfigStore((s) => s.routingConfig);
+  const globalTransferRate = useFabConfigStore((s) => s.transferRateConfig);
+  const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
   const fabStats = useOrderStatsStore((s) => s.fabStats);
 
   // fabIndex 기반 라벨 (3D FabLabelRenderer와 동일: "FAB 0", "FAB 1", ...)
@@ -146,6 +147,22 @@ const KpiHud: React.FC = () => {
   const currentFabIdx = Math.max(0, Math.min(activeFabIndex, fabIds.length - 1));
   const activeFabLabel = fabLabel(currentFabIdx);
   const currentFabId = fabIds[currentFabIdx];
+
+  // Per-fab effective config (override → global fallback)
+  const ovr = fabOverrides[currentFabIdx];
+  const effectiveRouting = {
+    strategy: ovr?.routing?.strategy ?? globalRoutingConfig.strategy,
+    bprAlpha: ovr?.routing?.bprAlpha ?? globalRoutingConfig.bprAlpha,
+    bprBeta: ovr?.routing?.bprBeta ?? globalRoutingConfig.bprBeta,
+    ewmaAlpha: ovr?.routing?.ewmaAlpha ?? globalRoutingConfig.ewmaAlpha,
+    rerouteInterval: ovr?.routing?.rerouteInterval ?? globalRoutingConfig.rerouteInterval,
+  };
+  const effectiveMode = ovr?.transferMode ?? globalTransferMode;
+  const effectiveRate = {
+    mode: ovr?.transferRateConfig?.mode ?? globalTransferRate.mode,
+    utilizationPercent: ovr?.transferRateConfig?.utilizationPercent ?? globalTransferRate.utilizationPercent,
+    throughputPerHour: ovr?.transferRateConfig?.throughputPerHour ?? globalTransferRate.throughputPerHour,
+  };
 
   // Throughput from orderStatsStore
   const orderStats = currentFabId ? fabStats[currentFabId] : undefined;
@@ -160,21 +177,21 @@ const KpiHud: React.FC = () => {
     : "0";
 
   // Routing label with key param
-  const routingLabel = ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy;
+  const routingLabel = ROUTING_LABEL[effectiveRouting.strategy] ?? effectiveRouting.strategy;
   let routingParam = "";
-  if (routingConfig.strategy === "BPR") {
-    routingParam = ` α${routingConfig.bprAlpha} β${routingConfig.bprBeta}`;
-  } else if (routingConfig.strategy === "EWMA") {
-    routingParam = ` α${routingConfig.ewmaAlpha}`;
+  if (effectiveRouting.strategy === "BPR") {
+    routingParam = ` α${effectiveRouting.bprAlpha} β${effectiveRouting.bprBeta}`;
+  } else if (effectiveRouting.strategy === "EWMA") {
+    routingParam = ` α${effectiveRouting.ewmaAlpha}`;
   }
 
   // Transfer mode + rate
-  const modeLabel = MODE_LABEL[transferModeConfig] ?? transferModeConfig;
+  const modeLabel = MODE_LABEL[effectiveMode] ?? effectiveMode;
   let rateStr = "";
-  if (transferRateConfig.mode === "utilization") {
-    rateStr = `${transferRateConfig.utilizationPercent}%`;
+  if (effectiveRate.mode === "utilization") {
+    rateStr = `${effectiveRate.utilizationPercent}%`;
   } else {
-    rateStr = `${transferRateConfig.throughputPerHour}/h`;
+    rateStr = `${effectiveRate.throughputPerHour}/h`;
   }
 
   return (

@@ -199,12 +199,28 @@ const MODE_LABEL: Record<string, string> = {
   MQTT_CONTROL: "MQTT", AUTO_ROUTE: "Auto Route",
 };
 
-const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
+const FabCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab, fabIndex }) => {
   const n = fab.vehicleCount;
   const orderStats = useOrderStatsStore((s) => s.fabStats[fab.fabId]);
-  const routingConfig = useFabConfigStore((s) => s.routingConfig);
-  const transferModeConfig = useFabConfigStore((s) => s.transferModeConfig);
-  const transferRateConfig = useFabConfigStore((s) => s.transferRateConfig);
+  const globalRouting = useFabConfigStore((s) => s.routingConfig);
+  const globalMode = useFabConfigStore((s) => s.transferModeConfig);
+  const globalRate = useFabConfigStore((s) => s.transferRateConfig);
+  const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
+
+  const ovr = fabOverrides[fabIndex];
+  const routingConfig = {
+    strategy: ovr?.routing?.strategy ?? globalRouting.strategy,
+    bprAlpha: ovr?.routing?.bprAlpha ?? globalRouting.bprAlpha,
+    bprBeta: ovr?.routing?.bprBeta ?? globalRouting.bprBeta,
+    ewmaAlpha: ovr?.routing?.ewmaAlpha ?? globalRouting.ewmaAlpha,
+    rerouteInterval: ovr?.routing?.rerouteInterval ?? globalRouting.rerouteInterval,
+  };
+  const transferModeConfig = ovr?.transferMode ?? globalMode;
+  const transferRateConfig = {
+    mode: ovr?.transferRateConfig?.mode ?? globalRate.mode,
+    utilizationPercent: ovr?.transferRateConfig?.utilizationPercent ?? globalRate.utilizationPercent,
+    throughputPerHour: ovr?.transferRateConfig?.throughputPerHour ?? globalRate.throughputPerHour,
+  };
   if (n === 0) return null;
 
   return (
@@ -620,8 +636,8 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <>
           {tab === "cards" && (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {fabStatsList.map((fab) => (
-                <FabCard key={fab.fabId} fab={fab} />
+              {fabStatsList.map((fab, i) => (
+                <FabCard key={fab.fabId} fab={fab} fabIndex={i} />
               ))}
             </div>
           )}
