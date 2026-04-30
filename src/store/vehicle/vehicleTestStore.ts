@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { VehicleSystemType } from "@/types/vehicle";
 import { getDefaultSetting } from "@/config/react/testSettingConfig";
+import { patchPersistedConfig } from "@/config/configDb";
 
 /**
  * Vehicle Test Store
@@ -51,6 +52,7 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
 
   setNumVehicles: (num: number) => {
     set({ numVehicles: num });
+    patchPersistedConfig({ numVehicles: num });
   },
 
   setPanelVisible: (visible: boolean) => {
@@ -70,6 +72,7 @@ export const useVehicleTestStore = create<VehicleTestState>((set) => ({
       selectedSettingId: settingId,
       settingChangeSeq: state.settingChangeSeq + 1,
     }));
+    patchPersistedConfig({ selectedSettingId: settingId });
   },
 }));
 

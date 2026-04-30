@@ -20,6 +20,8 @@ import { getNodeBounds, createFabInfos } from "@/utils/fab/fabUtils";
 import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/threejs/stationConfig";
+import { getPersistedConfig } from "@/config/persistedConfig";
+import { patchPersistedConfig } from "@/config/configDb";
 
 /**
  * VehicleTest
@@ -47,8 +49,9 @@ const VehicleTest: React.FC = () => {
   const [testKey, setTestKey] = useState<number>(0);
   const [isTestCreated, setIsTestCreated] = useState<boolean>(false);
   const [useVehicleConfig, setUseVehicleConfig] = useState<boolean>(false);
-  const [fabCountX, setFabCountX] = useState<number>(2);
-  const [fabCountY, setFabCountY] = useState<number>(1);
+  const persistedCfg = getPersistedConfig();
+  const [fabCountX, setFabCountX] = useState<number>(persistedCfg.fabCountX);
+  const [fabCountY, setFabCountY] = useState<number>(persistedCfg.fabCountY);
   const [isFabApplied, setIsFabApplied] = useState<boolean>(false);
 
   // Calculate max vehicle capacity from edges (fab 개수 반영)
@@ -109,10 +112,20 @@ const VehicleTest: React.FC = () => {
       if (autoCreateVehicles) {
         // Wait for map to render and edges renderingPoints to be calculated
         vehicleCreateTimeoutRef.current = setTimeout(() => {
-          // Auto-create vehicles using vehicles.cfg
-          setUseVehicleConfig(true); // Use vehicles.cfg
+          // Persisted config에 multi-fab이면 자동 적용
+          const cfg = getPersistedConfig();
+          const totalFabs = cfg.fabCountX * cfg.fabCountY;
+          if (totalFabs > 1) {
+            applyFabGrid(cfg.fabCountX, cfg.fabCountY);
+          }
+
+          // Auto-create vehicles with persisted numVehicles
+          const numVeh = cfg.numVehicles;
+          setInputValue(numVeh.toString());
+          setCustomNumVehicles(numVeh);
+          setUseVehicleConfig(false);
           setIsTestCreated(true);
-          setTestKey(prev => prev + 1); // Force remount to create vehicles
+          setTestKey(prev => prev + 1);
           vehicleCreateTimeoutRef.current = null;
         }, 800);
       }
@@ -154,20 +167,19 @@ const VehicleTest: React.FC = () => {
   const handleCreate = () => {
     const numVehicles = Number.parseInt(inputValue) || 1;
     setCustomNumVehicles(numVehicles);
+    patchPersistedConfig({ numVehicles });
     setUseVehicleConfig(false); // Don't use vehicles.cfg
     setIsTestCreated(true);
     setTestKey(prev => prev + 1); // Force remount to create vehicles
   };
 
-  // Handle FAB Create - clone nodes/edges/stations to create X * Y grid of fabs
-  const handleFabCreate = () => {
+  // Fab grid 생성 core 로직 (handleFabCreate, 자동 복원 공용)
+  const applyFabGrid = (countX: number, countY: number) => {
     const nodes = useNodeStore.getState().nodes;
     const edges = useEdgeStore.getState().edges;
     const stations = useStationStore.getState().stations;
 
-    if (nodes.length === 0 || edges.length === 0) {
-      return;
-    }
+    if (nodes.length === 0 || edges.length === 0) return;
 
     // Stop existing test and dispose simulator before FAB creation
     if (isTestCreated) {
@@ -187,14 +199,13 @@ const VehicleTest: React.FC = () => {
     const bounds = getNodeBounds(nodes);
 
     // Create fab infos and save to fabStore
-    const fabInfos = createFabInfos(fabCountX, fabCountY, bounds);
-    useFabStore.getState().setFabGrid(fabCountX, fabCountY, fabInfos);
+    const fabInfos = createFabInfos(countX, countY, bounds);
+    useFabStore.getState().setFabGrid(countX, countY, fabInfos);
 
     // Initialize render slots (슬롯 기반 렌더링용)
     useFabStore.getState().initSlots();
 
     // Store에는 원본만 저장 (메모리 절약)
-    // Worker는 sharedMapData로 원본을 받아서 자체적으로 fab별 offset 계산
     useNodeStore.getState().setNodes(nodes);
     useEdgeStore.getState().setEdges(edges);
     useStationStore.getState().setStations(stations);
@@ -203,7 +214,6 @@ const VehicleTest: React.FC = () => {
     updateTextsForFab(nodes, edges, stations);
 
     // Re-initialize LockMgr with original edges
-    // 메인 스레드 LockMgr는 원본 기준, Worker는 각자 fab별 LockMgr 사용
     resetLockMgr();
     getLockMgr().initFromEdges(edges);
 
@@ -218,6 +228,11 @@ const VehicleTest: React.FC = () => {
     }
 
     setIsFabApplied(true);
+  };
+
+  // Handle FAB Create - UI 버튼에서 호출
+  const handleFabCreate = () => {
+    applyFabGrid(fabCountX, fabCountY);
   };
 
   // Update text store with fab 0 data only (다른 fab은 position offset으로 처리)
@@ -336,8 +351,8 @@ const VehicleTest: React.FC = () => {
         onDeleteVehicles={handleDelete}
         fabCountX={fabCountX}
         fabCountY={fabCountY}
-        onFabCountXChange={setFabCountX}
-        onFabCountYChange={setFabCountY}
+        onFabCountXChange={(v: number) => { setFabCountX(v); patchPersistedConfig({ fabCountX: v }); }}
+        onFabCountYChange={(v: number) => { setFabCountY(v); patchPersistedConfig({ fabCountY: v }); }}
         isFabApplied={isFabApplied}
         onFabCreate={handleFabCreate}
         onFabClear={handleFabClear}
