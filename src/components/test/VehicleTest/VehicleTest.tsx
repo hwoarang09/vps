@@ -21,7 +21,6 @@ import { useFabStore } from "@/store/map/fabStore";
 import { getMaxVehicleCapacity } from "@/utils/vehicle/vehiclePlacement";
 import { getStationTextConfig } from "@/config/threejs/stationConfig";
 import { getPersistedConfig } from "@/config/persistedConfig";
-import { patchPersistedConfig } from "@/config/configDb";
 
 /**
  * VehicleTest
@@ -117,15 +116,21 @@ const VehicleTest: React.FC = () => {
           const totalFabs = cfg.fabCountX * cfg.fabCountY;
           if (totalFabs > 1) {
             applyFabGrid(cfg.fabCountX, cfg.fabCountY);
+            // applyFabGrid 후 추가 대기 — fab grid 렌더링 완료 후 차량 생성
+            setTimeout(() => {
+              setInputValue(cfg.numVehicles.toString());
+              setCustomNumVehicles(cfg.numVehicles);
+              setUseVehicleConfig(false);
+              setIsTestCreated(true);
+              setTestKey(prev => prev + 1);
+            }, 300);
+          } else {
+            setInputValue(cfg.numVehicles.toString());
+            setCustomNumVehicles(cfg.numVehicles);
+            setUseVehicleConfig(false);
+            setIsTestCreated(true);
+            setTestKey(prev => prev + 1);
           }
-
-          // Auto-create vehicles with persisted numVehicles
-          const numVeh = cfg.numVehicles;
-          setInputValue(numVeh.toString());
-          setCustomNumVehicles(numVeh);
-          setUseVehicleConfig(false);
-          setIsTestCreated(true);
-          setTestKey(prev => prev + 1);
           vehicleCreateTimeoutRef.current = null;
         }, 800);
       }
@@ -167,7 +172,6 @@ const VehicleTest: React.FC = () => {
   const handleCreate = () => {
     const numVehicles = Number.parseInt(inputValue) || 1;
     setCustomNumVehicles(numVehicles);
-    patchPersistedConfig({ numVehicles });
     setUseVehicleConfig(false); // Don't use vehicles.cfg
     setIsTestCreated(true);
     setTestKey(prev => prev + 1); // Force remount to create vehicles
@@ -351,8 +355,8 @@ const VehicleTest: React.FC = () => {
         onDeleteVehicles={handleDelete}
         fabCountX={fabCountX}
         fabCountY={fabCountY}
-        onFabCountXChange={(v: number) => { setFabCountX(v); patchPersistedConfig({ fabCountX: v }); }}
-        onFabCountYChange={(v: number) => { setFabCountY(v); patchPersistedConfig({ fabCountY: v }); }}
+        onFabCountXChange={setFabCountX}
+        onFabCountYChange={setFabCountY}
         isFabApplied={isFabApplied}
         onFabCreate={handleFabCreate}
         onFabClear={handleFabClear}

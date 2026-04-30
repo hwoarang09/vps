@@ -15,7 +15,6 @@ import {
   type GrantStrategy,
 } from "@/config/worker/simulationConfig";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
-import { patchPersistedConfig } from "@/config/configDb";
 import {
   DEFAULT_SENSOR_PRESETS,
   type SensorPreset,
@@ -275,18 +274,12 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
   },
 
   setFabOverride: (fabIndex, override) => {
-    set((state) => {
-      const newOverrides = { ...state.fabOverrides, [fabIndex]: override };
-      // routing override가 있으면 IndexedDB에도 저장
-      if (override.routing) {
-        const allRoutingOverrides: Record<number, any> = {};
-        for (const [idx, ov] of Object.entries(newOverrides)) {
-          if (ov.routing) allRoutingOverrides[Number(idx)] = ov.routing;
-        }
-        patchPersistedConfig({ fabRoutingOverrides: allRoutingOverrides });
-      }
-      return { fabOverrides: newOverrides };
-    });
+    set((state) => ({
+      fabOverrides: {
+        ...state.fabOverrides,
+        [fabIndex]: override,
+      },
+    }));
   },
 
   removeFabOverride: (fabIndex) => {
@@ -306,29 +299,23 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
   },
 
   setRoutingConfig: (config) => {
-    set((state) => {
-      const merged = { ...state.routingConfig, ...config };
-      patchPersistedConfig({ routing: merged });
-      return { routingConfig: merged };
-    });
+    set((state) => ({
+      routingConfig: { ...state.routingConfig, ...config },
+    }));
   },
 
   setTransferEnabled: (enabled) => {
     set({ transferEnabled: enabled });
-    patchPersistedConfig({ transfer: { enabled } } as any);
   },
 
   setTransferModeConfig: (mode) => {
     set({ transferModeConfig: mode });
-    patchPersistedConfig({ transfer: { mode } } as any);
   },
 
   setTransferRateConfig: (config) => {
-    set((state) => {
-      const merged = { ...state.transferRateConfig, ...config };
-      patchPersistedConfig({ transfer: { rate: merged } } as any);
-      return { transferRateConfig: merged };
-    });
+    set((state) => ({
+      transferRateConfig: { ...state.transferRateConfig, ...config },
+    }));
   },
 
   updateBaseMovement: (update) => {
