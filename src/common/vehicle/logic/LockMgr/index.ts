@@ -213,16 +213,19 @@ export class LockMgr {
 
       vehicles.sort((a, b) => b.ratio - a.ratio);
 
-      for (const { vehId, edgeIdx } of vehicles) {
+      for (const { vehId } of vehicles) {
         requestLockInternal(nodeName, vehId, this.state);
 
         // pendingReleases에 등록 — 경로 변경 시 releaseOrphanedLocks()가 정리 가능
+        // releaseEdgeIdx = -1 (sentinel): checkAutoRelease가 preLock 항목을 건드리지 않음
+        // → 차량이 path를 받으면 checkpoint handler가 올바른 releaseEdgeIdx로 갱신하거나,
+        //   releaseOrphanedLocks가 경로에 없는 merge lock을 정리함
         if (!this.state.pendingReleases.has(vehId)) {
           this.state.pendingReleases.set(vehId, []);
         }
         const releases = this.state.pendingReleases.get(vehId)!;
         if (!releases.find(r => r.nodeName === nodeName)) {
-          releases.push({ nodeName, releaseEdgeIdx: edgeIdx });
+          releases.push({ nodeName, releaseEdgeIdx: -1 });
         }
       }
 
