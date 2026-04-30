@@ -4,6 +4,8 @@ import { ChevronDown } from "lucide-react";
 import { useFabStore } from "@/store/map/fabStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useCameraStore } from "@/store/ui/cameraStore";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
+import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { menuContainerVariants } from "./shared/menuStyles";
 import { twMerge } from "tailwind-merge";
 import {
@@ -58,8 +60,21 @@ function computeKpi(
   return kpi;
 }
 
+const ROUTING_LABEL: Record<string, string> = {
+  DISTANCE: "Dist",
+  BPR: "BPR",
+  EWMA: "EWMA",
+};
+
+const MODE_LABEL: Record<string, string> = {
+  SIMPLE_LOOP: "S-Loop",
+  LOOP: "Loop",
+  RANDOM: "Random",
+  MQTT_CONTROL: "MQTT",
+  AUTO_ROUTE: "Auto",
+};
+
 const KpiHud: React.FC = () => {
-  // activeFabIndex는 MapTextRenderer의 useFrame에서 카메라 이동 시 자동 갱신됨
   const { activeFabIndex, setActiveFabIndex, fabs } = useFabStore();
 
   const controller = useShmSimulatorStore((s) => s.controller);
@@ -81,7 +96,7 @@ const KpiHud: React.FC = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, [dropdownOpen]);
 
-  // KPI 데이터 갱신 (500ms interval)
+  // KPI 데이터 갱신 (2500ms interval)
   const updateKpi = useCallback(() => {
     if (!controller) { setKpi(null); return; }
 
@@ -106,7 +121,7 @@ const KpiHud: React.FC = () => {
   useEffect(() => {
     updateKpi();
     if (isRunning) {
-      intervalRef.current = setInterval(updateKpi, 500);
+      intervalRef.current = setInterval(updateKpi, 2500);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [controller, isRunning, updateKpi, activeFabIndex]);
@@ -117,28 +132,54 @@ const KpiHud: React.FC = () => {
   const fabIds = controller.getFabIds?.() ?? [];
   if (fabIds.length === 0) return null;
 
+  // Config stores
+  const { transferModeConfig, routingConfig, transferRateConfig } = useFabConfigStore.getState();
+  const fabStats = useOrderStatsStore.getState().fabStats;
+
   // fabIndex 기반 라벨 (3D FabLabelRenderer와 동일: "FAB 0", "FAB 1", ...)
   const fabLabel = (idx: number) => {
     const fab = fabs[idx];
     return fab ? `FAB ${fab.fabIndex}` : `FAB ${idx}`;
   };
-  const activeFabLabel = fabLabel(Math.max(0, Math.min(activeFabIndex, fabIds.length - 1)));
+  const currentFabIdx = Math.max(0, Math.min(activeFabIndex, fabIds.length - 1));
+  const activeFabLabel = fabLabel(currentFabIdx);
+  const currentFabId = fabIds[currentFabIdx];
 
-  const rows: { label: string; value: string; color?: string }[] = kpi
-    ? [
-        { label: "Vehicles", value: `${kpi.vehicleCount}` },
-        { label: "Speed", value: `${kpi.avgSpeed.toFixed(2)} m/s`, color: "text-cyan-400" },
-        { label: "Moving", value: `${kpi.vehicleCount > 0 ? ((kpi.movingCount / kpi.vehicleCount) * 100).toFixed(0) : 0}%`, color: "text-green-400" },
-        { label: "Stopped", value: `${kpi.vehicleCount > 0 ? ((kpi.stoppedCount / kpi.vehicleCount) * 100).toFixed(0) : 0}%`, color: "text-amber-400" },
-        { label: "Locked", value: `${kpi.stopLocked}`, color: kpi.stopLocked > 0 ? "text-red-400" : "text-gray-500" },
-      ]
-    : [];
+  // Throughput from orderStatsStore
+  const orderStats = currentFabId ? fabStats[currentFabId] : undefined;
+  const throughputStr = orderStats ? `${orderStats.throughputPerHour.toFixed(0)}/hr` : "—";
+
+  // Moving/Stopped percentages
+  const movingPct = kpi && kpi.vehicleCount > 0
+    ? ((kpi.movingCount / kpi.vehicleCount) * 100).toFixed(0)
+    : "0";
+  const stoppedPct = kpi && kpi.vehicleCount > 0
+    ? ((kpi.stoppedCount / kpi.vehicleCount) * 100).toFixed(0)
+    : "0";
+
+  // Routing label with key param
+  const routingLabel = ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy;
+  let routingParam = "";
+  if (routingConfig.strategy === "BPR") {
+    routingParam = ` α${routingConfig.bprAlpha} β${routingConfig.bprBeta}`;
+  } else if (routingConfig.strategy === "EWMA") {
+    routingParam = ` α${routingConfig.ewmaAlpha}`;
+  }
+
+  // Transfer mode + rate
+  const modeLabel = MODE_LABEL[transferModeConfig] ?? transferModeConfig;
+  let rateStr = "";
+  if (transferRateConfig.mode === "utilization") {
+    rateStr = `${transferRateConfig.utilizationPercent}%`;
+  } else {
+    rateStr = `${transferRateConfig.throughputPerHour}/h`;
+  }
 
   return (
     <div
       className={twMerge(
         menuContainerVariants({ level: 2 }),
-        "fixed top-4 left-4 z-50 flex-col items-stretch p-3 min-w-[160px]",
+        "fixed top-4 left-4 z-50 flex-col items-stretch p-3 min-w-[170px]",
       )}
     >
       {/* Fab Selector */}
@@ -165,9 +206,6 @@ const KpiHud: React.FC = () => {
                   const prevFab = fabs[activeFabIndex];
                   setActiveFabIndex(i);
                   setDropdownOpen(false);
-                  // 현재 fab center → 선택 fab center 간 delta만큼 카메라 이동
-                  // OrbitControls의 실제 카메라 위치는 store에 없으므로
-                  // fab 간 offset delta만 적용하여 현재 뷰 각도/줌 유지
                   const nextFab = fabs[i];
                   if (nextFab && prevFab) {
                     const deltaX = nextFab.centerX - prevFab.centerX;
@@ -188,16 +226,53 @@ const KpiHud: React.FC = () => {
       </div>
 
       {/* KPI Rows */}
-      {rows.length > 0 ? (
+      {kpi ? (
         <div className="flex flex-col gap-1">
-          {rows.map((r) => (
-            <div key={r.label} className="flex justify-between items-center">
-              <span className="text-[10px] text-gray-500">{r.label}</span>
-              <span className={`font-mono text-[11px] ${r.color ?? "text-gray-300"}`}>
-                {r.value}
-              </span>
-            </div>
-          ))}
+          {/* Vehicles */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Vehicles</span>
+            <span className="font-mono text-[11px] text-gray-300">{kpi.vehicleCount}</span>
+          </div>
+
+          {/* Moving / Stopped */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Move/Stop</span>
+            <span className="font-mono text-[11px]">
+              <span className="text-green-400">{movingPct}</span>
+              <span className="text-gray-600"> / </span>
+              <span className="text-amber-400">{stoppedPct}</span>
+              <span className="text-gray-600"> %</span>
+            </span>
+          </div>
+
+          {/* Locked */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Locked</span>
+            <span className={`font-mono text-[11px] ${kpi.stopLocked > 0 ? "text-red-400" : "text-gray-500"}`}>
+              {kpi.stopLocked}
+            </span>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-700 my-0.5" />
+
+          {/* Transfer Mode */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Mode</span>
+            <span className="font-mono text-[11px] text-cyan-400">{modeLabel} · {rateStr}</span>
+          </div>
+
+          {/* Routing */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Routing</span>
+            <span className="font-mono text-[11px] text-purple-400">{routingLabel}{routingParam}</span>
+          </div>
+
+          {/* Throughput */}
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-gray-500">Throughput</span>
+            <span className="font-mono text-[11px] text-green-300 font-bold">{throughputStr}</span>
+          </div>
         </div>
       ) : (
         <span className="text-[10px] text-gray-600">No data</span>

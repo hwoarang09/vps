@@ -12,14 +12,13 @@ import DataPanel from "../DataPanel/DataPanel";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
-import MqttStatusIndicator from "../system/MqttStatusIndicator";
 import QuickViewToolbar from "./QuickViewToolbar";
 import KpiHud from "./KpiHud";
 import CommandPalette from "./CommandPalette";
 
 const MenuContainer: React.FC = () => {
   const { activeMainMenu, activeSubMenu, rightPanelOpen, setActiveSubMenu } = useMenuStore();
-  const { loadConfig, isConnected: mqttConnected } = useMqttStore();
+  const { loadConfig } = useMqttStore();
   const [showDataPanel, setShowDataPanel] = useState(false);
   const [showFabStats, setShowFabStats] = useState(false);
 
@@ -59,9 +58,6 @@ const MenuContainer: React.FC = () => {
 
   return (
     <>
-      {/* MQTT Status Indicator - only visible when connected */}
-      {mqttConnected && <MqttStatusIndicator />}
-
       {/* Quick View Toolbar + SimLog - Top Right, horizontal */}
       <QuickViewToolbar />
 
