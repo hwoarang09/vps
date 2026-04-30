@@ -5,7 +5,7 @@ import { TransferMode } from "@/common/vehicle/initialize/constants";
 import type { RoutingStrategy, RoutingConfig, TransferRateConfig } from "@/store/simulation/fabConfigStore";
 import { loadPersistedConfig, savePersistedConfig } from "./configDb";
 
-export const PERSISTED_CONFIG_VERSION = 4;
+export const PERSISTED_CONFIG_VERSION = 5;
 
 /** Per-fab routing override (fabIndex → routing config) */
 export type FabRoutingOverrides = Record<number, Partial<RoutingConfig>>;
