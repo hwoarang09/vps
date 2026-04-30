@@ -132,9 +132,11 @@ const KpiHud: React.FC = () => {
   const fabIds = controller.getFabIds?.() ?? [];
   if (fabIds.length === 0) return null;
 
-  // Config stores
-  const { transferModeConfig, routingConfig, transferRateConfig } = useFabConfigStore.getState();
-  const fabStats = useOrderStatsStore.getState().fabStats;
+  // Config stores (reactive — 설정 변경 시 즉시 반영)
+  const transferModeConfig = useFabConfigStore((s) => s.transferModeConfig);
+  const routingConfig = useFabConfigStore((s) => s.routingConfig);
+  const transferRateConfig = useFabConfigStore((s) => s.transferRateConfig);
+  const fabStats = useOrderStatsStore((s) => s.fabStats);
 
   // fabIndex 기반 라벨 (3D FabLabelRenderer와 동일: "FAB 0", "FAB 1", ...)
   const fabLabel = (idx: number) => {

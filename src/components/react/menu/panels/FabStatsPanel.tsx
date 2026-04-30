@@ -17,6 +17,7 @@ import {
 import FloatingPanel from "../shared/FloatingPanel";
 import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
+import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 
 // ============================================================================
 // Types
@@ -192,9 +193,18 @@ const DistributionBar: React.FC<{ items: { count: number; color: string; label: 
 // Fab Card
 // ============================================================================
 
+const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
+const MODE_LABEL: Record<string, string> = {
+  SIMPLE_LOOP: "Simple Loop", LOOP: "Loop", RANDOM: "Random",
+  MQTT_CONTROL: "MQTT", AUTO_ROUTE: "Auto Route",
+};
+
 const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
   const n = fab.vehicleCount;
   const orderStats = useOrderStatsStore((s) => s.fabStats[fab.fabId]);
+  const routingConfig = useFabConfigStore((s) => s.routingConfig);
+  const transferModeConfig = useFabConfigStore((s) => s.transferModeConfig);
+  const transferRateConfig = useFabConfigStore((s) => s.transferRateConfig);
   if (n === 0) return null;
 
   return (
@@ -255,16 +265,26 @@ const FabCard: React.FC<{ fab: FabStats }> = ({ fab }) => {
         />
       </div>
 
-      <div className="mt-2">
-        <span className="text-[10px] text-gray-600 font-medium">Traffic</span>
-        <DistributionBar
-          total={n}
-          items={[
-            { count: fab.trafficFree, color: "bg-accent-green", label: "Free" },
-            { count: fab.trafficWaiting, color: "bg-amber-500", label: "Waiting" },
-            { count: fab.trafficAcquired, color: "bg-accent-cyan", label: "Acquired" },
-          ]}
-        />
+      <div className="mt-2 p-1.5 rounded bg-panel-bg-solid/50 border border-purple-900/30">
+        <span className="text-[10px] text-purple-400 font-medium">Routing & Mode</span>
+        <div className="grid grid-cols-2 gap-x-3 mt-1">
+          <Stat label="Mode" value={MODE_LABEL[transferModeConfig] ?? transferModeConfig} color="text-cyan-300" />
+          <Stat label="Rate" value={
+            transferRateConfig.mode === "utilization"
+              ? `${transferRateConfig.utilizationPercent}% util`
+              : `${transferRateConfig.throughputPerHour}/hr`
+          } color="text-cyan-300" />
+          <Stat label="Routing" value={ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy} color="text-purple-300" />
+          {routingConfig.strategy === "BPR" && (
+            <Stat label="BPR" value={`α${routingConfig.bprAlpha} β${routingConfig.bprBeta}`} color="text-purple-300" />
+          )}
+          {routingConfig.strategy === "EWMA" && (
+            <Stat label="EWMA" value={`α${routingConfig.ewmaAlpha}`} color="text-purple-300" />
+          )}
+          {routingConfig.rerouteInterval > 0 && (
+            <Stat label="Reroute" value={`${routingConfig.rerouteInterval} edges`} color="text-gray-400" />
+          )}
+        </div>
       </div>
 
       {fab.stoppedCount > 0 && (
