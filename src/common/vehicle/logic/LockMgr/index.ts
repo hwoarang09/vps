@@ -213,8 +213,17 @@ export class LockMgr {
 
       vehicles.sort((a, b) => b.ratio - a.ratio);
 
-      for (const { vehId } of vehicles) {
+      for (const { vehId, edgeIdx } of vehicles) {
         requestLockInternal(nodeName, vehId, this.state);
+
+        // pendingReleases에 등록 — 경로 변경 시 releaseOrphanedLocks()가 정리 가능
+        if (!this.state.pendingReleases.has(vehId)) {
+          this.state.pendingReleases.set(vehId, []);
+        }
+        const releases = this.state.pendingReleases.get(vehId)!;
+        if (!releases.find(r => r.nodeName === nodeName)) {
+          releases.push({ nodeName, releaseEdgeIdx: edgeIdx });
+        }
       }
 
       const holder = this.state.locks.get(nodeName);
