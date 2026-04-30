@@ -126,18 +126,18 @@ const KpiHud: React.FC = () => {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [controller, isRunning, updateKpi, activeFabIndex]);
 
-  // 시뮬레이션 미실행 시 숨김
-  if (!controller) return null;
-
-  const fabIds = controller.getFabIds?.() ?? [];
-  if (fabIds.length === 0) return null;
-
-  // Config stores (reactive)
+  // Config stores (reactive — hooks는 early return 전에 호출)
   const globalTransferMode = useFabConfigStore((s) => s.transferModeConfig);
   const globalRoutingConfig = useFabConfigStore((s) => s.routingConfig);
   const globalTransferRate = useFabConfigStore((s) => s.transferRateConfig);
   const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
   const fabStats = useOrderStatsStore((s) => s.fabStats);
+
+  // 시뮬레이션 미실행 시 숨김
+  if (!controller) return null;
+
+  const fabIds = controller.getFabIds?.() ?? [];
+  if (fabIds.length === 0) return null;
 
   // fabIndex 기반 라벨 (3D FabLabelRenderer와 동일: "FAB 0", "FAB 1", ...)
   const fabLabel = (idx: number) => {
