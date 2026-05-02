@@ -39,6 +39,8 @@ export interface FabInitParams {
   transferMode?: TransferMode;
   stations: ReadonlyArray<unknown>;
   bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
+  /** 변형 DZ wait relocation (nodeStore.updateTopology에서 계산됨) */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 export class ShmSimulatorController {
@@ -161,6 +163,7 @@ export class ShmSimulatorController {
         transferMode: fabParams.transferMode ?? TransferMode.LOOP,
         stationData: fabParams.stations as StationRawData[],
         bayLoopEntries: fabParams.bayLoopEntries,
+        waitRelocations: fabParams.waitRelocations,
       };
 
       fabInitDataList.push(fabInitData);
@@ -219,6 +222,7 @@ export class ShmSimulatorController {
       transferMode: fabParams.transferMode ?? TransferMode.LOOP,
       stationData: fabParams.stations as StationRawData[],
       bayLoopEntries: fabParams.bayLoopEntries,
+      waitRelocations: fabParams.waitRelocations,
     };
 
     return new Promise((resolve) => {

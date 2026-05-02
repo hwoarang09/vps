@@ -58,6 +58,8 @@ export interface SharedMapRef {
   nodeNameToIndex: Map<string, number>;
   /** 원본 stations */
   stations: StationRawData[];
+  /** 변형 DZ wait relocation (전체 fab 공유) */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 /**
@@ -231,6 +233,12 @@ export interface SharedMapData {
   gridX: number;
   /** Grid 세로 개수 */
   gridY: number;
+  /**
+   * 변형 DZ wait relocation 분석 결과 (entry edge name → relocation)
+   * - main thread의 nodeStore.updateTopology에서 계산됨
+   * - 모든 fab이 같은 맵을 쓰므로 한 번만 전송
+   */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 // 단일 Fab 초기화 데이터
@@ -285,6 +293,12 @@ export interface FabInitData {
    * 없으면 전역 설정 사용, 있으면 전역 설정에 병합
    */
   config?: Partial<SimulationConfig>;
+
+  /**
+   * 변형 DZ wait relocation 분석 결과 (entry edge name → relocation)
+   * 단일 Fab 모드용 — 멀티 Fab 모드에서는 sharedMapData.waitRelocations 사용
+   */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 // 멀티 Fab 지원 Init Payload

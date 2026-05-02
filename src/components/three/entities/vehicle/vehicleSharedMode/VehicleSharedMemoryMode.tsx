@@ -146,6 +146,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         originalStations: originalMapData.stations,
         gridX: fabCountX,
         gridY: fabCountY,
+        waitRelocations: useNodeStore.getState().waitRelocations,
       };
 
       const workerCount = getWorkerCount(fabs.length);
@@ -167,6 +168,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         transferMode,
         stations,
         bayLoopEntries,
+        waitRelocations: useNodeStore.getState().waitRelocations,
       })
         .then(() => {
         })

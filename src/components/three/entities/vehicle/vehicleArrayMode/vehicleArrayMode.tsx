@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useEdgeStore } from "@/store/map/edgeStore";
+import { useNodeStore } from "@/store/map/nodeStore";
 
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
@@ -111,6 +112,8 @@ const VehicleArrayMode: React.FC<VehicleArrayModeProps> = ({
         transferMode: store.transferMode,
       });
 
+      // 변형 DZ wait relocation 분석 결과 주입 (nodeStore.updateTopology에서 미리 계산됨)
+      transferMgrRef.current.setWaitRelocations(useNodeStore.getState().waitRelocations);
 
       // Store results in refs for use in useFrame
       edgeNameToIndexRef.current = result.edgeNameToIndex;

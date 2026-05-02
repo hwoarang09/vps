@@ -16,6 +16,7 @@ import {
   type Checkpoint,
 } from "@/common/vehicle/initialize/constants";
 import { buildCheckpointsFromPath, logCheckpoints } from "../checkpoint";
+import type { WaitRelocationEntry } from "../checkpoint";
 import type {
   VehicleLoop,
   ProcessPathCommandContext,
@@ -50,6 +51,15 @@ export class TransferMgr {
   private readonly curveBrakeStates: Map<number, CurveBrakeState> = new Map();
   // 이번 프레임에서 경로 변경된 차량 (Step 4.5 lock 재정합용)
   private readonly _pathChangedVehicles: Map<number, PathChangeInfo> = new Map();
+  // 변형 DZ wait relocation 분석 결과 (entry edge name → relocation)
+  private waitRelocations: Map<string, WaitRelocationEntry> = new Map();
+
+  /**
+   * Wait relocation Map 주입 (맵 로드 시 nodeStore 또는 worker init payload에서)
+   */
+  setWaitRelocations(map: Map<string, WaitRelocationEntry>): void {
+    this.waitRelocations = map;
+  }
 
   /**
    * Set path buffer reference (called from EngineStore or FabContext)
@@ -670,6 +680,7 @@ export class TransferMgr {
       edgeIndices,
       edgeArray,
       isMergeNode: (nodeName) => lockMgr.isMergeNode(nodeName),
+      waitRelocations: this.waitRelocations,
     });
 
     logCheckpoints(vehId, result.checkpoints);

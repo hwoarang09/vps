@@ -117,6 +117,7 @@ export class SimulationEngine {
           transferMode: fabData.transferMode,
           memoryAssignment: fabData.memoryAssignment,
           bayLoopEntries: fabData.bayLoopEntries,
+          waitRelocations: fabData.waitRelocations,
         };
       }
 
@@ -134,7 +135,7 @@ export class SimulationEngine {
    * 모든 Fab이 이 참조를 공유하여 메모리 절약
    */
   private buildSharedMapRef(sharedMapData: SharedMapData): SharedMapRef {
-    const { originalEdges, originalNodes, originalStations } = sharedMapData;
+    const { originalEdges, originalNodes, originalStations, waitRelocations } = sharedMapData;
 
     // edgeNameToIndex 빌드 (한 번만)
     const edgeNameToIndex = new Map<string, number>();
@@ -154,6 +155,7 @@ export class SimulationEngine {
       edgeNameToIndex,
       nodeNameToIndex,
       stations: originalStations,
+      waitRelocations,
     };
   }
 
@@ -222,6 +224,7 @@ export class SimulationEngine {
       stationData: fabData.stationData ?? [],
       memoryAssignment: fabData.memoryAssignment,
       bayLoopEntries: fabData.bayLoopEntries,
+      waitRelocations: fabData.waitRelocations,
     };
 
     const context = new FabContext(params);

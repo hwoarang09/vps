@@ -4,10 +4,12 @@
 export * from "./types";
 export * from "./utils";
 export * from "./builder";
+export * from "./constants";
 
 import type { Edge } from "@/types/edge";
 import type { Checkpoint } from "@/common/vehicle/initialize/constants";
 import { buildCheckpoints } from "./builder";
+import type { WaitRelocationEntry } from "./types";
 
 /**
  * TransferMgr에서 사용하는 간소화된 wrapper 함수
@@ -17,11 +19,12 @@ export function buildCheckpointsFromPath(params: {
   edgeArray: Edge[];
   isMergeNode: (nodeName: string) => boolean;
   isDeadLockMergeNode?: (nodeName: string) => boolean;
+  waitRelocations?: Map<string, WaitRelocationEntry>;
 }): {
   checkpoints: Checkpoint[];
   warnings?: string[];
 } {
-  const { edgeIndices, edgeArray, isMergeNode, isDeadLockMergeNode } = params;
+  const { edgeIndices, edgeArray, isMergeNode, isDeadLockMergeNode, waitRelocations } = params;
 
   const result = buildCheckpoints(
     {
@@ -29,6 +32,7 @@ export function buildCheckpointsFromPath(params: {
       edgeArray,
       isMergeNode,
       isDeadLockMergeNode: isDeadLockMergeNode || (() => false),
+      waitRelocations,
     },
     {}  // default lock options
   );

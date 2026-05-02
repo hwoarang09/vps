@@ -5,6 +5,21 @@ import type { Edge } from "@/types/edge";
 import type { Checkpoint } from "@/common/vehicle/initialize/constants";
 
 /**
+ * 짧은 LINEAR wait point relocation 정보 (변형 DZ)
+ * - entry edge name → 어느 edge의 어느 위치로 wait CP를 옮길지
+ */
+export interface WaitRelocationEntry {
+  /** wait CP를 박을 edge 이름 */
+  waitEdge: string;
+  /** 실제 대기할 노드 이름 (디버그용) */
+  waitNode: string;
+  /** 거슬러 올라간 hop 수 (디버그용) */
+  hops: number;
+  /** 원래 lock을 잡을 merge 노드 (디버그용) */
+  mergeNode: string;
+}
+
+/**
  * Checkpoint 생성 컨텍스트
  */
 export interface CheckpointBuildContext {
@@ -16,6 +31,8 @@ export interface CheckpointBuildContext {
   isMergeNode: (nodeName: string) => boolean;
   /** DeadLock Merge node 확인 함수 */
   isDeadLockMergeNode: (nodeName: string) => boolean;
+  /** 변형 DZ wait relocation 분석 결과 (entry edge name → relocation) */
+  waitRelocations?: Map<string, WaitRelocationEntry>;
 }
 
 /**

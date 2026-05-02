@@ -46,6 +46,7 @@ interface ShmSimulatorState {
     stations: ReadonlyArray<unknown>;
     bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
     fabId?: string;
+    waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
   }) => Promise<void>;
 
   initMultiFab: (params: {
@@ -117,6 +118,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       transferMode = TransferMode.RANDOM,
       bayLoopEntries,
       fabId = DEFAULT_FAB_ID,
+      waitRelocations,
     } = params;
 
     await get().initMultiFab({
@@ -129,6 +131,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
         transferMode,
         stations,
         bayLoopEntries,
+        waitRelocations,
       }],
       config,
     });

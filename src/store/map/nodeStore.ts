@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { Node, Edge, EdgeType } from "@/types";
+import type { WaitRelocationEntry } from "@/common/vehicle/logic/checkpoint";
 
 /**
  * 데드락 존 정보
@@ -216,12 +217,7 @@ function logDeadlockZones(zones: DeadlockZone[], edges: Edge[]): void {
  * - hops: 거슬러 올라간 hop 수 (디버그용)
  * - mergeNode: 원래 lock을 잡을 merge 노드 (변경 없음)
  */
-export interface WaitRelocation {
-  waitNode: string;
-  waitEdge: string;
-  hops: number;
-  mergeNode: string;
-}
+export type WaitRelocation = WaitRelocationEntry;
 
 /**
  * 짧은 직선 edge 앞에서 wait point를 거슬러 올림
@@ -236,7 +232,9 @@ export interface WaitRelocation {
  */
 export function buildShortEdgeWaitRelocation(
   edges: Edge[],
-  threshold: number
+  threshold: number,
+  dzBranchNodes: Set<string> = new Set(),
+  dzMergeNodes: Set<string> = new Set()
 ): Map<string, WaitRelocation> {
   const relocation = new Map<string, WaitRelocation>();
 
@@ -262,6 +260,11 @@ export function buildShortEdgeWaitRelocation(
 
     for (const e_in of entryEdges) {
       totalEntries++;
+      // 정적 DZ 내부 edge는 정적 DZ 처리가 우선이므로 변형 마킹 제외
+      // (from_node가 DZ branch && to_node가 DZ merge인 경우)
+      if (dzBranchNodes.has(e_in.from_node) && dzMergeNodes.has(e_in.to_node)) {
+        continue;
+      }
       // 진입 edge type/length 무관 — e_in.from_node부터 거슬러 올라가면서
       // 짧은 LINEAR이 끼어있는지 검사
       let waitNode = e_in.from_node;
@@ -441,8 +444,20 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
     logDeadlockZones(deadlockZones, edges);
 
     // 2.5단계: 짧은 직선 wait relocation 정적 분석
+    // 정적 DZ 내부 edge는 변형 마킹에서 제외하기 위해 zone 노드 집합 구성
+    const dzBranchNodes = new Set<string>();
+    const dzMergeNodes = new Set<string>();
+    for (const z of deadlockZones) {
+      for (const n of z.divergeNodes) dzBranchNodes.add(n);
+      for (const n of z.mergeNodes) dzMergeNodes.add(n);
+    }
     const SHORT_EDGE_THRESHOLD = 1.5; // m, 추후 config화
-    const waitRelocation = buildShortEdgeWaitRelocation(edges, SHORT_EDGE_THRESHOLD);
+    const waitRelocation = buildShortEdgeWaitRelocation(
+      edges,
+      SHORT_EDGE_THRESHOLD,
+      dzBranchNodes,
+      dzMergeNodes
+    );
     logShortEdgeWaitRelocation(waitRelocation, SHORT_EDGE_THRESHOLD);
     set({ waitRelocations: waitRelocation });
 

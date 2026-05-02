@@ -30,6 +30,8 @@ export interface FabInitParams {
   transferMode: TransferMode;
   memoryAssignment?: FabMemoryAssignment;
   bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
+  /** 변형 DZ wait relocation (단일 fab 모드용) */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 /**

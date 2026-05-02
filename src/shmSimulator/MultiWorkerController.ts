@@ -47,6 +47,8 @@ export interface MultiFabInitParams {
   bayLoopEntries?: Array<{ bayName: string; edge1: string; edge2: string }>;
   /** Fab별 SimulationConfig 오버라이드 (linearMaxSpeed, curveMaxSpeed, lockWaitDistance 등) */
   config?: Partial<SimulationConfig>;
+  /** 변형 DZ wait relocation (단일 Fab 모드용 — grid mode는 sharedMapData) */
+  waitRelocations?: Map<string, import("@/common/vehicle/logic/checkpoint").WaitRelocationEntry>;
 }
 
 export type { FabInitParams } from "@/shmSimulator/index";
@@ -316,6 +318,7 @@ export class MultiWorkerController {
       memoryAssignment: fabAssignment,
       bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
+      // grid mode는 sharedMapData.waitRelocations 사용 — fab별 필드는 비움
     };
   }
 
@@ -342,6 +345,7 @@ export class MultiWorkerController {
       memoryAssignment: fabAssignment,
       bayLoopEntries: fabConfig.bayLoopEntries,
       config: fabConfig.config,
+      waitRelocations: fabConfig.waitRelocations,
     };
   }
 

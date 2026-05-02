@@ -35,8 +35,10 @@ import type {
   CheckpointBuildResult,
   MergeCheckpointOptions,
   LockWaitCheckpointParams,
+  WaitRelocationEntry,
 } from "./types";
 import { isCurveEdge, sortCheckpointsByPathOrder } from "./utils";
+import { DEFAULT_WAITING_OFFSET, DZ_ENTRY_WAIT_OFFSET } from "./constants";
 
 /**
  * edge의 시작점(from_node)이 merge node인지 확인
@@ -302,17 +304,24 @@ function createCheckpointsForOthers(
 }
 
 /**
- * Deadlock zone entry 대기 지점 찾기
+ * 통합 wait entry 정보 (정적/변형 DZ 공용)
+ */
+interface DzEntry {
+  edgeId: number;
+  ratio: number;
+  pathIdx: number;
+}
+
+/**
+ * Deadlock zone entry 대기 지점 찾기 (정적 DZ)
  * incoming edge의 deadlockZoneId로 zone을 식별하고,
  * 같은 zone의 entry edge (branch node 직전)를 반환
- *
- * @returns entry 지점 (edgeId, ratio, pathIdx) 또는 null
  */
 function findDeadlockZoneEntry(
   targetIdx: number,
   path: number[],
   edges: Edge[],
-): { edgeId: number; ratio: number; pathIdx: number } | null {
+): DzEntry | null {
   const incomingEdge = edges[path[targetIdx - 1]];
   if (!incomingEdge?.deadlockZoneId) return null;
   const zoneId = incomingEdge.deadlockZoneId;
@@ -322,10 +331,9 @@ function findDeadlockZoneEntry(
     const edge = edges[edgeId];
     if (!edge) continue;
     if (edge.isDeadlockZoneEntry && edge.deadlockZoneId === zoneId) {
-      // entry edge 끝에서 대기 (branch node 0.5m 전)
-      const ENTRY_WAIT_OFFSET = 0.5;
-      const ratio = edge.distance > ENTRY_WAIT_OFFSET
-        ? 1 - ENTRY_WAIT_OFFSET / edge.distance
+      // entry edge 끝에서 대기 (branch node 직전)
+      const ratio = edge.distance > DZ_ENTRY_WAIT_OFFSET
+        ? 1 - DZ_ENTRY_WAIT_OFFSET / edge.distance
         : 0;
       return { edgeId, ratio, pathIdx: i };
     }
@@ -334,9 +342,69 @@ function findDeadlockZoneEntry(
 }
 
 /**
- * LOCK_WAIT checkpoint 생성
+ * 변형 DZ entry 대기 지점 찾기 (짧은 LINEAR chain)
+ * - waitRelocations에서 incoming edge name으로 reloc 정보 lookup
+ * - path에서 reloc.waitEdge 찾아서 그 edge 끝 waiting_offset 전 위치 반환
+ * - waitEdge가 path에 없으면 (우회로) null → 일반 합류 분기로 fallback
  */
-function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
+function findVariantDzEntry(
+  targetIdx: number,
+  path: number[],
+  edges: Edge[],
+  waitRelocations: Map<string, WaitRelocationEntry> | undefined
+): DzEntry | null {
+  if (!waitRelocations || waitRelocations.size === 0) return null;
+
+  const incomingEdge = edges[path[targetIdx - 1]];
+  if (!incomingEdge) return null;
+
+  const reloc = waitRelocations.get(incomingEdge.edge_name);
+  if (!reloc) return null;
+
+  // path에서 waitEdge를 거꾸로 찾음
+  for (let i = targetIdx - 1; i >= 1; i--) {
+    const edgeId = path[i];
+    const edge = edges[edgeId];
+    if (!edge || edge.edge_name !== reloc.waitEdge) continue;
+
+    const offset = edge.waiting_offset ?? DEFAULT_WAITING_OFFSET;
+    const clamped = Math.min(offset, edge.distance);
+    const ratio = edge.distance > 0
+      ? Math.max(0, 1 - clamped / edge.distance)
+      : 0;
+    return { edgeId, ratio, pathIdx: i };
+  }
+  return null; // path가 우회로면 fallback
+}
+
+/**
+ * 정적 DZ + 변형 DZ 통합 entry 검색
+ * - 정적 DZ 우선
+ * - waitRelocations에 정적 DZ는 미리 제외되어있음 (nodeStore 분석 시점에 가드)
+ */
+function findDzEntry(
+  targetIdx: number,
+  path: number[],
+  edges: Edge[],
+  waitRelocations: Map<string, WaitRelocationEntry> | undefined
+): DzEntry | null {
+  return (
+    findDeadlockZoneEntry(targetIdx, path, edges)
+    ?? findVariantDzEntry(targetIdx, path, edges, waitRelocations)
+  );
+}
+
+/**
+ * LOCK_WAIT checkpoint 생성
+ * 처리 우선순위:
+ *   1. DZ entry (정적 또는 변형) → entry edge 위치
+ *   2. 곡선 incoming → 곡선 시작 (ratio 0)
+ *   3. 직선 incoming → merge에서 waiting_offset 거꾸로
+ */
+function createLockWaitCheckpoint(
+  params: LockWaitCheckpointParams,
+  waitRelocations: Map<string, WaitRelocationEntry> | undefined
+): void {
   const {
     checkpoints,
     targetEdgeId,
@@ -348,8 +416,8 @@ function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
     edges,
   } = params;
 
-  // ── Deadlock zone: zone entry에서 대기 ──
-  const dzEntry = findDeadlockZoneEntry(targetIdx, path, edges);
+  // ── Deadlock zone (정적/변형 통합): entry에서 대기 ──
+  const dzEntry = findDzEntry(targetIdx, path, edges, waitRelocations);
   if (dzEntry) {
     checkpoints.push({
       edge: dzEntry.edgeId,
@@ -370,8 +438,7 @@ function createLockWaitCheckpoint(params: LockWaitCheckpointParams): void {
       targetEdge: targetEdgeId,
     });
   } else {
-    // 직선 합류: waiting_offset 거리 전에서 대기 (없으면 기본 1.89m)
-    const DEFAULT_WAITING_OFFSET = 1.89;
+    // 직선 합류: waiting_offset 거리 전에서 대기
     const waitingOffset = incomingEdge.waiting_offset ?? DEFAULT_WAITING_OFFSET;
     const waitPoint = findWaitPoint(
       targetIdx,
@@ -403,7 +470,7 @@ export function buildCheckpoints(
 ): CheckpointBuildResult {
   const opts = { ...DEFAULT_OPTIONS, ...lockOptions };
   const checkpoints: Checkpoint[] = [];
-  const { edgeIndices, edgeArray, isMergeNode } = ctx;
+  const { edgeIndices, edgeArray, isMergeNode, waitRelocations } = ctx;
 
   // ========================================
   // 1-based 배열로 변환
@@ -432,10 +499,10 @@ export function buildCheckpoints(
     const isCurveIncoming = isCurveEdge(incomingEdge);
 
     // ========================================
-    // Deadlock zone 사전 탐지
+    // Deadlock zone 사전 탐지 (정적 + 변형 통합)
     // ========================================
     const dzEntry = isStartFromMergeNode
-      ? findDeadlockZoneEntry(targetIdx, path, edges)
+      ? findDzEntry(targetIdx, path, edges, waitRelocations)
       : null;
 
     // ========================================
@@ -491,7 +558,7 @@ export function buildCheckpoints(
         targetIdx,
         path,
         edges,
-      });
+      }, waitRelocations);
     }
   }
 

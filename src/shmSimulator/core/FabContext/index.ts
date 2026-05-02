@@ -139,6 +139,13 @@ export class FabContext {
     this.actualNumVehicles = result.actualNumVehicles;
     this.checkpointArray = result.checkpointArray;
 
+    // 변형 DZ wait relocation 주입 (sharedMapRef 또는 fab별 fallback)
+    const waitRelocations =
+      params.sharedMapRef?.waitRelocations ?? params.waitRelocations;
+    if (waitRelocations) {
+      this.transferMgr.setWaitRelocations(waitRelocations);
+    }
+
     // Fab render offset 설정
     if (params.sharedMapRef) {
       this.fabOffset = params.fabOffset ?? { x: 0, y: 0 };
