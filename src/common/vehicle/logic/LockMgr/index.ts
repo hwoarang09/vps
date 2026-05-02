@@ -163,6 +163,13 @@ export class LockMgr {
   }
 
   /**
+   * 전체 merge node 이름 목록 (정렬됨)
+   */
+  getAllMergeNodeNames(): string[] {
+    return [...this.state.mergeNodes].sort();
+  }
+
+  /**
    * Step 4.5: 경로 변경된 차량의 lock 정합성 일괄 처리
    * (1) orphaned lock 정리 (신 경로에 없는 merge release/cancel)
    * (2) missed checkpoint 즉시 처리 (rebuild된 checkpoint 중 이미 지나친 것)

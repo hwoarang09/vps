@@ -457,6 +457,7 @@ export class FabContext {
     return {
       strategy: this.lockMgr.getGrantStrategy(),
       nodes,
+      allMergeNodeNames: this.lockMgr.getAllMergeNodeNames(),
     };
   }
 }

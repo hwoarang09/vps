@@ -10,6 +10,7 @@ import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useVisualizationStore } from "@/store/ui/visualizationStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
+import NodeControlPanel from "./panels/NodeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
 import OperationMapPanel from "./panels/OperationMapPanel";
 import MovementParamsPanel from "./panels/params/MovementParamsPanel";
@@ -83,6 +84,11 @@ const RightPanel: React.FC = () => {
     // Search Edge Panel
     if (activeSubMenu === "search-edge") {
       return <EdgeControlPanel />;
+    }
+
+    // Search Node Panel
+    if (activeSubMenu === "search-node") {
+      return <NodeControlPanel />;
     }
 
     // Params panels (lv3)
@@ -190,6 +196,7 @@ const RightPanel: React.FC = () => {
     if (activeSubMenu === "devtools-lock") return "Lock Info";
     if (activeSubMenu === "search-vehicle") return "Vehicle Search";
     if (activeSubMenu === "search-edge") return "Edge Search";
+    if (activeSubMenu === "search-node") return "Node Search";
     if (activeSubMenu) return getMenuLabel(activeSubMenu);
     return "Detail Panel";
   };

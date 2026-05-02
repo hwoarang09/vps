@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Search, Navigation, ChevronDown } from "lucide-react";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
@@ -6,7 +6,6 @@ import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import { useCameraStore } from "@/store/ui/cameraStore";
 import { useFabStore } from "@/store/map/fabStore";
 import {
-  panelInputVariants,
   panelSelectVariants,
   panelCardVariants,
   panelButtonVariants,
@@ -19,6 +18,7 @@ const EdgeControlPanel: React.FC = () => {
   const [foundEdgeIndex, setFoundEdgeIndex] = useState<number | null>(null);
   const [selectedFabIndex, setSelectedFabIndex] = useState<number>(0);
   const [isEdgeDropdownOpen, setIsEdgeDropdownOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const edges = useEdgeStore((state) => state.edges);
   const edgeNameToIndex = useEdgeStore((state) => state.edgeNameToIndex);
@@ -109,18 +109,30 @@ const EdgeControlPanel: React.FC = () => {
       const edge = edges[selectedEdgeIndex];
       if (edge) {
         setFoundEdgeIndex(selectedEdgeIndex);
-        setSearchTerm(edge.edge_name);
+        setSearchTerm("");
         navigateToEdge(selectedEdgeIndex);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEdgeIndex]);
 
-  const handleSearch = () => {
-    if (!searchTerm.trim()) {
-      setFoundEdgeIndex(null);
-      return;
-    }
+  // 입력 기준 dropdown 필터 (이름/인덱스 부분일치)
+  const filteredGroups = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return groupedEdges;
+    return groupedEdges
+      .map((g) => ({
+        key: g.key,
+        items: g.items.filter(
+          (it) =>
+            it.name.toLowerCase().includes(q) || String(it.index).includes(q)
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [groupedEdges, searchTerm]);
+
+  const handleEnter = () => {
+    if (!searchTerm.trim()) return;
 
     let foundIdx: number | null = null;
 
@@ -150,19 +162,15 @@ const EdgeControlPanel: React.FC = () => {
     }
 
     if (foundIdx !== null) {
-      setFoundEdgeIndex(foundIdx);
-      selectEdge(foundIdx, selectedFabIndex);
-      navigateToEdge(foundIdx);
-    } else {
-      setFoundEdgeIndex(null);
-      alert("Edge not found");
+      handleEdgeSelect(foundIdx);
     }
   };
 
   const handleEdgeSelect = (edgeIndex: number) => {
     setFoundEdgeIndex(edgeIndex);
-    setSearchTerm(edges[edgeIndex]?.edge_name || "");
+    setSearchTerm("");
     setIsEdgeDropdownOpen(false);
+    inputRef.current?.blur();
     selectEdge(edgeIndex, selectedFabIndex);
     navigateToEdge(edgeIndex);
   };
@@ -191,24 +199,43 @@ const EdgeControlPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Edge Dropdown */}
+      {/* Edge Search (단일 input + 그룹 dropdown) */}
       <div className="relative">
         <label className={twMerge(panelLabelVariants({ color: "muted", size: "xs" }), "block mb-1")}>
-          Select Edge
+          Search Edge
         </label>
-        <button
-          onClick={() => setIsEdgeDropdownOpen(!isEdgeDropdownOpen)}
-          className="w-full px-3 py-2 border border-panel-border rounded bg-panel-bg-solid flex justify-between items-center hover:border-accent-cyan/50 focus:outline-none focus:ring-1 focus:ring-accent-cyan transition-colors"
-        >
-          <span className={foundEdge ? "text-white" : "text-gray-500"}>
-            {foundEdge ? foundEdge.edge_name : "Choose an edge..."}
-          </span>
-          <ChevronDown size={16} className={`text-gray-500 transition-transform ${isEdgeDropdownOpen ? "rotate-180" : ""}`} />
-        </button>
+        <div className="flex items-center border border-panel-border rounded bg-panel-bg-solid focus-within:ring-1 focus-within:ring-accent-cyan focus-within:border-accent-cyan">
+          <Search size={14} className="ml-2 text-gray-500 shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder={foundEdge ? foundEdge.edge_name : "E0001 or index..."}
+            className="flex-1 min-w-0 px-2 py-2 text-sm bg-transparent text-white placeholder-gray-500 focus:outline-none"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setIsEdgeDropdownOpen(true);
+            }}
+            onFocus={() => setIsEdgeDropdownOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleEnter();
+              else if (e.key === "Escape") {
+                setIsEdgeDropdownOpen(false);
+                inputRef.current?.blur();
+              }
+            }}
+          />
+          <button
+            onClick={() => setIsEdgeDropdownOpen(!isEdgeDropdownOpen)}
+            className="px-2 py-2 text-gray-500 hover:text-gray-300 shrink-0"
+          >
+            <ChevronDown size={14} className={`transition-transform ${isEdgeDropdownOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
 
         {isEdgeDropdownOpen && (
           <div className="absolute z-50 w-full mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg max-h-64 overflow-y-auto">
-            {groupedEdges.map((group) => (
+            {filteredGroups.map((group) => (
               <div key={group.key}>
                 <div className="px-3 py-1.5 bg-panel-bg text-xs font-semibold text-gray-400 sticky top-0 border-b border-panel-border">
                   {group.key} ({group.items.length})
@@ -227,29 +254,13 @@ const EdgeControlPanel: React.FC = () => {
                 ))}
               </div>
             ))}
-            {groupedEdges.length === 0 && (
+            {filteredGroups.length === 0 && (
               <div className="px-3 py-4 text-center text-gray-500 text-sm">
-                No edges available
+                {searchTerm.trim() ? "No matching edges" : "No edges available"}
               </div>
             )}
           </div>
         )}
-      </div>
-
-      {/* Search Area */}
-      <div className="relative">
-        <label className={twMerge(panelLabelVariants({ color: "muted", size: "xs" }), "block mb-1")}>
-          Or search by name/index
-        </label>
-        <input
-          type="text"
-          placeholder="E0001 or 0"
-          className={twMerge(panelInputVariants({ size: "md", width: "full" }), "pl-10 pr-4 py-2")}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-        />
-        <Search className="absolute left-3 top-8 text-gray-500" size={18} />
       </div>
 
       {/* Edge Info */}

@@ -425,6 +425,8 @@ export interface LockNodeData {
 export interface LockTableData {
   strategy: GrantStrategy;
   nodes: Record<string, LockNodeData>;
+  /** 전체 merge node 이름 (활성/비활성 무관) — 검색 dropdown용 */
+  allMergeNodeNames: string[];
 }
 
 // ============================================================================

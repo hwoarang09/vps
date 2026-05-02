@@ -71,13 +71,13 @@ const LockInfoPanel: React.FC = () => {
   const refreshNodeList = useCallback(async () => {
     if (mode === "array") {
       const lockMgr = getLockMgr();
-      const table = lockMgr.getTable();
-      setAllNodes(Object.keys(table));
+      // 모든 merge node 노출 (활성 lock 없어도 검색 가능)
+      setAllNodes(lockMgr.getAllMergeNodeNames());
       setStrategy(lockMgr.getGrantStrategy());
     } else if (mode === "shm" && selectedFab) {
       const data = await getLockTableData(selectedFab);
       if (data) {
-        setAllNodes(Object.keys(data.nodes));
+        setAllNodes(data.allMergeNodeNames ?? Object.keys(data.nodes));
         setStrategy(data.strategy);
       }
     }
@@ -123,7 +123,11 @@ const LockInfoPanel: React.FC = () => {
               ),
             };
           }
-          setLockTableData({ strategy: lockMgr.getGrantStrategy(), nodes });
+          setLockTableData({
+            strategy: lockMgr.getGrantStrategy(),
+            nodes,
+            allMergeNodeNames: lockMgr.getAllMergeNodeNames(),
+          });
         }
       } else if (mode === "shm" && selectedFab) {
         const data = await getLockTableData(selectedFab);

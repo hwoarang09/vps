@@ -9,6 +9,7 @@ import NodesRenderer from "./NodesRenderer";
 import StationRenderer from "./StationRenderer";
 import VehicleEdgeOverlay from "./VehicleEdgeOverlay";
 import WaitNodeMarkers from "./WaitNodeMarkers";
+import SelectedNodeMarker from "./SelectedNodeMarker";
 import { useRenderCheck } from "@/utils/renderDebug";
 
 // 카메라 위치 변화 감지 임계값 (이 거리 이상 이동해야 업데이트)
@@ -73,6 +74,9 @@ const MapRenderer: React.FC = () => {
 
       {/* Wait point relocation markers (빨간 점, 짧은 edge 앞 합류 대기 지점) */}
       <WaitNodeMarkers />
+
+      {/* 검색으로 선택된 노드 표시 (노란 sphere) */}
+      <SelectedNodeMarker />
 
       {/* Render all edges - slot offset applied inside renderer */}
       <EdgeRenderer edges={edges} />
