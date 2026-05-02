@@ -499,11 +499,15 @@ export function buildCheckpoints(
     const isCurveIncoming = isCurveEdge(incomingEdge);
 
     // ========================================
-    // Deadlock zone 사전 탐지 (정적 + 변형 통합)
+    // Deadlock zone 사전 탐지 (정적 우선, 변형 fallback)
     // ========================================
-    const dzEntry = isStartFromMergeNode
-      ? findDzEntry(targetIdx, path, edges, waitRelocations)
+    const staticDzEntry = isStartFromMergeNode
+      ? findDeadlockZoneEntry(targetIdx, path, edges)
       : null;
+    const variantDzEntry = (isStartFromMergeNode && !staticDzEntry)
+      ? findVariantDzEntry(targetIdx, path, edges, waitRelocations)
+      : null;
+    const dzEntry = staticDzEntry ?? variantDzEntry;
 
     // ========================================
     // 1. MOVE_PREPARE & LOCK_REQUEST
@@ -526,10 +530,15 @@ export function buildCheckpoints(
         flags: CheckpointFlags.MOVE_PREPARE,
         targetEdge: targetEdgeId,
       });
-      // LOCK_REQUEST: zone entry 앞에서 요청
+      // LOCK_REQUEST 위치:
+      // - 정적 DZ: entry 앞 5.1m (zone 진입 차단)
+      // - 변형 DZ: chain start 앞 1m (곡선 fn과 같은 처리)
+      //   chain은 곧 곡선으로 이어지므로 차량은 이미 pre-brake 중 → 1m 충분
+      const useShortDistance = !!variantDzEntry;
       const dzReqPoint = findRequestPoint(
         dzEntry.pathIdx, path, edges,
-        opts.straightRequestDistance, opts.curveRequestDistance, false
+        opts.straightRequestDistance, opts.curveRequestDistance,
+        useShortDistance  // true → curveRequestDistance(1m), false → straightRequestDistance(5.1m)
       );
       checkpoints.push({
         edge: dzReqPoint.edgeId,

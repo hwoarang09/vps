@@ -428,6 +428,202 @@ function calcPhysicalDistToMerge(
 }
 
 /**
+ * 차량의 path edges를 pathBuffer에서 읽어옴
+ */
+function readVehiclePathEdges(vehId: number, state: LockMgrState): number[] {
+  if (!state.pathBuffer) return [];
+  const pathPtr = vehId * MAX_PATH_LENGTH;
+  const pathLen = state.pathBuffer[pathPtr + PATH_LEN];
+  const result: number[] = [];
+  for (let i = 0; i < pathLen; i++) {
+    const e = state.pathBuffer[pathPtr + PATH_EDGES_START + i];
+    if (e >= 1) result.push(e);
+  }
+  return result;
+}
+
+/**
+ * 차량이 merge에 도달하기까지 정확한 잔여 거리 (현재 edge ratio 반영)
+ * - 차량별 pathBuffer에서 직접 path를 읽어 계산 (호출 차량과 큐 멤버 모두 자기 path 사용)
+ * - currentEdge.distance * (1 - ratio) + 사이 edges 거리 합 + mergeEdge 거리 (mergeEdge 끝까지)
+ * @returns { dist, mergePos, mergeEdgeIdx } — mergePos < 0이면 차량 path 위에 merge 없음
+ */
+function calcRemainingDistToMerge(
+  vehId: number,
+  nodeName: string,
+  state: LockMgrState
+): { dist: number; mergePos: number; mergeEdgeIdx: number } {
+  if (!state.vehicleDataArray) return { dist: Infinity, mergePos: -1, mergeEdgeIdx: -1 };
+  const data = state.vehicleDataArray;
+  const ptr = vehId * VEHICLE_DATA_SIZE;
+  const curEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+  const ratio = data[ptr + MovementData.EDGE_RATIO];
+
+  // 차량 자신의 path edges 읽기
+  const pathEdges = readVehiclePathEdges(vehId, state);
+  if (pathEdges.length === 0) return { dist: Infinity, mergePos: -1, mergeEdgeIdx: -1 };
+
+  // path 위 차량 위치
+  let vehPos = -1;
+  for (let j = 0; j < pathEdges.length; j++) {
+    if (pathEdges[j] === curEdge) { vehPos = j; break; }
+  }
+  // path 위 merge edge (to_node === nodeName)
+  let mergePos = -1;
+  for (let j = 0; j < pathEdges.length; j++) {
+    const edge = state.edges[pathEdges[j] - 1];
+    if (edge && edge.to_node === nodeName) { mergePos = j; break; }
+  }
+  if (mergePos < 0) return { dist: Infinity, mergePos: -1, mergeEdgeIdx: -1 };
+  if (vehPos < 0 || vehPos > mergePos) return { dist: Infinity, mergePos, mergeEdgeIdx: pathEdges[mergePos] };
+
+  let totalDist = 0;
+  // 현재 edge 잔여
+  const curEdgeObj = state.edges[curEdge - 1];
+  if (curEdgeObj) totalDist += curEdgeObj.distance * (1 - ratio);
+  // 사이 edges + mergeEdge 끝까지
+  for (let j = vehPos + 1; j <= mergePos; j++) {
+    const edge = state.edges[pathEdges[j] - 1];
+    if (edge) totalDist += edge.distance;
+  }
+  return { dist: totalDist, mergePos, mergeEdgeIdx: pathEdges[mergePos] };
+}
+
+/**
+ * Edge가 곡선인지 확인 (rail type LINEAR이 아니면 곡선으로 간주)
+ */
+function isEdgeCurve(edge: LockMgrState['edges'][number] | undefined): boolean {
+  if (!edge) return false;
+  return edge.vos_rail_type !== 'LINEAR';
+}
+
+/**
+ * Holder swap 안전 가드
+ * - holder가 이미 target edge에 진입했으면 swap 금지 (이미 합류 통과)
+ * - holder의 currentEdge가 mergeEdge보다 path상 뒤면 (이미 통과) 금지
+ * - 그 외 (incoming edge 위/이전): swap 허용
+ */
+function canSwapHolder(
+  holderVehId: number,
+  mergeEdgeIdx: number,
+  state: LockMgrState
+): boolean {
+  if (!state.vehicleDataArray) return false;
+  const data = state.vehicleDataArray;
+  const ptr = holderVehId * VEHICLE_DATA_SIZE;
+  const holderCurEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+
+  if (holderCurEdge < 1) return false;
+
+  // holder가 mergeEdge 위에 있으면 = 이미 merge로 들어가는 incoming edge에 진입 → 위험
+  // (정확히는 mergeEdge.to_node가 merge node, 즉 holder는 merge 직전 edge에 있음)
+  // 단, ratio가 낮으면 swap 가능. 보수적으로 ratio 0.5 미만일 때만 허용
+  if (holderCurEdge === mergeEdgeIdx) {
+    const ratio = data[ptr + MovementData.EDGE_RATIO];
+    return ratio < 0.5;
+  }
+
+  return true; // mergeEdge 이전에 있음 → swap 안전
+}
+
+/**
+ * Path 변경 시 priority-aware lock 요청
+ * - 본인이 holder/큐 멤버 아닌 신 path merge 중 LOCK_REQ 범위 안쪽인 것에 대해 즉시 REQ
+ * - 큐는 물리 잔여 거리 오름차순으로 insert
+ * - 본인이 holder보다 가까우면 holder swap (안전 가드 통과 시)
+ *
+ * 일반 LOCK_REQUEST CP 처리(handleLockRequest)는 그대로 FIFO 유지.
+ * 이 함수는 processPathChange 한정으로만 호출됨.
+ */
+export function requestLockWithPriority(
+  vehicleId: number,
+  newPathMergeNodes: Set<string>,
+  newPathEdges: number[],
+  state: LockMgrState,
+  _eName: (idx: number) => string
+): void {
+  if (!state.vehicleDataArray) return;
+
+  for (const nodeName of newPathMergeNodes) {
+    if (!state.mergeNodes.has(nodeName)) continue;
+    if (state.deadlockZoneMerges?.has(nodeName)) continue; // DZ는 gate에서 별도 처리
+
+    // 본인이 이미 holder거나 큐에 있으면 skip
+    if (state.locks.get(nodeName) === vehicleId) continue;
+    const existingQueue = state.queues.get(nodeName);
+    if (existingQueue && existingQueue.includes(vehicleId)) continue;
+
+    // 본인이 LOCK_REQ 범위 안쪽인지 검사 (본인 path 사용)
+    const myResult = calcRemainingDistToMerge(vehicleId, nodeName, state);
+    const { dist: myDist, mergeEdgeIdx } = myResult;
+    if (mergeEdgeIdx < 1 || myDist === Infinity) continue;
+
+    const mergeEdge = state.edges[mergeEdgeIdx - 1];
+    const reqDistance = isEdgeCurve(mergeEdge) ? CURVE_REQUEST_DISTANCE : STRAIGHT_REQUEST_DISTANCE;
+    if (myDist > reqDistance) continue; // 아직 LOCK_REQ 범위 밖 — 자연스럽게 도달할 때 처리됨
+
+    // ── 강제 REQ + priority 정렬 ──
+    if (!state.queues.has(nodeName)) state.queues.set(nodeName, []);
+    const queue = state.queues.get(nodeName)!;
+
+    // 정렬 위치에 insert (각 차량 자기 path 기준 잔여 거리 오름차순)
+    const insertIdx = queue.findIndex(v => {
+      const r = calcRemainingDistToMerge(v, nodeName, state);
+      return r.dist > myDist;
+    });
+    if (insertIdx === -1) queue.push(vehicleId);
+    else queue.splice(insertIdx, 0, vehicleId);
+    emitLockEvent(state, vehicleId, nodeName, LockEventType.REQUEST);
+
+    // pendingReleases 등록 (auto-release 위해)
+    if (!state.pendingReleases.has(vehicleId)) state.pendingReleases.set(vehicleId, []);
+    const releases = state.pendingReleases.get(vehicleId)!;
+    if (!releases.find(r => r.nodeName === nodeName)) {
+      // releaseEdgeIdx = mergeEdge 다음 edge (= target edge)
+      let targetEdgeIdx = -1;
+      for (let j = 0; j < newPathEdges.length - 1; j++) {
+        if (newPathEdges[j] === mergeEdgeIdx) {
+          targetEdgeIdx = newPathEdges[j + 1];
+          break;
+        }
+      }
+      if (targetEdgeIdx > 0) {
+        releases.push({ nodeName, releaseEdgeIdx: targetEdgeIdx });
+      }
+    }
+
+    // holder swap 검사 — 본인이 큐 1등이고 holder보다 가까울 때만
+    const holder = state.locks.get(nodeName);
+    if (holder !== undefined && holder !== vehicleId) {
+      // 본인이 큐 1등이 됐는지 확인
+      if (queue[0] !== vehicleId) continue;
+
+      // holder의 잔여 거리도 본인 path로 계산
+      const holderResult = calcRemainingDistToMerge(holder, nodeName, state);
+      // holder가 path 위에 없거나 (이미 통과/우회) myDist < holderDist면 swap
+      const holderShorter = holderResult.dist !== Infinity && holderResult.dist <= myDist;
+      if (holderShorter) continue; // holder가 더 가까움 → swap 안 함
+
+      // canSwapHolder: holder가 mergeEdge 위 ratio 0.5 이상이면 위험
+      if (!canSwapHolder(holder, mergeEdgeIdx, state)) continue;
+
+      // swap
+      state.locks.set(nodeName, vehicleId);
+      emitLockEvent(state, holder, nodeName, LockEventType.RELEASE);
+      emitLockEvent(state, vehicleId, nodeName, LockEventType.GRANT);
+    } else if (holder === undefined && queue[0] === vehicleId) {
+      // 큐 비어있고 본인이 1등 → 즉시 grant
+      state.locks.set(nodeName, vehicleId);
+      emitLockEvent(state, vehicleId, nodeName, LockEventType.GRANT);
+    }
+  }
+}
+
+/** LOCK_REQ 거리 (builder의 DEFAULT_OPTIONS와 동일) */
+const STRAIGHT_REQUEST_DISTANCE = 5.1;
+const CURVE_REQUEST_DISTANCE = 1.0;
+
+/**
  * 경로 변경 시 orphaned lock 처리
  * - 신 경로에 없는 merge → 무조건 release/cancel
  * - 신 경로에 있는 merge:

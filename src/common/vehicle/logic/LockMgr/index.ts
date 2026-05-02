@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { DEFAULT_LOCK_POLICY } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
-import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks } from "./lock-handlers";
+import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks, requestLockWithPriority } from "./lock-handlers";
 import { updateDeadlockZoneGates } from "./deadlock-zone";
 import type { PathChangeInfo } from "../TransferMgr/types";
 import { getLockSnapshot } from "./snapshot";
@@ -172,10 +172,12 @@ export class LockMgr {
   /**
    * Step 4.5: 경로 변경된 차량의 lock 정합성 일괄 처리
    * (1) orphaned lock 정리 (신 경로에 없는 merge release/cancel)
-   * (2) missed checkpoint 즉시 처리 (rebuild된 checkpoint 중 이미 지나친 것)
+   * (2) ★ priority-aware 강제 REQ (본인이 LOCK_REQ 범위 안쪽인 새 merge에 대해)
+   * (3) missed checkpoint 즉시 처리 (rebuild된 checkpoint 중 이미 지나친 것)
    */
   processPathChange(vehicleId: number, info: PathChangeInfo): void {
     releaseOrphanedLocks(vehicleId, info.newPathMergeNodes, info.newPathEdges, this.state, this.eName);
+    requestLockWithPriority(vehicleId, info.newPathMergeNodes, info.newPathEdges, this.state, this.eName);
     processCheckpoint(vehicleId, this.state, this.eName);
   }
 
