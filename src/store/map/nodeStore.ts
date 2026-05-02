@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Node, Edge } from "@/types";
+import { Node, Edge, EdgeType } from "@/types";
 
 /**
  * 데드락 존 정보
@@ -205,6 +205,134 @@ function logDeadlockZones(zones: DeadlockZone[], edges: Edge[]): void {
   }
 }
 
+// ============================================================================
+// Short-Edge Wait Relocation (변형 DZ 처리)
+// ============================================================================
+
+/**
+ * 한 진입 edge에 대한 wait point 재배치 정보
+ * - waitNode: 실제 대기할 노드 (원래 merge 노드 대신)
+ * - waitEdge: waitNode로 들어오는 edge (CP가 박힐 edge)
+ * - hops: 거슬러 올라간 hop 수 (디버그용)
+ * - mergeNode: 원래 lock을 잡을 merge 노드 (변경 없음)
+ */
+export interface WaitRelocation {
+  waitNode: string;
+  waitEdge: string;
+  hops: number;
+  mergeNode: string;
+}
+
+/**
+ * 짧은 직선 edge 앞에서 wait point를 거슬러 올림
+ *
+ * 변형 deadlock 케이스 처리:
+ *   merge 진입 edge가 짧은 직선이면, 그 edge에서 대기하면 봉쇄 발생.
+ *   따라서 대기 위치를 한 단계 또는 여러 단계 위로 올림 (긴 edge or 분기점까지).
+ *
+ * @param edges - 모든 edge 목록
+ * @param threshold - 짧은 edge 임계 (m). 이 미만 LINEAR가 "짧음" 판정
+ * @returns 진입 edge name → WaitRelocation 매핑
+ */
+export function buildShortEdgeWaitRelocation(
+  edges: Edge[],
+  threshold: number
+): Map<string, WaitRelocation> {
+  const relocation = new Map<string, WaitRelocation>();
+
+  // topology 빌드
+  const inEdges = new Map<string, Edge[]>();   // node → 들어오는 edge 들
+  const outDegree = new Map<string, number>();
+  for (const e of edges) {
+    if (!inEdges.has(e.to_node)) inEdges.set(e.to_node, []);
+    inEdges.get(e.to_node)!.push(e);
+    outDegree.set(e.from_node, (outDegree.get(e.from_node) || 0) + 1);
+  }
+
+  const isDiverge = (n: string) => (outDegree.get(n) ?? 0) >= 2;
+
+  // [DEBUG]
+  let mergeCount = 0;
+  let totalEntries = 0;
+
+  // 각 merge node M의 진입 edge 별로 검사
+  for (const [mergeNode, entryEdges] of inEdges) {
+    if (entryEdges.length < 2) continue; // merge 아님
+    mergeCount++;
+
+    for (const e_in of entryEdges) {
+      totalEntries++;
+      // 진입 edge type/length 무관 — e_in.from_node부터 거슬러 올라가면서
+      // 짧은 LINEAR이 끼어있는지 검사
+      let waitNode = e_in.from_node;
+      let waitEdge: Edge = e_in;
+      let hops = 0;
+      const visited = new Set<string>([mergeNode]);
+
+      while (hops < 20) { // safety: 무한루프 방지
+        if (visited.has(waitNode)) break;
+        visited.add(waitNode);
+
+        // 종료 조건: 진짜 분기점
+        if (isDiverge(waitNode)) break;
+
+        // 종료 조건: 또 다른 merge (in ≥ 2)
+        const inE = inEdges.get(waitNode) ?? [];
+        if (inE.length !== 1) break;
+
+        const prev = inE[0];
+        // 짧은 LINEAR이 아니면 stop (긴 edge / 곡선 만남)
+        if (prev.distance >= threshold) break;
+        if (prev.vos_rail_type !== EdgeType.LINEAR) break;
+
+        // 짧은 LINEAR 만남 → 거슬러 올라감
+        waitNode = prev.from_node;
+        waitEdge = prev;
+        hops++;
+      }
+
+      // hops === 0 이면 짧은 LINEAR이 없었던 거 → relocation 의미 없음 skip
+      if (hops === 0) continue;
+
+      relocation.set(e_in.edge_name, {
+        waitNode,
+        waitEdge: waitEdge.edge_name,
+        hops,
+        mergeNode,
+      });
+    }
+  }
+
+  // [DEBUG]
+  console.log(
+    `[WaitRelocation/diag] edges=${edges.length}, merges=${mergeCount}, ` +
+    `entries=${totalEntries}, relocations=${relocation.size}`
+  );
+
+  return relocation;
+}
+
+/**
+ * Wait relocation 결과를 콘솔에 출력 (dry-run 검증용)
+ */
+function logShortEdgeWaitRelocation(
+  relocation: Map<string, WaitRelocation>,
+  threshold: number
+): void {
+  if (relocation.size === 0) {
+    console.log(`[WaitRelocation] threshold=${threshold}m: no short merge entries detected`);
+    return;
+  }
+  console.log(`[WaitRelocation] threshold=${threshold}m: ${relocation.size} relocation(s)`);
+  let i = 0;
+  for (const [entryEdge, r] of relocation) {
+    i++;
+    console.log(
+      `  ${String(i).padStart(2)}. entry=${entryEdge} → wait@${r.waitNode} (waitEdge=${r.waitEdge}, hops=${r.hops}, lockOn=${r.mergeNode})`
+    );
+  }
+}
+
 /**
  * 노드가 데드락 존의 분기점인지 확인
  */
@@ -239,12 +367,14 @@ interface NodeStore {
   nodes: Node[];
   nodeNameToIndex: Map<string, number>; // O(1) Lookup
   previewNodes: Node[];
+  /** 짧은 edge wait point relocation 결과 (entry edge name → WaitRelocation) */
+  waitRelocations: Map<string, WaitRelocation>;
 
   // Actions
   setNodes: (nodes: Node[]) => void;
   addNode: (node: Node) => void;
   clearNodes: () => void;
-  
+
   // [핵심] Edge 정보를 기반으로 Node 상태(Merge/Diverge) 계산
   updateTopology: (edges: Edge[]) => void;
 
@@ -255,6 +385,7 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
   nodes: [],
   nodeNameToIndex: new Map(),
   previewNodes: [],
+  waitRelocations: new Map(),
 
   setNodes: (newNodes) => {
     const newMap = new Map<string, number>();
@@ -274,7 +405,7 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
     };
   }),
 
-  clearNodes: () => set({ nodes: [], nodeNameToIndex: new Map() }),
+  clearNodes: () => set({ nodes: [], nodeNameToIndex: new Map(), waitRelocations: new Map() }),
 
   // 맵 로더에서 Edge 로딩 직후 호출해주면 됨
   updateTopology: (edges: Edge[]) => {
@@ -308,6 +439,12 @@ export const useNodeStore = create<NodeStore>((set, get) => ({
 
     // 콘솔에 데드락 존 목록 출력
     logDeadlockZones(deadlockZones, edges);
+
+    // 2.5단계: 짧은 직선 wait relocation 정적 분석
+    const SHORT_EDGE_THRESHOLD = 1.5; // m, 추후 config화
+    const waitRelocation = buildShortEdgeWaitRelocation(edges, SHORT_EDGE_THRESHOLD);
+    logShortEdgeWaitRelocation(waitRelocation, SHORT_EDGE_THRESHOLD);
+    set({ waitRelocations: waitRelocation });
 
     // 3단계: Node에 데드락 존 정보 추가
     const updatedNodes = nodesWithBasicTopology.map(node => {
