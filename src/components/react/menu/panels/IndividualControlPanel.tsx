@@ -179,7 +179,7 @@ const JOB_STATE_LABEL: Record<number, { label: string; color: string }> = {
 const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
     const {
         vehicleId, vehicleIndex, status, velocity, acceleration, deceleration,
-        currentEdgeName, currentEdgeIdx, currentEdge, nextEdgeName, nextEdgeIdx,
+        currentEdgeName, currentEdge, nextEdgeName, nextEdgeIdx,
         destinationEdgeName, pathRemaining, isShmMode, trafficState, stopReasons,
         jobState, orderId, orderSrcStation, orderDestStation,
     } = data;
@@ -187,9 +187,7 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
     const srcName = orderSrcStation > 0 ? (stations[orderSrcStation - 1]?.station_name ?? `#${orderSrcStation}`) : null;
     const destName = orderDestStation > 0 ? (stations[orderDestStation - 1]?.station_name ?? `#${orderDestStation}`) : null;
 
-    const railType = currentEdge
-        ? (currentEdge.vos_rail_type === EdgeType.LINEAR ? "Str" : "Curve")
-        : "—";
+    const currentEdgeLength = currentEdge ? `${currentEdge.distance.toFixed(1)}m` : "—";
 
     return (
         <div className="space-y-1 text-sm bg-panel-bg-solid p-2 rounded border border-panel-border">
@@ -216,8 +214,8 @@ const BasicTab: React.FC<{ data: VehicleData }> = ({ data }) => {
             </div>
 
             <div className="flex justify-between text-xs text-accent-cyan font-medium mt-1">
-                <span>Cur Edge <span className="text-gray-600">({railType})</span></span>
-                <span className="font-mono">{currentEdgeName} (#{currentEdgeIdx})</span>
+                <span>Cur Edge <span className="text-gray-600">(length)</span></span>
+                <span className="font-mono">{currentEdgeName} ({currentEdgeLength})</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500">
                 <span>Ratio / Pos</span>

@@ -81,8 +81,7 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       const { fabCountX, fabCountY } = fabStore;
       const totalFabs = fabCountX * fabCountY;
       const vehiclesPerFab = Math.floor(numVehicles / totalFabs);
-      // 버퍼 오버플로우 방지를 위해 10% 여유 추가
-      const maxVehiclesPerFab = Math.ceil(vehiclesPerFab * 1.1);
+      const maxVehiclesPerFab = vehiclesPerFab;
 
 
       // 각 Fab별로 분리된 데이터 생성 (fabId만 필요)
