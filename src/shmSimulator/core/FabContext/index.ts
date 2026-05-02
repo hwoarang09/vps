@@ -13,6 +13,7 @@ import { DispatchMgr } from "@/shmSimulator/managers/DispatchMgr";
 import { RoutingMgr } from "@/shmSimulator/managers/RoutingMgr";
 import { EngineStore } from "../EngineStore";
 import { SimLogger } from "@/logger";
+import { SnapshotLogger } from "@/logger/SnapshotLogger";
 import type { Edge } from "@/types/edge";
 import type { Node } from "@/types";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
@@ -78,6 +79,10 @@ export class FabContext {
 
   // === SimLogger ===
   private simLogger: SimLogger | null = null;
+
+  // === SnapshotLogger (디버그 모드, 0.1s 주기) ===
+  private snapshotLogger: SnapshotLogger | null = null;
+  private lastSnapshotTime: number = 0;
 
   // === Collision & Curve Brake Check Timers ===
   private readonly collisionCheckTimers: Map<number, number> = new Map();
@@ -297,6 +302,21 @@ export class FabContext {
       workerId,
     );
     console.log(`[FabContext] setLoggerPort result: simLogger=${this.simLogger ? 'OK' : 'null'}`);
+
+    // Snapshot logger도 같이 초기화 (디버그 모드, SimLogger와 같은 sessionId)
+    if (this.simLogger) {
+      try {
+        const sessionId = this.simLogger.getSessionId();
+        this.snapshotLogger = new SnapshotLogger({ sessionId, fabId: this.fabId });
+        await this.snapshotLogger.init();
+        console.log(`[FabContext] SnapshotLogger init OK: fabId=${this.fabId}, sessionId=${sessionId}`);
+      } catch (e) {
+        console.warn(`[FabContext] SnapshotLogger init failed:`, e);
+        this.snapshotLogger = null;
+      }
+    } else {
+      console.log(`[FabContext] SnapshotLogger skipped: simLogger is null (fabId=${this.fabId})`);
+    }
   }
 
   /**
@@ -335,6 +355,8 @@ export class FabContext {
         transferThroughputPerHour: this.store.transferThroughputPerHour,
       },
       simLogger: this.simLogger,
+      snapshotLogger: this.snapshotLogger,
+      lastSnapshotTime: this.lastSnapshotTime,
       edgeStatsTracker: this.edgeStatsTracker,
       edgeEnterTimes: this.edgeEnterTimes,
       collisionCheckTimers: this.collisionCheckTimers,
@@ -346,6 +368,7 @@ export class FabContext {
 
     // Write-back replay state
     this.lastReplaySnapshotTime = ctx.lastReplaySnapshotTime;
+    this.lastSnapshotTime = ctx.lastSnapshotTime;
     this.prevVehicleSpeeds = ctx.prevVehicleSpeeds;
 
     // 5. Order stats flush (1초마다)
@@ -402,6 +425,7 @@ export class FabContext {
 
   flushLogs(): void {
     this.simLogger?.flush();
+    this.snapshotLogger?.flush();
   }
 
   dispose(): void {
@@ -409,6 +433,11 @@ export class FabContext {
     if (this.simLogger) {
       this.simLogger.dispose();
       this.simLogger = null;
+    }
+    // SnapshotLogger 정리
+    if (this.snapshotLogger) {
+      this.snapshotLogger.close();
+      this.snapshotLogger = null;
     }
 
     this.store.dispose();

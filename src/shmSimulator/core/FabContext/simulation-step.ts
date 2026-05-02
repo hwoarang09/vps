@@ -12,8 +12,9 @@ import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import type { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/logic/TransferMgr";
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { SimLogger } from "@/logger";
+import type { SnapshotLogger, SnapshotVehicle, SnapshotEdge } from "@/logger/SnapshotLogger";
 import type { EdgeStatsTracker } from "@/common/vehicle/logic/EdgeStatsTracker";
-import { VEHICLE_DATA_SIZE, MovementData } from "@/common/vehicle/initialize/constants";
+import { VEHICLE_DATA_SIZE, MovementData, LogicData } from "@/common/vehicle/initialize/constants";
 
 /**
  * 시뮬레이션 스텝 실행 컨텍스트
@@ -50,6 +51,9 @@ export interface SimulationStepContext {
   };
   // Logger
   simLogger: SimLogger | null;
+  // Snapshot Logger (디버그 모드, 0.1s 주기)
+  snapshotLogger: SnapshotLogger | null;
+  lastSnapshotTime: number;
   // EWMA tracker (per-fab)
   edgeStatsTracker: EdgeStatsTracker;
   // Edge enter time tracking (vehId → simulationTime when vehicle entered current edge)
@@ -250,6 +254,46 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
       for (let i = 0; i < actualNumVehicles; i++) {
         ctx.prevVehicleSpeeds[i] = vehicleDataArray.getVelocity(i);
       }
+    }
+  }
+
+  // 6. Debug Snapshot (0.1초 주기, 모든 vehicle position + 모든 active edge queue)
+  if (ctx.snapshotLogger) {
+    const SNAPSHOT_INTERVAL_MS = 100;
+    if (simulationTime - ctx.lastSnapshotTime >= SNAPSHOT_INTERVAL_MS) {
+      const data = vehicleDataArray.getData();
+
+      // Vehicle positions
+      const vehicles: SnapshotVehicle[] = [];
+      for (let v = 0; v < actualNumVehicles; v++) {
+        const ptr = v * VEHICLE_DATA_SIZE;
+        vehicles.push({
+          vehId: v,
+          currentEdge: Math.trunc(data[ptr + MovementData.CURRENT_EDGE]),
+          ratio: data[ptr + MovementData.EDGE_RATIO],
+          velocity: data[ptr + MovementData.VELOCITY],
+          stopReason: Math.trunc(data[ptr + LogicData.STOP_REASON]),
+        });
+      }
+
+      // Edge queues (count >= 1만)
+      const activeEdges: SnapshotEdge[] = [];
+      for (let e = 1; e <= edges.length; e++) {
+        const count = edgeVehicleQueue.getCount(e);
+        if (count === 0) continue;
+        const vehIds: number[] = [];
+        for (let p = 0; p < count; p++) {
+          vehIds.push(edgeVehicleQueue.getVehicleAt(e, p));
+        }
+        activeEdges.push({ edgeId: e, vehIds });
+      }
+
+      ctx.snapshotLogger.writeSnapshot({
+        ts: Math.trunc(simulationTime),
+        vehicles,
+        activeEdges,
+      });
+      ctx.lastSnapshotTime = simulationTime;
     }
   }
 }

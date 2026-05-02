@@ -499,9 +499,8 @@ function isEdgeCurve(edge: LockMgrState['edges'][number] | undefined): boolean {
 
 /**
  * Holder swap 안전 가드
- * - holder가 이미 target edge에 진입했으면 swap 금지 (이미 합류 통과)
- * - holder의 currentEdge가 mergeEdge보다 path상 뒤면 (이미 통과) 금지
- * - 그 외 (incoming edge 위/이전): swap 허용
+ * - holder가 mergeEdge에 진입해서 ratio 0.5 이상이면 위험 → swap 금지
+ * - 그 외: swap 허용
  */
 function canSwapHolder(
   holderVehId: number,
@@ -512,18 +511,13 @@ function canSwapHolder(
   const data = state.vehicleDataArray;
   const ptr = holderVehId * VEHICLE_DATA_SIZE;
   const holderCurEdge = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
-
   if (holderCurEdge < 1) return false;
 
-  // holder가 mergeEdge 위에 있으면 = 이미 merge로 들어가는 incoming edge에 진입 → 위험
-  // (정확히는 mergeEdge.to_node가 merge node, 즉 holder는 merge 직전 edge에 있음)
-  // 단, ratio가 낮으면 swap 가능. 보수적으로 ratio 0.5 미만일 때만 허용
   if (holderCurEdge === mergeEdgeIdx) {
     const ratio = data[ptr + MovementData.EDGE_RATIO];
     return ratio < 0.5;
   }
-
-  return true; // mergeEdge 이전에 있음 → swap 안전
+  return true;
 }
 
 /**
@@ -592,19 +586,22 @@ export function requestLockWithPriority(
       }
     }
 
-    // holder swap 검사 — 본인이 큐 1등이고 holder보다 가까울 때만
+    // Holder swap — 본인이 큐 1등 + holder보다 충분히 가까울 때만 (path-change priority inversion fix)
     const holder = state.locks.get(nodeName);
     if (holder !== undefined && holder !== vehicleId) {
-      // 본인이 큐 1등이 됐는지 확인
-      if (queue[0] !== vehicleId) continue;
+      if (queue[0] !== vehicleId) continue; // 1등 아니면 swap 안 함
 
-      // holder의 잔여 거리도 본인 path로 계산
+      // holder의 잔여 거리도 자기 path로 계산
       const holderResult = calcRemainingDistToMerge(holder, nodeName, state);
-      // holder가 path 위에 없거나 (이미 통과/우회) myDist < holderDist면 swap
-      const holderShorter = holderResult.dist !== Infinity && holderResult.dist <= myDist;
-      if (holderShorter) continue; // holder가 더 가까움 → swap 안 함
+      // holder가 path 위에 있으면 거리 비교, path 위에 없으면 (Infinity) → swap 허용 (holder가 우회/통과)
+      if (holderResult.dist !== Infinity) {
+        // SAFETY MARGIN: 본인이 holder보다 적어도 1m 이상 가까울 때만 swap
+        // (단순 거리 미세차로 swap되어 holder가 박탈당하는 일 방지)
+        const SWAP_SAFETY_MARGIN = 1.0;
+        if (myDist + SWAP_SAFETY_MARGIN >= holderResult.dist) continue;
+      }
 
-      // canSwapHolder: holder가 mergeEdge 위 ratio 0.5 이상이면 위험
+      // holder 안전 가드 (mergeEdge ratio 0.5 미만일 때만 swap)
       if (!canSwapHolder(holder, mergeEdgeIdx, state)) continue;
 
       // swap

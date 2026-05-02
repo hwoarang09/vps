@@ -112,6 +112,8 @@ const SUFFIX_RECORD_SIZE: Record<string, number> = {
   lock_detail: 20,
   transfer: 16,
   edge_queue: 16,
+  // snapshot은 가변 크기 block 포맷 — recordCount는 의미 없으니 1로 (size를 그대로 표시)
+  snapshot: 1,
 };
 
 const KNOWN_SUFFIXES = Object.keys(SUFFIX_RECORD_SIZE);

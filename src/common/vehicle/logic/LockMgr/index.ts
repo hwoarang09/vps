@@ -170,6 +170,20 @@ export class LockMgr {
   }
 
   /**
+   * 차량이 해당 merge node lock의 holder인지 확인
+   */
+  isLockHolder(nodeName: string, vehId: number): boolean {
+    return this.state.locks.get(nodeName) === vehId;
+  }
+
+  /**
+   * Deadlock zone merge node 여부 확인
+   */
+  isDeadlockZoneMerge(nodeName: string): boolean {
+    return this.state.deadlockZoneMerges?.has(nodeName) ?? false;
+  }
+
+  /**
    * Step 4.5: 경로 변경된 차량의 lock 정합성 일괄 처리
    * (1) orphaned lock 정리 (신 경로에 없는 merge release/cancel)
    * (2) ★ priority-aware 강제 REQ (본인이 LOCK_REQ 범위 안쪽인 새 merge에 대해)

@@ -129,6 +129,11 @@ export class SimLogger {
     this.enabledEvents = this._resolveEnabledEvents();
   }
 
+  /** 현재 sessionId 조회 */
+  getSessionId(): string {
+    return this.config.sessionId;
+  }
+
   async init(): Promise<void> {
     // 이전 init의 잔여 handle이 있으면 먼저 정리
     if (this.eventBuffers.size > 0) {
