@@ -2,7 +2,7 @@
 // TODO: vis-heatmap, vis-traffic-flow, vis-deadlock-zone are not yet wired in
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Activity, Radar, Tag, Binary } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
@@ -24,7 +24,14 @@ const QuickViewToolbar: React.FC = () => {
     togglePerfLeft, togglePerfRight, toggleSensorBox, toggleFabLabels,
   } = useVisualizationStore();
   const { showTooltip, hideTooltip } = useMenuStore();
+  const activeMainMenu = useMenuStore((s) => s.activeMainMenu);
+  const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
   const [logOpen, setLogOpen] = useState(false);
+
+  // 하단/서브 메뉴 상태가 바뀌면 로그 드롭다운 강제 닫기
+  useEffect(() => {
+    setLogOpen(false);
+  }, [activeMainMenu, activeSubMenu]);
 
   const items: ToggleItem[] = [
     {
