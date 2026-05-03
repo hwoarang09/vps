@@ -127,10 +127,94 @@ logger.dispose(); // flush + close
 
 ## Python Parser
 
-```bash
-python scripts/log_parser/log_parser.py /path/to/session_xxx_edge_transit.bin --summary
-python scripts/log_parser/log_parser.py /path/to/ --session session_xxx --export-csv ./output/
+### 파일
+
+```yaml
+scripts/log_parser/log_parser.py
+  purpose: 단일 .bin 파일 raw 파싱 + summary/CSV export
+  지원 타입: order, edge_transit, lock, veh_state, path, lock_detail, transfer, edge_queue, snapshot
+  주요 함수:
+    - parse_file(filepath) → list[dict]   # fixed-size 레코드
+    - parse_snapshot_file(filepath) → list[block]   # 가변 블록 (snapshot 전용)
+
+scripts/log_parser/analyze.py
+  purpose: 세션 디렉토리 통합 분석 (여러 .bin 합쳐서 시간순 / 노드 / 차량 단위로 보기)
+  명령들 (mutually exclusive):
+    --lock-node N    : 특정 노드의 lock activity (REQ/WAIT/GRANT/RELEASE 시간순 + 위치 + holder timeline + 잔존 holder)
+    --veh V          : 차량 타임라인 (edge 이동 + path + lock + transfer + checkpoint 통합)
+    --stuck          : 멈춘 차량 자동 탐지
+    --transfers      : 반송 현황 요약
+    --deadlock --pair V1 V2 [--node N] : 두 차량 데드락 분석
+    --raw            : 차량 원시 레코드 출력
+    (default)        : 세션 전체 요약
+  공통 옵션: --from / --to (시간 범위), --limit
 ```
+
+### snapshot.bin 형식 (가변 블록)
+
+```
+magic(u16)=0xCAFE
+ts(u32)
+numVehicles(u16)
+[vehId(u16) currentEdge(u16) ratio(f32) velocity(f32) stopReason(u16)] × numVehicles
+numActiveEdges(u16)
+[edgeId(u16) count(u16) [vehId(u16)] × count] × numActiveEdges
+```
+
+`parse_snapshot_file()` 가 알아서 파싱. magic 으로 sync, 손상 시 다음 magic 까지 스킵.
+
+### 사용 예
+
+```bash
+# 세션 요약
+python3 scripts/log_parser/analyze.py logs/SESSION_ID/
+
+# 단일 .bin 파일 raw
+python3 scripts/log_parser/log_parser.py logs/SESSION_ID/X_lock.bin --summary
+python3 scripts/log_parser/log_parser.py logs/SESSION_ID/X_lock.bin --veh 164
+
+# 노드 분석 (가장 많이 씀)
+python3 scripts/log_parser/analyze.py logs/SESSION_ID/ --lock-node 384
+
+# 차량 통합 타임라인
+python3 scripts/log_parser/analyze.py logs/SESSION_ID/ --veh 164
+
+# 특정 시간대만
+python3 scripts/log_parser/analyze.py logs/SESSION_ID/ --lock-node 384 --from 5000 --to 15000
+
+# CSV export
+python3 scripts/log_parser/log_parser.py logs/SESSION_ID/ --session SESSION_ID --export-csv ./output/
+```
+
+## 노드 분석 워크플로우
+
+사용자가 "N0XXX 분석해줘" / "어떤 노드 락이 이상해" 라고 하면:
+
+1. **node 이름 → node_idx 변환**
+   - log/analyze.py 의 node_idx 는 **0-based** (e.g. `N0385` → `384`)
+   - nodes.cfg 1-based row N → log node_idx (N-1)
+2. **`analyze.py --lock-node <idx>` 한 번 호출**
+3. 출력에서 핵심 자동 보임:
+   - 시간순 lock event 표 (REQ/WAIT/GRANT/RELEASE)
+   - 각 event 시점 차량 위치 (snapshot 가장 가까운 frame: edge, ratio, velocity, stopReason)
+   - 차량별 사이클 요약 (정상은 `REQ WAIT GRANT RELEASE`, 비정상 한눈에)
+   - holder timeline (보유 시간 포함)
+   - **❗ 잔존 holder** (시뮬 끝까지 release 안 한 차량)
+4. 매번 ad-hoc 파이썬 스크립트 새로 짜지 말 것 — 위 명령으로 충분
+
+## Lock Event 의미
+
+```
+event_type 0 = REQ      (락 요청)
+event_type 1 = GRANT    (락 받음)
+event_type 2 = RELEASE  (락 해제)
+event_type 3 = WAIT     (queue 진입, holder_hint = 누가 들고 있나)
+holder_hint = 255 → '-' (해당 없음)
+```
+
+## 멀티 fab 주의
+
+한 세션에 fab 여러 개 (e.g. `*_fab_1_0_*.bin`, `*_fab_2_1_*.bin`) 가 같이 있으면 `analyze.py` 가 둘 다 합쳐 출력 → ts 가 섞임. 분석 시 fab 별로 분리된 디렉토리에 두는 게 깔끔. (필요 시 `--fab` 필터 추가 가능)
 
 ## Critical Rules
 

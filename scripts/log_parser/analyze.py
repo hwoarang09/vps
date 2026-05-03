@@ -78,15 +78,92 @@ def parse_file(path: Path) -> tuple[str, list[dict]]:
     return (suffix, records)
 
 
+SNAPSHOT_MAGIC = 0xCAFE
+
+
+def parse_snapshot_file(path: Path) -> list[dict]:
+    """snapshot.bin (가변 블록) 파싱. SnapshotLogger.ts 형식 참고.
+    Returns: [{ts, vehicles: [{vehId, currentEdge, ratio, velocity, stopReason}], activeEdges: [{edgeId, vehIds}]}]
+    """
+    raw = path.read_bytes()
+    blocks = []
+    off = 0
+    total = len(raw)
+    while off + 8 <= total:
+        magic = struct.unpack_from('<H', raw, off)[0]
+        if magic != SNAPSHOT_MAGIC:
+            nxt = raw.find(struct.pack('<H', SNAPSHOT_MAGIC), off + 1)
+            if nxt < 0:
+                break
+            off = nxt
+            continue
+        try:
+            ts = struct.unpack_from('<I', raw, off + 2)[0]
+            num_v = struct.unpack_from('<H', raw, off + 6)[0]
+            cur = off + 8
+            vehicles = []
+            for _ in range(num_v):
+                if cur + 14 > total: break
+                vid, edge = struct.unpack_from('<HH', raw, cur)
+                ratio, vel = struct.unpack_from('<ff', raw, cur + 4)
+                stop = struct.unpack_from('<H', raw, cur + 12)[0]
+                vehicles.append({'vehId': vid, 'currentEdge': edge, 'ratio': ratio, 'velocity': vel, 'stopReason': stop})
+                cur += 14
+            if cur + 2 > total: break
+            num_e = struct.unpack_from('<H', raw, cur)[0]
+            cur += 2
+            edges = []
+            for _ in range(num_e):
+                if cur + 4 > total: break
+                eid, cnt = struct.unpack_from('<HH', raw, cur)
+                cur += 4
+                if cur + 2 * cnt > total: break
+                vids = list(struct.unpack_from(f'<{cnt}H', raw, cur))
+                cur += 2 * cnt
+                edges.append({'edgeId': eid, 'vehIds': vids})
+            blocks.append({'ts': ts, 'vehicles': vehicles, 'activeEdges': edges})
+            off = cur
+        except struct.error:
+            break
+    return blocks
+
+
 def load_session(session_dir: Path) -> dict[str, list[dict]]:
-    """세션 디렉토리의 모든 .bin 파일 로드. {suffix: [records]} 반환"""
+    """세션 디렉토리의 모든 .bin 파일 로드. {suffix: [records]} 반환.
+    'snapshot' suffix 는 fixed-size 가 아니라 가변 블록 — 별도 처리.
+    """
     result = {}
     for f in sorted(session_dir.glob('*.bin')):
+        if f.stem.endswith('_snapshot'):
+            blocks = parse_snapshot_file(f)
+            if blocks:
+                result['snapshot'] = blocks
+                print(f"  loaded {f.name}: {len(blocks):,} frames")
+            continue
         suffix, records = parse_file(f)
         if records:
             result[suffix] = records
             print(f"  loaded {f.name}: {len(records):,} records")
     return result
+
+
+def find_veh_at_ts(snapshots: list[dict], veh_id: int, ts: int) -> dict | None:
+    """주어진 ts에 가장 가까운 snapshot frame 에서 veh_id 의 상태 반환"""
+    if not snapshots:
+        return None
+    # 이진 탐색으로 가장 가까운 frame
+    lo, hi = 0, len(snapshots) - 1
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if snapshots[mid]['ts'] <= ts:
+            lo = mid
+        else:
+            hi = mid - 1
+    frame = snapshots[lo]
+    for v in frame['vehicles']:
+        if v['vehId'] == veh_id:
+            return {'frame_ts': frame['ts'], **v}
+    return None
 
 
 def fmt_ts(ms: int) -> str:
@@ -408,6 +485,83 @@ def cmd_deadlock(data: dict, veh_ids: list[int], node_id: int | None = None):
             print(f"    {common_edges}")
 
 
+def cmd_lock_node(data: dict, node_idx: int, ts_from: int, ts_to: int):
+    """특정 노드의 lock activity 통합 분석:
+       - 시간순 모든 lock event (REQ/WAIT/GRANT/RELEASE)
+       - 차량별 사이클 요약
+       - 각 이벤트 시점의 차량 위치 (snapshot 가장 가까운 frame)
+       - holder timeline + 잔존 holder 식별
+    """
+    ETYPE = {0: 'REQ', 1: 'GRANT', 2: 'RELEASE', 3: 'WAIT'}
+
+    locks = [r for r in data.get('lock', [])
+             if r['node_idx'] == node_idx and ts_from <= r['ts'] <= ts_to]
+    if not locks:
+        print(f"  node_idx={node_idx} 에 대한 lock event 없음 (in [{fmt_ts(ts_from)} ~ {fmt_ts(ts_to)}])")
+        return
+    locks.sort(key=lambda r: r['ts'])
+    snapshots = data.get('snapshot', [])
+
+    print(f"\n=== node_idx={node_idx} lock activity ({len(locks)} events) ===")
+    print(f"{'ts':>10}  {'veh':>4}  {'event':<8}  {'holder':>6}  {'wait_ms':>7}  {'pos at ts':<48}")
+    print('-' * 100)
+
+    holder = None  # 현재 holder veh_id
+    holder_since = None
+    holder_history = []  # (start_ts, end_ts, veh_id)
+    by_veh = {}  # veh_id -> list of events
+
+    for r in locks:
+        et = ETYPE.get(r['event_type'], str(r['event_type']))
+        holder_hint = r['holder_hint'] if r['holder_hint'] != 255 else '-'
+
+        # 위치
+        snap = find_veh_at_ts(snapshots, r['veh_id'], r['ts'])
+        if snap:
+            pos = f"edge={snap['currentEdge']:>4} ratio={snap['ratio']:.3f} vel={snap['velocity']:.2f} stop={snap['stopReason']}"
+        else:
+            pos = '(no snapshot)'
+
+        print(f"{r['ts']:>10}  {r['veh_id']:>4}  {et:<8}  {str(holder_hint):>6}  {r['wait_ms']:>7}  {pos}")
+
+        # holder 추적
+        if r['event_type'] == 1:  # GRANT
+            if holder is not None and holder != r['veh_id']:
+                holder_history.append((holder_since, r['ts'], holder))
+            holder = r['veh_id']
+            holder_since = r['ts']
+        elif r['event_type'] == 2:  # RELEASE
+            if holder == r['veh_id']:
+                holder_history.append((holder_since, r['ts'], holder))
+                holder = None
+                holder_since = None
+
+        by_veh.setdefault(r['veh_id'], []).append(r)
+
+    # 차량별 사이클 요약
+    print(f"\n=== 차량별 사이클 ===")
+    for vid in sorted(by_veh.keys()):
+        evs = by_veh[vid]
+        counts = {}
+        for r in evs:
+            et = ETYPE.get(r['event_type'], '?')
+            counts[et] = counts.get(et, 0) + 1
+        seq = ' '.join(ETYPE.get(r['event_type'], '?') for r in evs)
+        print(f"  veh={vid:>3}  {dict(sorted(counts.items()))}  sequence: {seq}")
+
+    # holder timeline
+    print(f"\n=== holder timeline ===")
+    for start, end, vid in holder_history:
+        dur = end - start
+        print(f"  veh={vid:>3}  ts={start:>6} ~ {end:>6}  ({fmt_ms(dur)})")
+    if holder is not None:
+        last_ts = locks[-1]['ts']
+        # 시뮬 끝까지 hold
+        all_lock_max = max((r['ts'] for r in data.get('lock', [])), default=last_ts)
+        dur = all_lock_max - holder_since
+        print(f"  veh={holder:>3}  ts={holder_since:>6} ~ END    ({fmt_ms(dur)})  ❗ 잔존 holder")
+
+
 def cmd_raw(data: dict, veh_id: int, ts_from: int, ts_to: int, limit: int = 50):
     """특정 차량의 원시 레코드 출력"""
     print(f"\n=== Raw Records for veh {veh_id} ===")
@@ -456,6 +610,8 @@ def main():
     parser.add_argument('--deadlock', action='store_true', help='deadlock 분석 (--pair 필수)')
     parser.add_argument('--pair', type=int, nargs='+', metavar='VEH', help='분석할 차량 ID 목록 (예: --pair 41 108)')
     parser.add_argument('--node', type=int, help='타겟 노드 ID (deadlock 분석용, 0-based)')
+    parser.add_argument('--lock-node', dest='lock_node', type=int,
+                        help='특정 노드의 lock activity 분석 (0-based node_idx, 시간순 + 위치 + holder timeline)')
     parser.add_argument('--raw', action='store_true', help='원시 레코드 출력')
     parser.add_argument('--limit', type=int, default=50, help='raw 모드 최대 출력 수')
     args = parser.parse_args()
@@ -479,6 +635,8 @@ def main():
             print("[ERROR] --deadlock 에는 --pair VEH1 VEH2 필요", file=sys.stderr)
             sys.exit(1)
         cmd_deadlock(data, args.pair, args.node)
+    elif args.lock_node is not None:
+        cmd_lock_node(data, args.lock_node, ts_from, ts_to)
     elif args.stuck:
         cmd_stuck(data)
     elif args.transfers:

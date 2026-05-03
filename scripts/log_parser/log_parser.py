@@ -52,7 +52,17 @@ FILE_SUFFIX_TO_TYPES = {
     'lock_detail':  [12],
     'transfer':     [13],
     'edge_queue':   [14],
+    'snapshot':     ['snapshot'],  # 가변 블록 — 별도 처리
 }
+
+# Snapshot block (variable size, see SnapshotLogger.ts):
+#   magic(u16)=0xCAFE
+#   ts(u32)
+#   numVehicles(u16)
+#   [vehId(u16) currentEdge(u16) ratio(f32) velocity(f32) stopReason(u16)] × numVehicles
+#   numActiveEdges(u16)
+#   [edgeId(u16) count(u16) [vehId(u16)] × count] × numActiveEdges
+SNAPSHOT_MAGIC = 0xCAFE
 
 COLUMNS = {
     1:  ['order_id', 'veh_id', 'dest_edge', 'move_to_pickup_ts', 'pickup_arrive_ts', 'pickup_start_ts', 'pickup_done_ts', 'move_to_drop_ts', 'drop_arrive_ts', 'drop_start_ts', 'drop_done_ts'],
@@ -73,6 +83,81 @@ def detect_file_type(filename: str):
         if stem.endswith(f'_{suffix}'):
             return types
     return None
+
+
+def parse_snapshot_file(filepath: str):
+    """
+    Snapshot binary 파일 파싱 (가변 블록).
+    Returns: list of dict
+        {
+          'ts': int,
+          'vehicles': [{vehId, currentEdge, ratio, velocity, stopReason}, ...],
+          'activeEdges': [{edgeId, vehIds: [...]}, ...],
+        }
+    """
+    filepath = Path(filepath)
+    if not filepath.exists():
+        print(f"[ERROR] File not found: {filepath}", file=sys.stderr)
+        return []
+
+    raw = filepath.read_bytes()
+    blocks = []
+    off = 0
+    total = len(raw)
+
+    while off + 8 <= total:
+        magic = struct.unpack_from('<H', raw, off)[0]
+        if magic != SNAPSHOT_MAGIC:
+            # 동기화 잃음 — 다음 magic까지 스킵
+            next_off = raw.find(struct.pack('<H', SNAPSHOT_MAGIC), off + 1)
+            if next_off < 0:
+                break
+            off = next_off
+            continue
+        try:
+            ts = struct.unpack_from('<I', raw, off + 2)[0]
+            num_v = struct.unpack_from('<H', raw, off + 6)[0]
+            cur = off + 8
+
+            vehicles = []
+            for _ in range(num_v):
+                if cur + 14 > total:
+                    break
+                veh_id, cur_edge = struct.unpack_from('<HH', raw, cur)
+                ratio, vel = struct.unpack_from('<ff', raw, cur + 4)
+                stop_reason = struct.unpack_from('<H', raw, cur + 12)[0]
+                vehicles.append({
+                    'vehId': veh_id,
+                    'currentEdge': cur_edge,
+                    'ratio': ratio,
+                    'velocity': vel,
+                    'stopReason': stop_reason,
+                })
+                cur += 14
+
+            if cur + 2 > total:
+                break
+            num_e = struct.unpack_from('<H', raw, cur)[0]
+            cur += 2
+
+            active_edges = []
+            for _ in range(num_e):
+                if cur + 4 > total:
+                    break
+                edge_id, count = struct.unpack_from('<HH', raw, cur)
+                cur += 4
+                if cur + 2 * count > total:
+                    break
+                veh_ids = list(struct.unpack_from(f'<{count}H', raw, cur))
+                cur += 2 * count
+                active_edges.append({'edgeId': edge_id, 'vehIds': veh_ids})
+
+            blocks.append({'ts': ts, 'vehicles': vehicles, 'activeEdges': active_edges})
+            off = cur
+        except struct.error:
+            break
+
+    return blocks
 
 
 def parse_file(filepath: str, event_types=None):
@@ -96,6 +181,10 @@ def parse_file(filepath: str, event_types=None):
         if event_types is None:
             print(f"[ERROR] Cannot detect event type from filename: {filepath.name}", file=sys.stderr)
             return []
+
+    # snapshot 은 가변 블록이라 별도 처리
+    if event_types == ['snapshot']:
+        return parse_snapshot_file(str(filepath))
 
     records = []
     raw = filepath.read_bytes()
