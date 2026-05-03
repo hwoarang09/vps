@@ -27,7 +27,7 @@ const CameraController: React.FC = () => {
   const position = useCameraStore((s) => s.position);
   const target = useCameraStore((s) => s.target);
   const _resetCameraUpdate = useCameraStore((s) => s._resetCameraUpdate);
-  const followingVehicleId = useCameraStore((s) => s.followingVehicleId);
+  const followingVehicle = useCameraStore((s) => s.followingVehicle);
   const followOffset = useCameraStore((s) => s.followOffset);
 
 
@@ -59,7 +59,7 @@ const CameraController: React.FC = () => {
 
     const handleStart = () => {
       // User started interacting with camera - stop following
-      if (useCameraStore.getState().followingVehicleId !== null) {
+      if (useCameraStore.getState().followingVehicle !== null) {
         stopFollowingVehicle();
       }
     };
@@ -117,27 +117,30 @@ const CameraController: React.FC = () => {
 
   // Vehicle following logic with smooth lerp
   useFrame(() => {
-    if (!controls || followingVehicleId === null) return;
+    if (!controls || followingVehicle === null) return;
 
-    // Get vehicle position based on mode (SHM or Array)
+    // Get vehicle position based on mode (SHM or Array).
+    // followingVehicle은 fab-local 식별자. 모드별로 worker/array index로 변환.
     let vehX = 0, vehY = 0, vehZ = 0;
     let vehicleFound = false;
 
+    const shmController = useShmSimulatorStore.getState().controller;
     const shmData = useShmSimulatorStore.getState().getVehicleFullData();
-    const shmActualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
 
-    if (shmData && shmActualNumVehicles > 0 && followingVehicleId < shmActualNumVehicles) {
-      // SHM mode
-      const ptr = followingVehicleId * VEHICLE_DATA_SIZE;
-      vehX = shmData[ptr + MovementData.X];
-      vehY = shmData[ptr + MovementData.Y];
-      vehZ = shmData[ptr + MovementData.Z];
-      vehicleFound = true;
+    if (shmController && shmData) {
+      const workerIdx = shmController.fabLocalToWorkerIndex(followingVehicle.fabId, followingVehicle.localIndex);
+      if (workerIdx >= 0) {
+        const ptr = workerIdx * VEHICLE_DATA_SIZE;
+        vehX = shmData[ptr + MovementData.X];
+        vehY = shmData[ptr + MovementData.Y];
+        vehZ = shmData[ptr + MovementData.Z];
+        vehicleFound = true;
+      }
     } else {
-      // Array mode fallback
+      // Array mode fallback — fabId="" 가정, localIndex = vehicle index
       const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
-      if (arrayActualNumVehicles > 0 && followingVehicleId < arrayActualNumVehicles) {
-        const vehicleData = vehicleDataArray.get(followingVehicleId);
+      if (arrayActualNumVehicles > 0 && followingVehicle.localIndex < arrayActualNumVehicles) {
+        const vehicleData = vehicleDataArray.get(followingVehicle.localIndex);
         if (vehicleData) {
           vehX = vehicleData.movement.x;
           vehY = vehicleData.movement.y;

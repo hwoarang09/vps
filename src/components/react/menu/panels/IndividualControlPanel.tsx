@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Search, Play, Pause, Settings, Octagon, Video, VideoOff } from "lucide-react";
 import { useCameraStore } from "@/store/ui/cameraStore";
 import { useVehicleGeneralStore } from "@/store/vehicle/vehicleGeneralStore";
-import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
+import { useVehicleControlStore, type SelectedVehicle } from "@/store/ui/vehicleControlStore";
 import { vehicleDataArray, MovingStatus, StopReason, TrafficState } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
@@ -61,9 +61,11 @@ const HitZoneMap: Record<number, string> = {
 type TabType = "basic" | "route" | "sensor";
 
 interface VehicleMonitorProps {
-    vehicleIndex: number;
+    selected: SelectedVehicle;
     vehicles: Map<number, any>;
     isShmMode: boolean;
+    /** Show fabId prefix in label (when multiple fabs exist) */
+    showFabPrefix: boolean;
 }
 
 // Helper to read vehicle data from SHM buffer
@@ -524,15 +526,23 @@ interface VehicleData {
 }
 
 // ─── VehicleMonitor ─────────────────────────────────────
-const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles, isShmMode }) => {
+const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ selected, vehicles, isShmMode, showFabPrefix }) => {
     const [tick, setTick] = useState(0);
     const [activeTab, setActiveTab] = useState<TabType>("basic");
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const followingVehicleId = useCameraStore((state) => state.followingVehicleId);
+    // SHM: fab-local → worker buffer index. Array: localIndex 그대로 (vehicle index).
+    const shmController = useShmSimulatorStore((s) => s.controller);
+    const vehicleIndex = isShmMode
+        ? (shmController?.fabLocalToWorkerIndex(selected.fabId, selected.localIndex) ?? -1)
+        : selected.localIndex;
+
+    const followingVehicle = useCameraStore((state) => state.followingVehicle);
     const followVehicle = useCameraStore((state) => state.followVehicle);
     const stopFollowingVehicle = useCameraStore((state) => state.stopFollowingVehicle);
-    const isFollowing = followingVehicleId === vehicleIndex;
+    const isFollowing = followingVehicle !== null
+        && followingVehicle.fabId === selected.fabId
+        && followingVehicle.localIndex === selected.localIndex;
 
     useEffect(() => {
         intervalRef.current = setInterval(() => {
@@ -582,7 +592,7 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
         if (isFollowing) {
             stopFollowingVehicle();
         } else {
-            followVehicle(vehicleIndex);
+            followVehicle(selected);
         }
     };
 
@@ -594,6 +604,9 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     let jobState = 0, orderId = 0, orderSrcStation = 0, orderDestStation = 0;
 
     if (isShmMode) {
+        if (vehicleIndex < 0) {
+            return <div className="text-gray-500">Invalid vehicle (fab/local mapping failed)</div>;
+        }
         const data = useShmSimulatorStore.getState().getVehicleFullData();
         if (!data) {
             return <div className="text-gray-500">No SHM data available</div>;
@@ -635,7 +648,10 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
     }
 
     const vehicleInfo = vehicles.get(vehicleIndex);
-    const vehicleId = vehicleInfo?.id || `VEH${String(vehicleIndex).padStart(5, '0')}`;
+    // 표시 ID는 fab-local 기준 (snapshot.bin / log parser와 1:1 매칭).
+    // 다중 fab일 땐 `<fabId>:VEH00<localIndex>` 형식, 단일이면 prefix 생략.
+    const vehLabel = `VEH${String(selected.localIndex).padStart(5, '0')}`;
+    const vehicleId = vehicleInfo?.id || (showFabPrefix && selected.fabId ? `${selected.fabId}:${vehLabel}` : vehLabel);
     const stopReasons = getStopReasons(stopReasonMask);
 
     const currentEdgeName = useEdgeStore.getState().getEdgeByIndex(currentEdgeIdx)?.edge_name || "Unknown";
@@ -799,9 +815,9 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ vehicleIndex, vehicles,
 // ─── IndividualControlPanel ─────────────────────────────
 const IndividualControlPanel: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState("");
-    const [foundVehicleIndex, setFoundVehicleIndex] = useState<number | null>(null);
+    const [foundSelected, setFoundSelected] = useState<SelectedVehicle | null>(null);
     const vehicles = useVehicleGeneralStore((state) => state.vehicles);
-    const selectedVehicleId = useVehicleControlStore((state) => state.selectedVehicleId);
+    const selectedVehicle = useVehicleControlStore((state) => state.selectedVehicle);
     const shmController = useShmSimulatorStore((state) => state.controller);
     const isShmMode = shmController !== null;
 
@@ -811,57 +827,75 @@ const IndividualControlPanel: React.FC = () => {
     const followVehicle = useCameraStore((state) => state.followVehicle);
     const stopFollowingVehicle = useCameraStore((state) => state.stopFollowingVehicle);
 
+    // fab 정보 (다중 fab 여부 → 라벨 prefix 결정)
+    const fabAssignments = isShmMode ? (shmController?.getFabRenderAssignments() ?? []) : [];
+    const showFabPrefix = fabAssignments.length > 1;
+
     const handleSearch = () => {
         if (!searchTerm) {
-            setFoundVehicleIndex(null);
+            setFoundSelected(null);
             stopFollowingVehicle();
             return;
         }
 
-        const shmActualNumVehicles = useShmSimulatorStore.getState().actualNumVehicles;
-        const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
-        const actualNumVehicles = isShmMode ? shmActualNumVehicles : arrayActualNumVehicles;
+        // 입력 형식:
+        //   "<fabId>:<n>" or "<fabId>/<n>" → 명시적 fab 지정
+        //   "VEH00123" or "123"            → 첫 fab 가정 (단일 fab일 때 일반 사용)
+        let fabId = "";
+        let localIndex = -1;
 
-        let found = -1;
-
-        const match = searchTerm.match(/(\d+)/);
-        if (match) {
-            const idNum = Number.parseInt(match[0], 10);
-            const targetIdx = idNum;
-
-            if (isShmMode) {
-                if (targetIdx >= 0 && targetIdx < actualNumVehicles) {
-                    found = targetIdx;
-                }
-            } else {
-                const v = vehiclesRef.current.get(targetIdx);
-                if (v) {
-                    found = targetIdx;
+        const explicit = searchTerm.match(/^([^:/\s]+)[:/](\d+)/);
+        if (explicit) {
+            fabId = explicit[1];
+            localIndex = Number.parseInt(explicit[2], 10);
+        } else {
+            const numMatch = searchTerm.match(/(\d+)/);
+            if (numMatch) {
+                localIndex = Number.parseInt(numMatch[0], 10);
+                if (isShmMode) {
+                    fabId = fabAssignments[0]?.fabId ?? "";
+                } else {
+                    fabId = ""; // array mode
                 }
             }
         }
 
-        if (found >= 0) {
-            setFoundVehicleIndex(found);
-            followVehicle(found);
+        if (localIndex < 0) {
+            setFoundSelected(null);
+            stopFollowingVehicle();
+            alert("Vehicle not found");
+            return;
+        }
+
+        // 유효성 체크
+        let valid = false;
+        if (isShmMode) {
+            const ra = fabAssignments.find((f) => f.fabId === fabId);
+            valid = !!ra && localIndex < ra.actualVehicles;
         } else {
-            setFoundVehicleIndex(null);
+            const arrayActualNumVehicles = useVehicleArrayStore.getState().actualNumVehicles;
+            valid = localIndex < arrayActualNumVehicles && !!vehiclesRef.current.get(localIndex);
+        }
+
+        if (valid) {
+            const sel: SelectedVehicle = { fabId, localIndex };
+            setFoundSelected(sel);
+            followVehicle(sel);
+        } else {
+            setFoundSelected(null);
             stopFollowingVehicle();
             alert("Vehicle not found");
         }
     };
 
     useEffect(() => {
-        if (selectedVehicleId !== null) {
-            // click에서 들어오는 selectedVehicleId는 render buffer index
-            // worker buffer index로 변환하여 사용
-            const workerIdx = isShmMode
-                ? (shmController?.renderIndexToWorkerIndex(selectedVehicleId) ?? selectedVehicleId)
-                : selectedVehicleId;
-            setFoundVehicleIndex(workerIdx);
-            setSearchTerm(String(workerIdx));
+        if (selectedVehicle !== null) {
+            setFoundSelected(selectedVehicle);
+            // 검색 input도 표시 ID로 동기화 (라벨/Search/snapshot 전부 같은 fab-local)
+            const label = `VEH${String(selectedVehicle.localIndex).padStart(5, '0')}`;
+            setSearchTerm(showFabPrefix && selectedVehicle.fabId ? `${selectedVehicle.fabId}:${label}` : label);
         }
-    }, [selectedVehicleId, isShmMode, shmController]);
+    }, [selectedVehicle, showFabPrefix]);
 
     return (
         <div className="flex flex-col h-full">
@@ -869,7 +903,7 @@ const IndividualControlPanel: React.FC = () => {
             <div className="relative shrink-0 pb-3">
                 <input
                     type="text"
-                    placeholder="VEH00001 or 1"
+                    placeholder={showFabPrefix ? "fab1:VEH00001 or 1" : "VEH00001 or 1"}
                     className={twMerge(
                         panelInputVariants({ size: "md", width: "full" }),
                         "pl-10 pr-4 py-2"
@@ -882,12 +916,13 @@ const IndividualControlPanel: React.FC = () => {
             </div>
 
             {/* Monitor Area */}
-            {foundVehicleIndex !== null && (
+            {foundSelected !== null && (
                 <div className="flex-1 overflow-y-auto min-h-0">
                     <VehicleMonitor
-                        vehicleIndex={foundVehicleIndex}
+                        selected={foundSelected}
                         vehicles={vehicles}
                         isShmMode={isShmMode}
+                        showFabPrefix={showFabPrefix}
                     />
                 </div>
             )}

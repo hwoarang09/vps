@@ -28,6 +28,9 @@ const TextRenderer: React.FC<Props> = (props) => {
   const { testMode, isTestActive } = useVehicleTestStore();
   // actualNumVehicles from shmSimulatorStore (real initialized count)
   const shmActualNumVehicles = useShmSimulatorStore((state) => state.actualNumVehicles);
+  // fab 경계 — 라벨을 fab-local 인덱스로 reset해서 snapshot.bin과 매칭
+  const shmController = useShmSimulatorStore((state) => state.controller);
+  const fabAssignments = shmController?.getFabRenderAssignments();
 
   const isSharedMemoryMode = testMode === VehicleSystemType.SharedMemory;
   const showVehicleText = vehicleConfig.text.visible && shmActualNumVehicles > 0 && isTestActive && isSharedMemoryMode;
@@ -50,6 +53,7 @@ const TextRenderer: React.FC<Props> = (props) => {
           scale={vehicleConfig.text.scale}
           color={vehicleColor}
           zOffset={vehicleConfig.text.zOffset}
+          fabAssignments={fabAssignments}
         />
       )}
     </group>

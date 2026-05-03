@@ -295,9 +295,20 @@ export function buildSlotData(groups: TextGroup[]): SlotData | null {
 }
 
 /**
- * 차량용 슬롯 데이터 생성 (VEH00000 포맷)
+ * 차량용 슬롯 데이터 생성 (VEH00000 포맷).
+ *
+ * 라벨은 fab-local 인덱스 기준 (snapshot.bin / log parser와 1:1 매칭).
+ * - fabAssignments 없으면 0..numVehicles-1 (single fab / array mode)
+ * - 있으면 각 fab 안에서 0..fab.actualVehicles-1 로 reset
+ *
+ * NOTE: slotVehicle 은 그대로 render-buffer index (transform 계산용 차량 위치 조회).
+ * label 텍스트만 fab-local로 표시. 다중 fab일 때 같은 라벨 숫자가 여러 차량에 보일 수 있음 — fab 구분은 색/위치로.
  */
-export function buildVehicleSlotData(numVehicles: number, labelLength: number): SlotData | null {
+export function buildVehicleSlotData(
+  numVehicles: number,
+  labelLength: number,
+  fabAssignments?: ReadonlyArray<{ actualVehicles: number }>,
+): SlotData | null {
   if (numVehicles === 0) return null;
 
   const totalCharacters = numVehicles * labelLength;
@@ -306,9 +317,30 @@ export function buildVehicleSlotData(numVehicles: number, labelLength: number): 
   const slotVehicle = new Int32Array(totalCharacters);
   const slotPosition = new Int32Array(totalCharacters);
 
+  // fab 경계 누적: render index v 가 어느 fab에 속하고 그 안에서 몇 번째인지 알기 위함
+  const fabBoundaries: number[] = [0];
+  if (fabAssignments && fabAssignments.length > 0) {
+    let acc = 0;
+    for (const fa of fabAssignments) {
+      acc += fa.actualVehicles;
+      fabBoundaries.push(acc);
+    }
+  }
+  const useFabLocal = fabBoundaries.length > 1;
+
   let charIndex = 0;
+  let curFabStart = 0; // 현재 fab의 render-index 시작점
+  let curFabEnd = useFabLocal ? fabBoundaries[1] : numVehicles;
+  let curFabIdx = 0;
+
   for (let v = 0; v < numVehicles; v++) {
-    const label = `VEH${String(v).padStart(5, "0")}`;
+    if (useFabLocal && v >= curFabEnd) {
+      curFabIdx++;
+      curFabStart = curFabEnd;
+      curFabEnd = fabBoundaries[curFabIdx + 1] ?? numVehicles;
+    }
+    const localIdx = useFabLocal ? v - curFabStart : v;
+    const label = `VEH${String(localIdx).padStart(5, "0")}`;
 
     for (let i = 0; i < labelLength; i++) {
         const digit = CHAR_MAP[label[i]] ?? 0;

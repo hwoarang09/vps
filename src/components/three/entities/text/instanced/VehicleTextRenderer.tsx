@@ -43,6 +43,8 @@ interface Props {
   scale?: number;
   color?: string;
   zOffset?: number;
+  /** fab 경계 정보 — 있으면 라벨 텍스트가 fab-local 인덱스로 reset됨 (snapshot.bin과 일치) */
+  fabAssignments?: ReadonlyArray<{ actualVehicles: number }>;
 }
 
 const VehicleTextRenderer: React.FC<Props> = ({
@@ -51,17 +53,22 @@ const VehicleTextRenderer: React.FC<Props> = ({
   scale = 0.5,
   color = "#ffffff",
   zOffset = 1,
+  fabAssignments,
 }) => {
   const vehicleConfig = getVehicleRenderConfig();
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
   const isVisible = vehicleConfig.text.visible;
 
+  // fabAssignments dep을 안정적으로 (signature 문자열로 비교)
+  const fabSig = fabAssignments?.map((f) => f.actualVehicles).join(",") ?? "";
+
   // 슬롯 데이터 계산 (Render Phase) - hooks는 항상 호출되어야 함
   const slotData = useMemo(() => {
     if (!isVisible) return null;
     resetVehicleHiddenState(); // numVehicles 변경 시 hidden state 리셋
-    return buildVehicleSlotData(numVehicles, LABEL_LENGTH);
-  }, [numVehicles, isVisible]);
+    return buildVehicleSlotData(numVehicles, LABEL_LENGTH, fabAssignments);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numVehicles, isVisible, fabSig]);
 
   const instRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(CHAR_COUNT).fill(null));
 

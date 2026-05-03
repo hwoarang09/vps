@@ -5,7 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { sensorPointArray, SensorPoint, SENSOR_DATA_SIZE, SENSOR_POINT_SIZE } from "@/store/vehicle/arrayMode/sensorPointArray";
-import { getShmSensorPointData } from "@/store/vehicle/shmMode/shmSimulatorStore";
+import { getShmSensorPointData, useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { SENSOR_ATTR_SIZE, SensorSection } from "@/shmSimulator/MemoryLayoutManager";
 import { getMarkerConfig } from "@/config/threejs/renderConfig";
 import { VehicleSystemType } from "@/types/vehicle";
@@ -327,7 +327,7 @@ function SelectedSensorGlow({
 }>) {
   const groupRef = useRef<THREE.Group>(null);
   const quadsRef = useRef<SensorGlowQuad[] | null>(null);
-  const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
+  const selectedVehicle = useVehicleControlStore((s) => s.selectedVehicle);
 
   // zone colors: body=cyan, zone0=yellow, zone1=orange, zone2=red
   const GLOW_LAYER_COUNT = 10;
@@ -354,7 +354,20 @@ function SelectedSensorGlow({
     const group = groupRef.current;
     if (!quads || !group) return;
 
-    if (selectedVehicleId === null || selectedVehicleId >= numVehicles) {
+    if (selectedVehicle === null) {
+      for (const q of quads) q.setVisible(false);
+      return;
+    }
+
+    // fab-local → render index 변환 (SHM). Array mode는 localIndex 그대로 vehicle index.
+    let renderVid: number;
+    if (isSharedMemory) {
+      const controller = useShmSimulatorStore.getState().controller;
+      renderVid = controller?.fabLocalToRenderIndex(selectedVehicle.fabId, selectedVehicle.localIndex) ?? -1;
+    } else {
+      renderVid = selectedVehicle.localIndex;
+    }
+    if (renderVid < 0 || renderVid >= numVehicles) {
       for (const q of quads) q.setVisible(false);
       return;
     }
@@ -372,7 +385,7 @@ function SelectedSensorGlow({
     if (isSharedMemory) {
       // SHM layout: section-based
       const sectionSize = numVehicles * SENSOR_ATTR_SIZE;
-      const vid = selectedVehicleId;
+      const vid = renderVid;
 
       // Read each zone's 4 points
       const zoneConfigs = [
@@ -409,7 +422,7 @@ function SelectedSensorGlow({
       }
     } else {
       // Array mode layout
-      const vid = selectedVehicleId;
+      const vid = renderVid;
       const base = vid * SENSOR_DATA_SIZE;
 
       // Body quad (zone0 FL/FR + BL/BR)

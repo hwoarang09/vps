@@ -222,7 +222,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   });
 
   // Selection glow outline for selected vehicle (multi-layer fake bloom)
-  const selectedVehicleId = useVehicleControlStore((s) => s.selectedVehicleId);
+  const selectedVehicle = useVehicleControlStore((s) => s.selectedVehicle);
   const showSensorBox = useVisualizationStore((s) => s.showSensorBox);
   const glowGroupRef = useRef<THREE.Group>(null);
 
@@ -262,7 +262,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const group = glowGroupRef.current;
     if (!group) return;
 
-    if (selectedVehicleId === null) {
+    if (selectedVehicle === null) {
       group.visible = false;
       return;
     }
@@ -270,8 +270,18 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     const instanceDataAttr = instanceDataRef.current;
     if (!instanceDataAttr) { group.visible = false; return; }
 
+    // fab-local → render index 변환 (SHM mode). Array mode면 localIndex 그대로 instance index.
+    let renderIdx: number;
+    if (isSharedMemory) {
+      const controller = useShmSimulatorStore.getState().controller;
+      renderIdx = controller?.fabLocalToRenderIndex(selectedVehicle.fabId, selectedVehicle.localIndex) ?? -1;
+    } else {
+      renderIdx = selectedVehicle.localIndex;
+    }
+    if (renderIdx < 0) { group.visible = false; return; }
+
     const arr = instanceDataAttr.array as Float32Array;
-    const ptr = selectedVehicleId * 4;
+    const ptr = renderIdx * 4;
     const x = arr[ptr], y = arr[ptr + 1], z = arr[ptr + 2];
     const rotDeg = arr[ptr + 3];
 
@@ -305,17 +315,26 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
 
   // Vehicle click handler - opens IndividualControlPanel
   const handleVehicleClick = useCallback((e: ThreeEvent<PointerEvent>) => {
-    // instanceId is the index of the clicked instance
+    // instanceId is the render-buffer instance index of the clicked instance
     const instanceId = e.instanceId;
     if (instanceId === undefined) return;
 
     // Stop propagation to prevent camera controls from interfering
     e.stopPropagation();
 
-    // Select vehicle and open panel
-    useVehicleControlStore.getState().selectVehicle(instanceId);
-    useMenuStore.getState().setRightPanelOpen(true);
-  }, []);
+    // render index → fab-local 로 변환. Array mode면 fabId="" 로 저장.
+    if (isSharedMemory) {
+      const controller = useShmSimulatorStore.getState().controller;
+      const sel = controller?.renderIndexToFabLocal(instanceId) ?? null;
+      if (sel) {
+        useVehicleControlStore.getState().selectVehicle(sel);
+        useMenuStore.getState().setRightPanelOpen(true);
+      }
+    } else {
+      useVehicleControlStore.getState().selectVehicle({ fabId: "", localIndex: instanceId });
+      useMenuStore.getState().setRightPanelOpen(true);
+    }
+  }, [isSharedMemory]);
 
   if (actualNumVehicles <= 0) {
     return null;

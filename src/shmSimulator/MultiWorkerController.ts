@@ -812,6 +812,69 @@ export class MultiWorkerController {
     return -1;
   }
 
+  /**
+   * Render buffer global index → { fabId, localIndex } (fab-local index).
+   * 차량 ID의 단일 진실 소스(SSoT). 라벨/선택/follow/data 조회 모두 fab-local로 통일.
+   */
+  renderIndexToFabLocal(renderIndex: number): { fabId: string; localIndex: number } | null {
+    if (!this.renderLayout) return null;
+    let renderOffset = 0;
+    for (const ra of this.renderLayout.fabRenderAssignments) {
+      if (renderIndex < renderOffset + ra.actualVehicles) {
+        return { fabId: ra.fabId, localIndex: renderIndex - renderOffset };
+      }
+      renderOffset += ra.actualVehicles;
+    }
+    return null;
+  }
+
+  /** { fabId, localIndex } → render buffer global index (selection glow 용). -1 if invalid. */
+  fabLocalToRenderIndex(fabId: string, localIndex: number): number {
+    if (!this.renderLayout) return -1;
+    let renderOffset = 0;
+    for (const ra of this.renderLayout.fabRenderAssignments) {
+      if (ra.fabId === fabId) {
+        if (localIndex < 0 || localIndex >= ra.actualVehicles) return -1;
+        return renderOffset + localIndex;
+      }
+      renderOffset += ra.actualVehicles;
+    }
+    return -1;
+  }
+
+  /** { fabId, localIndex } → worker buffer global index (vehicle data 조회 용). -1 if invalid. */
+  fabLocalToWorkerIndex(fabId: string, localIndex: number): number {
+    if (!this.layout) return -1;
+    const fabAssignment = this.layout.fabAssignments.get(fabId);
+    if (!fabAssignment) return -1;
+    if (localIndex < 0) return -1;
+    const workerVehOffset = fabAssignment.vehicleRegion.offset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+    return workerVehOffset + localIndex;
+  }
+
+  /** Worker buffer global index → { fabId, localIndex }. (camera follow legacy 용) */
+  workerIndexToFabLocal(workerIndex: number): { fabId: string; localIndex: number } | null {
+    if (!this.renderLayout || !this.layout) return null;
+    for (const ra of this.renderLayout.fabRenderAssignments) {
+      const fabAssignment = this.layout.fabAssignments.get(ra.fabId);
+      if (!fabAssignment) continue;
+      const workerVehOffset = fabAssignment.vehicleRegion.offset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+      if (workerIndex >= workerVehOffset && workerIndex < workerVehOffset + ra.actualVehicles) {
+        return { fabId: ra.fabId, localIndex: workerIndex - workerVehOffset };
+      }
+    }
+    return null;
+  }
+
+  /** Render layout fab assignments (라벨러가 fab 경계 알아야 함) */
+  getFabRenderAssignments(): ReadonlyArray<{ fabId: string; actualVehicles: number }> {
+    if (!this.renderLayout) return [];
+    return this.renderLayout.fabRenderAssignments.map((ra) => ({
+      fabId: ra.fabId,
+      actualVehicles: ra.actualVehicles,
+    }));
+  }
+
   getIsRunning(): boolean {
     return this.isRunning;
   }

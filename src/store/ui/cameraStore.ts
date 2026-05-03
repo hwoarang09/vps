@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as THREE from "three";
 import { getDefaultCameraPosition, getDefaultCameraTarget } from "@/config/threejs/cameraConfig";
+import type { SelectedVehicle } from "./vehicleControlStore";
 
 type CameraState = {
   position: THREE.Vector3;
@@ -12,8 +13,8 @@ type CameraState = {
   // Camera update request flag
   shouldUpdateCamera: boolean;
 
-  // Vehicle tracking
-  followingVehicleId: number | null;
+  // Vehicle tracking — fab-local 식별자 (vehicleControlStore와 동일 타입)
+  followingVehicle: SelectedVehicle | null;
   followOffset: [number, number, number]; // Offset from vehicle position
 
   setPosition: (pos: THREE.Vector3 | THREE.Vector3Like) => void;
@@ -25,7 +26,7 @@ type CameraState = {
   _resetCameraUpdate: () => void;
 
   // Vehicle tracking methods
-  followVehicle: (vehicleId: number, offset?: [number, number, number]) => void;
+  followVehicle: (vehicle: SelectedVehicle, offset?: [number, number, number]) => void;
   stopFollowingVehicle: () => void;
 };
 
@@ -40,7 +41,7 @@ export const useCameraStore = create<CameraState>((set) => {
   rotateZDeg: 0,
   shouldUpdateCamera: false,
 
-  followingVehicleId: null,
+  followingVehicle: null,
   followOffset: [-10, -10, 15],
 
   setPosition: (pos) => set((s) => ({ position: s.position.copy(pos as any) })),
@@ -57,12 +58,12 @@ export const useCameraStore = create<CameraState>((set) => {
     _resetRotateZ: () => set({ rotateZDeg: 0 }),
     _resetCameraUpdate: () => set({ shouldUpdateCamera: false }),
 
-    followVehicle: (vehicleId, offset = [-10, -10, 15]) => {
-      set({ followingVehicleId: vehicleId, followOffset: offset });
+    followVehicle: (vehicle, offset = [-10, -10, 15]) => {
+      set({ followingVehicle: vehicle, followOffset: offset });
     },
 
     stopFollowingVehicle: () => {
-      set({ followingVehicleId: null });
+      set({ followingVehicle: null });
     },
   };
 });
