@@ -378,32 +378,15 @@ function findVariantDzEntry(
 }
 
 /**
- * 정적 DZ + 변형 DZ 통합 entry 검색
- * - 정적 DZ 우선
- * - waitRelocations에 정적 DZ는 미리 제외되어있음 (nodeStore 분석 시점에 가드)
- */
-function findDzEntry(
-  targetIdx: number,
-  path: number[],
-  edges: Edge[],
-  waitRelocations: Map<string, WaitRelocationEntry> | undefined
-): DzEntry | null {
-  return (
-    findDeadlockZoneEntry(targetIdx, path, edges)
-    ?? findVariantDzEntry(targetIdx, path, edges, waitRelocations)
-  );
-}
-
-/**
  * LOCK_WAIT checkpoint 생성
  * 처리 우선순위:
- *   1. DZ entry (정적 또는 변형) → entry edge 위치
+ *   1. DZ entry (정적 또는 변형) → entry edge 위치  (메인 루프에서 가드 적용 후 전달)
  *   2. 곡선 incoming → 곡선 시작 (ratio 0)
  *   3. 직선 incoming → merge에서 waiting_offset 거꾸로
  */
 function createLockWaitCheckpoint(
   params: LockWaitCheckpointParams,
-  waitRelocations: Map<string, WaitRelocationEntry> | undefined
+  dzEntry: DzEntry | null
 ): void {
   const {
     checkpoints,
@@ -417,7 +400,8 @@ function createLockWaitCheckpoint(
   } = params;
 
   // ── Deadlock zone (정적/변형 통합): entry에서 대기 ──
-  const dzEntry = findDzEntry(targetIdx, path, edges, waitRelocations);
+  // ★ dzEntry 는 메인 루프에서 targetIsDzMerge 가드 적용 후 결정된 값.
+  //   target merge 가 진짜 DZ merge 일 때만 dzEntry 가 set 됨.
   if (dzEntry) {
     checkpoints.push({
       edge: dzEntry.edgeId,
@@ -561,6 +545,8 @@ export function buildCheckpoints(
     // ========================================
     // 2. LOCK_WAIT
     // ========================================
+    // dzEntry 는 위에서 targetIsDzMerge 가드로 계산됨 (variantDzEntry 도 isStartFromMergeNode 한정)
+    // → target merge 가 진짜 DZ merge 가 아니면 null → 일반 waiting_offset 적용
     if (isStartFromMergeNode) {
       createLockWaitCheckpoint({
         checkpoints,
@@ -571,7 +557,7 @@ export function buildCheckpoints(
         targetIdx,
         path,
         edges,
-      }, waitRelocations);
+      }, dzEntry);
     }
   }
 
