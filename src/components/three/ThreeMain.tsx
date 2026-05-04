@@ -8,7 +8,7 @@ import { Perf } from "r3f-perf";
 
 import MapRenderer from "./entities/renderers/MapRenderer";
 import Floor from "./scene/Floor";
-import AxisHelper from "./scene/AxisHelper";
+// import AxisHelper from "./scene/AxisHelper";
 import TextRenderer from "./entities/renderers/TextRenderer";
 import FabLabelRenderer from "./entities/renderers/FabLabelRenderer";
 import VehicleSystem from "./entities/vehicle/VehicleSystem";
@@ -41,7 +41,7 @@ const ThemedSceneContent: React.FC = () => {
       )}
 
       <Floor />
-      <AxisHelper />
+      {/* <AxisHelper /> */}
       <MapRenderer />
       <TextRenderer />
       <FabLabelRenderer />

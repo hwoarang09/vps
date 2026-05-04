@@ -164,6 +164,12 @@ const EdgeOverlayMesh: React.FC<{
     euler: new THREE.Euler(),
   }), []);
 
+  // InstancedMesh boots with count=MAX_SEGMENTS and zero matrices → all instances
+  // collapse to origin and render as a flickering blob there. Reset to 0 on mount.
+  useEffect(() => {
+    if (meshRef.current) meshRef.current.count = 0;
+  }, []);
+
   useEffect(() => {
     return () => {
       geometry.dispose();
@@ -240,6 +246,11 @@ const PathOverlayMesh: React.FC = () => {
     scale: new THREE.Vector3(),
     euler: new THREE.Euler(),
   }), []);
+
+  // Avoid the 1-frame origin-flicker before useFrame initializes count=0
+  useEffect(() => {
+    if (meshRef.current) meshRef.current.count = 0;
+  }, []);
 
   useEffect(() => {
     return () => {

@@ -1,12 +1,9 @@
 // NodesRenderer.tsx - InstancedMesh version for all nodes (슬롯 기반 렌더링)
 import React, { useRef, useEffect, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useFabStore } from "@/store/map/fabStore";
-import nodeVertexShader from "../node/shaders/nodeVertex.glsl?raw";
-import nodeFragmentShader from "../node/shaders/nodeFragment.glsl?raw";
-import { getNodeConfig, getMarkerConfig } from "@/config/threejs/renderConfig";
+import { getMarkerConfig } from "@/config/threejs/renderConfig";
 
 interface NodesRendererProps {
   nodeIds: string[];
@@ -124,13 +121,10 @@ interface NodesCoreProps {
 }
 
 const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
-  const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const normalMarkerRef = useRef<THREE.InstancedMesh>(null);
   const tmpMarkerRef = useRef<THREE.InstancedMesh>(null);
   const prevInstanceCountRef = useRef(0);
 
-  // nodeId -> instanceIndex 매핑 (전체 노드용)
-  const nodeDataRef = useRef<Map<string, number>>(new Map());
   // 일반 노드와 TMP_ 노드 분리 매핑
   const normalNodeMapRef = useRef<Map<string, number>>(new Map());
   const tmpNodeMapRef = useRef<Map<string, number>>(new Map());
@@ -153,8 +147,6 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
   const normalCount = normalNodeIds.length;
   const tmpCount = tmpNodeIds.length;
 
-  const geometry = useMemo(() => new THREE.SphereGeometry(0.2, 16, 16), []);
-
   // 마커 geometry/material (MARKER_TYPES 기반)
   const normalMarkerGeometry = useMemo(
     () => new THREE.SphereGeometry(MARKER_TYPES.normal.radius, MARKER_SEGMENTS, MARKER_SEGMENTS),
@@ -173,85 +165,41 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
     []
   );
 
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        vertexShader: nodeVertexShader,
-        fragmentShader: nodeFragmentShader,
-        uniforms: {
-          uTime: { value: 0 },
-          uColor: { value: new THREE.Color(getNodeConfig().selectedColor) },
-          uOpacity: { value: 1 },
-          uSize: { value: getNodeConfig().selectedSize },
-          uIsPreview: { value: 0 },
-        },
-        transparent: true,
-        side: THREE.FrontSide,
-        depthWrite: true,
-        blending: THREE.NormalBlending,
-      }),
-    []
-  );
-
   // Build nodeId -> instanceIndex mapping
   useEffect(() => {
-    nodeDataRef.current = buildIndexMap(nodeIds);
     normalNodeMapRef.current = buildIndexMap(normalNodeIds);
     tmpNodeMapRef.current = buildIndexMap(tmpNodeIds);
-  }, [nodeIds, normalNodeIds, tmpNodeIds]);
+  }, [normalNodeIds, tmpNodeIds]);
 
-  // Initialize instance matrices and colors (원본 데이터만 처리)
+  // Initialize marker instance matrices
   useEffect(() => {
-    const mesh = instancedMeshRef.current;
     const normalMarker = normalMarkerRef.current;
     const tmpMarker = tmpMarkerRef.current;
-    if (!mesh || instanceCount === 0) return;
+    if (instanceCount === 0) return;
 
     const getNodeByName = useNodeStore.getState().getNodeByName;
 
-    // 메인 노드 메시 초기화 (node.editor_z, 동적 scale 사용)
-    initInstancedMesh(mesh, nodeIds, getNodeByName, { useNodeZ: true, useDynamicScale: true });
-
-    // 마커 초기화 (MARKER_Z 고정, scale 1 고정)
     if (normalMarker) initInstancedMesh(normalMarker, normalNodeIds, getNodeByName);
     if (tmpMarker) initInstancedMesh(tmpMarker, tmpNodeIds, getNodeByName);
-  }, [nodeIds, instanceCount, normalNodeIds, tmpNodeIds]);
+  }, [instanceCount, normalNodeIds, tmpNodeIds]);
 
-  // Subscribe to node store changes and update matrices
+  // Subscribe to node store changes and update marker matrices
   useEffect(() => {
-    const mesh = instancedMeshRef.current;
-    const normalMarker = normalMarkerRef.current;
-    const tmpMarker = tmpMarkerRef.current;
-    if (!mesh) return;
-
-    const matrix = new THREE.Matrix4();
     const markerMatrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
     const markerPosition = new THREE.Vector3();
     const quaternion = new THREE.Quaternion();
-    const scale = new THREE.Vector3();
     const markerScale = new THREE.Vector3(1, 1, 1);
 
     const unsub = useNodeStore.subscribe((state) => {
-      let needsUpdate = false;
+      const normalMarker = normalMarkerRef.current;
+      const tmpMarker = tmpMarkerRef.current;
       let normalMarkerNeedsUpdate = false;
       let tmpMarkerNeedsUpdate = false;
 
       for (const nodeId of nodeIds) {
         const node = state.getNodeByName(nodeId);
-        const instanceIndex = nodeDataRef.current.get(nodeId);
+        if (!node) continue;
 
-        if (!node || instanceIndex === undefined) continue;
-
-        position.set(node.editor_x, node.editor_y, node.editor_z);
-        const size = node.size ?? 1;
-        scale.set(size, size, size);
-
-        matrix.compose(position, quaternion, scale);
-        mesh.setMatrixAt(instanceIndex, matrix);
-        needsUpdate = true;
-
-        // 마커 위치도 업데이트 (Z 고정)
         markerPosition.set(node.editor_x, node.editor_y, MARKER_Z);
         markerMatrix.compose(markerPosition, quaternion, markerScale);
 
@@ -268,9 +216,6 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
         if (tmpUpdated) tmpMarkerNeedsUpdate = true;
       }
 
-      if (needsUpdate) {
-        mesh.instanceMatrix.needsUpdate = true;
-      }
       if (normalMarkerNeedsUpdate && normalMarker) {
         normalMarker.instanceMatrix.needsUpdate = true;
       }
@@ -285,34 +230,23 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
   // Cleanup when nodes are deleted (instanceCount decreases to 0)
   useEffect(() => {
     if (prevInstanceCountRef.current > instanceCount && instanceCount === 0) {
-      geometry.dispose();
       normalMarkerGeometry.dispose();
       tmpMarkerGeometry.dispose();
       normalMarkerMaterial.dispose();
       tmpMarkerMaterial.dispose();
-      material.dispose();
     }
     prevInstanceCountRef.current = instanceCount;
-  }, [instanceCount, geometry, normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial, material]);
+  }, [instanceCount, normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial]);
 
   // Cleanup all geometries and materials on unmount
   useEffect(() => {
     return () => {
-      geometry.dispose();
       normalMarkerGeometry.dispose();
       tmpMarkerGeometry.dispose();
       normalMarkerMaterial.dispose();
       tmpMarkerMaterial.dispose();
-      material.dispose();
     };
-  }, [geometry, normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial, material]);
-
-  // Single useFrame for all nodes - only update time uniform
-  useFrame((state) => {
-    if (material.uniforms.uTime) {
-      material.uniforms.uTime.value = state.clock.elapsedTime;
-    }
-  });
+  }, [normalMarkerGeometry, tmpMarkerGeometry, normalMarkerMaterial, tmpMarkerMaterial]);
 
   if (instanceCount === 0) {
     return null;
@@ -320,11 +254,6 @@ const NodesCore: React.FC<NodesCoreProps> = ({ nodeIds }) => {
 
   return (
     <>
-      <instancedMesh
-        ref={instancedMeshRef}
-        args={[geometry, material, instanceCount]}
-        frustumCulled={false}
-      />
       {/* 일반 노드 마커 (분홍색, 큰 크기) */}
       {normalCount > 0 && (
         <instancedMesh
