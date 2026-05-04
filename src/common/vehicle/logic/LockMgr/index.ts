@@ -372,40 +372,20 @@ export class LockMgr {
   }
 
   /**
-   * Edge topology에서 deadlock zone merge 노드 감지
-   * 조건: 분기점 A, D가 같은 합류점 2개(B, C)로 분기 → B, C가 deadlock zone merge
+   * deadlock zone merge 노드 검출.
+   * nodeStore.detectDeadlockZones (1-hop 직접 + 2-hop curve passthrough = 변형 DZ 2)
+   * 의 결과 (node.isDeadlockMergeNode) 를 그대로 사용.
+   *
+   * 이전엔 LockMgr 가 자체 1-hop 검출 했는데 변형 DZ 2 미반영 → runtime 에서
+   * N0304/N0542/N0549 등 누락 → handleLockRequest skip 안 됨 → cp 처리 깨짐.
    */
   private buildDeadlockZoneMerges(): void {
     const dzMerges = new Set<string>();
-    const edges = this.state.edges;
-    const mergeNodes = this.state.mergeNodes;
-
-    // 분기점 → toNode 집합
-    const divergeToNodes = new Map<string, Set<string>>();
-    for (const edge of edges) {
-      if (!divergeToNodes.has(edge.from_node)) divergeToNodes.set(edge.from_node, new Set());
-      divergeToNodes.get(edge.from_node)!.add(edge.to_node);
-    }
-
-    // 분기점 (outgoing >= 2)
-    const divergeNodes: string[] = [];
-    for (const [node, toNodes] of divergeToNodes) {
-      if (toNodes.size >= 2) divergeNodes.push(node);
-    }
-
-    // 분기점 쌍 중 같은 합류점 2개로 분기하는 경우 감지
-    for (let i = 0; i < divergeNodes.length; i++) {
-      const toA = divergeToNodes.get(divergeNodes[i])!;
-      for (let j = i + 1; j < divergeNodes.length; j++) {
-        const toD = divergeToNodes.get(divergeNodes[j])!;
-        const common = [...toA].filter(n => toD.has(n));
-        if (common.length === 2 && mergeNodes.has(common[0]) && mergeNodes.has(common[1])) {
-          dzMerges.add(common[0]);
-          dzMerges.add(common[1]);
-        }
+    for (const node of this.state.nodes) {
+      if (node.isDeadlockMergeNode) {
+        dzMerges.add(node.node_name);
       }
     }
-
     this.state.deadlockZoneMerges = dzMerges;
   }
 
