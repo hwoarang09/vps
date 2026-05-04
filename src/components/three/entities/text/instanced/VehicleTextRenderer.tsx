@@ -16,6 +16,7 @@ import { BaseInstancedText } from "./BaseInstancedText";
 import { VehicleSystemType } from "@/types/vehicle";
 import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
 import { getVehicleRenderConfig } from "@/config/threejs/renderConfig";
+import { useThemeStore } from "@/store/ui/themeStore";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
@@ -58,6 +59,9 @@ const VehicleTextRenderer: React.FC<Props> = ({
   const vehicleConfig = getVehicleRenderConfig();
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
   const isVisible = vehicleConfig.text.visible;
+  const strokeColor = useThemeStore((s) => s.theme.textVehicleStrokeColor);
+  const strokeWidth = useThemeStore((s) => s.theme.textVehicleStrokeWidth);
+  const themeSpacing = useThemeStore((s) => s.theme.textVehicleSpacing);
 
   // fabAssignments dep을 안정적으로 (signature 문자열로 비교)
   const fabSig = fabAssignments?.map((f) => f.actualVehicles).join(",") ?? "";
@@ -91,7 +95,7 @@ const VehicleTextRenderer: React.FC<Props> = ({
       return;
     }
 
-    const charSpacing = 0.15 * scale;
+    const charSpacing = themeSpacing * scale;
     const halfLen = (LABEL_LENGTH - 1) / 2;
 
     const dirtyMeshes = updateVehicleTextTransformsOptimized(
@@ -128,6 +132,8 @@ const VehicleTextRenderer: React.FC<Props> = ({
       data={slotData}
       instRefs={instRefs}
       color={color}
+      strokeColor={strokeColor}
+      strokeWidth={strokeWidth}
       renderOrder={RENDER_ORDER_TEXT}
     />
   );

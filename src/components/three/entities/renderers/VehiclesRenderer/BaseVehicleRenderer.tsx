@@ -1,7 +1,9 @@
 import React, { useRef, useMemo, useEffect, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getVehicleConfigSync, waitForConfig } from "@/config/threejs/vehicleConfig";
+import { useThemeStore } from "@/store/ui/themeStore";
 
 // 자식이 구현해야 할 데이터 주입 함수 타입
 export type UpdateTransformFn = (
@@ -44,25 +46,70 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
   const sensorLength = bodyLength + config.spacing.vehicleSpacing;
   const sensorWidth = bodyWidth;
   const sensorHeight = bodyHeight;
-  // Default vehicle color
-  const vehicleColor = "#1a85ff";
 
-  // Geometry & Material (공통 - 메모이제이션)
+  const themeVehicleColor = useThemeStore((s) => s.theme.vehicleColor);
+  const themeMetalness = useThemeStore((s) => s.theme.vehicleMetalness);
+  const themeRoughness = useThemeStore((s) => s.theme.vehicleRoughness);
+  const themeBracket = useThemeStore((s) => s.theme.vehicleBracket);
+  const vehicleColor = themeVehicleColor;
+
+  // Body geometry: solid box (default theme) or ㄷ-bracket (white theme).
   const bodyGeometry = useMemo(() => {
-    const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
-    geo.translate(0, 0, -bodyHeight / 2);
-    return geo;
-  }, [bodyLength, bodyWidth, bodyHeight]);
+    if (!themeBracket) {
+      const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
+      geo.translate(0, 0, -bodyHeight / 2);
+      return geo;
+    }
+
+    const topThickness = bodyHeight * 0.35;
+    const legHeight = bodyHeight - topThickness;
+    const legLength = bodyLength * 0.18;
+    const legCenterX = bodyLength * 0.5 - legLength * 0.5;
+    const legCenterZ = -topThickness - legHeight * 0.5;
+
+    const top = new THREE.BoxGeometry(bodyLength, bodyWidth, topThickness);
+    top.translate(0, 0, -topThickness * 0.5);
+
+    const front = new THREE.BoxGeometry(legLength, bodyWidth, legHeight);
+    front.translate(legCenterX, 0, legCenterZ);
+
+    const back = new THREE.BoxGeometry(legLength, bodyWidth, legHeight);
+    back.translate(-legCenterX, 0, legCenterZ);
+
+    const merged = mergeGeometries([top, front, back]);
+    top.dispose();
+    front.dispose();
+    back.dispose();
+    return merged;
+  }, [bodyLength, bodyWidth, bodyHeight, themeBracket]);
   const sensorGeometry = useMemo(() => new THREE.BoxGeometry(sensorLength, sensorWidth, sensorHeight), [sensorLength, sensorWidth, sensorHeight]);
-  
-  const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({ color: new THREE.Color(vehicleColor), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), [vehicleColor]);
+
+  // Created ONCE — theme-driven props updated in-place to avoid mesh recreation.
+  const bodyMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+    color: new THREE.Color(vehicleColor),
+    metalness: themeMetalness,
+    roughness: themeRoughness,
+    // Stronger polygonOffset than curves (-1,-1) → vehicle wins depth test
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
+  useEffect(() => {
+    bodyMaterial.color.set(vehicleColor);
+    bodyMaterial.metalness = themeMetalness;
+    bodyMaterial.roughness = themeRoughness;
+  }, [vehicleColor, themeMetalness, themeRoughness, bodyMaterial]);
   const sensorMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.8 }), []);
 
   // Temp Objects (Zero-GC: 재사용)
   const tempMatrix = useMemo(() => new THREE.Matrix4(), []);
   const tempPosition = useMemo(() => new THREE.Vector3(), []);
   const tempQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  // tempScale: visual LOD scale for body. tempSensorScale: fixed (1,1,1) for sensor.
   const tempScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
+  const tempSensorScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
   const tempSensorPos = useMemo(() => new THREE.Vector3(), []);
   const tempInitMatrix = useMemo(() => new THREE.Matrix4().identity(), []);
 
@@ -109,24 +156,29 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
     const bodyMesh = bodyMeshRef.current;
     if (!bodyMesh || numVehicles === 0) return;
 
+    // Visual-only LOD scale for body (sensor stays 1:1)
+    const camZ = state.camera.position.z;
+    const lod = Math.max(1, Math.min(3.5, 1 + (camZ - 50) / 200));
+    tempScale.set(lod, lod, lod);
+
     const sensorMesh = showSensor ? sensorMeshRef.current : null;
     let updateCount = 0;
 
     for (let i = 0; i < numVehicles; i++) {
       // 1. 자식에게서 위치/회전값 받아오기 (Call by Reference로 성능 최적화)
       const isValid = onUpdate(i, tempPosition, tempQuaternion);
-      
+
       if (isValid) {
-        // 2. Body Matrix
+        // 2. Body Matrix (with LOD scale)
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
         bodyMesh.setMatrixAt(i, tempMatrix);
 
-        // 3. Sensor Matrix (옵션) - Zero-GC: tempSensorPos 재사용
+        // 3. Sensor Matrix (use fixed scale — sensor unaffected by LOD)
         if (sensorMesh) {
           tempSensorPos.set(sensorOffsetX, 0, 0)
             .applyQuaternion(tempQuaternion)
             .add(tempPosition);
-          tempMatrix.compose(tempSensorPos, tempQuaternion, tempScale);
+          tempMatrix.compose(tempSensorPos, tempQuaternion, tempSensorScale);
           sensorMesh.setMatrixAt(i, tempMatrix);
         }
         updateCount++;
@@ -150,6 +202,7 @@ export const BaseVehicleRenderer: React.FC<BaseProps> = ({
         ref={bodyMeshRef}
         args={[bodyGeometry, bodyMaterial, numVehicles]}
         frustumCulled={false}
+        renderOrder={10}
       />
       {showSensor && (
         <instancedMesh

@@ -5,6 +5,7 @@ import { Edge, EdgeType } from "@/types";
 import { getEdgeColors as getEdgeColorConfig, getEdgeConfig } from "@/config/threejs/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
+import { useThemeStore } from "@/store/ui/themeStore";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
 import edgeFragmentShader from "../edge/shaders/edgeFragment.glsl?raw";
@@ -176,7 +177,7 @@ interface EdgeRendererProps {
 const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   edges,
 }) => {
-  const colors = getEdgeColorConfig();
+  const railColor = useThemeStore((s) => s.theme.railColor);
   const slots = useFabStore((state) => state.slots);
   const fabs = useFabStore((state) => state.fabs);
 
@@ -215,35 +216,35 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.LINEAR]}
           edgeType={EdgeType.LINEAR}
-          color={colors.LINEAR}
+          color={railColor}
           renderOrder={RENDER_ORDER_RAIL_LINEAR}
           selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
           edgeType={EdgeType.CURVE_90}
-          color={colors.CURVE_90}
+          color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
           selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
           edgeType={EdgeType.CURVE_180}
-          color={colors.CURVE_180}
+          color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_180}
           selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
           edgeType={EdgeType.CURVE_CSC}
-          color={colors.CURVE_CSC}
+          color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
           selectedEdgeIndex={selectedEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
           edgeType={EdgeType.S_CURVE}
-          color={colors.S_CURVE}
+          color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
           selectedEdgeIndex={selectedEdgeIndex}
         />
@@ -262,35 +263,35 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.LINEAR]}
               edgeType={EdgeType.LINEAR}
-              color={colors.LINEAR}
+              color={railColor}
               renderOrder={RENDER_ORDER_RAIL_LINEAR}
               selectedEdgeIndex={effectiveSelectedIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
               edgeType={EdgeType.CURVE_90}
-              color={colors.CURVE_90}
+              color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_90}
               selectedEdgeIndex={effectiveSelectedIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
               edgeType={EdgeType.CURVE_180}
-              color={colors.CURVE_180}
+              color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_180}
               selectedEdgeIndex={effectiveSelectedIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
               edgeType={EdgeType.CURVE_CSC}
-              color={colors.CURVE_CSC}
+              color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
               selectedEdgeIndex={effectiveSelectedIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
               edgeType={EdgeType.S_CURVE}
-              color={colors.S_CURVE}
+              color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_90}
               selectedEdgeIndex={effectiveSelectedIndex}
             />
@@ -321,6 +322,9 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   const prevInstanceCountRef = useRef(0);
   const prevSelectedRef = useRef<number | null>(null);
 
+  const borderColor = useThemeStore((s) => s.theme.railBorderColor);
+  const borderWidth = useThemeStore((s) => s.theme.railBorderWidth);
+
   // Calculate total instance count and build edge→instance mapping
   const { instanceCount, edgeToInstanceMap } = useMemo(
     () => buildEdgeInstanceMapping(edgesWithIndex, edgeType),
@@ -330,24 +334,42 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
 
   const shaderMaterial = useMemo(() => {
+    // Created ONCE per edgeType — re-creating on theme change would tear down
+    // the InstancedMesh and lose its instance matrices/aSelected attribute.
+    // Theme-driven uniforms are updated in-place via the useEffect below.
+    const isCurve = edgeType !== EdgeType.LINEAR;
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uColor: { value: new THREE.Color(color) },
         uSelectedColor: { value: new THREE.Color(getSelectedEdgeColor()) },
+        uBorderColor: { value: new THREE.Color(borderColor) },
+        uBorderWidth: { value: borderWidth },
         uOpacity: { value: 1 },
         uIsPreview: { value: 0 },
         uLength: { value: 1 },
       },
       vertexShader: edgeVertexShader,
       fragmentShader: edgeFragmentShader,
+      extensions: { derivatives: true },
       transparent: true,
       side: THREE.DoubleSide,
       depthTest: true,
       depthWrite: true,
       depthFunc: THREE.LessEqualDepth,
+      polygonOffset: isCurve,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
-  }, [color]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edgeType]);
+
+  // Update uniforms in-place when theme changes (no material/mesh recreation)
+  useEffect(() => {
+    shaderMaterial.uniforms.uColor.value.set(color);
+    shaderMaterial.uniforms.uBorderColor.value.set(borderColor);
+    shaderMaterial.uniforms.uBorderWidth.value = borderWidth;
+  }, [color, borderColor, borderWidth, shaderMaterial]);
 
   // Create selected attribute
   useEffect(() => {
@@ -365,6 +387,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       selectedAttrRef.current = null;
     };
   }, [instanceCount]);
+
 
   // Update selected state (no React re-render, just GPU buffer update)
   const updateSelectedState = useCallback((newSelectedIndex: number | null) => {

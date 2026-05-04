@@ -3,6 +3,7 @@ import { getMapRenderConfig, getVehicleRenderConfig } from "@/config/threejs/ren
 import { VehicleSystemType } from "@/types/vehicle";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
+import { useThemeStore } from "@store/ui/themeStore";
 import MapTextRenderer from "../text/instanced/MapTextRenderer";
 import VehicleTextRenderer from "../text/instanced/VehicleTextRenderer";
 
@@ -16,12 +17,16 @@ interface Props {
 const TextRenderer: React.FC<Props> = (props) => {
   const mapConfig = getMapRenderConfig();
   const vehicleConfig = getVehicleRenderConfig();
+  const themeNode = useThemeStore((s) => s.theme.textNode);
+  const themeEdge = useThemeStore((s) => s.theme.textEdge);
+  const themeStation = useThemeStore((s) => s.theme.textStation);
+  const themeVehicleTextColor = useThemeStore((s) => s.theme.textVehicleColor);
 
   const {
     scale = mapConfig.scale,
-    nodeColor = "#00ff00",
-    edgeColor = "#0066ff",
-    vehicleColor = vehicleConfig.text.color,
+    nodeColor = themeNode,
+    edgeColor = themeEdge,
+    vehicleColor = themeVehicleTextColor,
   } = props;
 
   // testMode from vehicleTestStore (actual running mode)
@@ -43,6 +48,7 @@ const TextRenderer: React.FC<Props> = (props) => {
         scale={scale}
         nodeColor={nodeColor}
         edgeColor={edgeColor}
+        stationColor={themeStation}
       />
 
       {/* Vehicle texts (SharedMemory mode) */}

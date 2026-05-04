@@ -7,6 +7,7 @@ import { useFabStore } from "@/store/map/fabStore";
 import EdgeRenderer from "./EdgeRenderer";
 import NodesRenderer from "./NodesRenderer";
 import StationRenderer from "./StationRenderer";
+// import EdgeFloorDashRenderer from "./EdgeFloorDashRenderer";
 import VehicleEdgeOverlay from "./VehicleEdgeOverlay";
 import WaitNodeMarkers from "./WaitNodeMarkers";
 import SelectedNodeMarker from "./SelectedNodeMarker";
@@ -86,6 +87,10 @@ const MapRenderer: React.FC = () => {
 
       {/* Render all stations - slot offset applied inside renderer */}
       <StationRenderer stations={stations} />
+
+      {/* Orange dashed floor trace for every edge — disabled, keep for later
+      <EdgeFloorDashRenderer edges={edges} />
+      */}
 
       {/* Basic lighting for better visibility */}
       <ambientLight intensity={0.6} />

@@ -3,11 +3,14 @@ import * as THREE from "three";
 import type { Station } from "@/store/map/stationStore";
 import { useFabStore } from "@/store/map/fabStore";
 import { getStationTypeConfig, getStationBoxConfig } from "@/config/threejs/stationConfig";
+import { useThemeStore } from "@/store/ui/themeStore";
+import type { Theme } from "@/config/threejs/themes";
 
-// Color mapping by station type
-const getStationColor = (type: string): string => {
-  const config = getStationTypeConfig(type);
-  return config.COLOR;
+const getStationColor = (type: string, theme: Theme): string => {
+  if (type === "EQ") return theme.stationEqColor;
+  if (type === "OHB") return theme.stationOhbColor;
+  if (type === "STK") return theme.stationStkColor;
+  return getStationTypeConfig(type).COLOR;
 };
 
 interface StationRendererProps {
@@ -17,6 +20,7 @@ interface StationRendererProps {
 const StationRenderer: React.FC<StationRendererProps> = ({ stations }) => {
   const slots = useFabStore((state) => state.slots);
   const fabs = useFabStore((state) => state.fabs);
+  const theme = useThemeStore((s) => s.theme);
 
   // Group stations by type for efficient rendering (전체 스테이션 사용)
   const stationsByType = useMemo(() => {
@@ -45,19 +49,19 @@ const StationRenderer: React.FC<StationRendererProps> = ({ stations }) => {
       <group name="stations">
         <StationTypeRenderer
           stations={stationsByType.OHB}
-          color={getStationColor("OHB")}
+          color={getStationColor("OHB", theme)}
         />
         <StationTypeRenderer
           stations={stationsByType.STK}
-          color={getStationColor("STK")}
+          color={getStationColor("STK", theme)}
         />
         <StationTypeRenderer
           stations={stationsByType.EQ}
-          color={getStationColor("EQ")}
+          color={getStationColor("EQ", theme)}
         />
         <StationTypeRenderer
           stations={stationsByType.OTHER}
-          color={getStationColor("OTHER")}
+          color={getStationColor("OTHER", theme)}
         />
       </group>
     );
@@ -70,19 +74,19 @@ const StationRenderer: React.FC<StationRendererProps> = ({ stations }) => {
         <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
           <StationTypeRenderer
             stations={stationsByType.OHB}
-            color={getStationColor("OHB")}
+            color={getStationColor("OHB", theme)}
           />
           <StationTypeRenderer
             stations={stationsByType.STK}
-            color={getStationColor("STK")}
+            color={getStationColor("STK", theme)}
           />
           <StationTypeRenderer
             stations={stationsByType.EQ}
-            color={getStationColor("EQ")}
+            color={getStationColor("EQ", theme)}
           />
           <StationTypeRenderer
             stations={stationsByType.OTHER}
-            color={getStationColor("OTHER")}
+            color={getStationColor("OTHER", theme)}
           />
         </group>
       ))}
@@ -109,6 +113,8 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
     () => new THREE.BoxGeometry(boxConfig.WIDTH, boxConfig.DEPTH, 0.1),
     []
   );
+  // Created ONCE — recreating would tear down InstancedMesh and lose matrices.
+  // Color is updated in-place via the useEffect below.
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -116,8 +122,13 @@ const StationTypeRenderer: React.FC<StationTypeRendererProps> = ({
         metalness: 0.3,
         roughness: 0.7,
       }),
-    [color]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
+
+  useEffect(() => {
+    material.color.set(color);
+  }, [color, material]);
 
   // Initialize instance matrices (원본 데이터만 처리)
   useEffect(() => {

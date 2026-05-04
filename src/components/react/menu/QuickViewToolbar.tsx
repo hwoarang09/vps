@@ -3,9 +3,11 @@
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
 import React, { useEffect, useState } from "react";
-import { Activity, Radar, Tag, Binary } from "lucide-react";
+import { Activity, Radar, Tag, Binary, Palette } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
+import { useThemeStore } from "@store/ui/themeStore";
+import { THEMES } from "@/config/threejs/themes";
 import { menuButtonVariants, menuContainerVariants } from "./shared/menuStyles";
 import { twMerge } from "tailwind-merge";
 import SimLogFileManager from "@/components/test/VehicleTest/SimLogFileManager";
@@ -27,10 +29,14 @@ const QuickViewToolbar: React.FC = () => {
   const activeMainMenu = useMenuStore((s) => s.activeMainMenu);
   const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
   const [logOpen, setLogOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const themeName = useThemeStore((s) => s.themeName);
+  const setTheme = useThemeStore((s) => s.setTheme);
 
-  // 하단/서브 메뉴 상태가 바뀌면 로그 드롭다운 강제 닫기
+  // 하단/서브 메뉴 상태가 바뀌면 드롭다운 강제 닫기
   useEffect(() => {
     setLogOpen(false);
+    setThemeOpen(false);
   }, [activeMainMenu, activeSubMenu]);
 
   const items: ToggleItem[] = [
@@ -87,6 +93,44 @@ const QuickViewToolbar: React.FC = () => {
           </button>
         );
       })}
+
+      {/* Divider */}
+      <div className="w-px h-6 bg-gray-600/50" />
+
+      {/* Theme picker */}
+      <div className="relative">
+        <button
+          onClick={() => setThemeOpen(!themeOpen)}
+          onMouseEnter={(e) => handleMouseEnter(e, "theme", `Theme: ${THEMES[themeName]?.label ?? ""}`)}
+          onMouseLeave={hideTooltip}
+          className={twMerge(
+            menuButtonVariants({ active: themeOpen }),
+            "w-9 h-9 mx-0",
+          )}
+        >
+          <Palette size={16} />
+        </button>
+        {themeOpen && (
+          <div
+            className="absolute top-12 right-0 min-w-[160px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden"
+          >
+            {Object.values(THEMES).map((t) => (
+              <button
+                key={t.name}
+                onClick={() => {
+                  setTheme(t.name);
+                  setThemeOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 ${
+                  t.name === themeName ? "bg-zinc-700 text-white" : "text-zinc-200"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Divider */}
       <div className="w-px h-6 bg-gray-600/50" />

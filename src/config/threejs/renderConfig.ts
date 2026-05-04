@@ -97,24 +97,24 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         tmpMarkerRadius: 0.025,
         text: {
           visible: true,
-          color: "#00ff00",
+          color: "#0d4f1a",
           scale: 0.6,
         },
       },
       edges: {
         colors: {
-          LINEAR: "#0066ff",
-          CURVE_90: "#0066ff",
-          CURVE_180: "#0066ff",
-          CURVE_CSC: "#0066ff",
-          S_CURVE: "#0066ff",
+          LINEAR: "#e8e8e8",
+          CURVE_90: "#e8e8e8",
+          CURVE_180: "#e8e8e8",
+          CURVE_CSC: "#e8e8e8",
+          S_CURVE: "#e8e8e8",
           DEFAULT: "#888888",
         },
         lineWidth: 1.0,
         selectedColor: "#ff0000",
         text: {
           visible: true,
-          color: "#0066ff",
+          color: "#0a2966",
           scale: 0.6,
         },
       },
@@ -130,7 +130,7 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         },
         text: {
           visible: true,
-          zOffset: 1.0,
+          zOffset: 0.5,
           color: "#ffffff",
           scale: 0.9,
         },
@@ -139,12 +139,12 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         types: {
           EQ: {
             zHeight: 0,
-            color: "#00ff00",
+            color: "#4a4a4a",
             description: "Equipment on floor",
           },
           OHB: {
             zHeight: 3,
-            color: "#ff9800",
+            color: "#9a6a3a",
             description: "Overhead Buffer",
           },
           STK: {
@@ -161,7 +161,7 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         text: {
           visible: true,
           zOffset: -0.2,
-          color: "#FFD700",
+          color: "#664400",
           scale: 0.6,
         },
         box: {
@@ -190,24 +190,24 @@ let renderConfig: RenderConfig = {
     tmpMarkerRadius: 0.025,
     text: {
       visible: true,
-      color: "#00ff00",
+      color: "#0d4f1a",
       scale: 0.6,
     },
   },
   edges: {
     colors: {
-      LINEAR: "#0066ff",
-      CURVE_90: "#0066ff",
-      CURVE_180: "#0066ff",
-      CURVE_CSC: "#0066ff",
-      S_CURVE: "#0066ff",
+      LINEAR: "#e8e8e8",
+      CURVE_90: "#e8e8e8",
+      CURVE_180: "#e8e8e8",
+      CURVE_CSC: "#e8e8e8",
+      S_CURVE: "#e8e8e8",
       DEFAULT: "#888888",
     },
     lineWidth: 1.0,
     selectedColor: "#ff0000",
     text: {
       visible: true,
-      color: "#0066ff",
+      color: "#0a2966",
       scale: 0.6,
     },
   },
@@ -223,7 +223,7 @@ let renderConfig: RenderConfig = {
     },
     text: {
       visible: true,
-      zOffset: 1.0,
+      zOffset: 0.5,
       color: "#ffffff",
       scale: 0.9,
     },
@@ -232,12 +232,12 @@ let renderConfig: RenderConfig = {
     types: {
       EQ: {
         zHeight: 0,
-        color: "#00ff00",
+        color: "#4a4a4a",
         description: "Equipment on floor",
       },
       OHB: {
         zHeight: 3,
-        color: "#ff9800",
+        color: "#9a6a3a",
         description: "Overhead Buffer",
       },
       STK: {
@@ -254,7 +254,7 @@ let renderConfig: RenderConfig = {
     text: {
       visible: true,
       zOffset: -0.2,
-      color: "#FFD700",
+      color: "#664400",
       scale: 0.6,
     },
     box: {

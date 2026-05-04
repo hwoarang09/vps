@@ -4,6 +4,7 @@ import { getMapRenderConfig as getRendererConfig, getNodeConfig, getEdgeConfig, 
 import { getStationTextConfig } from "@/config/threejs/stationConfig";
 import { useTextStore } from "@store/map/textStore";
 import { useFabStore } from "@store/map/fabStore";
+import { useThemeStore } from "@store/ui/themeStore";
 import { useEdgeStore } from "@store/map/edgeStore";
 import { useNodeStore } from "@store/map/nodeStore";
 import InstancedText, { TextGroup } from "./InstancedText";
@@ -187,7 +188,8 @@ const MapTextRenderer: React.FC<Props> = (props) => {
   }, [edges, nodes]);
 
   const BAY_LABEL_SCALE = 5;
-  const BAY_LABEL_COLOR = "#ffffff";
+  const BAY_LABEL_COLOR = useThemeStore((s) => s.theme.textBay);
+  const BAY_LABEL_OPACITY = useThemeStore((s) => s.theme.textBayOpacity);
   const BAY_LOD_DISTANCE = 200;
   const BAY_CAM_HEIGHT_CUTOFF = 500;
 
@@ -211,7 +213,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
           camHeightCutoff={BAY_CAM_HEIGHT_CUTOFF}
           fabOffsetRef={fabOffsetRef}
           billboard={false}
-          opacity={0.7}
+          opacity={BAY_LABEL_OPACITY}
         />
       )}
     </group>

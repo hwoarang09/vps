@@ -1,7 +1,9 @@
 import { useRef, useMemo, useEffect, useState, useCallback } from "react";
 import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { useVehicleArrayStore } from "@/store/vehicle/arrayMode/vehicleStore";
+import { useThemeStore } from "@/store/ui/themeStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { vehicleDataArray, VEHICLE_DATA_SIZE, MovementData } from "@/store/vehicle/arrayMode/vehicleDataArray";
 import { getVehicleConfigSync, waitForConfig } from "@/config/threejs/vehicleConfig";
@@ -50,12 +52,42 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   const bodyHeight = config.body?.height ?? 0.3;
   const vehicleColor = 0xffffff; // White base — actual color set per-instance via setColorAt
 
+  const themeMetalness = useThemeStore((s) => s.theme.vehicleMetalness);
+  const themeRoughness = useThemeStore((s) => s.theme.vehicleRoughness);
+  const themeBracket = useThemeStore((s) => s.theme.vehicleBracket);
+
   // instanceData: vec4 (x, y, z, rotation_deg)
   const instanceDataRef = useRef<THREE.InstancedBufferAttribute | null>(null);
 
   const bodyGeometry = useMemo(() => {
-    const geo = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
-    geo.translate(0, 0, -bodyHeight / 2);
+    let geo: THREE.BufferGeometry;
+
+    if (!themeBracket) {
+      const box = new THREE.BoxGeometry(bodyLength, bodyWidth, bodyHeight);
+      box.translate(0, 0, -bodyHeight / 2);
+      geo = box;
+    } else {
+      // Body = ㄷ-bracket (inverted U): top plate + two legs, hollow center.
+      const topThickness = bodyHeight * 0.35;
+      const legHeight = bodyHeight - topThickness;
+      const legLength = bodyLength * 0.18;
+      const legCenterX = bodyLength * 0.5 - legLength * 0.5;
+      const legCenterZ = -topThickness - legHeight * 0.5;
+
+      const top = new THREE.BoxGeometry(bodyLength, bodyWidth, topThickness);
+      top.translate(0, 0, -topThickness * 0.5);
+
+      const front = new THREE.BoxGeometry(legLength, bodyWidth, legHeight);
+      front.translate(legCenterX, 0, legCenterZ);
+
+      const back = new THREE.BoxGeometry(legLength, bodyWidth, legHeight);
+      back.translate(-legCenterX, 0, legCenterZ);
+
+      geo = mergeGeometries([top, front, back]);
+      top.dispose();
+      front.dispose();
+      back.dispose();
+    }
 
     const initialCount = Math.max(actualNumVehicles, 1000);
 
@@ -69,21 +101,28 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     instanceDataRef.current = instanceDataAttr;
 
     return geo;
-  }, [bodyLength, bodyWidth, bodyHeight, actualNumVehicles]);
+  }, [bodyLength, bodyWidth, bodyHeight, actualNumVehicles, themeBracket]);
 
   const bodyMaterial = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(vehicleColor),
+      metalness: themeMetalness,
+      roughness: themeRoughness,
+      // Stronger polygonOffset than curves (-1,-1) → vehicle wins depth test
       polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
 
     mat.onBeforeCompile = (shader) => {
+      // Inject LOD scale uniform — visual-only (does not affect physics).
+      shader.uniforms.uVehicleScale = lodScaleUniform;
+
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
         attribute vec4 instanceData; // x, y, z, rotation_deg
+        uniform float uVehicleScale;
 
         mat3 rotateZ(float angle) {
           float s = sin(angle);
@@ -100,6 +139,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         '#include <begin_vertex>',
         `#include <begin_vertex>
         float rotation = instanceData.w * ${DEG_TO_RAD_GLSL};
+        transformed *= uVehicleScale;
         transformed = rotateZ(rotation) * transformed;
         transformed += instanceData.xyz;`
       );
@@ -113,7 +153,17 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     };
 
     return mat;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleColor]);
+
+  // Update theme-driven material props in-place (no mesh recreation)
+  useEffect(() => {
+    bodyMaterial.metalness = themeMetalness;
+    bodyMaterial.roughness = themeRoughness;
+  }, [themeMetalness, themeRoughness, bodyMaterial]);
+
+  // Visual-only LOD scale (does not affect physics/sensors)
+  const lodScaleUniform = useMemo(() => ({ value: 1.0 }), []);
 
   const identityMatrix = useMemo(() => new THREE.Matrix4(), []);
 
@@ -164,13 +214,13 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   const getJobStateColor = (jobState: number, pulse: number): THREE.Color => {
     switch (jobState) {
       case JobState.MOVE_TO_LOAD:
-        return tempColor.setRGB(1.0, 0.0, 0.5);                      // 진분홍
+        return tempColor.setRGB(1.0, 0.05, 0.85);                    // 비비드 핑크
       case JobState.LOADING:
-        return tempColor.setRGB(1.0, pulse * 0.3, 0.5 + pulse * 0.5); // 분홍 깜빡
+        return tempColor.setRGB(1.0, pulse * 0.2, 0.7 + pulse * 0.3); // 핑크 깜빡
       case JobState.MOVE_TO_UNLOAD:
-        return tempColor.setRGB(1.0, 0.6, 0.0);                      // 주황
+        return tempColor.setRGB(1.0, 0.4, 0.0);                      // 비비드 주황
       case JobState.UNLOADING:
-        return tempColor.setRGB(1.0, 0.4 + pulse * 0.6, 0.0);        // 주황 깜빡
+        return tempColor.setRGB(1.0, 0.25 + pulse * 0.5, 0.0);       // 주황 깜빡
       case JobState.ERROR:
         return tempColor.setRGB(1.0, 0.0, 0.0);                      // 빨강
       default:
@@ -181,6 +231,10 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   // Update instanced attributes every frame
   // SharedMemory 모드: 레이아웃이 동일하므로 set()으로 한 번에 복사
   useFrame((state) => {
+    // LOD: scale up vehicles when camera pulls away (visual only, sensors unaffected)
+    const camZ = state.camera.position.z;
+    lodScaleUniform.value = Math.max(1, Math.min(3.5, 1 + (camZ - 50) / 200));
+
     const instanceDataAttr = instanceDataRef.current;
     if (!instanceDataAttr) return;
 
@@ -347,6 +401,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         args={[bodyGeometry, bodyMaterial, actualNumVehicles]}
         frustumCulled={false}
         onPointerDown={handleVehicleClick}
+        renderOrder={10}
       />
       <group ref={glowGroupRef} visible={false} renderOrder={999}>
         {glowLayers.map((layer, i) => (

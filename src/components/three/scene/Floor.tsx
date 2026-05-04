@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useNodeStore } from '@/store/map/nodeStore';
 import { useFabStore } from '@/store/map/fabStore';
+import { useThemeStore } from '@/store/ui/themeStore';
 
 /**
  * Floor component - Creates a factory floor at z=0
@@ -10,6 +11,7 @@ const Floor: React.FC = () => {
   const fabs = useFabStore((state) => state.fabs);
   const fabCountX = useFabStore((state) => state.fabCountX);
   const fabCountY = useFabStore((state) => state.fabCountY);
+  const floorColor = useThemeStore((s) => s.theme.floorColor);
 
   const { width, height, centerX, centerY } = useMemo(() => {
     if (nodes.length === 0) {
@@ -58,7 +60,7 @@ const Floor: React.FC = () => {
       {/* Dynamic plane for factory floor - normal vector points to +Z */}
       <planeGeometry args={[width, height]} />
       <meshStandardMaterial
-        color="#404040"
+        color={floorColor}
         roughness={0.8}
         metalness={0.1}
       />

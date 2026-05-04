@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useFabStore } from "@store/map/fabStore";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
+import { useThemeStore } from "@store/ui/themeStore";
 import InstancedText, { type TextGroup } from "../text/instanced/InstancedText";
 import { textToDigits } from "../text/instanced/useDigitMaterials";
 import { RENDER_ORDER_FAB_LABEL } from "@/utils/renderOrder";
@@ -14,8 +15,6 @@ import { RENDER_ORDER_FAB_LABEL } from "@/utils/renderOrder";
 
 const FAB_LABEL_SCALE = 30;
 const FAB_SUBLABEL_SCALE = 15;
-const FAB_LABEL_COLOR = "#00e5ff";
-const FAB_SUBLABEL_COLOR = "#ffaa44";
 const FAB_Z = 5.0;
 const FAB_LOD_DISTANCE = 99999;
 const FAB_CAM_HEIGHT_CUTOFF = 99999;
@@ -23,6 +22,8 @@ const FAB_CAM_HEIGHT_CUTOFF = 99999;
 const FabLabelRenderer: React.FC = () => {
   const showFabLabels = useVisualizationStore((s) => s.showFabLabels);
   const fabs = useFabStore((s) => s.fabs);
+  const fabLabelColor = useThemeStore((s) => s.theme.textFabLabel);
+  const fabSublabelColor = useThemeStore((s) => s.theme.textFabSublabel);
 
   // 메인 라벨: "FAB0", "FAB1", ...
   const mainGroups = useMemo((): TextGroup[] => {
@@ -55,7 +56,7 @@ const FabLabelRenderer: React.FC = () => {
       <InstancedText
         groups={mainGroups}
         scale={FAB_LABEL_SCALE}
-        color={FAB_LABEL_COLOR}
+        color={fabLabelColor}
         lodDistance={FAB_LOD_DISTANCE}
         camHeightCutoff={FAB_CAM_HEIGHT_CUTOFF}
         billboard={false}
@@ -65,7 +66,7 @@ const FabLabelRenderer: React.FC = () => {
       <InstancedText
         groups={subGroups}
         scale={FAB_SUBLABEL_SCALE}
-        color={FAB_SUBLABEL_COLOR}
+        color={fabSublabelColor}
         lodDistance={FAB_LOD_DISTANCE}
         camHeightCutoff={FAB_CAM_HEIGHT_CUTOFF}
         billboard={false}

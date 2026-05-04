@@ -29,6 +29,8 @@ interface DigitMaterialsOptions {
   size?: number;
   depthTest?: boolean;
   opacity?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
 }
 
 export function useDigitMaterials({
@@ -38,6 +40,8 @@ export function useDigitMaterials({
   size = 256,
   depthTest = false,
   opacity = 1,
+  strokeColor,
+  strokeWidth = 0,
 }: DigitMaterialsOptions = {}) {
   const materials = useMemo(() => {
     return ALL_CHARS.map(char => {
@@ -51,16 +55,29 @@ export function useDigitMaterials({
         ctx.fillRect(0, 0, size, size);
       }
 
-      ctx.fillStyle = color;
       ctx.font = font;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+
+      // Stroke first (behind), then fill (on top) → outline halo
+      if (strokeColor && strokeWidth > 0) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = strokeWidth;
+        ctx.lineJoin = "round";
+        ctx.miterLimit = 2;
+        ctx.strokeText(char, size / 2, size / 2, size * 0.9);
+      }
+
+      ctx.fillStyle = color;
       ctx.fillText(char, size / 2, size / 2, size * 0.9);
 
       const tex = new THREE.Texture(canvas);
-      tex.minFilter = THREE.LinearFilter;
+      // Mipmaps + trilinear + anisotropic so text stays clean when far/oblique
+      // (without these, glyph edges alias as the camera moves away)
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
       tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = false;
+      tex.generateMipmaps = true;
+      tex.anisotropy = 8;
       tex.needsUpdate = true;
 
       return new THREE.MeshBasicMaterial({
@@ -71,7 +88,7 @@ export function useDigitMaterials({
         opacity,
       });
     });
-  }, [color, bgColor, font, size, depthTest, opacity]);
+  }, [color, bgColor, font, size, depthTest, opacity, strokeColor, strokeWidth]);
 
   // Cleanup materials and textures when component unmounts or deps change
   const ref = useRef(materials);
