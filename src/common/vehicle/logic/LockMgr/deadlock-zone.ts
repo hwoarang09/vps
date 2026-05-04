@@ -10,7 +10,21 @@ import {
   CheckpointFlags,
 } from "@/common/vehicle/initialize/constants";
 import type { LockMgrState } from "./types";
-import { LockEventType } from "./types";
+import { LockEventType, LockDetailType } from "./types";
+
+/** DEV_LOCK_DETAIL emit 헬퍼 */
+function emitDetail(
+  state: LockMgrState,
+  vehId: number,
+  nodeName: string,
+  detailType: number,
+  holderVehId: number = -1,
+  extra: number = 0
+): void {
+  if (!state.onLockDetailEvent || !state.nodeNameToIndex) return;
+  const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
+  state.onLockDetailEvent(vehId, nodeIdx, detailType, holderVehId, extra);
+}
 
 /**
  * 차량이 merge node 직전 edge에 있는지 확인
@@ -50,7 +64,8 @@ export function grantNextInQueue(
   if (!queue || queue.length === 0) return;
 
   // 기본: FIFO
-  let nextVeh = queue[0];
+  const fifoHead = queue[0];
+  let nextVeh = fifoHead;
 
   // Deadlock zone merge: 직전 edge 차량 우선
   if (isDeadlockZoneMerge(nodeName, state)) {
@@ -60,6 +75,12 @@ export function grantNextInQueue(
         break;
       }
     }
+  }
+
+  // ★ FIFO 위반 시 ZONE_PREEMPT 기록 (queue 1등이 아닌 차량 grant)
+  // holderVehId 필드에 박탈당한 큐 1등 vehId, extra 에 그 차량의 큐 위치 (= 0, 항상 head)
+  if (nextVeh !== fifoHead) {
+    emitDetail(state, nextVeh, nodeName, LockDetailType.ZONE_PREEMPT, fifoHead, queue.indexOf(nextVeh));
   }
 
   state.locks.set(nodeName, nextVeh);
@@ -178,13 +199,17 @@ export function updateDeadlockZoneGates(
           const nodeIdx = state.nodeNameToIndex.get(toNode) ?? 0;
           state.onLockEvent(vehId, nodeIdx, LockEventType.REQUEST, 0, -1);
         }
+        // ★ DZ_GATE_AUTO_REQ — cp 우회로 큐 push (holder=현재holder, extra=push 후 큐 길이)
+        emitDetail(state, vehId, toNode, LockDetailType.DZ_GATE_AUTO_REQ,
+          holder ?? -1, state.queues.get(toNode)?.length ?? 0);
       }
 
       // grant 시도 (holder가 없을 때)
       if (holder === undefined) {
         grantNextInQueue(toNode, state, eName);
         if (state.locks.get(toNode) === vehId) {
-          // grant 받음 → 통과
+          // ★ DZ_GATE_AUTO_GRANT — auto-REQ 직후 holder=undefined 였어서 이 차량이 즉시 grant
+          emitDetail(state, vehId, toNode, LockDetailType.DZ_GATE_AUTO_GRANT);
           continue;
         }
       }
@@ -202,6 +227,9 @@ export function updateDeadlockZoneGates(
             const holderVeh = state.locks.get(toNode) ?? -1;
             state.onLockEvent(vehId, nodeIdx, LockEventType.WAIT, 0, holderVeh);
           }
+          // ★ DZ_GATE_BLOCK — 차량이 cp 발화 없이 자동 정지됨 (holder=현재 holder)
+          emitDetail(state, vehId, toNode, LockDetailType.DZ_GATE_BLOCK,
+            state.locks.get(toNode) ?? -1);
         }
         continue;
       }

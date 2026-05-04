@@ -30,13 +30,18 @@ export async function setupLoggerPort(
   const note = config.logSessionNote ? `_${config.logSessionNote}` : "";
   const sessionId = `${ts}${note}`;
 
+  // DEV_LOCK_DETAIL 강제 활성화 — 의심 메커니즘 (zone preempt / DZ gate / holder swap) 디버그용
+  // 사용자가 logEvents.lockDetail 명시적으로 false 주면 그 의도 존중
+  const events = { ...(config.logEvents ?? {}) };
+  if (events.lockDetail === undefined) events.lockDetail = true;
+
   const logger = new SimLogger({
     sessionId,
     workerId: workerId % 256,
     fabId,
     mode: 'ml',
     targets: config.logTargets ?? { opfs: true, db: true },
-    events: config.logEvents,
+    events,
   });
 
   try {

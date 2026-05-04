@@ -107,6 +107,11 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     lockMgr.setOnCheckpointEvent((vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio) => {
       simLogger.logCheckpoint({ ts: simulationTime, vehId, cpEdge, cpFlags, action, cpRatio, currentEdge, currentRatio });
     });
+    // DEV_LOCK_DETAIL: zone preempt / DZ gate / holder swap 등 의심 메커니즘 추적
+    // logLockDetail(ts, vehId, nodeIdx, type, holderVehId, waitMs) 의 waitMs 자리를 extra 로 재활용
+    lockMgr.setOnLockDetailEvent((vehId, nodeIdx, detailType, holderVehId, extra) => {
+      simLogger.logLockDetail(simulationTime, vehId, nodeIdx, detailType, holderVehId, extra);
+    });
   }
 
   // 1. Collision Check (충돌 감지 → 멈출지 결정)

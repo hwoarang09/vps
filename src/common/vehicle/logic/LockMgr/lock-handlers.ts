@@ -13,8 +13,22 @@ import {
 } from "@/common/vehicle/initialize/constants";
 import { MAX_PATH_LENGTH, PATH_LEN, PATH_EDGES_START } from "../TransferMgr";
 import type { LockMgrState } from "./types";
-import { LockEventType } from "./types";
+import { LockEventType, LockDetailType } from "./types";
 import { grantNextInQueue } from "./deadlock-zone";
+
+/** DEV_LOCK_DETAIL emit 헬퍼 */
+function emitDetail(
+  state: LockMgrState,
+  vehId: number,
+  nodeName: string,
+  detailType: number,
+  holderVehId: number = -1,
+  extra: number = 0
+): void {
+  if (!state.onLockDetailEvent || !state.nodeNameToIndex) return;
+  const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
+  state.onLockDetailEvent(vehId, nodeIdx, detailType, holderVehId, extra);
+}
 
 /** Lock 이벤트를 콜백에 전달 */
 function emitLockEvent(
@@ -565,9 +579,14 @@ export function requestLockWithPriority(
       const r = calcRemainingDistToMerge(v, nodeName, state);
       return r.dist > myDist;
     });
+    const finalInsertIdx = insertIdx === -1 ? queue.length : insertIdx;
     if (insertIdx === -1) queue.push(vehicleId);
     else queue.splice(insertIdx, 0, vehicleId);
     emitLockEvent(state, vehicleId, nodeName, LockEventType.REQUEST);
+    // ★ PRIORITY_INSERT — path 변경 시 거리 기반으로 큐에 끼어듦
+    // holder = 현재 holder, extra = insert 위치 (queue index, 0 이면 큐 head)
+    emitDetail(state, vehicleId, nodeName, LockDetailType.PRIORITY_INSERT,
+      state.locks.get(nodeName) ?? -1, finalInsertIdx);
 
     // pendingReleases 등록 (auto-release 위해)
     if (!state.pendingReleases.has(vehicleId)) state.pendingReleases.set(vehicleId, []);
@@ -608,10 +627,17 @@ export function requestLockWithPriority(
       state.locks.set(nodeName, vehicleId);
       emitLockEvent(state, holder, nodeName, LockEventType.RELEASE);
       emitLockEvent(state, vehicleId, nodeName, LockEventType.GRANT);
+      // ★ HOLDER_SWAP — 정상 holder 박탈 + 본인이 holder 됨
+      // holder = 박탈당한 차량, extra = 거리 차이 (mm 단위, holder.dist - my.dist)
+      const distDiffMm = holderResult.dist === Infinity ? -1
+        : Math.round((holderResult.dist - myDist) * 1000);
+      emitDetail(state, vehicleId, nodeName, LockDetailType.HOLDER_SWAP, holder, distDiffMm);
     } else if (holder === undefined && queue[0] === vehicleId) {
       // 큐 비어있고 본인이 1등 → 즉시 grant
       state.locks.set(nodeName, vehicleId);
       emitLockEvent(state, vehicleId, nodeName, LockEventType.GRANT);
+      // ★ PRIORITY_GRANT — path 변경 직후 holder 없어 즉시 grant (cp 흐름 우회)
+      emitDetail(state, vehicleId, nodeName, LockDetailType.PRIORITY_GRANT);
     }
   }
 }

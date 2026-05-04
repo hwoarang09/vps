@@ -95,6 +95,53 @@ export const LockEventType = {
 } as const;
 
 /**
+ * DEV_LOCK_DETAIL subtype 코드 — 의심 메커니즘 추적용.
+ * SimLogger.logLockDetail 의 type 바이트에 들어감.
+ *
+ * 10번대: deadlock-zone.ts 자동 처리 (cp 흐름 우회)
+ * 20번대: lock-handlers.ts requestLockWithPriority (path 변경 시 priority/swap)
+ */
+export const LockDetailType = {
+  /** grantNextInQueue 가 queue[0] 가 아닌 차량을 zone-internal 우선순위로 grant */
+  ZONE_PREEMPT: 10,
+  /** updateDeadlockZoneGates 가 cp 우회로 자동 REQ (큐에 push) */
+  DZ_GATE_AUTO_REQ: 11,
+  /** updateDeadlockZoneGates 가 자동 REQ 후 holder 없어 즉시 grant */
+  DZ_GATE_AUTO_GRANT: 12,
+  /** updateDeadlockZoneGates 가 lock 못 받아 차량 강제 정지 */
+  DZ_GATE_BLOCK: 13,
+  /** requestLockWithPriority 가 거리 기반 우선순위로 큐 insert (FIFO 위반 가능) */
+  PRIORITY_INSERT: 20,
+  /** requestLockWithPriority 가 현재 holder 박탈 (holder swap) */
+  HOLDER_SWAP: 21,
+  /** requestLockWithPriority 가 holder 없을 때 즉시 grant */
+  PRIORITY_GRANT: 22,
+  /** preLockMergeNodes 가 t=0 에 차량을 merge 큐에 push (silent — REQ 이벤트 없음) */
+  PRELOCK_REGISTER: 30,
+  /** preLockMergeNodes 결과 holder 가 됨 (silent grant) */
+  PRELOCK_HOLDER: 31,
+  /** stopNonHolderVehiclesNearMerge 가 차량을 LOCKED 으로 강제 정지 */
+  PRELOCK_STOP: 32,
+} as const;
+export type LockDetailTypeValue = typeof LockDetailType[keyof typeof LockDetailType];
+
+/**
+ * DEV_LOCK_DETAIL 이벤트 콜백 타입.
+ * @param vehId        영향받는 차량
+ * @param nodeIdx      merge node index (0-based)
+ * @param detailType   LockDetailType 값
+ * @param holderVehId  관련 holder 차량 (swap 의 박탈당한 holder, preempt 의 큐 1등 등). 없으면 -1
+ * @param extra        추가 정보 (예: 큐 위치, 거리값을 mm 단위로 등). 미사용시 0
+ */
+export type OnLockDetailEventCallback = (
+  vehId: number,
+  nodeIdx: number,
+  detailType: number,
+  holderVehId: number,
+  extra: number
+) => void;
+
+/**
  * LockMgr 내부 상태
  */
 export interface LockMgrState {
@@ -114,6 +161,13 @@ export interface LockMgrState {
   onLockEvent?: OnLockEventCallback;
   /** Checkpoint 이벤트 콜백 (SimLogger 연결용) */
   onCheckpointEvent?: OnCheckpointEventCallback;
+  /** Lock detail 이벤트 콜백 (의심 메커니즘 디버그용 — DEV_LOCK_DETAIL 로 OPFS 기록) */
+  onLockDetailEvent?: OnLockDetailEventCallback;
+  /**
+   * preLock 시점엔 callback 미설정 → 이벤트 버퍼링.
+   * setOnLockDetailEvent 시 flush. 각 항목: [vehId, nodeIdx, detailType, holderVehId, extra]
+   */
+  pendingLockDetailEvents?: Array<[number, number, number, number, number]>;
   /** Node name → index (0-based) 맵 */
   nodeNameToIndex?: Map<string, number>;
   /** Deadlock zone merge 노드 이름 Set */

@@ -16,6 +16,7 @@ VPS 로그 통합 분석 스크립트
 import argparse
 import struct
 import sys
+from typing import Optional
 from pathlib import Path
 from collections import defaultdict
 
@@ -53,6 +54,20 @@ JOB_STATE_NAMES = {0:'INIT', 1:'IDLE', 2:'MOVE_TO_LOAD', 3:'LOADING', 4:'MOVE_TO
 LOCK_EVENT_NAMES = {0:'REQ', 1:'GRANT', 2:'RELEASE', 3:'WAIT'}
 CHECKPOINT_ACTION_NAMES = {0:'LOADED', 1:'HIT', 2:'MISS', 3:'WAITING', 4:'WAIT_BLOCKED'}
 CHECKPOINT_FLAG_NAMES = {1:'REQ', 2:'WAIT', 4:'REL', 8:'PREP', 16:'SLOW'}
+
+# DEV_LOCK_DETAIL type — 의심 메커니즘 추적용 (LockMgr/types.ts 의 LockDetailType 동기화)
+LOCK_DETAIL_NAMES = {
+    10: 'ZONE_PREEMPT',     # grantNextInQueue 가 queue[0] 가 아닌 차량 grant
+    11: 'DZ_GATE_AUTO_REQ', # updateDeadlockZoneGates 가 cp 우회 자동 REQ
+    12: 'DZ_GATE_AUTO_GRANT', # auto-REQ 직후 holder 없어 즉시 grant
+    13: 'DZ_GATE_BLOCK',    # auto-REQ 후 grant 못 받아 강제 정지
+    20: 'PRIORITY_INSERT',  # path 변경 시 거리 기반 큐 insert (FIFO 위반 가능)
+    21: 'HOLDER_SWAP',      # path 변경 시 현재 holder 박탈
+    22: 'PRIORITY_GRANT',   # path 변경 시 holder 없어 즉시 grant
+    30: 'PRELOCK_REGISTER', # preLockMergeNodes 가 차량을 큐에 push (silent)
+    31: 'PRELOCK_HOLDER',   # preLockMergeNodes 결과 holder 됨
+    32: 'PRELOCK_STOP',     # stopNonHolderVehiclesNearMerge 가 차량 LOCKED 정지
+}
 
 
 def parse_file(path: Path) -> tuple[str, list[dict]]:
@@ -562,6 +577,80 @@ def cmd_lock_node(data: dict, node_idx: int, ts_from: int, ts_to: int):
         print(f"  veh={holder:>3}  ts={holder_since:>6} ~ END    ({fmt_ms(dur)})  ❗ 잔존 holder")
 
 
+def cmd_lock_detail(data: dict, ts_from: int, ts_to: int,
+                    veh_filter: Optional[int] = None,
+                    node_filter: Optional[int] = None,
+                    type_filter: Optional[str] = None):
+    """DEV_LOCK_DETAIL 분석 — 의심 메커니즘 발화 추적.
+
+    필터:
+      veh_filter   : 특정 차량만
+      node_filter  : 특정 노드만
+      type_filter  : 'ZONE_PREEMPT' / 'DZ_GATE_*' / 'HOLDER_SWAP' 등 부분 일치
+    """
+    details = data.get('lock_detail', [])
+    if not details:
+        print("  lock_detail event 0 (DEV_LOCK_DETAIL 미활성화 또는 발화 없음)")
+        return
+
+    # 필터 적용
+    filtered = []
+    for r in details:
+        if not (ts_from <= r['ts'] <= ts_to):
+            continue
+        if veh_filter is not None and r['veh_id'] != veh_filter:
+            continue
+        if node_filter is not None and r['node_idx'] != node_filter:
+            continue
+        type_name = LOCK_DETAIL_NAMES.get(r['type'], f'?{r["type"]}')
+        if type_filter and type_filter not in type_name:
+            continue
+        filtered.append((r, type_name))
+
+    if not filtered:
+        print(f"  필터 통과 event 0 (전체 {len(details)} 중)")
+        return
+
+    # 시간순 출력
+    filtered.sort(key=lambda x: x[0]['ts'])
+    print(f"\n=== DEV_LOCK_DETAIL ({len(filtered)} events) ===")
+    print(f"{'ts':>10}  {'veh':>4}  {'node':>4}  {'type':<20}  {'holder':>6}  {'extra':>6}")
+    print('-' * 80)
+    for r, name in filtered:
+        holder = r['holder_veh_id'] if r['holder_veh_id'] != 0xFFFFFFFF and r['holder_veh_id'] >= 0 else '-'
+        # holder_veh_id 가 -1 (uint32 = 0xFFFFFFFF) 이면 - 표시
+        holder_raw = r['holder_veh_id']
+        if holder_raw == 0xFFFFFFFF:
+            holder = '-'
+        else:
+            holder = str(holder_raw)
+        print(f"{r['ts']:>10}  {r['veh_id']:>4}  {r['node_idx']:>4}  {name:<20}  {holder:>6}  {r['wait_ms']:>6}")
+
+    # type 별 요약
+    print(f"\n=== type 별 발화 요약 ===")
+    by_type = defaultdict(int)
+    for _, name in filtered:
+        by_type[name] += 1
+    for name, cnt in sorted(by_type.items(), key=lambda x: -x[1]):
+        print(f"  {name:<20}  {cnt}")
+
+    # node 별 hot spot
+    print(f"\n=== node 별 (top 10) ===")
+    by_node = defaultdict(int)
+    for r, _ in filtered:
+        by_node[r['node_idx']] += 1
+    for node, cnt in sorted(by_node.items(), key=lambda x: -x[1])[:10]:
+        print(f"  node={node:>4}  {cnt}")
+
+    # veh 별 (top 10) — REQ 안 하고 grant 받은 차량 등 추적
+    print(f"\n=== veh 별 (top 10) ===")
+    by_veh = defaultdict(int)
+    for r, _ in filtered:
+        by_veh[r['veh_id']] += 1
+    for vid, cnt in sorted(by_veh.items(), key=lambda x: -x[1])[:10]:
+        print(f"  veh={vid:>4}  {cnt}")
+
+
 def cmd_raw(data: dict, veh_id: int, ts_from: int, ts_to: int, limit: int = 50):
     """특정 차량의 원시 레코드 출력"""
     print(f"\n=== Raw Records for veh {veh_id} ===")
@@ -612,6 +701,10 @@ def main():
     parser.add_argument('--node', type=int, help='타겟 노드 ID (deadlock 분석용, 0-based)')
     parser.add_argument('--lock-node', dest='lock_node', type=int,
                         help='특정 노드의 lock activity 분석 (0-based node_idx, 시간순 + 위치 + holder timeline)')
+    parser.add_argument('--lock-detail', action='store_true', dest='lock_detail',
+                        help='DEV_LOCK_DETAIL 분석 (zone preempt / DZ gate / holder swap 의심 메커니즘 추적)')
+    parser.add_argument('--detail-type', dest='detail_type',
+                        help='--lock-detail 필터: 부분 일치 (예: ZONE_PREEMPT, DZ_GATE, HOLDER_SWAP)')
     parser.add_argument('--raw', action='store_true', help='원시 레코드 출력')
     parser.add_argument('--limit', type=int, default=50, help='raw 모드 최대 출력 수')
     args = parser.parse_args()
@@ -635,6 +728,11 @@ def main():
             print("[ERROR] --deadlock 에는 --pair VEH1 VEH2 필요", file=sys.stderr)
             sys.exit(1)
         cmd_deadlock(data, args.pair, args.node)
+    elif args.lock_detail:
+        cmd_lock_detail(data, ts_from, ts_to,
+                        veh_filter=args.veh,
+                        node_filter=args.lock_node,
+                        type_filter=args.detail_type)
     elif args.lock_node is not None:
         cmd_lock_node(data, args.lock_node, ts_from, ts_to)
     elif args.stuck:

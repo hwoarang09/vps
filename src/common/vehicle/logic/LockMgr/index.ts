@@ -10,8 +10,9 @@ import type {
   GrantStrategy,
   OnLockEventCallback,
   OnCheckpointEventCallback,
+  OnLockDetailEventCallback,
 } from "./types";
-import { DEFAULT_LOCK_POLICY } from "./types";
+import { DEFAULT_LOCK_POLICY, LockDetailType } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
 import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks, requestLockWithPriority } from "./lock-handlers";
 import { updateDeadlockZoneGates } from "./deadlock-zone";
@@ -91,6 +92,23 @@ export class LockMgr {
    */
   setOnCheckpointEvent(callback: OnCheckpointEventCallback): void {
     this.state.onCheckpointEvent = callback;
+  }
+
+  /**
+   * Lock detail 이벤트 콜백 설정 (의심 메커니즘 디버그 — DEV_LOCK_DETAIL OPFS 기록).
+   * preLock 시점에 callback 미설정으로 버퍼링된 이벤트가 있으면 flush.
+   */
+  setOnLockDetailEvent(callback: OnLockDetailEventCallback): void {
+    this.state.onLockDetailEvent = callback;
+    const pending = this.state.pendingLockDetailEvents;
+    if (pending && pending.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[LockMgr] Flushing ${pending.length} buffered lock_detail events (preLock 시점)`);
+      for (const [vehId, nodeIdx, t, holder, extra] of pending) {
+        callback(vehId, nodeIdx, t, holder, extra);
+      }
+      this.state.pendingLockDetailEvents = [];
+    }
   }
 
   /**
@@ -236,13 +254,29 @@ export class LockMgr {
 
       vehicles.sort((a, b) => b.ratio - a.ratio);
 
-      for (const { vehId } of vehicles) {
-        requestLockInternal(nodeName, vehId, this.state);
+      const nodeIdx = this.state.nodeNameToIndex?.get(nodeName) ?? 0;
+      // preLock 시점엔 callback 미설정 → 버퍼에 push, 나중에 flush
+      const emit = (vehId: number, t: number, holder: number, extra: number) => {
+        if (this.state.onLockDetailEvent) {
+          this.state.onLockDetailEvent(vehId, nodeIdx, t, holder, extra);
+        } else {
+          if (!this.state.pendingLockDetailEvents) this.state.pendingLockDetailEvents = [];
+          this.state.pendingLockDetailEvents.push([vehId, nodeIdx, t, holder, extra]);
+        }
+      };
 
-        // pendingReleases에 등록 — 경로 변경 시 releaseOrphanedLocks()가 정리 가능
-        // releaseEdgeIdx = -1 (sentinel): checkAutoRelease가 preLock 항목을 건드리지 않음
-        // → 차량이 path를 받으면 checkpoint handler가 올바른 releaseEdgeIdx로 갱신하거나,
-        //   releaseOrphanedLocks가 경로에 없는 merge lock을 정리함
+      for (const { vehId, edgeIdx } of vehicles) {
+        const wasHolder = this.state.locks.get(nodeName);
+        requestLockInternal(nodeName, vehId, this.state);
+        const becameHolder = wasHolder === undefined && this.state.locks.get(nodeName) === vehId;
+
+        // ★ DEV_LOCK_DETAIL — preLock 이 어떤 차량을 어떤 merge 에 silent 락 거는지
+        // extra = 차량의 시작 edge (1-based) — incoming edge 검증용
+        emit(vehId,
+          becameHolder ? LockDetailType.PRELOCK_HOLDER : LockDetailType.PRELOCK_REGISTER,
+          -1, edgeIdx);
+
+        // pendingReleases 등록
         if (!this.state.pendingReleases.has(vehId)) {
           this.state.pendingReleases.set(vehId, []);
         }
@@ -253,7 +287,7 @@ export class LockMgr {
       }
 
       const holder = this.state.locks.get(nodeName);
-      this.stopNonHolderVehiclesNearMerge(vehicles, holder, data);
+      this.stopNonHolderVehiclesNearMerge(vehicles, holder, data, emit);
     }
   }
 
@@ -296,7 +330,8 @@ export class LockMgr {
   private stopNonHolderVehiclesNearMerge(
     vehicles: { vehId: number; ratio: number; edgeIdx: number }[],
     holder: number | undefined,
-    data: Float32Array
+    data: Float32Array,
+    emit: (vehId: number, t: number, holder: number, extra: number) => void
   ): void {
     const { edges } = this.state;
     for (const { vehId, ratio, edgeIdx } of vehicles) {
@@ -308,6 +343,9 @@ export class LockMgr {
         data[ptr + MovementData.VELOCITY] = 0;
         data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
         data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;
+        // extra = mm 단위 distToMerge
+        emit(vehId, LockDetailType.PRELOCK_STOP,
+          holder ?? -1, Math.round(distToMerge * 1000));
       }
     }
   }
