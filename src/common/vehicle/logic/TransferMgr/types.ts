@@ -46,6 +46,8 @@ export interface ProcessPathCommandContext {
 /** LockMgr interface for merge check */
 export interface ILockMgrForNextEdge {
   isMergeNode(nodeName: string): boolean;
+  /** target merge 가 DZ pair 의 일원인지 — cp builder 가 zone-aware 배치 할지 결정 */
+  isDeadlockZoneMerge(nodeName: string): boolean;
   checkGrant(nodeName: string, vehId: number): boolean;
 }
 

@@ -470,7 +470,7 @@ export function buildCheckpoints(
 ): CheckpointBuildResult {
   const opts = { ...DEFAULT_OPTIONS, ...lockOptions };
   const checkpoints: Checkpoint[] = [];
-  const { edgeIndices, edgeArray, isMergeNode, waitRelocations } = ctx;
+  const { edgeIndices, edgeArray, isMergeNode, isDeadLockMergeNode, waitRelocations } = ctx;
 
   // ========================================
   // 1-based 배열로 변환
@@ -500,8 +500,12 @@ export function buildCheckpoints(
 
     // ========================================
     // Deadlock zone 사전 탐지 (정적 우선, 변형 fallback)
-    // ========================================
-    const staticDzEntry = isStartFromMergeNode
+    // ★ 가드: target merge 자체가 DZ merge 일 때만 zone-aware cp 배치.
+    //   incoming edge.deadlockZoneId 만 보면, DZ 다음의 비-DZ merge 도 zone 으로 묶여
+    //   엉뚱한 차량이 멀리서 락 잡는 버그 발생 (예: N0385 가 N0384(DZ) 다음에 와서
+    //   444/445 까지 cp 가 끌려가 158/159/165 등이 미리 큐에 들어감).
+    const targetIsDzMerge = isStartFromMergeNode && isDeadLockMergeNode(targetEdge.from_node);
+    const staticDzEntry = targetIsDzMerge
       ? findDeadlockZoneEntry(targetIdx, path, edges)
       : null;
     const variantDzEntry = (isStartFromMergeNode && !staticDzEntry)

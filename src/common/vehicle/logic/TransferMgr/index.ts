@@ -680,6 +680,7 @@ export class TransferMgr {
       edgeIndices,
       edgeArray,
       isMergeNode: (nodeName) => lockMgr.isMergeNode(nodeName),
+      isDeadLockMergeNode: (nodeName) => lockMgr.isDeadlockZoneMerge(nodeName),
       waitRelocations: this.waitRelocations,
     });
 
