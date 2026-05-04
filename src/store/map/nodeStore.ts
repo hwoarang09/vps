@@ -70,27 +70,81 @@ function findMergeNodes(incomingCount: Map<string, number>): Set<string> {
 }
 
 /**
- * A와 D의 공통 toNode 찾기
- * @returns 두 노드 집합의 교집합 배열
+ * 변형 DZ 2 — curve 두 개로 90+90 회전하는 passthrough 패턴.
+ * passthrough 노드: incoming 1개, outgoing 1개, merge 도 diverge 도 아님.
+ * 그 노드의 in/out edge 가 둘 다 curve (vos_rail_type !== 'LINEAR') 면 curve-passthrough.
+ *
+ * curve-passthrough 는 diverge 가 사실상 reachable 한 merge 를 한 단계 더 늘려줌.
+ * 예) N0303 (diverge) → curve → N0541 (curve-passthrough) → curve → N0542 (merge)
+ *     → N0303 의 reachable merges 에 N0542 추가됨.
  */
-function findCommonToNodes(toNodesA: Set<string>, toNodesD: Set<string>): string[] {
-  const commonToNodes: string[] = [];
-  for (const toNode of toNodesA) {
-    if (toNodesD.has(toNode)) {
-      commonToNodes.push(toNode);
-    }
+interface PassthroughInfo {
+  /** outgoing edge to_node (= 다음 노드) */
+  nextNode: string;
+}
+
+function buildCurvePassthroughs(
+  edges: Edge[],
+  divergeToNodes: Map<string, Set<string>>,
+  incomingCount: Map<string, number>
+): Map<string, PassthroughInfo> {
+  const result = new Map<string, PassthroughInfo>();
+  // 각 노드의 outgoing edge 목록
+  const outgoingEdges = new Map<string, Edge[]>();
+  const incomingEdges = new Map<string, Edge[]>();
+  for (const e of edges) {
+    if (!outgoingEdges.has(e.from_node)) outgoingEdges.set(e.from_node, []);
+    outgoingEdges.get(e.from_node)!.push(e);
+    if (!incomingEdges.has(e.to_node)) incomingEdges.set(e.to_node, []);
+    incomingEdges.get(e.to_node)!.push(e);
   }
-  return commonToNodes;
+
+  for (const [node, outs] of outgoingEdges) {
+    if (outs.length !== 1) continue; // outgoing 1개 아님
+    if ((incomingCount.get(node) ?? 0) !== 1) continue; // incoming 1개 아님
+    const isDiverge = (divergeToNodes.get(node)?.size ?? 0) >= 2;
+    if (isDiverge) continue;
+    const isMerge = (incomingCount.get(node) ?? 0) >= 2;
+    if (isMerge) continue;
+
+    const inEdge = incomingEdges.get(node)?.[0];
+    const outEdge = outs[0];
+    if (!inEdge || !outEdge) continue;
+    // 둘 다 curve 여야 함
+    if (inEdge.vos_rail_type === EdgeType.LINEAR) continue;
+    if (outEdge.vos_rail_type === EdgeType.LINEAR) continue;
+
+    result.set(node, { nextNode: outEdge.to_node });
+  }
+
+  return result;
 }
 
 /**
- * 데드락 존 유효성 검증
- * @returns 공통 toNode가 정확히 2개이고, 둘 다 합류점이면 true
+ * diverge 의 reachable merges (1-hop 직접 + 2-hop curve-passthrough).
+ * 각 merge 에 도달하는 경로 종류 (direct vs via passthrough) 도 같이 반환 — 디버그/검증용.
  */
-function isValidDeadlockZone(commonToNodes: string[], mergeNodeSet: Set<string>): boolean {
-  if (commonToNodes.length !== 2) return false;
-  const [nodeB, nodeC] = commonToNodes;
-  return mergeNodeSet.has(nodeB) && mergeNodeSet.has(nodeC);
+function computeReachableMerges(
+  diverge: string,
+  divergeToNodes: Map<string, Set<string>>,
+  mergeNodeSet: Set<string>,
+  curvePassthroughs: Map<string, PassthroughInfo>
+): Set<string> {
+  const reach = new Set<string>();
+  const directOuts = divergeToNodes.get(diverge);
+  if (!directOuts) return reach;
+  for (const to of directOuts) {
+    if (mergeNodeSet.has(to)) {
+      reach.add(to);
+      continue;
+    }
+    // 2-hop curve passthrough?
+    const pass = curvePassthroughs.get(to);
+    if (pass && mergeNodeSet.has(pass.nextNode)) {
+      reach.add(pass.nextNode);
+    }
+  }
+  return reach;
 }
 
 /**
@@ -99,33 +153,45 @@ function isValidDeadlockZone(commonToNodes: string[], mergeNodeSet: Set<string>)
  * 조건:
  * - A, D 둘 다 분기점 (outgoing >= 2)
  * - B, C 둘 다 합류점 (incoming >= 2)
- * - A와 D가 정확히 같은 2개의 노드(B, C)로 분기
+ * - A와 D 의 reachable merges 가 정확히 {B, C} 공유 (2개)
+ *   reachable = 1-hop 직접 OR 2-hop curve-passthrough (변형 DZ 2)
  */
 function findDeadlockZonePairs(
   divergeNodes: string[],
   divergeToNodes: Map<string, Set<string>>,
-  mergeNodeSet: Set<string>
+  mergeNodeSet: Set<string>,
+  curvePassthroughs: Map<string, PassthroughInfo>
 ): DeadlockZone[] {
   const zones: DeadlockZone[] = [];
   const usedDiverge = new Set<string>();
 
   // 각 분기점 쌍에 대해 같은 합류점 2개로 분기하는지 확인
+  // diverge 별 reachable merges 사전 계산 (1-hop + 2-hop curve passthrough)
+  const reachByDiverge = new Map<string, Set<string>>();
+  for (const div of divergeNodes) {
+    reachByDiverge.set(div, computeReachableMerges(div, divergeToNodes, mergeNodeSet, curvePassthroughs));
+  }
+
   for (let i = 0; i < divergeNodes.length; i++) {
     const nodeA = divergeNodes[i];
     if (usedDiverge.has(nodeA)) continue;
 
-    const toNodesA = divergeToNodes.get(nodeA)!;
+    const reachA = reachByDiverge.get(nodeA)!;
+    if (reachA.size < 2) continue;
 
     for (let j = i + 1; j < divergeNodes.length; j++) {
       const nodeD = divergeNodes[j];
       if (usedDiverge.has(nodeD)) continue;
 
-      const toNodesD = divergeToNodes.get(nodeD)!;
+      const reachD = reachByDiverge.get(nodeD)!;
+      if (reachD.size < 2) continue;
 
-      const commonToNodes = findCommonToNodes(toNodesA, toNodesD);
+      // 공통 reachable merges
+      const common: string[] = [];
+      for (const m of reachA) if (reachD.has(m)) common.push(m);
 
-      if (isValidDeadlockZone(commonToNodes, mergeNodeSet)) {
-        const [nodeB, nodeC] = commonToNodes;
+      if (common.length === 2) {
+        const [nodeB, nodeC] = common;
         zones.push({
           divergeNodes: [nodeA, nodeD],
           mergeNodes: [nodeB, nodeC],
@@ -160,8 +226,11 @@ function detectDeadlockZones(edges: Edge[]): DeadlockZone[] {
   // 3. 합류점 찾기
   const mergeNodeSet = findMergeNodes(incomingCount);
 
-  // 4. 데드락 존 쌍 찾기
-  return findDeadlockZonePairs(divergeNodes, divergeToNodes, mergeNodeSet);
+  // 4. 변형 DZ 2 — curve+curve 90+90 passthrough 노드 식별
+  const curvePassthroughs = buildCurvePassthroughs(edges, divergeToNodes, incomingCount);
+
+  // 5. 데드락 존 쌍 찾기 (1-hop 직접 OR 2-hop curve passthrough)
+  return findDeadlockZonePairs(divergeNodes, divergeToNodes, mergeNodeSet, curvePassthroughs);
 }
 
 /**
