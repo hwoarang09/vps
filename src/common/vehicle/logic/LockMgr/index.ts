@@ -97,13 +97,16 @@ export class LockMgr {
   /**
    * Lock detail 이벤트 콜백 설정 (의심 메커니즘 디버그 — DEV_LOCK_DETAIL OPFS 기록).
    * preLock 시점에 callback 미설정으로 버퍼링된 이벤트가 있으면 flush.
+   * Flush 시작 시 FLUSH_MARKER 이벤트 emit (extra=count) → 파서가 해당 marker 이후
+   * 이벤트들을 "preLock 시점 발생" 으로 인식 가능.
    */
   setOnLockDetailEvent(callback: OnLockDetailEventCallback): void {
     this.state.onLockDetailEvent = callback;
     const pending = this.state.pendingLockDetailEvents;
     if (pending && pending.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[LockMgr] Flushing ${pending.length} buffered lock_detail events (preLock 시점)`);
+      // FLUSH_MARKER (vehId=0, nodeIdx=0, holderVehId=-1, extra=count)
+      // 파서가 marker 보고 "이후 N개는 preLock 버퍼링 이벤트" 임을 인식
+      callback(0, 0, LockDetailType.FLUSH_MARKER, -1, pending.length);
       for (const [vehId, nodeIdx, t, holder, extra] of pending) {
         callback(vehId, nodeIdx, t, holder, extra);
       }

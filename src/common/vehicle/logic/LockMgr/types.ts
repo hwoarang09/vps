@@ -122,6 +122,8 @@ export const LockDetailType = {
   PRELOCK_HOLDER: 31,
   /** stopNonHolderVehiclesNearMerge 가 차량을 LOCKED 으로 강제 정지 */
   PRELOCK_STOP: 32,
+  /** 버퍼링된 preLock 이벤트 flush 시작 marker (extra=flush 된 이벤트 수) */
+  FLUSH_MARKER: 90,
 } as const;
 export type LockDetailTypeValue = typeof LockDetailType[keyof typeof LockDetailType];
 

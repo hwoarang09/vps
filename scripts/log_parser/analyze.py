@@ -67,6 +67,7 @@ LOCK_DETAIL_NAMES = {
     30: 'PRELOCK_REGISTER', # preLockMergeNodes 가 차량을 큐에 push (silent)
     31: 'PRELOCK_HOLDER',   # preLockMergeNodes 결과 holder 됨
     32: 'PRELOCK_STOP',     # stopNonHolderVehiclesNearMerge 가 차량 LOCKED 정지
+    90: 'FLUSH_MARKER',     # 버퍼링된 preLock 이벤트 flush 시작 (extra=count)
 }
 
 
@@ -610,6 +611,13 @@ def cmd_lock_detail(data: dict, ts_from: int, ts_to: int,
     if not filtered:
         print(f"  필터 통과 event 0 (전체 {len(details)} 중)")
         return
+
+    # FLUSH_MARKER 검출 (preLock 버퍼 flush 시점)
+    flush_markers = [r for r in details if r['type'] == 90]
+    if flush_markers:
+        print(f"\n=== preLock buffer flush 정보 ({len(flush_markers)} 개 marker) ===")
+        for r in flush_markers:
+            print(f"  ts={r['ts']:>6}  flushed {r['wait_ms']} preLock 이벤트 (callback 설정 시점)")
 
     # 시간순 출력
     filtered.sort(key=lambda x: x[0]['ts'])
