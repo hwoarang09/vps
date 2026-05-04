@@ -70,18 +70,22 @@ function findMergeNodes(incomingCount: Map<string, number>): Set<string> {
 }
 
 /**
- * 변형 DZ 2 — curve 두 개로 90+90 회전하는 passthrough 패턴.
- * passthrough 노드: incoming 1개, outgoing 1개, merge 도 diverge 도 아님.
- * 그 노드의 in/out edge 가 둘 다 curve (vos_rail_type !== 'LINEAR') 면 curve-passthrough.
+ * 변형 DZ passthrough 노드 식별 — diverge 의 reachable merge 를 2-hop 로 확장.
  *
- * curve-passthrough 는 diverge 가 사실상 reachable 한 merge 를 한 단계 더 늘려줌.
- * 예) N0303 (diverge) → curve → N0541 (curve-passthrough) → curve → N0542 (merge)
- *     → N0303 의 reachable merges 에 N0542 추가됨.
+ * passthrough 조건: incoming 1개, outgoing 1개, merge 도 diverge 도 아님.
+ *
+ * 추가 조건 (둘 중 하나):
+ *   - 변형 DZ 2: in/out 둘 다 curve  (예: N0541 RIGHT_CURVE+RIGHT_CURVE)
+ *   - 변형 DZ 1: 한 쪽이 curve + 다른 쪽이 짧은 LINEAR (≤ SHORT_THRESHOLD)
+ *     (예: N0357 — N0356 →[LINEAR 0.65m]→ N0357 →[CURVE 1.65m]→ N0195)
+ *
+ * 둘 다 긴 LINEAR 면 일반 path → DZ 분류 안 함 (대기 공간 충분).
  */
 interface PassthroughInfo {
-  /** outgoing edge to_node (= 다음 노드) */
   nextNode: string;
 }
+
+const SHORT_LINEAR_THRESHOLD_M = 2.0;
 
 function buildCurvePassthroughs(
   edges: Edge[],
@@ -89,7 +93,6 @@ function buildCurvePassthroughs(
   incomingCount: Map<string, number>
 ): Map<string, PassthroughInfo> {
   const result = new Map<string, PassthroughInfo>();
-  // 각 노드의 outgoing edge 목록
   const outgoingEdges = new Map<string, Edge[]>();
   const incomingEdges = new Map<string, Edge[]>();
   for (const e of edges) {
@@ -100,8 +103,8 @@ function buildCurvePassthroughs(
   }
 
   for (const [node, outs] of outgoingEdges) {
-    if (outs.length !== 1) continue; // outgoing 1개 아님
-    if ((incomingCount.get(node) ?? 0) !== 1) continue; // incoming 1개 아님
+    if (outs.length !== 1) continue;
+    if ((incomingCount.get(node) ?? 0) !== 1) continue;
     const isDiverge = (divergeToNodes.get(node)?.size ?? 0) >= 2;
     if (isDiverge) continue;
     const isMerge = (incomingCount.get(node) ?? 0) >= 2;
@@ -110,9 +113,18 @@ function buildCurvePassthroughs(
     const inEdge = incomingEdges.get(node)?.[0];
     const outEdge = outs[0];
     if (!inEdge || !outEdge) continue;
-    // 둘 다 curve 여야 함
-    if (inEdge.vos_rail_type === EdgeType.LINEAR) continue;
-    if (outEdge.vos_rail_type === EdgeType.LINEAR) continue;
+
+    const inIsCurve = inEdge.vos_rail_type !== EdgeType.LINEAR;
+    const outIsCurve = outEdge.vos_rail_type !== EdgeType.LINEAR;
+    const inIsShortLinear = !inIsCurve && inEdge.distance <= SHORT_LINEAR_THRESHOLD_M;
+    const outIsShortLinear = !outIsCurve && outEdge.distance <= SHORT_LINEAR_THRESHOLD_M;
+
+    // 변형 DZ 2: 둘 다 curve
+    const validV2 = inIsCurve && outIsCurve;
+    // 변형 DZ 1: 한 쪽 curve + 다른 쪽 짧은 LINEAR
+    const validV1 = (inIsCurve && outIsShortLinear) || (inIsShortLinear && outIsCurve);
+
+    if (!validV2 && !validV1) continue;
 
     result.set(node, { nextNode: outEdge.to_node });
   }
