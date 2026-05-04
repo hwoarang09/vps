@@ -127,7 +127,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
   checkCollisions(collisionCtx);
 
   // 2. Lock 처리 (합류점에서 멈출지 결정)
-  lockMgr.updateAll(actualNumVehicles, { default: 'FIFO' });
+  lockMgr.updateAll(actualNumVehicles, simulationTime, { default: 'FIFO' });
 
   // 3. Movement Update (1,2에서 멈추지 않은 차량만 이동)
   const movementCtx: MovementUpdateContext = {

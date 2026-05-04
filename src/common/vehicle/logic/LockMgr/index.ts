@@ -15,7 +15,7 @@ import type {
 import { DEFAULT_LOCK_POLICY, LockDetailType } from "./types";
 import { processCheckpoint } from "./checkpoint-processor";
 import { checkAutoRelease, requestLockInternal, releaseOrphanedLocks, requestLockWithPriority } from "./lock-handlers";
-import { updateDeadlockZoneGates } from "./deadlock-zone";
+import { updateDeadlockZoneGates, detectAndSwapDeadlockedHolders } from "./deadlock-zone";
 import type { PathChangeInfo } from "../TransferMgr/types";
 import { getLockSnapshot } from "./snapshot";
 import type { IEdgeVehicleQueue } from "@/common/vehicle/initialize/types";
@@ -137,13 +137,21 @@ export class LockMgr {
 
   /**
    * 매 프레임 호출 - 전체 차량 순회
+   * @param simulationTime 현재 시뮬 시간 (ms) — DZ holder swap 정지 시간 측정용
    */
-  updateAll(numVehicles: number, policy: LockPolicy = DEFAULT_LOCK_POLICY): void {
+  updateAll(
+    numVehicles: number,
+    simulationTime: number,
+    policy: LockPolicy = DEFAULT_LOCK_POLICY
+  ): void {
     // 자동 해제 체크 (checkpoint 처리 전에)
     checkAutoRelease(this.state, this.eName);
 
     // Deadlock zone gate: 직전 edge 도착 시 자동 REQ/GRANT/STOP, 통과 후 자동 RELEASE
     updateDeadlockZoneGates(numVehicles, this.state, this.eName);
+
+    // ★ DZ holder swap: holder 가 stuck 이고 ready 한 queued 차량 있으면 강제 이전
+    detectAndSwapDeadlockedHolders(this.state, simulationTime, this.eName);
 
     for (let i = 0; i < numVehicles; i++) {
       this.processLock(i, policy);

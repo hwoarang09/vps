@@ -122,6 +122,8 @@ export const LockDetailType = {
   PRELOCK_HOLDER: 31,
   /** stopNonHolderVehiclesNearMerge 가 차량을 LOCKED 으로 강제 정지 */
   PRELOCK_STOP: 32,
+  /** DZ merge holder 가 stuck 상태로 너무 오래 있어 ready 한 queued 차량으로 강제 swap */
+  DEADLOCK_SWAP: 40,
   /** 버퍼링된 preLock 이벤트 flush 시작 marker (extra=flush 된 이벤트 수) */
   FLUSH_MARKER: 90,
 } as const;

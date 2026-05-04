@@ -246,3 +246,149 @@ export function updateDeadlockZoneGates(
     }
   }
 }
+
+// ============================================================================
+// Deadlock holder swap — DZ merge holder 가 stuck 일 때 ready queued 로 이전
+// ============================================================================
+
+/** holder 가 정지로 간주되는 시간 (ms) — 이 이상 vel=0 이면 swap 후보 */
+const HOLDER_STUCK_THRESHOLD_MS = 2000;
+
+/** holder 별 정지 시작 ts (nodeName → ts). holder 바뀌거나 움직이면 reset */
+const stuckHolderSince = new Map<string, number>();
+const stuckHolderVeh = new Map<string, number>();
+
+/**
+ * DZ merge holder 가 너무 오래 정지 + queue 에 ready 한 차량 있으면 holder 강제 이전.
+ *
+ * 시나리오 (logs/20260504_2014):
+ *   49 가 N0304 holder 인데 본인이 진행 못함 (앞에 89, 89 는 N0542 대기, etc)
+ *   376 은 edge 849 ratio 0 LOCKED — N0304 락만 받으면 즉시 통과 가능
+ *   → 49 의 N0304 락을 376 에게 이전.
+ *
+ * 조건:
+ *   - DZ merge 만 (deadlockZoneMerges 안)
+ *   - holder 가 vel=0 으로 HOLDER_STUCK_THRESHOLD_MS 이상
+ *   - queue 에 STOP_REASON.LOCKED + currentEdge.to_node === merge 인 차량 (= ready)
+ */
+export function detectAndSwapDeadlockedHolders(
+  state: LockMgrState,
+  simulationTime: number,
+  eName: (idx: number) => string
+): void {
+  if (!state.deadlockZoneMerges || !state.vehicleDataArray) return;
+  if (state.deadlockZoneMerges.size === 0) return;
+  const data = state.vehicleDataArray;
+
+  for (const nodeName of state.deadlockZoneMerges) {
+    const holder = state.locks.get(nodeName);
+    if (holder === undefined) {
+      stuckHolderSince.delete(nodeName);
+      stuckHolderVeh.delete(nodeName);
+      continue;
+    }
+
+    // holder 변경 감지 — reset
+    if (stuckHolderVeh.get(nodeName) !== holder) {
+      stuckHolderVeh.set(nodeName, holder);
+      stuckHolderSince.delete(nodeName);
+    }
+
+    const ptr = holder * VEHICLE_DATA_SIZE;
+    const vel = data[ptr + MovementData.VELOCITY];
+
+    if (vel > 0.01) {
+      stuckHolderSince.delete(nodeName);
+      continue;
+    }
+
+    // 정지 상태 — 시간 누적
+    if (!stuckHolderSince.has(nodeName)) {
+      stuckHolderSince.set(nodeName, simulationTime);
+      continue;
+    }
+
+    const stuckMs = simulationTime - stuckHolderSince.get(nodeName)!;
+    if (stuckMs < HOLDER_STUCK_THRESHOLD_MS) continue;
+
+    // ready 한 queued 차량 찾기 (LOCKED + incoming edge 위)
+    const queue = state.queues.get(nodeName);
+    if (!queue || queue.length <= 1) continue;
+
+    let swapTarget: number | null = null;
+    for (const qVeh of queue) {
+      if (qVeh === holder) continue;
+      const qPtr = qVeh * VEHICLE_DATA_SIZE;
+      const qStop = data[qPtr + LogicData.STOP_REASON];
+      if (!(qStop & StopReason.LOCKED)) continue;
+      const qEdgeIdx = Math.trunc(data[qPtr + MovementData.CURRENT_EDGE]);
+      if (qEdgeIdx < 1) continue;
+      const qEdge = state.edges[qEdgeIdx - 1];
+      if (!qEdge || qEdge.to_node !== nodeName) continue;
+      // 후보 발견
+      swapTarget = qVeh;
+      break;
+    }
+
+    if (swapTarget === null) continue;
+
+    performHolderSwap(state, nodeName, holder, swapTarget, eName);
+    stuckHolderSince.delete(nodeName);
+    stuckHolderVeh.set(nodeName, swapTarget);
+  }
+}
+
+/**
+ * holder 강제 이전.
+ * - newHolder 를 queue 에서 제거 + state.locks 에 set
+ * - oldHolder 는 queue 에서 제거 (cp 가 다시 LOCK_REQUEST 하면 재진입)
+ * - LOCK_RELEASE / LOCK_GRANT 이벤트 emit
+ * - newHolder 의 STOP_REASON.LOCKED 클리어 + LOCK_WAIT cp flag 클리어
+ */
+function performHolderSwap(
+  state: LockMgrState,
+  nodeName: string,
+  oldHolder: number,
+  newHolder: number,
+  _eName: (idx: number) => string
+): void {
+  const queue = state.queues.get(nodeName);
+  if (queue) {
+    const newIdx = queue.indexOf(newHolder);
+    if (newIdx !== -1) queue.splice(newIdx, 1);
+    const oldIdx = queue.indexOf(oldHolder);
+    if (oldIdx !== -1) queue.splice(oldIdx, 1);
+  }
+  state.locks.set(nodeName, newHolder);
+
+  // 이벤트 emit
+  if (state.onLockEvent && state.nodeNameToIndex) {
+    const nodeIdx = state.nodeNameToIndex.get(nodeName) ?? 0;
+    state.onLockEvent(oldHolder, nodeIdx, LockEventType.RELEASE, 0, -1);
+    state.onLockEvent(newHolder, nodeIdx, LockEventType.GRANT, 0, -1);
+  }
+
+  // newHolder 정지 해제
+  if (state.vehicleDataArray) {
+    const data = state.vehicleDataArray;
+    const ptr = newHolder * VEHICLE_DATA_SIZE;
+    data[ptr + LogicData.STOP_REASON] &= ~StopReason.LOCKED;
+    data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    const targetEdgeIdx = Math.trunc(data[ptr + LogicData.CURRENT_CP_TARGET]);
+    const targetEdge = targetEdgeIdx >= 1 ? state.edges[targetEdgeIdx - 1] : null;
+    if (targetEdge?.from_node === nodeName) {
+      data[ptr + LogicData.CURRENT_CP_FLAGS] &= ~CheckpointFlags.LOCK_WAIT;
+    }
+    state.waitingVehicles.delete(newHolder);
+  }
+
+  // pendingReleases 정리: oldHolder 의 nodeName 항목 제거 (더 이상 holder 아님)
+  const oldReleases = state.pendingReleases.get(oldHolder);
+  if (oldReleases) {
+    const ri = oldReleases.findIndex(r => r.nodeName === nodeName);
+    if (ri >= 0) oldReleases.splice(ri, 1);
+  }
+
+  // DEV_LOCK_DETAIL: DEADLOCK_SWAP (holder=oldHolder, extra=0)
+  emitDetail(state, newHolder, nodeName, LockDetailType.DEADLOCK_SWAP, oldHolder, 0);
+}

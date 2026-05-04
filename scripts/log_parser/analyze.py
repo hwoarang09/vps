@@ -67,6 +67,7 @@ LOCK_DETAIL_NAMES = {
     30: 'PRELOCK_REGISTER', # preLockMergeNodes 가 차량을 큐에 push (silent)
     31: 'PRELOCK_HOLDER',   # preLockMergeNodes 결과 holder 됨
     32: 'PRELOCK_STOP',     # stopNonHolderVehiclesNearMerge 가 차량 LOCKED 정지
+    40: 'DEADLOCK_SWAP',    # DZ holder stuck 감지 → ready queued 로 강제 holder 이전
     90: 'FLUSH_MARKER',     # 버퍼링된 preLock 이벤트 flush 시작 (extra=count)
 }
 
