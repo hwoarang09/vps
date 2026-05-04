@@ -423,7 +423,8 @@ const TREND_METRICS = [
 
 type TrendMetricKey = typeof TREND_METRICS[number]["key"];
 
-const MAX_HISTORY = 120; // 120 * 500ms = 60 seconds
+const UPDATE_INTERVAL_MS = 2500;
+const MAX_HISTORY = 120; // 120 * 2.5s = 5 min window
 
 const TrendTab: React.FC<{
   fabStatsList: FabStats[];
@@ -451,7 +452,7 @@ const TrendTab: React.FC<{
           </button>
         ))}
         <span className="text-[10px] text-gray-600 self-center ml-2">
-          {elapsed.toFixed(0)}s / {(MAX_HISTORY * 0.5).toFixed(0)}s window
+          {elapsed.toFixed(0)}s / {(MAX_HISTORY * UPDATE_INTERVAL_MS / 1000).toFixed(0)}s window
         </span>
       </div>
 
@@ -568,7 +569,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
     update();
     if (isRunning) {
-      intervalRef.current = setInterval(update, 500);
+      intervalRef.current = setInterval(update, UPDATE_INTERVAL_MS);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [controller, isRunning, pushHistory]);
