@@ -302,6 +302,19 @@ export function detectAndSwapDeadlockedHolders(
       continue;
     }
 
+    // ★ over-aggressive swap 방지: holder 가 아직 merge incoming edge 위면 skip.
+    //   - 곡선 진입 직후 일시적 감속도 vel=0 (실제 stuck 아님)
+    //   - swap target 도 같은 incoming chain 에 있을 가능성 → swap 무의미
+    //   holder 가 incoming edge 위 = currentEdge.to_node === merge node
+    const holderEdgeIdx = Math.trunc(data[ptr + MovementData.CURRENT_EDGE]);
+    if (holderEdgeIdx >= 1) {
+      const holderEdge = state.edges[holderEdgeIdx - 1];
+      if (holderEdge && holderEdge.to_node === nodeName) {
+        stuckHolderSince.delete(nodeName);
+        continue;
+      }
+    }
+
     // 정지 상태 — 시간 누적
     if (!stuckHolderSince.has(nodeName)) {
       stuckHolderSince.set(nodeName, simulationTime);
