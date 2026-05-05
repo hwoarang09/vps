@@ -139,10 +139,10 @@ const KpiHud: React.FC = () => {
   const fabIds = controller.getFabIds?.() ?? [];
   if (fabIds.length === 0) return null;
 
-  // fabIndex 기반 라벨 (3D FabLabelRenderer와 동일: "FAB 0", "FAB 1", ...)
+  // col_row 기반 라벨 ("1_0", "2_0", ...) — 위치로 바로 구분 가능
   const fabLabel = (idx: number) => {
     const fab = fabs[idx];
-    return fab ? `FAB ${fab.fabIndex}` : `FAB ${idx}`;
+    return fab ? `${fab.col}_${fab.row}` : `${idx}`;
   };
   const currentFabIdx = Math.max(0, Math.min(activeFabIndex, fabIds.length - 1));
   const activeFabLabel = fabLabel(currentFabIdx);
@@ -249,25 +249,25 @@ const KpiHud: React.FC = () => {
         <div className="flex flex-col gap-1">
           {/* Vehicles */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Vehicles</span>
+            <span className="text-[10px] text-white">Vehicles</span>
             <span className="font-mono text-[11px] text-gray-300">{kpi.vehicleCount}</span>
           </div>
 
           {/* Moving / Stopped */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Move/Stop</span>
+            <span className="text-[10px] text-white">Move/Stop</span>
             <span className="font-mono text-[11px]">
               <span className="text-green-400">{movingPct}</span>
-              <span className="text-gray-600"> / </span>
+              <span className="text-white"> / </span>
               <span className="text-amber-400">{stoppedPct}</span>
-              <span className="text-gray-600"> %</span>
+              <span className="text-white"> %</span>
             </span>
           </div>
 
           {/* Locked */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Locked</span>
-            <span className={`font-mono text-[11px] ${kpi.stopLocked > 0 ? "text-red-400" : "text-gray-500"}`}>
+            <span className="text-[10px] text-white">Locked</span>
+            <span className={`font-mono text-[11px] ${kpi.stopLocked > 0 ? "text-red-400" : "text-white"}`}>
               {kpi.stopLocked}
             </span>
           </div>
@@ -277,19 +277,19 @@ const KpiHud: React.FC = () => {
 
           {/* Transfer Mode */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Mode</span>
+            <span className="text-[10px] text-white">Mode</span>
             <span className="font-mono text-[11px] text-cyan-400">{modeLabel} · {rateStr}</span>
           </div>
 
           {/* Routing */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Routing</span>
+            <span className="text-[10px] text-white">Routing</span>
             <span className="font-mono text-[11px] text-purple-400">{routingLabel}{routingParam}</span>
           </div>
 
           {/* Throughput */}
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-500">Throughput</span>
+            <span className="text-[10px] text-white">Throughput</span>
             <span className="font-mono text-[11px] text-green-300 font-bold">{throughputStr}</span>
           </div>
         </div>
