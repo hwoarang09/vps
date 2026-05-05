@@ -362,3 +362,85 @@ CREATE INDEX idx_lock_detail_session_veh ON dev_lock_detail(session_id, veh_id);
 - Phase 1: Docker PostgreSQL + 스키마 + FastAPI 서버 (scripts/log_server/)
 - Phase 2: Worker LogShipper.ts — SimLogger에서 write 시 LogShipper에도 push, batch fetch POST
 - Phase 3: 분석 쿼리 스크립트 (scripts/log_analyzer/)
+
+## 분석 도구 (scripts/log_parser/)
+
+세션 분석/디버깅용 Python 도구. 일회용 ad-hoc 스크립트로 만들지 말고 이 폴더에 등록해서 재사용.
+
+### log_parser.py
+범용 .bin 파일 파서 (개별 파일 단위, CLI).
+- `parse_file(filepath, event_types=None)` — 단일 .bin → list[dict]
+- `parse_snapshot_file(filepath)` — snapshot.bin (가변 블록) 파싱
+- CLI: `--summary` / `--export-csv` / `--type` / `--veh` / `--from` / `--to`
+
+### analyze.py
+세션 통합 분석 (모든 .bin 한 번에 로드, CLI).
+
+| 명령어 | 인풋 | 아웃풋 / 용도 |
+|---|---|---|
+| (없음) | session_dir | 세션 요약 (각 suffix 별 record/veh/시간 범위) |
+| `--veh N` | veh_id | 차량 타임라인 (edge transit + path + transfer + lock) |
+| `--stuck` | - | 멈춘 차량 탐지 (10초 이상 정지) |
+| `--transfers` | - | 반송 현황 요약 |
+| `--deadlock --pair V1 V2 [--node N]` | 두 차량 + 노드 | deadlock 분석 (cycle 검증) |
+| `--lock-node N` | node_idx (0-based) | 노드 락 activity 시간순 + 차량 위치 + holder timeline |
+| `--lock-detail [--detail-type X]` | - | DEV_LOCK_DETAIL 의심 메커니즘 추적 (ZONE_PREEMPT/DZ_GATE/HOLDER_SWAP) |
+| `--ratio-jump --veh N` | veh_id, threshold | 텔레포트 감지 (같은 edge 에서 \|Δratio\| > 0.3) |
+| `--compare-pair --pair V1 V2` | 두 차량 | 시간순 위치 비교 (edge/ratio/vel/stop) |
+| `--topology --rail-dir D [--edge-idx N] [--node-idx N]` | rail config 폴더 | 토폴로지 검증 — edge ↔ from/to_node 매핑, merge 노드 검출 |
+
+### snapshot_streaming.py (NEW, 2026-05-05)
+큰 snapshot.bin (300MB+) 을 OOM 없이 streaming 처리.
+
+| 함수 | 인풋 | 아웃풋 |
+|---|---|---|
+| `iter_snapshot_frames(filepath, ts_range=None)` | path, optional (ts_from, ts_to) | generator: frame meta {ts, num_v, raw, veh_off} |
+| `capture_at_ts_list(filepath, target_ts_list, target_vehs=None)` | path, ts 리스트, vehId set | `{target_ts: {snap_ts, data: {vehId: {edge,ratio,vel,stop}}}}` |
+| `capture_dense_range(filepath, ts_range, target_vehs=None, every_n=1)` | path, (ts_from,ts_to), set, N | list of `{ts, data: {vehId: {edge,ratio,vel,stop}}}` |
+| `detect_ratio_jumps(filepath, veh_id, threshold=0.3, ts_range=None)` | path, vehId, 임계값 | list of `{ts, edge, prev_ratio, cur_ratio, delta, same_edge, prev_vel, cur_vel}` |
+
+언제 쓰나:
+- `parse_snapshot_file()` 가 OOM 나는 큰 세션 (>200MB)
+- 특정 시간 구간만 dense 분석 (ratio 점프 감지, deadlock 시점 차량 위치 추적)
+- 두 차량 위치 비교 (deadlock 조사)
+
+### topology.py (NEW, 2026-05-05)
+rail config (edge.map+node.map / edges.cfg+nodes.cfg) 로딩 + 인덱스 변환.
+
+| 함수 / 메소드 | 인풋 | 아웃풋 |
+|---|---|---|
+| `load_topology(rail_dir)` | railConfig 폴더 | `Topology` 객체 |
+| `Topology.edge_by_index(idx_1based)` | SHM 1-based edge idx | edge dict |
+| `Topology.node_by_index(idx_0based)` | lock log 0-based node idx | node dict |
+| `Topology.edge_idx_by_name("EDGE0246")` | edge 이름 | 1-based int |
+| `Topology.node_idx_by_name("NODE0216")` | node 이름 | 0-based int |
+| `Topology.edges_into(node_name)` | node 이름 | incoming edge 리스트 |
+| `Topology.edges_out_of(node_name)` | node 이름 | outgoing edge 리스트 |
+| `Topology.merge_nodes` | property | incoming ≥ 2 인 노드 set |
+| `describe_edge(topo, idx)` / `describe_node(topo, idx)` | - | 사람-읽기용 한 줄 요약 |
+
+언제 쓰나:
+- 락 로그의 `node_idx=215` 가 어떤 NODE인지 확인 (0-based vs 1-based 매핑 검증)
+- `edge 246` 의 from/to 노드 + 길이 + bay 확인
+- merge 노드 검출 (incoming edges ≥ 2)
+- 차량 경로 검증 (edge X 의 다음 가능한 edge가 무엇인지)
+
+### 인덱스 매핑 규칙 (중요)
+- **edge index**: SHM/log 에서 항상 **1-based**. `edges[idx-1]` 로 array 접근.
+- **node index**: lock log (`node_idx`) 는 **0-based** (nodeNameToIndex set with i 그대로).
+- 즉 lock log 의 `node_idx=215` = `nodes[215]` = `NODE0216` (이름 1-based). UI 의 "N216" 과 매핑.
+- TMP_FROM_*/TMP_TO_* 노드도 nodes 배열에 포함 (parseNodesCFG 가 필터하지 않음). 단 NODE0xxx 가 먼저 나와서 NODE0216 의 인덱스는 215 가 맞음.
+
+### 분석 케이스 노트 (2026-05-05): N216 deadlock 조사
+세션 `20260505_1405`. veh 118 N216 락 잡고 영원히 release 안함. veh 57이 앞을 막아 양쪽 다 stuck.
+- **smoking gun**: veh 118 ratio 0.929 → 0.050 (같은 edge 246 에서 텔레포트, 112ms)
+- **의심 코드**: `AutoMgr.ts:181, 218` — `data[ptr + MovementData.TARGET_RATIO] = srcStation.ratio`
+- 차량이 station 을 이미 지나친(currentRatio > srcStation.ratio) 상태에서 path replan 발생 시,
+  `vehicleTransition.ts:235` `checkTargetReached` 가 `rawNewRatio >= targetRatio` 조건으로 ratio 를 target 으로 강제 → 뒤로 텔레포트
+- 락은 GRANT 직후라 hold 유지, 위치만 뒤로 가서 후속 차량(57)이 추월 → deadlock
+- 재현/디버깅 명령:
+  ```
+  python3 scripts/log_parser/analyze.py logs/20260505_1405/ --topology --rail-dir public/railConfig/cop --edge-idx 246 --node-idx 215
+  python3 scripts/log_parser/analyze.py logs/20260505_1405/ --ratio-jump --veh 118
+  python3 scripts/log_parser/analyze.py logs/20260505_1405/ --lock-node 215 --from 8300000 --to 8500000
+  ```

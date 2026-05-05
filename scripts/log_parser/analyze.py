@@ -685,6 +685,109 @@ def cmd_raw(data: dict, veh_id: int, ts_from: int, ts_to: int, limit: int = 50):
 # main
 # ==============================================================================
 
+def cmd_ratio_jump(session_dir: Path, veh_id: int, ts_from: int, ts_to: int,
+                   threshold: float = 0.3):
+    """차량의 ratio 점프 (텔레포트) 감지.
+
+    snapshot.bin 을 streaming 으로 읽어서 frame 간 ratio 변화량을 추적.
+    같은 edge 내에서 |Δratio| > threshold 면 비정상 점프로 표시.
+
+    예: AutoMgr 의 TARGET_RATIO 가 station.ratio 로 거꾸로 설정되면
+        currentRatio > targetRatio 케이스에서 ratio 가 target 으로 강제됨.
+    """
+    from snapshot_streaming import detect_ratio_jumps
+    snap_files = list(session_dir.glob('*_snapshot.bin'))
+    if not snap_files:
+        print(f"[ERROR] {session_dir} 에 snapshot.bin 없음")
+        return
+    snap_path = snap_files[0]
+    print(f"\n=== veh {veh_id} ratio jumps (threshold={threshold}, {fmt_ts(ts_from)} ~ {fmt_ts(ts_to)}) ===")
+    ts_range = (ts_from, ts_to) if ts_to < 999_000_000 else None
+    jumps = detect_ratio_jumps(snap_path, veh_id, threshold=threshold, ts_range=ts_range)
+    if not jumps:
+        print("  no jumps detected")
+        return
+    print(f"{'ts':>10} {'edge':>6} {'prev_ratio':>11} {'cur_ratio':>10} {'delta':>8} {'prev_vel':>9} {'cur_vel':>8} {'note':<20}")
+    print('-' * 100)
+    for j in jumps:
+        note = 'SAME EDGE - SUSPICIOUS' if j['same_edge'] else 'edge change (normal?)'
+        print(f"{j['ts']:>10} {j['edge']:>6} {j['prev_ratio']:>11.3f} {j['cur_ratio']:>10.3f} {j['delta']:>+8.3f} {j['prev_vel']:>9.3f} {j['cur_vel']:>8.3f} {note:<20}")
+
+
+def cmd_compare_pair(session_dir: Path, data: dict, vehs: list[int],
+                     ts_from: int, ts_to: int, sample_every_ms: int = 1000):
+    """두 차량의 위치를 시간순으로 비교 (deadlock 조사 시 누가 앞에 있는지 확인용).
+
+    snapshot.bin 을 streaming 으로 읽어서 sample_every_ms 마다 두 차량 상태 출력.
+    """
+    from snapshot_streaming import capture_dense_range
+    snap_files = list(session_dir.glob('*_snapshot.bin'))
+    if not snap_files:
+        print(f"[ERROR] {session_dir} 에 snapshot.bin 없음")
+        return
+    snap_path = snap_files[0]
+    if len(vehs) < 2:
+        print("[ERROR] --pair 에 두 차량 이상 필요")
+        return
+
+    frames = capture_dense_range(snap_path, (ts_from, ts_to), target_vehs=set(vehs))
+    if not frames:
+        print("  no frames in range")
+        return
+
+    # sample_every_ms 단위로 다운샘플
+    last_ts = ts_from - sample_every_ms
+    sampled = []
+    for f in frames:
+        if f['ts'] - last_ts >= sample_every_ms:
+            sampled.append(f)
+            last_ts = f['ts']
+
+    print(f"\n=== veh compare {vehs} ({fmt_ts(ts_from)} ~ {fmt_ts(ts_to)}, every {sample_every_ms}ms) ===")
+    header = f"{'ts':>10}"
+    for v in vehs:
+        header += f" | veh{v:>3}: {'edge':>5} {'ratio':>6} {'vel':>6} {'stop':>4}"
+    print(header)
+    print('-' * len(header))
+    for f in sampled:
+        line = f"{f['ts']:>10}"
+        for v in vehs:
+            d = f['data'].get(v, {})
+            if d:
+                line += f" | veh{v:>3}: {d['edge']:>5} {d['ratio']:>6.3f} {d['vel']:>6.2f} {d['stop']:>4}"
+            else:
+                line += f" | veh{v:>3}: {'-':>5} {'-':>6} {'-':>6} {'-':>4}"
+        print(line)
+
+
+def cmd_topology(session_dir: Path, rail_dir: str | Path, edge_idx: int | None = None,
+                 node_idx: int | None = None):
+    """rail config 의 토폴로지 검증/조회.
+    --topology --rail-dir public/railConfig/cop --edge-idx 246
+    --topology --rail-dir public/railConfig/cop --node-idx 215
+    """
+    from topology import load_topology, describe_edge, describe_node
+    topo = load_topology(rail_dir)
+    print(f"\n=== topology: {rail_dir} ===")
+    print(f"  edges: {len(topo.edges)}, nodes: {len(topo.nodes)}, stations: {len(topo.stations)}")
+    print(f"  merge nodes: {len(topo.merge_nodes)}, branch nodes: {len(topo.branch_nodes)}")
+
+    if edge_idx is not None:
+        print(f"\n  edge {edge_idx}: {describe_edge(topo, edge_idx)}")
+        e = topo.edge_by_index(edge_idx)
+        if e:
+            print(f"  in to:    {[x['name'] for x in topo.edges_into(e['from_node'])]}")
+            print(f"  out from: {[x['name'] for x in topo.edges_out_of(e['to_node'])]}")
+
+    if node_idx is not None:
+        print(f"\n  node {node_idx} (lock log 0-based): {describe_node(topo, node_idx)}")
+        n = topo.node_by_index(node_idx)
+        if n:
+            name = n['name']
+            print(f"  incoming: {[(e['name'], e['from_node']) for e in topo.edges_into(name)]}")
+            print(f"  outgoing: {[(e['name'], e['to_node']) for e in topo.edges_out_of(name)]}")
+
+
 def parse_ts(s: str) -> int:
     if ':' in s:
         parts = s.split(':')
@@ -716,12 +819,45 @@ def main():
                         help='--lock-detail 필터: 부분 일치 (예: ZONE_PREEMPT, DZ_GATE, HOLDER_SWAP)')
     parser.add_argument('--raw', action='store_true', help='원시 레코드 출력')
     parser.add_argument('--limit', type=int, default=50, help='raw 모드 최대 출력 수')
+    parser.add_argument('--ratio-jump', dest='ratio_jump', action='store_true',
+                        help='차량 ratio 점프 (텔레포트) 감지 (--veh 필수)')
+    parser.add_argument('--jump-threshold', dest='jump_threshold', type=float, default=0.3,
+                        help='--ratio-jump 임계값 (절댓값, 기본 0.3)')
+    parser.add_argument('--compare-pair', dest='compare_pair', action='store_true',
+                        help='두 차량 위치 비교 (--pair VEH1 VEH2 필수)')
+    parser.add_argument('--sample-ms', dest='sample_ms', type=int, default=1000,
+                        help='--compare-pair 샘플링 간격 ms (기본 1000)')
+    parser.add_argument('--topology', action='store_true', help='rail 토폴로지 조회')
+    parser.add_argument('--rail-dir', dest='rail_dir',
+                        help='--topology rail config 폴더 (예: public/railConfig/cop)')
+    parser.add_argument('--edge-idx', dest='edge_idx', type=int,
+                        help='--topology 조회할 edge index (1-based)')
+    parser.add_argument('--node-idx', dest='node_idx', type=int,
+                        help='--topology 조회할 node index (0-based)')
     args = parser.parse_args()
 
     session_dir = Path(args.session_dir)
     if not session_dir.exists():
         print(f"[ERROR] 디렉토리 없음: {session_dir}", file=sys.stderr)
         sys.exit(1)
+
+    # topology 만 실행할 때는 session.bin 파싱 불필요 (snapshot OOM 회피)
+    if args.topology:
+        if not args.rail_dir:
+            print("[ERROR] --topology 에 --rail-dir 필요", file=sys.stderr)
+            sys.exit(1)
+        cmd_topology(session_dir, args.rail_dir, args.edge_idx, args.node_idx)
+        return
+
+    # ratio_jump / compare_pair 도 snapshot 만 streaming 으로 읽음 — 전체 load 불필요
+    if args.ratio_jump:
+        if args.veh is None:
+            print("[ERROR] --ratio-jump 에 --veh 필요", file=sys.stderr)
+            sys.exit(1)
+        ts_from = parse_ts(args.ts_from)
+        ts_to   = parse_ts(args.ts_to)
+        cmd_ratio_jump(session_dir, args.veh, ts_from, ts_to, args.jump_threshold)
+        return
 
     print(f"Loading session: {session_dir}")
     data = load_session(session_dir)
@@ -732,7 +868,12 @@ def main():
     ts_from = parse_ts(args.ts_from)
     ts_to   = parse_ts(args.ts_to)
 
-    if args.deadlock:
+    if args.compare_pair:
+        if not args.pair or len(args.pair) < 2:
+            print("[ERROR] --compare-pair 에 --pair VEH1 VEH2 필요", file=sys.stderr)
+            sys.exit(1)
+        cmd_compare_pair(session_dir, data, args.pair, ts_from, ts_to, args.sample_ms)
+    elif args.deadlock:
         if not args.pair or len(args.pair) < 2:
             print("[ERROR] --deadlock 에는 --pair VEH1 VEH2 필요", file=sys.stderr)
             sys.exit(1)
