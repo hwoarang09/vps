@@ -114,7 +114,7 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       polygonOffsetUnits: -2,
     });
 
-    mat.onBeforeCompile = (shader) => {
+    mat.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
       // Inject LOD scale uniform — visual-only (does not affect physics).
       shader.uniforms.uVehicleScale = lodScaleUniform;
 

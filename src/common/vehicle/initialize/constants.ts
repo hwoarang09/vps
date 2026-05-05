@@ -128,9 +128,9 @@ export interface Checkpoint {
  * - CHECKPOINT_FIELDS: checkpoint당 필드 수 (edge, ratio, flags)
  * - CHECKPOINT_SECTION_SIZE: vehicle 1대가 차지하는 크기 (count + checkpoints)
  */
-export const MAX_CHECKPOINTS_PER_VEHICLE = 100;
+export const MAX_CHECKPOINTS_PER_VEHICLE = 200;
 export const CHECKPOINT_FIELDS = 4;  // edge, ratio, flags, targetEdge
-export const CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS; // 401
+export const CHECKPOINT_SECTION_SIZE = 1 + MAX_CHECKPOINTS_PER_VEHICLE * CHECKPOINT_FIELDS; // 801
 
 /**
  * Checkpoint 배열 레이아웃 (1-based, Float32Array)

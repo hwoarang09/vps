@@ -1,9 +1,10 @@
+import type React from "react";
 import { MainMenuType } from "@/types";
 
 export type MenuLevel1Item = {
   id: MainMenuType;
   label: string;
-  iconFn: (isActive: boolean) => JSX.Element;
+  iconFn: (isActive: boolean) => React.JSX.Element;
   shortcutLabel?: string;
   bgColor?: string;
 };
@@ -11,7 +12,7 @@ export type MenuLevel1Item = {
 export type MenuLevel2Item = {
   id: string;
   label: string;
-  iconFn: (isActive: boolean) => JSX.Element;
+  iconFn: (isActive: boolean) => React.JSX.Element;
   shortcutLabel?: string;
   bgColor?: string;
 };

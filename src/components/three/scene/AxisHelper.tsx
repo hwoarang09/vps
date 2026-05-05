@@ -7,7 +7,7 @@ import { useThree } from '@react-three/fiber';
  */
 const AxisHelper: React.FC = () => {
   const { scene } = useThree();
-  const axesHelperRef = useRef<THREE.AxesHelper>();
+  const axesHelperRef = useRef<THREE.AxesHelper | null>(null);
 
   useEffect(() => {
     // Create AxesHelper with size 10

@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Edge, EdgeType } from "@/types";
-import { getEdgeColors as getEdgeColorConfig, getEdgeConfig } from "@/config/threejs/renderConfig";
+import { getEdgeConfig } from "@/config/threejs/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
 import { useThemeStore } from "@/store/ui/themeStore";
@@ -351,7 +351,6 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
       },
       vertexShader: edgeVertexShader,
       fragmentShader: edgeFragmentShader,
-      extensions: { derivatives: true },
       transparent: true,
       side: THREE.DoubleSide,
       depthTest: true,
