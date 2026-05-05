@@ -167,19 +167,29 @@ export class AutoMgr {
       if (jobState === JobState.MOVE_TO_LOAD) {
         const srcStation = this.pendingSrcStation.get(vehId);
         if (srcStation && currentEdgeIdx === srcStation.edgeIndex) {
-          // On station edge — pre-load dest path for merge lock acquisition
-          const destStation = this.pendingDestStation.get(vehId);
-          if (destStation) {
-            // Save actual dest station before preloadNextPath overwrites vehicleDestinations
-            this.actualDestStation.set(vehId, destStation);
-            this.preloadNextPath(
-              vehId, srcStation, destStation,
-              vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
-            );
+          // GUARD: 차량이 srcStation 위치를 이미 지나친 상태면 (assignToStation 의 loop-around
+          // 분기로 한 바퀴 도는 중) 처리 보류. loop path 가 다시 srcStation edge 진입(ratio≈0)
+          // 했을 때 정상 처리. 이 가드 없으면 TARGET_RATIO 가 backward 로 설정되어
+          // checkTargetReached(rawNewRatio>=targetRatio) 에서 ratio 가 target 으로 강제 →
+          // 차량이 뒤로 텔레포트. 락 hold 중이면 deadlock.
+          const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+          if (currentRatio > srcStation.ratio) {
+            // loop 도는 중 — path 그대로 따라가게 두고 다음 진입 대기
+          } else {
+            // On station edge — pre-load dest path for merge lock acquisition
+            const destStation = this.pendingDestStation.get(vehId);
+            if (destStation) {
+              // Save actual dest station before preloadNextPath overwrites vehicleDestinations
+              this.actualDestStation.set(vehId, destStation);
+              this.preloadNextPath(
+                vehId, srcStation, destStation,
+                vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+              );
+            }
+            // Stop at station
+            data[ptr + MovementData.TARGET_RATIO] = srcStation.ratio;
+            this.pendingSrcStation.delete(vehId);
           }
-          // Stop at station
-          data[ptr + MovementData.TARGET_RATIO] = srcStation.ratio;
-          this.pendingSrcStation.delete(vehId);
         } else if (!srcStation && isStopped) {
           // Pre-load done, vehicle stopped at src → start LOADING
           data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
@@ -209,15 +219,23 @@ export class AutoMgr {
           ?? this.vehicleDestinations.get(vehId);
         if (destStation && currentEdgeIdx === destStation.edgeIndex
           && !this.dwellTimers.has(vehId)) {
-          // Just entered dest station edge — pre-load loop path
-          this.preloadLoopPath(
-            vehId, destStation,
-            vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
-          );
-          // Stop at dest station
-          data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
-          // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
-          this.dwellTimers.set(vehId, Infinity);
+          // GUARD: MOVE_TO_LOAD 와 동일 — destStation 을 이미 지나친 상태면 loop 도는 중.
+          // path 그대로 두고 다시 진입(ratio≈0) 시 정상 처리. 가드 없으면 TARGET_RATIO 가
+          // backward 로 설정되어 텔레포트.
+          const currentRatio = data[ptr + MovementData.EDGE_RATIO];
+          if (currentRatio > destStation.ratio) {
+            // loop 도는 중 — 처리 보류
+          } else {
+            // Just entered dest station edge — pre-load loop path
+            this.preloadLoopPath(
+              vehId, destStation,
+              vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+            );
+            // Stop at dest station
+            data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
+            // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
+            this.dwellTimers.set(vehId, Infinity);
+          }
         } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex) {
           // Stopped at dest station → start UNLOADING
           data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
