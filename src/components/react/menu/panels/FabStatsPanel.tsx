@@ -199,7 +199,9 @@ const MODE_LABEL: Record<string, string> = {
   MQTT_CONTROL: "MQTT", AUTO_ROUTE: "Auto Route",
 };
 
-const FabCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab, fabIndex }) => {
+const RANK_BADGE = ["🥇", "🥈", "🥉"];
+
+const FabCard: React.FC<{ fab: FabStats; fabIndex: number; rank: number }> = ({ fab, fabIndex, rank }) => {
   const n = fab.vehicleCount;
   const orderStats = useOrderStatsStore((s) => s.fabStats[fab.fabId]);
   const globalRouting = useFabConfigStore((s) => s.routingConfig);
@@ -223,26 +225,44 @@ const FabCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab, fabIndex 
   };
   if (n === 0) return null;
 
+  // 전략명 한 줄로 (가장 잘 보여야 할 비교 변수)
+  let strategyText = ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy;
+  if (routingConfig.strategy === "BPR") {
+    strategyText = `BPR α=${routingConfig.bprAlpha} β=${routingConfig.bprBeta}`;
+  } else if (routingConfig.strategy === "EWMA") {
+    strategyText = `EWMA α=${routingConfig.ewmaAlpha}`;
+  }
+  const rankBadge = rank < 3 ? RANK_BADGE[rank] : `#${rank + 1}`;
+
   return (
     <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-accent-orange">{fab.fabId}</span>
-        <span className="text-[10px] text-gray-500">{n} vehicles</span>
+      {/* Header: 메달 + fabId + 전략명 (가장 잘 보여야 함) */}
+      <div className="flex items-baseline gap-2 mb-1">
+        <span className="text-base leading-none">{rankBadge}</span>
+        <span className="text-sm font-bold text-accent-orange">{fab.fabId}</span>
+        <span className="text-xs font-semibold text-purple-300 truncate">{strategyText}</span>
+        <span className="text-[10px] text-gray-500 ml-auto shrink-0">{n} veh</span>
       </div>
 
-      {/* Transfer KPI */}
-      {orderStats && orderStats.completed > 0 && (
-        <div className="mb-2 p-1.5 rounded bg-panel-bg-solid/50 border border-green-900/30">
-          <span className="text-[10px] text-green-400 font-medium">Transfer KPI</span>
-          <div className="grid grid-cols-2 gap-x-3 mt-1">
-            <Stat label="Completed" value={orderStats.completed} color="text-green-300" />
-            <Stat label="Throughput" value={`${orderStats.throughputPerHour.toFixed(0)}/hr`} color="text-green-300 font-bold" />
+      {/* Throughput hero — 카드의 가장 큰 숫자 */}
+      {orderStats && orderStats.completed > 0 ? (
+        <div className="mb-2 pb-2 border-b border-gray-700/50">
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-bold text-green-300 leading-none tabular-nums">
+              {orderStats.throughputPerHour.toFixed(0)}
+            </span>
+            <span className="text-xs text-gray-400">/hr</span>
+            <span className="text-[10px] text-gray-500 ml-auto">{orderStats.completed} done</span>
           </div>
           <div className="grid grid-cols-3 gap-x-3 mt-1">
             <Stat label="LT p50" value={`${orderStats.leadTimeP50.toFixed(1)}s`} color="text-accent-cyan" />
             <Stat label="LT p95" value={`${orderStats.leadTimeP95.toFixed(1)}s`} color="text-amber-400" />
             <Stat label="LT mean" value={`${orderStats.leadTimeMean.toFixed(1)}s`} color="text-gray-300" />
           </div>
+        </div>
+      ) : (
+        <div className="mb-2 pb-2 border-b border-gray-700/50">
+          <span className="text-xs text-gray-500">Throughput —</span>
         </div>
       )}
 
@@ -281,26 +301,16 @@ const FabCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab, fabIndex 
         />
       </div>
 
-      <div className="mt-2 p-1.5 rounded bg-panel-bg-solid/50 border border-purple-900/30">
-        <span className="text-[10px] text-purple-400 font-medium">Routing & Mode</span>
-        <div className="grid grid-cols-2 gap-x-3 mt-1">
-          <Stat label="Mode" value={MODE_LABEL[transferModeConfig] ?? transferModeConfig} color="text-cyan-300" />
-          <Stat label="Rate" value={
-            transferRateConfig.mode === "utilization"
-              ? `${transferRateConfig.utilizationPercent}% util`
-              : `${transferRateConfig.throughputPerHour}/hr`
-          } color="text-cyan-300" />
-          <Stat label="Routing" value={ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy} color="text-purple-300" />
-          {routingConfig.strategy === "BPR" && (
-            <Stat label="BPR" value={`α${routingConfig.bprAlpha} β${routingConfig.bprBeta}`} color="text-purple-300" />
-          )}
-          {routingConfig.strategy === "EWMA" && (
-            <Stat label="EWMA" value={`α${routingConfig.ewmaAlpha}`} color="text-purple-300" />
-          )}
-          {routingConfig.rerouteInterval > 0 && (
-            <Stat label="Reroute" value={`${routingConfig.rerouteInterval} edges`} color="text-gray-400" />
-          )}
-        </div>
+      <div className="mt-2 grid grid-cols-2 gap-x-3">
+        <Stat label="Mode" value={MODE_LABEL[transferModeConfig] ?? transferModeConfig} color="text-cyan-300" />
+        <Stat label="Rate" value={
+          transferRateConfig.mode === "utilization"
+            ? `${transferRateConfig.utilizationPercent}% util`
+            : `${transferRateConfig.throughputPerHour}/hr`
+        } color="text-cyan-300" />
+        {routingConfig.rerouteInterval > 0 && (
+          <Stat label="Reroute" value={`${routingConfig.rerouteInterval} edges`} color="text-gray-400" />
+        )}
       </div>
 
       {fab.stoppedCount > 0 && (
@@ -506,6 +516,7 @@ function getCenterDefaults() {
 const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const controller = useShmSimulatorStore((s) => s.controller);
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
+  const orderStatsMap = useOrderStatsStore((s) => s.fabStats);
   const [fabStatsList, setFabStatsList] = useState<FabStats[]>([]);
   const [tab, setTab] = useState<TabKey>("cards");
   const [defaults] = useState(getCenterDefaults);
@@ -635,13 +646,28 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
       ) : (
         <>
-          {tab === "cards" && (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {fabStatsList.map((fab, i) => (
-                <FabCard key={fab.fabId} fab={fab} fabIndex={i} />
-              ))}
-            </div>
-          )}
+          {tab === "cards" && (() => {
+            // throughput 내림차순 정렬 — 1등이 위, 꼴등이 아래. fabIndex(원본)는 보존.
+            const ranked = fabStatsList
+              .map((fab, fabIndex) => ({
+                fab,
+                fabIndex,
+                throughput: orderStatsMap[fab.fabId]?.throughputPerHour ?? 0,
+              }))
+              .sort((a, b) => b.throughput - a.throughput);
+            return (
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                {ranked.map((entry, rank) => (
+                  <FabCard
+                    key={entry.fab.fabId}
+                    fab={entry.fab}
+                    fabIndex={entry.fabIndex}
+                    rank={rank}
+                  />
+                ))}
+              </div>
+            );
+          })()}
           {tab === "compare" && <CompareTab fabStatsList={fabStatsList} />}
           {tab === "trend" && (
             <TrendTab fabStatsList={fabStatsList} history={historyRef} elapsed={elapsed} />
