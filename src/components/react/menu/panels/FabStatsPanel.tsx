@@ -194,9 +194,10 @@ const DistributionBar: React.FC<{ items: { count: number; color: string; label: 
 // ============================================================================
 
 const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
-const MODE_LABEL: Record<string, string> = {
-  SIMPLE_LOOP: "Simple Loop", LOOP: "Loop", RANDOM: "Random",
-  MQTT_CONTROL: "MQTT", AUTO_ROUTE: "Auto Route",
+const IDLE_POLICY_LABEL: Record<string, string> = {
+  RANDOM_WALK: "Random Walk",
+  ARRIVAL_BAY_LOOP: "Bay Loop",
+  BALANCED_BAY_LOOP: "Balanced Loop",
 };
 
 const RANK_BADGE = ["🥇", "🥈", "🥉"];
@@ -302,7 +303,7 @@ const FabCard: React.FC<{ fab: FabStats; fabIndex: number; rank: number }> = ({ 
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-x-3">
-        <Stat label="Mode" value={MODE_LABEL[transferModeConfig] ?? transferModeConfig} color="text-cyan-300" />
+        <Stat label="Idle" value={IDLE_POLICY_LABEL[transferModeConfig.idlePolicy] ?? transferModeConfig.idlePolicy} color="text-cyan-300" />
         <Stat label="Rate" value={
           transferRateConfig.mode === "utilization"
             ? `${transferRateConfig.utilizationPercent}% util`

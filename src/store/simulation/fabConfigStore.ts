@@ -255,7 +255,7 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   transferEnabled: true,
 
-  transferModeConfig: TransferMode.AUTO_ROUTE,
+  transferModeConfig: { idlePolicy: "RANDOM_WALK" } as TransferMode,
 
   transferRateConfig: {
     mode: 'utilization',

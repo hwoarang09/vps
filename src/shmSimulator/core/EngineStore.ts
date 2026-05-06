@@ -12,7 +12,7 @@ export class EngineStore implements IVehicleStore {
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
 
   public actualNumVehicles: number = 0;
-  public transferMode: TransferMode = TransferMode.LOOP;
+  public transferMode: TransferMode = { idlePolicy: "ARRIVAL_BAY_LOOP" };
   public transferEnabled: boolean = false;
   public transferRateMode: 'utilization' | 'throughput' = 'utilization';
   public transferUtilizationPercent: number = 50;

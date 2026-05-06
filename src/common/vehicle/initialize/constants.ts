@@ -163,15 +163,35 @@ export const PresetIndex = {
   BRANCH: 5,
 } as const;
 
-// Transition Control Mode
-export const TransferMode = {
-  SIMPLE_LOOP: "SIMPLE_LOOP",
-  LOOP: "LOOP",
-  RANDOM: "RANDOM",
-  MQTT_CONTROL: "MQTT_CONTROL",
-  AUTO_ROUTE: "AUTO_ROUTE",
+// ============================================================================
+// Transfer Mode (통합 개념)
+// - idlePolicy: order 가 없을 때 idle 차량이 어떻게 행동하는지
+// - 미래 확장 자리: dispatchPolicy(차량 선택 정책), orderSource(MQTT 등) 등
+// ============================================================================
+
+export type IdlePolicy =
+  | "RANDOM_WALK"        // 랜덤 station 으로 무한히 떠돔 (기존 AUTO_ROUTE 행동)
+  | "ARRIVAL_BAY_LOOP"   // 도착한 bay 의 edge1↔edge2 핑퐁 (기존 LOOP 행동)
+  | "BALANCED_BAY_LOOP"; // bay 별 차량 수 균형 잡고 순환 (TODO: 미구현 stub)
+
+export const IdlePolicy = {
+  RANDOM_WALK: "RANDOM_WALK",
+  ARRIVAL_BAY_LOOP: "ARRIVAL_BAY_LOOP",
+  BALANCED_BAY_LOOP: "BALANCED_BAY_LOOP",
 } as const;
-export type TransferMode = typeof TransferMode[keyof typeof TransferMode];
+
+export interface TransferMode {
+  idlePolicy: IdlePolicy;
+  // 미래 확장: dispatchPolicy, orderSource, orderPattern 등
+}
+
+export const DEFAULT_TRANSFER_MODE: TransferMode = {
+  idlePolicy: "ARRIVAL_BAY_LOOP",
+};
+
+export function makeTransferMode(idlePolicy: IdlePolicy): TransferMode {
+  return { idlePolicy };
+}
 
 // ============================================================================
 // Memory Layout - Auto-generated Offsets

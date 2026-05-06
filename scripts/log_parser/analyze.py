@@ -660,6 +660,94 @@ def cmd_lock_detail(data: dict, ts_from: int, ts_to: int,
         print(f"  veh={vid:>4}  {cnt}")
 
 
+def _format_cp_flags(flags: int) -> str:
+    """checkpoint flags bitmask → 사람이 읽을 수 있는 'REQ|WAIT|REL' 형태"""
+    if flags == 0:
+        return 'NONE'
+    parts = [name for bit, name in CHECKPOINT_FLAG_NAMES.items() if flags & bit]
+    return '|'.join(parts) if parts else f'0x{flags:02x}'
+
+
+def cmd_checkpoint(data: dict, ts_from: int, ts_to: int,
+                   veh_filter: Optional[int] = None,
+                   edge_filter: Optional[int] = None,
+                   action_filter: Optional[str] = None,
+                   flag_filter: Optional[str] = None):
+    """DEV_CHECKPOINT 분석 — checkpoint HIT/MISS/WAIT_BLOCKED 시간순 추적.
+
+    LOCK_REQUEST CP 가 누락되거나 처리 stuck 되는 케이스(N216 류 deadlock) 진단용.
+
+    필터:
+      veh_filter    : 특정 차량만
+      edge_filter   : checkpoint 의 cp_edge 또는 current_edge 가 일치
+      action_filter : LOADED/HIT/MISS/WAITING/WAIT_BLOCKED 부분 일치
+      flag_filter   : REQ/WAIT/REL/PREP/SLOW 부분 일치 (LOCK_REQUEST 만 보고 싶을 때 'REQ')
+    """
+    cps = data.get('checkpoint', [])
+    if not cps:
+        print("  checkpoint event 0 (DEV_CHECKPOINT 미활성화 또는 발화 없음)")
+        print("  → logger-setup.ts 에서 events.checkpoint = true 강제 설정 후 재실행 필요")
+        return
+
+    # 필터 적용
+    filtered = []
+    for r in cps:
+        if not (ts_from <= r['ts'] <= ts_to):
+            continue
+        if veh_filter is not None and r['veh_id'] != veh_filter:
+            continue
+        if edge_filter is not None and r['cp_edge'] != edge_filter and r['current_edge'] != edge_filter:
+            continue
+        action_name = CHECKPOINT_ACTION_NAMES.get(r['action'], f'?{r["action"]}')
+        if action_filter and action_filter.upper() not in action_name:
+            continue
+        flag_str = _format_cp_flags(r['cp_flags'])
+        if flag_filter and flag_filter.upper() not in flag_str:
+            continue
+        filtered.append((r, action_name, flag_str))
+
+    if not filtered:
+        print(f"  필터 통과 event 0 (전체 {len(cps)} 중)")
+        return
+
+    # 시간순 출력
+    filtered.sort(key=lambda x: x[0]['ts'])
+    print(f"\n=== DEV_CHECKPOINT ({len(filtered)} events) ===")
+    print(f"{'ts':>10}  {'veh':>4}  {'cpEdge':>6}  {'cpRatio':>7}  {'flags':<20}  {'action':<13}  {'curEdge':>7}  {'curRatio':>8}")
+    print('-' * 100)
+    for r, action_name, flag_str in filtered:
+        print(f"{r['ts']:>10}  {r['veh_id']:>4}  {r['cp_edge']:>6}  {r['cp_ratio']:>7.4f}  "
+              f"{flag_str:<20}  {action_name:<13}  {r['current_edge']:>7}  {r['current_ratio']:>8.4f}")
+
+    # action 별 요약
+    print(f"\n=== action 별 요약 ===")
+    by_action = defaultdict(int)
+    for _, name, _ in filtered:
+        by_action[name] += 1
+    for name, cnt in sorted(by_action.items(), key=lambda x: -x[1]):
+        print(f"  {name:<13}  {cnt}")
+
+    # WAIT_BLOCKED 가 자주 나오는 (cp_edge, cp_flags) — stuck 의심 지점
+    if any(name == 'WAIT_BLOCKED' for _, name, _ in filtered):
+        print(f"\n=== WAIT_BLOCKED hot spots (top 10) ===")
+        by_loc = defaultdict(int)
+        for r, name, flag_str in filtered:
+            if name == 'WAIT_BLOCKED':
+                by_loc[(r['cp_edge'], flag_str)] += 1
+        for (edge, flag), cnt in sorted(by_loc.items(), key=lambda x: -x[1])[:10]:
+            print(f"  cpEdge={edge:>4}  flags={flag:<15}  count={cnt}")
+
+    # MISS 가 자주 나오는 (cp_edge, cp_flags) — CP 놓침
+    if any(name == 'MISS' for _, name, _ in filtered):
+        print(f"\n=== MISS hot spots (top 10) ===")
+        by_loc = defaultdict(int)
+        for r, name, flag_str in filtered:
+            if name == 'MISS':
+                by_loc[(r['cp_edge'], flag_str)] += 1
+        for (edge, flag), cnt in sorted(by_loc.items(), key=lambda x: -x[1])[:10]:
+            print(f"  cpEdge={edge:>4}  flags={flag:<15}  count={cnt}")
+
+
 def cmd_raw(data: dict, veh_id: int, ts_from: int, ts_to: int, limit: int = 50):
     """특정 차량의 원시 레코드 출력"""
     print(f"\n=== Raw Records for veh {veh_id} ===")
@@ -817,6 +905,14 @@ def main():
                         help='DEV_LOCK_DETAIL 분석 (zone preempt / DZ gate / holder swap 의심 메커니즘 추적)')
     parser.add_argument('--detail-type', dest='detail_type',
                         help='--lock-detail 필터: 부분 일치 (예: ZONE_PREEMPT, DZ_GATE, HOLDER_SWAP)')
+    parser.add_argument('--checkpoint', action='store_true', dest='checkpoint',
+                        help='DEV_CHECKPOINT 분석 (CP HIT/MISS/WAIT_BLOCKED 시간순 — N216 류 deadlock 진단)')
+    parser.add_argument('--cp-edge', dest='cp_edge', type=int,
+                        help='--checkpoint 필터: cp_edge 또는 current_edge 가 일치하는 것만')
+    parser.add_argument('--cp-action', dest='cp_action',
+                        help='--checkpoint 필터: action 부분 일치 (LOADED/HIT/MISS/WAITING/WAIT_BLOCKED)')
+    parser.add_argument('--cp-flag', dest='cp_flag',
+                        help='--checkpoint 필터: flags 부분 일치 (REQ/WAIT/REL/PREP/SLOW)')
     parser.add_argument('--raw', action='store_true', help='원시 레코드 출력')
     parser.add_argument('--limit', type=int, default=50, help='raw 모드 최대 출력 수')
     parser.add_argument('--ratio-jump', dest='ratio_jump', action='store_true',
@@ -883,6 +979,12 @@ def main():
                         veh_filter=args.veh,
                         node_filter=args.lock_node,
                         type_filter=args.detail_type)
+    elif args.checkpoint:
+        cmd_checkpoint(data, ts_from, ts_to,
+                       veh_filter=args.veh,
+                       edge_filter=args.cp_edge,
+                       action_filter=args.cp_action,
+                       flag_filter=args.cp_flag)
     elif args.lock_node is not None:
         cmd_lock_node(data, args.lock_node, ts_from, ts_to)
     elif args.stuck:

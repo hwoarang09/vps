@@ -149,6 +149,7 @@ export interface SimulationConfig {
     lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
     transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
     edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
+    checkpoint?: boolean;       // DEV_CHECKPOINT (기본: true — logger-setup 에서 force enable)
   };
 
   // Routing parameters
@@ -448,7 +449,7 @@ export interface LockTableData {
 // ============================================================================
 
 // TransferMode is now imported from common
-export { TransferMode } from "@/common/vehicle/initialize/constants";
+export type { TransferMode, IdlePolicy } from "@/common/vehicle/initialize/constants";
 // ============================================================================
 // [5] RE-EXPORTS
 // ============================================================================

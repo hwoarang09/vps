@@ -115,7 +115,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       numVehicles,
       vehicleConfigs = [],
       config = {},
-      transferMode = TransferMode.RANDOM,
+      transferMode = { idlePolicy: "ARRIVAL_BAY_LOOP" },
       bayLoopEntries,
       fabId = DEFAULT_FAB_ID,
       waitRelocations,
@@ -194,7 +194,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       await controller.init({
         fabs: fabs.map(fab => ({
           ...fab,
-          transferMode: fab.transferMode ?? TransferMode.RANDOM,
+          transferMode: fab.transferMode ?? { idlePolicy: "ARRIVAL_BAY_LOOP" },
         })),
         workerCount,
         config: {

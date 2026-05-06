@@ -34,6 +34,8 @@ export async function setupLoggerPort(
   // 사용자가 logEvents.lockDetail 명시적으로 false 주면 그 의도 존중
   const events = { ...(config.logEvents ?? {}) };
   if (events.lockDetail === undefined) events.lockDetail = true;
+  // DEV_CHECKPOINT 강제 활성화 — N216 류 deadlock 추적용 (checkpoint HIT/MISS/WAIT_BLOCKED 시간순 기록)
+  if (events.checkpoint === undefined) events.checkpoint = true;
 
   const logger = new SimLogger({
     sessionId,

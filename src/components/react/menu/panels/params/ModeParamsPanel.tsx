@@ -2,14 +2,15 @@ import React, { useState } from "react";
 import { useFabConfigStore, type FabConfigOverride, type TransferRateMode, type TransferRateConfig } from "@/store/simulation/fabConfigStore";
 import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 import { useFabStore } from "@/store/map/fabStore";
-import { TransferMode } from "@/common/vehicle/initialize/constants";
+import { TransferMode, IdlePolicy } from "@/common/vehicle/initialize/constants";
 import { panelCardVariants, panelTextVariants } from "../../shared/panelStyles";
 
-// ─── Mode definitions (LOOP 제외 — 기본 동작이므로 선택 불필요) ───
+// ─── Idle Policy 정의 — 반송 없을 때 idle 차량이 어떻게 행동하는지 ───
 
-const MODE_LIST: { mode: TransferMode; label: string; desc: string; color: string }[] = [
-  { mode: TransferMode.AUTO_ROUTE, label: "AUTO", desc: "시뮬레이터가 자동 반송 생성 (랜덤 목적지)", color: "bg-cyan-500 border-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" },
-  { mode: TransferMode.MQTT_CONTROL, label: "MQTT", desc: "외부에서 반송 명령 수신", color: "bg-amber-500 border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" },
+const IDLE_POLICY_LIST: { idlePolicy: IdlePolicy; label: string; desc: string; color: string }[] = [
+  { idlePolicy: "RANDOM_WALK", label: "RANDOM", desc: "랜덤 station 으로 무한히 떠돔", color: "bg-cyan-500 border-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)]" },
+  { idlePolicy: "ARRIVAL_BAY_LOOP", label: "BAY LOOP", desc: "도착한 bay 의 두 edge 를 핑퐁 순환", color: "bg-emerald-500 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" },
+  { idlePolicy: "BALANCED_BAY_LOOP", label: "BALANCED", desc: "bay 별 차량 균형 잡고 순환 (TODO: 미구현)", color: "bg-purple-500 border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]" },
 ];
 
 const RATE_MODES: { mode: TransferRateMode; label: string; desc: string }[] = [
@@ -20,7 +21,7 @@ const RATE_MODES: { mode: TransferRateMode; label: string; desc: string }[] = [
 // ─── Sub-components ───
 
 const ModeButton: React.FC<{
-  item: typeof MODE_LIST[number]; active: boolean; onClick: () => void;
+  item: typeof IDLE_POLICY_LIST[number]; active: boolean; onClick: () => void;
 }> = ({ item, active, onClick }) => (
   <button
     onClick={onClick}
@@ -248,14 +249,14 @@ const ModeParamsPanel: React.FC = () => {
     fabOverrides[fi]?.transferEnabled !== undefined ||
     fabOverrides[fi]?.transferRateConfig !== undefined;
 
-  // ─── Mode selector (shared) ───
+  // ─── IdlePolicy selector (shared) — order 없을 때 차량 행동 ───
   const renderModeSelector = (activeMode: TransferMode, onSelect: (m: TransferMode) => void) => (
     <>
-      <div className={panelTextVariants({ variant: "muted", size: "xs" })}>TRANSFER MODE</div>
+      <div className={panelTextVariants({ variant: "muted", size: "xs" })}>IDLE POLICY (order 없을 때)</div>
       <div className="space-y-1 mt-1">
-        {MODE_LIST.map((m) => (
-          <ModeButton key={m.mode} item={m} active={activeMode === m.mode}
-            onClick={() => onSelect(m.mode)} />
+        {IDLE_POLICY_LIST.map((m) => (
+          <ModeButton key={m.idlePolicy} item={m} active={activeMode.idlePolicy === m.idlePolicy}
+            onClick={() => onSelect({ idlePolicy: m.idlePolicy })} />
         ))}
       </div>
     </>
@@ -271,8 +272,8 @@ const ModeParamsPanel: React.FC = () => {
         </div>
         <div className="text-[10px] text-gray-500 mt-1">
           {transferEnabled
-            ? "반송 명령 활성. 완료 후 LOOP 복귀."
-            : "모든 차량이 bay LOOP만 순회."}
+            ? "반송 명령 활성. 완료 후 idle policy 따라 행동."
+            : "반송 OFF — 모든 차량이 idle policy 따라 행동."}
         </div>
       </div>
 
@@ -350,7 +351,7 @@ const ModeParamsPanel: React.FC = () => {
               const ovr = fabOverrides[fab.fabIndex];
               const parts: string[] = [];
               if (ovr?.transferEnabled !== undefined) parts.push(ovr.transferEnabled ? "ON" : "OFF");
-              if (ovr?.transferMode) parts.push(ovr.transferMode);
+              if (ovr?.transferMode) parts.push(ovr.transferMode.idlePolicy);
               if (ovr?.transferRateConfig) {
                 const r = ovr.transferRateConfig;
                 if (r.mode === "utilization" && r.utilizationPercent !== undefined) parts.push(`${r.utilizationPercent}%`);

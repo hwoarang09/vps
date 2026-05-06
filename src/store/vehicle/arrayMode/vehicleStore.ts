@@ -97,7 +97,7 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
       set({ actualNumVehicles: num });
     },
 
-    transferMode: TransferMode.RANDOM,
+    transferMode: { idlePolicy: "ARRIVAL_BAY_LOOP" },
     setTransferMode: (mode) => set({ transferMode: mode }),
 
     // Initialize array memory
@@ -230,4 +230,4 @@ export const useVehicleArrayStore = create<VehicleArrayStore>(
 );
 
 // Re-export TransferMode for convenience
-export { TransferMode } from "@/shmSimulator/types";
+export type { TransferMode } from "@/shmSimulator/types";

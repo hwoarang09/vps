@@ -72,7 +72,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Small loop with few vehicles for quick testing",
       mapName: "straight_short_test",
       numVehicles: 5,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [5, -2, 10],
         target: [5, 5, 0]
@@ -84,7 +84,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Medium-sized loop with moderate vehicle count",
       mapName: "straight_test",
       numVehicles: 50,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [250, -150, 550],
         target: [250, 150, 0]
@@ -96,7 +96,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Maximum vehicles for performance testing",
       mapName: "stress_test",
       numVehicles: 1000,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [250, -150, 550],
         target: [250, 150, 0]
@@ -108,7 +108,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Simple connected loop test",
       mapName: "simple_connected",
       numVehicles: 2,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [10, -10, 30],
         target: [10, 0, 0]
@@ -120,7 +120,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Simple S-curve test",
       mapName: "simple_s",
       numVehicles: 8,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [10, -10, 30],
         target: [10, 0, 0]
@@ -132,7 +132,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Y-switch short track test",
       mapName: "y_short",
       numVehicles: 200,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [10, -10, 30],
         target: [10, 0, 0]
@@ -144,7 +144,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "COP track test",
       mapName: "cop",
       numVehicles: 200,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [10, -10, 30],
         target: [10, 0, 0]
@@ -156,7 +156,7 @@ let testSettingConfig: TestSettingConfig = {
       description: "Simple Connected Short Edge Keep test",
       mapName: "simple_connected_short_edge_keep",
       numVehicles: 10,
-      transferMode: TransferMode.AUTO_ROUTE,
+      transferMode: { idlePolicy: "RANDOM_WALK" },
       camera: {
         position: [10, -10, 30],
         target: [10, 0, 0]

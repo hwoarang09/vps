@@ -41,6 +41,7 @@ EVENT_TYPES = {
     12: ('DEV_LOCK_DETAIL',   20, '<IIHBxII'), # ts(u32) vehId(u32) nodeIdx(u16) type(u8) pad(1) holderVehId(u32) waitMs(u32)
     13: ('DEV_TRANSFER',      16, '<IIII'),     # ts(u32) vehId(u32) fromEdge(u32) toEdge(u32)
     14: ('DEV_EDGE_QUEUE',    16, '<IIIHBx'),  # ts(u32) edgeId(u32) vehId(u32) count(u16) type(u8) pad(1)
+    15: ('DEV_CHECKPOINT',    24, '<IIHBBfIf'), # ts(u32) vehId(u32) cpEdge(u16) cpFlags(u8) action(u8) cpRatio(f32) currentEdge(u32) currentRatio(f32)
 }
 
 FILE_SUFFIX_TO_TYPES = {
@@ -52,6 +53,7 @@ FILE_SUFFIX_TO_TYPES = {
     'lock_detail':  [12],
     'transfer':     [13],
     'edge_queue':   [14],
+    'checkpoint':   [15],
     'snapshot':     ['snapshot'],  # 가변 블록 — 별도 처리
 }
 
@@ -73,7 +75,34 @@ COLUMNS = {
     12: ['ts', 'veh_id', 'node_idx', 'type', 'holder_veh_id', 'wait_ms'],
     13: ['ts', 'veh_id', 'from_edge', 'to_edge'],
     14: ['ts', 'edge_id', 'veh_id', 'count', 'type'],
+    15: ['ts', 'veh_id', 'cp_edge', 'cp_flags', 'action', 'cp_ratio', 'current_edge', 'current_ratio'],
 }
+
+# Checkpoint flags bitmask (constants.ts CheckpointFlags 와 동기화)
+CP_FLAGS = {
+    1:  'LOCK_REQUEST',
+    2:  'LOCK_WAIT',
+    4:  'LOCK_RELEASE',
+    8:  'MOVE_PREPARE',
+    16: 'MOVE_SLOW',
+}
+
+# Checkpoint action (LockMgr/types.ts CheckpointAction 와 동기화)
+CP_ACTION = {
+    0: 'LOADED',
+    1: 'HIT',
+    2: 'MISS',
+    3: 'WAITING',
+    4: 'WAIT_BLOCKED',
+}
+
+
+def format_cp_flags(flags: int) -> str:
+    """checkpoint flags bitmask → 사람이 읽을 수 있는 문자열"""
+    if flags == 0:
+        return 'NONE'
+    parts = [name for bit, name in CP_FLAGS.items() if flags & bit]
+    return '|'.join(parts) if parts else f'0x{flags:02x}'
 
 
 def detect_file_type(filename: str):

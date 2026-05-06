@@ -32,7 +32,6 @@ import {
   MAX_PATH_LENGTH,
   PATH_LEN,
   PATH_EDGES_START,
-  getNextEdgeInLoop,
 } from "./types";
 import { fillFirstNextEdge, fillSubsequentNextEdge } from "./next-edge-handlers";
 
@@ -385,8 +384,10 @@ export class TransferMgr {
       MovementData.NEXT_EDGE_4,
     ];
 
+    // RANDOM_WALK: AutoMgr 가 매번 새 random destination Dijkstra 경로를 path buffer 에 채움 → buffer 사용
+    // ARRIVAL_BAY_LOOP / BALANCED_BAY_LOOP: bay 순환 sequence (vehicleLoopMap) 기반 lookahead
     const usePathBuffer = this.pathBufferFromAutoMgr &&
-      (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE);
+      mode.idlePolicy === "RANDOM_WALK";
 
     if (usePathBuffer) {
       // Checkpoint 시스템이 MOVE_PREPARE를 놓친 경우의 안전장치
@@ -407,32 +408,16 @@ export class TransferMgr {
   private determineNextEdge(
     currentEdge: Edge,
     vehicleIndex: number,
-    vehicleLoopMap: Map<number, VehicleLoop>,
+    _vehicleLoopMap: Map<number, VehicleLoop>,
     edgeNameToIndex: Map<string, number>,
-    mode: TransferMode
+    _mode: TransferMode
   ): number {
     if (this.canDirectlyTransition(currentEdge)) {
       return currentEdge.nextEdgeIndices![0];
     }
 
-    if (mode === TransferMode.MQTT_CONTROL || mode === TransferMode.AUTO_ROUTE) {
-      // MQTT_CONTROL or AUTO_ROUTE - both use reserved paths/commands
-      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, currentEdge.edge_name);
-    } else if (mode === TransferMode.LOOP) {
-      // LOOP (bay 순환) - checkpoint/command 기반 (AUTO_ROUTE와 동일)
-      return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, currentEdge.edge_name);
-    } else if (mode === TransferMode.SIMPLE_LOOP) {
-      // SIMPLE_LOOP (기존 nextEdgeIndices[0] 추적)
-      return this.getNextEdgeFromLoop(
-        currentEdge,
-        vehicleIndex,
-        vehicleLoopMap,
-        edgeNameToIndex
-      );
-    } else {
-      // RANDOM
-      return this.getNextEdgeRandomly(currentEdge);
-    }
+    // 모든 idlePolicy 가 checkpoint/command(path buffer) 기반으로 다음 edge 결정
+    return this.getNextEdgeFromCommand(vehicleIndex, edgeNameToIndex, currentEdge.edge_name);
   }
 
   private getNextEdgeFromCommand(
@@ -489,50 +474,11 @@ export class TransferMgr {
     return ratio;
   }
 
-  private getNextEdgeRandomly(currentEdge: Edge): number {
-    if ((currentEdge.nextEdgeIndices?.length ?? 0) > 0) {
-      const randomIndex = Math.floor(
-        Math.random() * currentEdge.nextEdgeIndices!.length
-      );
-      return currentEdge.nextEdgeIndices![randomIndex];
-    }
-    return 0; // 0 is invalid sentinel
-  }
-
   private canDirectlyTransition(currentEdge: Edge): boolean {
     return (
       !currentEdge.toNodeIsDiverge &&
       (currentEdge.nextEdgeIndices?.length ?? 0) > 0
     );
-  }
-
-  private getNextEdgeFromLoop(
-    currentEdge: Edge,
-    vehicleIndex: number,
-    vehicleLoopMap: Map<number, VehicleLoop>,
-    edgeNameToIndex: Map<string, number>
-  ): number {
-    let nextEdgeIndex = 0; // 0 is invalid sentinel
-    const loop = vehicleLoopMap.get(vehicleIndex);
-
-    if (loop) {
-      const nextName = getNextEdgeInLoop(
-        currentEdge.edge_name,
-        loop.edgeSequence
-      );
-      const found = edgeNameToIndex.get(nextName);
-      if (found === undefined) {
-        // do nothing
-      } else {
-        nextEdgeIndex = found;
-      }
-    }
-
-    if (nextEdgeIndex === 0 && currentEdge.nextEdgeIndices?.length) {
-      nextEdgeIndex = currentEdge.nextEdgeIndices[0];
-    }
-
-    return nextEdgeIndex;
   }
 
   // --- Helper Methods ---

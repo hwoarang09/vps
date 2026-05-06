@@ -46,7 +46,7 @@ function traceEdgeSequence(
  * - vehicleLoopMap에 { edgeSequence: [...] } 형태로 저장
  *
  * 사용:
- * - TransferMode.SIMPLE_LOOP일 때 TransferMgr.getNextEdgeFromLoop()에서 사용
+ * - vehicleLoopMap 은 fillNextEdgesFromLoopMap (lookahead) 에서 사용
  */
 export function buildVehicleLoopMap(
   vehicleLoopMap: Map<number, VehicleLoop>,

@@ -90,6 +90,12 @@ export class AutoMgr {
   private readonly pendingSrcStation: Map<number, StationTarget> = new Map();
   // vehId → actual dest station (preserved across preloadLoopPath which overwrites vehicleDestinations)
   private readonly actualDestStation: Map<number, StationTarget> = new Map();
+  // vehId set: assignToStation case 2 (loop-around) 적용 직후 차량 표시.
+  // 차량이 srcStation.edgeIndex 위에 있지만 station 위치를 이미 지나친 상태라 loop path 따라
+  // 한 바퀴 돌고 와야 함. MOVE_TO_LOAD branch 가 이 set 의 차량은 처리 보류 (preloadNextPath
+  // 호출 안 함, backward TARGET_RATIO 안 set) → 차량이 srcStation.edgeIndex 떠나면 set 해제 →
+  // 다시 진입(ratio≈0) 시 정상 처리.
+  private readonly loopAroundVehicles: Set<number> = new Set();
   /** pickup/dropoff 대기 시간 (ms). 기본 7초. */
   dwellMs = 7000;
   /** Path 발견 콜백 (SimLogger 연결용) */
@@ -147,7 +153,6 @@ export class AutoMgr {
       transferMgr, lockMgr, vehicleBayLoopMap,
       transferEnabled, simulationTime,
     } = ctx;
-    if (mode !== TransferMode.AUTO_ROUTE && mode !== TransferMode.LOOP) return;
     if (numVehicles === 0) return;
 
     // Reset per-frame counter
@@ -166,17 +171,23 @@ export class AutoMgr {
       // --- MOVE_TO_LOAD: pre-load dest path when entering src station edge ---
       if (jobState === JobState.MOVE_TO_LOAD) {
         const srcStation = this.pendingSrcStation.get(vehId);
+
+        // Cleanup loopAround flag: vehicle 이 srcStation.edgeIndex 떠나면 해제 (loop 한 바퀴 돌고
+        // 다시 들어올 때 정상 처리되도록). 짧은 edge(<1m) 에서 ratio 가 1 frame 만에 station.ratio
+        // 를 넘는 케이스를 ratio 비교만으로는 구분할 수 없기 때문에 set 으로 명시 추적.
+        if (this.loopAroundVehicles.has(vehId)
+          && (!srcStation || currentEdgeIdx !== srcStation.edgeIndex)) {
+          this.loopAroundVehicles.delete(vehId);
+        }
+
         if (srcStation && currentEdgeIdx === srcStation.edgeIndex) {
-          // GUARD: 차량이 srcStation 위치를 이미 지나친 상태면 (assignToStation 의 loop-around
-          // 분기로 한 바퀴 도는 중) 처리 보류. loop path 가 다시 srcStation edge 진입(ratio≈0)
-          // 했을 때 정상 처리. 이 가드 없으면 TARGET_RATIO 가 backward 로 설정되어
-          // checkTargetReached(rawNewRatio>=targetRatio) 에서 ratio 가 target 으로 강제 →
-          // 차량이 뒤로 텔레포트. 락 hold 중이면 deadlock.
-          const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-          if (currentRatio > srcStation.ratio) {
-            // loop 도는 중 — path 그대로 따라가게 두고 다음 진입 대기
+          if (this.loopAroundVehicles.has(vehId)) {
+            // assignToStation case 2 직후: vehicle 이 srcStation.edgeIndex 위에 있지만
+            // station 위치를 이미 지나침. loop path 적용된 상태로 path 따라 한 바퀴 돌게 두고
+            // 다음 진입(ratio≈0) 대기. preloadNextPath/TARGET_RATIO 건드리면 텔레포트(N216).
           } else {
-            // On station edge — pre-load dest path for merge lock acquisition
+            // 정상 진입(loop 한 바퀴 돌고 ratio≈0 으로 재진입 OR 다른 edge 에서 normal path 끝)
+            // → preload dest path + station 에서 stop
             const destStation = this.pendingDestStation.get(vehId);
             if (destStation) {
               // Save actual dest station before preloadNextPath overwrites vehicleDestinations
@@ -219,23 +230,17 @@ export class AutoMgr {
           ?? this.vehicleDestinations.get(vehId);
         if (destStation && currentEdgeIdx === destStation.edgeIndex
           && !this.dwellTimers.has(vehId)) {
-          // GUARD: MOVE_TO_LOAD 와 동일 — destStation 을 이미 지나친 상태면 loop 도는 중.
-          // path 그대로 두고 다시 진입(ratio≈0) 시 정상 처리. 가드 없으면 TARGET_RATIO 가
-          // backward 로 설정되어 텔레포트.
-          const currentRatio = data[ptr + MovementData.EDGE_RATIO];
-          if (currentRatio > destStation.ratio) {
-            // loop 도는 중 — 처리 보류
-          } else {
-            // Just entered dest station edge — pre-load loop path
-            this.preloadLoopPath(
-              vehId, destStation,
-              vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
-            );
-            // Stop at dest station
-            data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
-            // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
-            this.dwellTimers.set(vehId, Infinity);
-          }
+          // Just entered dest station edge — pre-load loop path
+          // (MOVE_TO_LOAD 와 달리 destStation 도달은 항상 정상 path 끝이므로 loop-around guard 불필요.
+          // dwellTimer=Infinity sentinel 이 다음 frame 첫 if skip 시켜서 isStopped UNLOADING 분기로 빠지게 함.)
+          this.preloadLoopPath(
+            vehId, destStation,
+            vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+          );
+          // Stop at dest station
+          data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
+          // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
+          this.dwellTimers.set(vehId, Infinity);
         } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex) {
           // Stopped at dest station → start UNLOADING
           data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
@@ -281,14 +286,29 @@ export class AutoMgr {
       if (this.transferringVehicles.has(vehId)) continue;
 
       let didAssign = false;
-      if (mode === TransferMode.LOOP && vehicleBayLoopMap) {
-        didAssign = this.checkAndAssignLoopRoute(
-          vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
-        );
-      } else {
-        didAssign = this.checkAndAssignRoute(
-          vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
-        );
+      switch (mode.idlePolicy) {
+        case "ARRIVAL_BAY_LOOP":
+          if (vehicleBayLoopMap) {
+            didAssign = this.checkAndAssignLoopRoute(
+              vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
+            );
+          }
+          break;
+        case "BALANCED_BAY_LOOP":
+          // TODO: bay별 차량 균형을 잡는 dispatch 추가 구현 예정.
+          // 현재는 ARRIVAL_BAY_LOOP 와 동일 동작으로 fallback.
+          if (vehicleBayLoopMap) {
+            didAssign = this.checkAndAssignLoopRoute(
+              vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr, vehicleBayLoopMap
+            );
+          }
+          break;
+        case "RANDOM_WALK":
+        default:
+          didAssign = this.checkAndAssignRoute(
+            vehId, vehicleDataArray, edgeArray, edgeNameToIndex, transferMgr, lockMgr
+          );
+          break;
       }
 
       if (didAssign) {
@@ -454,6 +474,9 @@ export class AutoMgr {
           transferMgr,
           lockMgr,
         });
+        // 차량이 srcStation.edgeIndex 위에 있지만 station 위치를 이미 지나친 상태.
+        // MOVE_TO_LOAD branch 가 이 차량 처리 보류하도록 표시. 차량이 edge 떠나면 자동 해제.
+        this.loopAroundVehicles.add(vehId);
         return true;
       }
     }
@@ -751,8 +774,32 @@ export class AutoMgr {
     transferMgr: TransferMgr,
     lockMgr?: LockMgr
   ): void {
-    this.pathFindCountThisFrame++;
-    const pathIndices = findShortestPath(srcStation.edgeIndex, destStation.edgeIndex, edgeArray, this.routingContext);
+    let pathIndices: number[] | null = null;
+
+    if (srcStation.edgeIndex === destStation.edgeIndex) {
+      // src/dest 가 같은 edge — findShortestPath 는 [edge] 한 개만 반환 →
+      // constructPathCommand 가 빈 배열 만들어 차량 path 비어버림.
+      // assignToStation case 2 와 동일 패턴으로 loop-around path 생성:
+      // current edge → next edges → ... → dest(=src) edge.
+      const srcEdge = edgeArray[srcStation.edgeIndex - 1];
+      if (!srcEdge || !srcEdge.nextEdgeIndices || srcEdge.nextEdgeIndices.length === 0) return;
+
+      let bestPath: number[] | null = null;
+      for (const nextIdx of srcEdge.nextEdgeIndices) {
+        this.pathFindCountThisFrame++;
+        const p = findShortestPath(nextIdx, destStation.edgeIndex, edgeArray, this.routingContext);
+        if (p && p.length > 0) {
+          if (!bestPath || p.length < bestPath.length - 1) {
+            bestPath = [srcStation.edgeIndex, ...p];
+          }
+        }
+      }
+      pathIndices = bestPath;
+    } else {
+      this.pathFindCountThisFrame++;
+      pathIndices = findShortestPath(srcStation.edgeIndex, destStation.edgeIndex, edgeArray, this.routingContext);
+    }
+
     if (!pathIndices || pathIndices.length === 0) return;
 
     // Apply path: pathBuffer = [src+1..dest], checkpoint includes merge locks
@@ -846,6 +893,7 @@ export class AutoMgr {
     this.pendingDestStation.clear();
     this.pendingSrcStation.clear();
     this.actualDestStation.clear();
+    this.loopAroundVehicles.clear();
     this.throughputCredit = 0;
     this.transferCheckCooldown = 0;
     this.lastPath.clear();

@@ -66,12 +66,10 @@ const ROUTING_LABEL: Record<string, string> = {
   EWMA: "EWMA",
 };
 
-const MODE_LABEL: Record<string, string> = {
-  SIMPLE_LOOP: "S-Loop",
-  LOOP: "Loop",
-  RANDOM: "Random",
-  MQTT_CONTROL: "MQTT",
-  AUTO_ROUTE: "Auto",
+const IDLE_POLICY_LABEL: Record<string, string> = {
+  RANDOM_WALK: "Random",
+  ARRIVAL_BAY_LOOP: "BayLoop",
+  BALANCED_BAY_LOOP: "Balanced",
 };
 
 const KpiHud: React.FC = () => {
@@ -185,8 +183,8 @@ const KpiHud: React.FC = () => {
     routingParam = ` α${effectiveRouting.ewmaAlpha}`;
   }
 
-  // Transfer mode + rate
-  const modeLabel = MODE_LABEL[effectiveMode] ?? effectiveMode;
+  // Transfer mode (idle policy) + rate
+  const modeLabel = IDLE_POLICY_LABEL[effectiveMode.idlePolicy] ?? effectiveMode.idlePolicy;
   let rateStr = "";
   if (effectiveRate.mode === "utilization") {
     rateStr = `${effectiveRate.utilizationPercent}%`;

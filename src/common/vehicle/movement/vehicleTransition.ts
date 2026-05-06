@@ -8,7 +8,6 @@ import {
   MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 import { handleEdgeTransition, type EdgeTransitionResult } from "./edgeTransition";
-import { TransferMode } from "@/shmSimulator/types";
 import type { VehiclePhysicsResult } from "./vehiclePhysics";
 import type { MovementUpdateContext } from "./movementUpdate";
 import type { LockMgr } from "@/common/vehicle/logic/LockMgr/index";
@@ -165,9 +164,6 @@ function processEdgeTransitionLogic(
   const shouldTransition = rawNewRatio >= 1 && (targetRatio === 1 || nextEdgeState === NextEdgeState.READY);
 
   if (shouldTransition) {
-    // In MQTT_CONTROL mode, preserve TARGET_RATIO (don't overwrite with 1)
-    const preserveTargetRatio = ctx.store.transferMode === TransferMode.MQTT_CONTROL;
-
     // Check if there's a reserved target ratio for the next edge (fixes premature target application bug)
     const nextTargetRatio = ctx.transferMgr.consumeNextEdgeReservationFromPathBuffer(vehicleIndex);
 
@@ -179,7 +175,7 @@ function processEdgeTransitionLogic(
       initialRatio: rawNewRatio,
       edgeArray: ctx.edgeArray,
       target: out,
-      preserveTargetRatio: preserveTargetRatio,
+      preserveTargetRatio: false,
       nextTargetRatio: nextTargetRatio,
       pathBufferFromAutoMgr: ctx.transferMgr.getPathBufferFromAutoMgr(),
       lockMgr: ctx.lockMgr,

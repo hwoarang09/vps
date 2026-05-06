@@ -158,17 +158,11 @@ export function initializeVehicleStates(
     edgeArray,
     store,
     config,
-    transferMode,
     updateSensorPoints,
     onVehicleCreated,
   } = params;
   
   const edgeVehicleCount = new Map<number, number>();
-
-  // Determine initial target ratio logic based on transfer mode
-  // MQTT_CONTROL -> vehicles spawn stopped at their current placement (Target = edgeRatio)
-  // Others -> vehicles spawn and move (Target = 1)
-  const isMqtt = transferMode === TransferMode.MQTT_CONTROL;
 
   for (const placement of placements) {
     const edgeIndex = nameToIndex.get(placement.edgeName);
@@ -176,7 +170,7 @@ export function initializeVehicleStates(
 
     const edge = edgeArray[edgeIndex - 1]; // Convert to 0-based for array access
 
-    const initialTargetRatio = isMqtt ? placement.edgeRatio : 1;
+    const initialTargetRatio = 1;
 
     initializeSingleVehicle({
       placement,
