@@ -17,25 +17,20 @@
 
 ## 핵심 시각화
 
-### Cards — 라우팅 전략별 결과 한눈에
-순위(🥇🥈🥉) + Throughput을 카드의 가장 큰 숫자로. 전략명(BPR α=4 β=8 등)이 카드 헤더에 노출되어 *어느 전략이 이기고 있는지* 즉시 보인다.
+### Fab Config — fab별 파라미터 설정
+라우팅 전략(BPR α/β, Random Walk 등) · IDLE policy · vehicle 수 등 fab마다 독립적으로 세팅. 같은 토폴로지에 다른 정책을 꽂아 동시 비교할 수 있다.
 
-![Fab Stats Cards](public/pic/fab-stats-cards.png)
+![Fab Config](public/pic/fab-config.png)
 
-### Compare — 같은 metric으로 fab 간 비교
-Avg Speed / Moving% / Locked / Collision 등 metric을 골라 fab 간 막대 차트로 비교.
+### Fab Stats — 다중 fab 실시간 통계
+Throughput / Avg Speed / Moving% / Locked / Collision 등 metric을 fab 간 카드·차트로 한눈에. 어떤 전략이 이기고 있는지 실시간으로 보인다.
 
-![Fab Stats Compare](public/pic/fab-stats-compare.png)
+![Fab Stats](public/pic/fab-stats.png)
 
-### Trend — 시간축에서 안정/발산 확인
-지난 5분 윈도우의 라인 차트. 안정화됐는지, 점점 나빠지는지 즉시 판단.
+### Vehicle Info — 개별 차량 상세
+선택한 vehicle의 현재 edge / ratio / 경로 / lock 상태 / 대기 큐 등 디버깅 정보. 특정 차량의 정체·deadlock 원인 추적용.
 
-![Fab Stats Trend](public/pic/fab-stats-trend.png)
-
-### KPI HUD — 좌상단 미니 대시보드
-드롭다운으로 fab 전환 (`{col}_{row}`로 위치 식별). 카메라가 그 fab으로 자동 이동.
-
-![KPI HUD](public/pic/kpi-hud.png)
+![Vehicle Info](public/pic/vehicle-info.png)
 
 ---
 
