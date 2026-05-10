@@ -3,8 +3,6 @@
 > 반도체 FAB 내 OHT(Overhead Hoist Transport) 차량의 **대규모 라우팅 비교 시뮬레이터**.
 > 같은 맵에서 라우팅 전략(Distance / BPR / EWMA)을 동시에 돌려 **어느 게 더 효율적인지** 한 화면에서 비교한다.
 
-**Live demo**: https://vos-navy.vercel.app
-
 ![Hero](public/pic/hero.png)
 
 ---
