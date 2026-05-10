@@ -5,7 +5,7 @@ import { TransferMode } from "@/common/vehicle/initialize/constants";
 import type { RoutingStrategy, RoutingConfig, TransferRateConfig } from "@/store/simulation/fabConfigStore";
 import { loadPersistedConfig, savePersistedConfig } from "./configDb";
 
-export const PERSISTED_CONFIG_VERSION = 6;
+export const PERSISTED_CONFIG_VERSION = 7;
 
 /** Per-fab routing override (fabIndex → routing config) */
 export type FabRoutingOverrides = Record<number, Partial<RoutingConfig>>;
@@ -34,9 +34,9 @@ export interface PersistedSimConfig {
 export const DEFAULT_SIM_CONFIG: PersistedSimConfig = {
   version: PERSISTED_CONFIG_VERSION,
   selectedSettingId: "Y_SHORT",
-  numVehicles: 1600,
+  numVehicles: 4800,
   fabCountX: 4,
-  fabCountY: 2,
+  fabCountY: 6,
   routing: {
     strategy: "BPR",
     bprAlpha: 4,
@@ -45,6 +45,7 @@ export const DEFAULT_SIM_CONFIG: PersistedSimConfig = {
     ewmaAlpha: 0.1,
   },
   fabRoutingOverrides: {
+    // Row 0~1 (fabIndex 0~7): rerouteInterval=0 (도착시만, default)
     0: { strategy: "DISTANCE" },
     1: { strategy: "BPR", bprAlpha: 2, bprBeta: 8 },
     2: { strategy: "BPR", bprAlpha: 4, bprBeta: 8 },
@@ -53,6 +54,24 @@ export const DEFAULT_SIM_CONFIG: PersistedSimConfig = {
     5: { strategy: "EWMA", ewmaAlpha: 0.1 },
     6: { strategy: "EWMA", ewmaAlpha: 0.15 },
     7: { strategy: "EWMA", ewmaAlpha: 0.2 },
+    // Row 2~3 (fabIndex 8~15): rerouteInterval=5 (동일 전략을 5edge마다 재계산)
+    8: { strategy: "DISTANCE", rerouteInterval: 5 },
+    9: { strategy: "BPR", bprAlpha: 2, bprBeta: 8, rerouteInterval: 5 },
+    10: { strategy: "BPR", bprAlpha: 4, bprBeta: 8, rerouteInterval: 5 },
+    11: { strategy: "BPR", bprAlpha: 8, bprBeta: 8, rerouteInterval: 5 },
+    12: { strategy: "EWMA", ewmaAlpha: 0.05, rerouteInterval: 5 },
+    13: { strategy: "EWMA", ewmaAlpha: 0.1, rerouteInterval: 5 },
+    14: { strategy: "EWMA", ewmaAlpha: 0.15, rerouteInterval: 5 },
+    15: { strategy: "EWMA", ewmaAlpha: 0.2, rerouteInterval: 5 },
+    // Row 4~5 (fabIndex 16~23): rerouteInterval=1 (매 edge 재계산)
+    16: { strategy: "DISTANCE", rerouteInterval: 1 },
+    17: { strategy: "BPR", bprAlpha: 2, bprBeta: 8, rerouteInterval: 1 },
+    18: { strategy: "BPR", bprAlpha: 4, bprBeta: 8, rerouteInterval: 1 },
+    19: { strategy: "BPR", bprAlpha: 8, bprBeta: 8, rerouteInterval: 1 },
+    20: { strategy: "EWMA", ewmaAlpha: 0.05, rerouteInterval: 1 },
+    21: { strategy: "EWMA", ewmaAlpha: 0.1, rerouteInterval: 1 },
+    22: { strategy: "EWMA", ewmaAlpha: 0.15, rerouteInterval: 1 },
+    23: { strategy: "EWMA", ewmaAlpha: 0.2, rerouteInterval: 1 },
   },
   transfer: {
     enabled: true,

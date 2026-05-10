@@ -371,8 +371,8 @@ export class FabContext {
     this.lastSnapshotTime = ctx.lastSnapshotTime;
     this.prevVehicleSpeeds = ctx.prevVehicleSpeeds;
 
-    // 5. Order stats flush (1초마다)
-    if (simulationTime - this.lastOrderStatsFlush >= 1.0) {
+    // 5. Order stats flush (simulationTime is ms, so 2000 = 2초마다)
+    if (simulationTime - this.lastOrderStatsFlush >= 2000) {
       this.flushOrderStats(simulationTime);
       this.lastOrderStatsFlush = simulationTime;
     }
