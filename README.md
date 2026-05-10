@@ -93,12 +93,6 @@ pnpm dev
 
 # 빌드 + 타입체크
 pnpm build
-
-# 테스트
-pnpm test
-
-# Lint
-pnpm lint
 ```
 
 **브라우저 요구사항**: SharedArrayBuffer 사용을 위해 cross-origin isolation 필요 (vite dev 서버는 자동 설정됨).
@@ -168,6 +162,7 @@ vps/
 - [x] 멀티 FAB 동시 시뮬레이션
 - [x] 실시간 KPI 비교 패널 (Cards / Compare / Trend)
 - [x] 로그 수집 인프라 (PostgreSQL + MQTT)
-- [ ] baseline 대비 throughput 델타 표시
-- [ ] 카드 디테일 펼침/접기
-- [ ] 100k+ vehicle 스트레스 테스트
+- [ ] 단순 배속 (×2/×4) — 렌더 프레임 스킵으로 시간 가속
+- [ ] **Sub-step 배속** — 한 프레임당 물리 step을 N번 추가 계산해 정확도 유지하며 시간 가속
+- [ ] fab별 vehicle 대수 차등 배정 (현재는 모든 fab이 균일)
+- [ ] Lock 정책 최적화 — 합류점에서 1대씩 통과 중인데, 같은 길목이면 여러 대 묶음 통과 허용
