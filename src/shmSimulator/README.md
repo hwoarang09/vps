@@ -545,6 +545,6 @@ controller.onNewEvent((data) => {
 ```
 
 ## 관련 문서
-- [시스템 전체 아키텍처](../../doc/README.md)
+- [시스템 전체 아키텍처](../../doc/SYSTEM_ARCHITECTURE.md)
 - [Multi-Worker Architecture](../../doc/dev_req/MULTI_WORKER_ARCHITECTURE.md)
 - [Vehicle 비즈니스 로직](../common/vehicle/README.md)

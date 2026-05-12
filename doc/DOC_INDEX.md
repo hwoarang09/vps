@@ -8,10 +8,8 @@
 
 | 문서 | 설명 |
 |------|------|
-| [시스템 아키텍처](./SYSTEM_ARCHITECTURE.md) | 전체 시스템 설계 |
+| [시스템 아키텍처](./SYSTEM_ARCHITECTURE.md) | 전체 시스템 설계 (Lock 시스템 개요 포함) |
 | [코딩 규칙](./rule/coding_rule.md) | 코드 작성 규칙 |
-| [Lock 정리](./spec/Lock정리.md) | Checkpoint 기반 Lock 시스템 (합류 제어, Deadlock Zone) |
-| [MQTT 명령 전달](./spec/mqtt_명령전달_구현현황.md) | MQTT 통신 구현 현황 |
 
 ---
 
@@ -30,7 +28,8 @@
 |------|------|
 | [vehicle](../src/common/vehicle/README.md) | 차량 로직 개요 |
 | [vehicle/collision](../src/common/vehicle/collision/README.md) | 충돌 감지 로직 |
-| [vehicle/logic](../src/common/vehicle/logic/README.md) | 비즈니스 로직 (Lock, Transfer, Dispatch) |
+| [vehicle/logic](../src/common/vehicle/logic/README.md) | 비즈니스 로직 (Lock / Transfer / Auto / Dijkstra) 개요 |
+| [vehicle/logic/LockMgr](../src/common/vehicle/logic/LockMgr/README.md) | Checkpoint 기반 Lock 시스템 (합류 제어, Deadlock Zone) |
 | [vehicle/memory](../src/common/vehicle/memory/README.md) | 메모리 레이아웃 (VehicleDataArray) |
 | [vehicle/movement](../src/common/vehicle/movement/README.md) | 이동 로직 (EdgeTransition, Physics) |
 
@@ -58,7 +57,7 @@
 
 | 문서 | 설명 |
 |------|------|
-| [logger](../src/logger/README.md) | 로깅 시스템 (EdgeTransitTracker, DevLogger) |
+| [logger](../src/logger/README.md) | Worker → OPFS / MQTT 이중 로그 시스템 (SimLogger, SnapshotLogger, DbShipper) |
 | [VehicleTest](../src/components/test/VehicleTest/README.md) | 테스트 UI 컴포넌트 |
 
 ---

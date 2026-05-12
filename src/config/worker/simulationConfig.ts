@@ -101,8 +101,8 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         curvePreBrakeCheckInterval: 100,
       },
       log: {
-        devLogEnabled: true,
-        edgeTransitLogEnabled: true,
+        devLogEnabled: false,
+        edgeTransitLogEnabled: false,
       },
       lock: {
         waitDistanceFromMergingStr: 1.89,

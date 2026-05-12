@@ -148,7 +148,6 @@ vps/
 | [`doc/SYSTEM_ARCHITECTURE.md`](doc/SYSTEM_ARCHITECTURE.md) | 시스템 아키텍처 상세 |
 | [`doc/DOC_INDEX.md`](doc/DOC_INDEX.md) | 전체 문서 인덱스 |
 | [`doc/dev_plan/`](doc/dev_plan/) | 개발 계획 |
-| [`doc/spec/`](doc/spec/) | 명세 |
 | [`.ai-agents/`](.ai-agents/) | 도메인별 작업 에이전트 (Lock/Sonar/Transfer/...) |
 
 ---
@@ -163,6 +162,8 @@ vps/
 **5월 (2026-05)**
 - [ ] 단순 배속 (×2/×4) — 렌더 프레임 스킵으로 시간 가속
 - [ ] fab별 vehicle 대수 차등 배정 (현재는 모든 fab이 균일)
+- [ ] **파라미터 그룹 비교 뷰 (marginal)** — fabs를 한 파라미터(rerouteInterval / strategy / BPR α 등) 기준으로 그룹화해 그룹 평균을 차트로. 다른 변수는 독립 가정 → 어떤 파라미터가 KPI에 얼마나 영향 주는지 한눈에. 24 fab 늘린 후 개별 카드만으론 marginal effect가 보이지 않아 필요해짐
+- [ ] **Compare/Trend 정렬 + 업데이트 throttle** — 값 기준 내림차순/오름차순 정렬, 갱신 주기 2~5초로 통일 (현재 Cards만 2초 throttle 적용 — `FabContext` flush 단에서 처리, Compare/Trend도 동일 단위로 맞추기)
 - [ ] Lock 정책 최적화 (1차) — 합류점에서 같은 길목이면 여러 대 묶음 통과 허용 *(5~6월 진행)*
 
 **6월 (2026-06)**

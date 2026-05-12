@@ -132,134 +132,153 @@ Worker Thread
 
 ### 4.1 시뮬레이션과 렌더링 분리
 
-FAB 시스템은 **시뮬레이션**과 **렌더링**이 완전히 다른 방식으로 동작합니다.
+FAB 시스템은 **시뮬레이션**과 **렌더링**이 완전히 다른 방식으로 동작한다.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        시뮬레이션 (Worker)                       │
+│                  시뮬레이션 (Worker) — 모든 fab 좌표 공유         │
 │                                                                  │
-│    fab_0 (원본)        fab_1 (offset)       fab_2 (offset)      │
-│    ┌─────────┐        ┌─────────┐          ┌─────────┐         │
-│    │edge0001 │        │edge1001 │          │edge2001 │         │
-│    │node0001 │        │node1001 │          │node2001 │         │
-│    │(0,0)    │        │(110,0)  │          │(220,0)  │         │
-│    └─────────┘        └─────────┘          └─────────┘         │
-│         │                  │                    │               │
-│    각 fab은 자신만의 offset된 맵 복사본을 가지고                  │
-│    그 위에서 이동, 충돌감지, 경로탐색 수행                        │
+│    fab_0_0           fab_0_1            fab_1_0                  │
+│    ┌─────────┐       ┌─────────┐        ┌─────────┐              │
+│    │ edges   │       │ edges   │        │ edges   │              │
+│    │ nodes   │  ←→   │ nodes   │  ←→    │ nodes   │              │
+│    │ (0,0)   │       │ (0,0)   │        │ (0,0)   │              │
+│    └─────────┘       └─────────┘        └─────────┘              │
+│         │                 │                  │                   │
+│         └── 같은 SharedMapRef 참조 (메모리 1벌, edge_name 변환無)─┘
+│                                                                  │
+│    각 fab의 차량들은 좌표상 겹치지만 충돌 검사는 FabContext       │
+│    안에서만 일어나므로 서로 인지하지 않음                          │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        렌더링 (Main Thread)                      │
+│                       렌더링 (Main Thread)                       │
 │                                                                  │
-│    원본 맵 데이터 1개 + 슬롯 offset으로 25개 fab 표시             │
+│    차량 = Worker가 시뮬→렌더 버퍼 복사 시 + fabOffset             │
+│    맵   = Main이 <group position={[offset, ...]}> 한 번 적용      │
 │                                                                  │
-│    originalMapData          slots (max 25)                       │
-│    ┌─────────┐              ┌─────┐ ┌─────┐ ┌─────┐             │
-│    │edge0001 │      →       │fab0 │ │fab1 │ │fab2 │ ...         │
-│    │node0001 │    offset    │+0,0 │ │+110 │ │+220 │             │
-│    └─────────┘      적용    └─────┘ └─────┘ └─────┘             │
+│    원본 맵 1벌 + slots (max renderConfig.maxVisibleFabs)         │
+│    ┌─────────┐       ┌─────┐ ┌─────┐ ┌─────┐                     │
+│    │ edges   │  →    │fab5 │ │fab4 │ │fab6 │ ...                 │
+│    │ nodes   │ slot  │+550 │ │+440 │ │+660 │ (카메라 가까운 순)   │
+│    └─────────┘ offset└─────┘ └─────┘ └─────┘                     │
 │                                                                  │
 │    메모리 절약: 맵 데이터 1벌만 저장                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Worker에서 FAB별 맵 복사
+### 4.2 Worker에서 맵 데이터 공유 (zero-copy)
 
-`SimulationEngine.calculateFabData()`가 각 FAB에 맞게 맵을 복사/변환합니다.
+`SimulationEngine.buildSharedMapRef()`가 `SharedMapRef` 1개를 만들어 **모든 FabContext에 동일 참조를 주입**한다. 옛 구조처럼 fab마다 edges/nodes를 복제하지 않음 — edge_name 변환(`edge1001`, `edge2001` 식)도 없음.
 
-| FAB | Edge 이름 | 좌표 offset | 설명 |
-|-----|-----------|-------------|------|
-| fab_0 | edge0001 | (0, 0) | 원본 그대로 |
-| fab_1 | edge1001 | (110, 0) | ID + 1000, 좌표 + xOffset |
-| fab_2 | edge2001 | (220, 0) | ID + 2000, 좌표 + 2*xOffset |
-| fab_N | edgeN001 | (N*110, 0) | ID + N*1000, 좌표 + N*xOffset |
+```
+sharedMapData (init 시 1회 postMessage)
+       │
+       ▼
+SimulationEngine.buildSharedMapRef()  ← 1회 호출
+       │
+       └─ SharedMapRef
+          ├─ edges: Edge[]              ← 원본 그대로 (공유)
+          ├─ nodes: Node[]              ← 원본 그대로 (공유)
+          ├─ edgeNameToIndex: Map       ← 공유 lookup
+          └─ stations: Station[]
+                │
+                ▼
+       모든 FabContext가 같은 참조를 사용
+       (fab_0_0, fab_0_1, fab_1_0, ... 전부 edges[5] === 같은 edge)
+```
 
-**각 FabContext는 자신만의 offset된 맵 위에서 독립적으로 시뮬레이션합니다.**
+**시뮬 좌표는 원본 그대로**. 즉 모든 FAB의 차량들이 같은 좌표 공간 (0, 0) 근처에서 시뮬레이션됨. 충돌 검사는 각 FabContext의 `edgeVehicleQueue` 안에서만 일어나므로 fab 간 좌표가 겹쳐도 서로의 차량을 인지하지 않음.
 
 ### 4.3 FabContext 구조
 
 ```
 FabContext ("fab_0_1")
 ├── fabId: "fab_0_1"
-├── edges: Edge[]              ← offset된 맵 데이터 (edge1001, edge1002...)
-├── nodes: Node[]              ← offset된 좌표 (x+110, y+0)
-├── edgeNameToIndex: Map       ← edge1001 → 0
+├── edges: Edge[]              ← sharedMapRef.edges 참조 (모든 fab 공유)
+├── nodes: Node[]              ← sharedMapRef.nodes 참조
+├── edgeNameToIndex: Map       ← sharedMapRef와 동일
+├── fabOffset: { x, y }        ← 렌더 좌표 offset (렌더 버퍼 쓸 때만 적용)
 │
-├── store: EngineStore         ← SharedBuffer 접근
-│   └── vehicleDataArray       ← 이 FAB의 차량들 (offset된 좌표)
+├── store: EngineStore         ← 시뮬 버퍼 (fab별 region) 접근
+│   └── vehicleDataArray       ← 이 FAB의 차량들 (원본 좌표)
 │
-├── edgeVehicleQueue           ← edge별 차량 목록 (충돌감지용)
-├── lockMgr: LockMgr           ← Merge 노드 잠금
+├── edgeVehicleQueue           ← edge별 차량 목록 (충돌감지, FabContext 격리)
+├── lockMgr: LockMgr           ← Merge 노드 잠금 (per-fab 독립 인스턴스)
 ├── transferMgr: TransferMgr   ← 차량 이동 명령
-└── autoMgr: AutoMgr           ← 자동 라우팅
+├── autoMgr: AutoMgr           ← 자동 라우팅
+├── dispatchMgr: DispatchMgr   ← 배차
+└── routingMgr: RoutingMgr     ← 명령 라우팅
 ```
 
-**자세한 내용**: [FabContext 설계 개념](../src/shmSimulator/core/README.md#개념-왜-이렇게-설계했나)
+**자세한 내용**: [FabContext API / step 흐름](../src/shmSimulator/core/README.md#6-fabcontext-api)
 
-### 4.4 Main Thread 렌더링 (Slot 기반)
+### 4.4 fab offset이 적용되는 두 경로
 
-Main Thread는 메모리 절약을 위해 **원본 맵 데이터 1개만 저장**하고, **슬롯 offset**으로 여러 FAB을 표시합니다.
+모든 fab이 같은 시뮬 좌표(fab_0_0의 공간)에서 돌고, 차량들도 좌표상 겹친다. 그런데 화면에서는 따로 떨어져 보여야 한다. **차량과 맵이 서로 다른 경로로 offset된다** — 동적 데이터와 정적 데이터의 처리가 갈림.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     카메라 위치 기반 슬롯 할당                    │
-│                                                                  │
-│    카메라가 fab_5 근처에 있으면:                                  │
-│    → 가장 가까운 25개 fab을 슬롯에 할당                          │
-│    → 각 슬롯은 fab 위치까지의 offset 값을 가짐                   │
-│                                                                  │
-│    slot[0]: fabIndex=5,  offsetX=550, offsetY=0                 │
-│    slot[1]: fabIndex=4,  offsetX=440, offsetY=0                 │
-│    slot[2]: fabIndex=6,  offsetX=660, offsetY=0                 │
-│    ...                                                           │
-│                                                                  │
-│    EdgeRenderer:                                                 │
-│    {slots.map((slot) => (                                       │
-│      <group position={[slot.offsetX, slot.offsetY, 0]}>         │
-│        {/* 원본 edge 데이터를 이 위치에 렌더링 */}               │
-│      </group>                                                    │
-│    ))}                                                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+| 데이터 | 변환 시점 | 변환 방법 | 누가 함 |
+|--------|----------|----------|---------|
+| **차량** (동적, 매 프레임 변함) | 매 step 끝, 시뮬→렌더 버퍼 복사 시 | SAB에 `+fabOffsetX/Y` 적용한 값 기록 | Worker |
+| **맵** (정적, 안 변함) | Three.js scene 빌드 시 | `<group position={[slot.offsetX, slot.offsetY, 0]}>` | Main |
 
-### 4.5 차량 렌더링
+#### 차량 경로 — 시뮬 vs 렌더 버퍼 2-layer
 
-차량은 Worker에서 **이미 offset된 좌표**로 SharedBuffer에 저장되므로, 렌더러는 그대로 읽어서 표시합니다.
+SAB이 총 6개 — **시뮬용 4개** (`vehicleBuffer` / `sensorBuffer` / `pathBuffer` / `checkpointBuffer`)는 Worker만 쓰고, **렌더용 2개** (`vehicleRenderBuffer` / `sensorRenderBuffer`)는 Worker가 쓰고 Main이 읽음.
+
+| 버퍼 | 레이아웃 | 1차량당 크기 | 좌표계 |
+|------|---------|------------|--------|
+| **시뮬 버퍼** (`vehicleBuffer`, FAB별 region) | fab별 region 분리 | 22 floats | 원본 (offset 없음) |
+| **렌더 버퍼** (`vehicleRenderBuffer`, 전역 연속) | 모든 fab 연속 | 4 floats (x, y, z, rotation) | `+fabOffset` 적용본 |
+
+**Worker** — `FabContext.step()` 끝에 `writeToRenderRegion()` 호출. 매 step 마지막 단계에서 시뮬 좌표 → 렌더 좌표 변환 + 22 floats 중 4개만 추려서 복사:
 
 ```typescript
-// VehicleArrayRenderer - 슬롯 offset 없이 그대로 렌더링
-posArr[i3] = data[ptr + MovementData.X];      // 이미 fab offset 적용됨
-posArr[i3 + 1] = data[ptr + MovementData.Y];  // 이미 fab offset 적용됨
+// src/shmSimulator/core/FabContext/render.ts
+vehicleRenderData[i*4 + 0] = workerVehicleData[i*22 + MovementData.X] + fabOffsetX;
+vehicleRenderData[i*4 + 1] = workerVehicleData[i*22 + MovementData.Y] + fabOffsetY;
+vehicleRenderData[i*4 + 2] = workerVehicleData[i*22 + MovementData.Z];
+vehicleRenderData[i*4 + 3] = workerVehicleData[i*22 + MovementData.ROTATION];
 ```
 
-| 구분 | 맵 렌더링 | 차량 렌더링 |
-|------|----------|------------|
-| 데이터 | 원본 1개 | fab별 offset된 좌표 |
-| offset 적용 | 렌더러에서 slot offset | 이미 적용됨 (그대로) |
-| 메모리 | 원본 × 1 | 전체 차량 수 × 22 floats |
+**Main** — `useFrame` 안에서 렌더 버퍼를 InstancedMesh attribute에 **그대로 한 줄로 복사**. fab offset도 좌표 변환도 다시 안 함:
 
-### 4.6 디버깅 시 주의사항
+```typescript
+// src/components/three/entities/renderers/VehiclesRenderer/VehicleArrayRenderer.tsx
+dataArr.set(data.subarray(0, actualNumVehicles * VEHICLE_RENDER_SIZE));
+```
 
-차량 클릭 시 표시되는 edge 정보가 헷갈릴 수 있습니다.
+#### 맵 경로 — Slot 기반 group transform
+
+맵은 정적이라 SAB을 안 거침. Main이 init 때 받은 **원본 맵 1벌**을 메모리에 보관하고, slot마다 다른 `position`을 가진 `<group>` 자식으로 N번 렌더한다. mesh geometry/material은 1벌 — Three.js scene graph가 group transform을 자식 draw call에 자동으로 곱함.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  차량 정보 표시 (UI)                                             │
-│                                                                  │
-│  실제 저장값:  currentEdgeIndex = 5                              │
-│  UI 표시:      "E5" (index 그대로)                               │
-│                                                                  │
-│  ⚠️ 주의:                                                        │
-│  - fab_0 차량: E5 → 실제 edge0005                               │
-│  - fab_1 차량: E5 → 실제 edge1005                               │
-│  - fab_2 차량: E5 → 실제 edge2005                               │
-│                                                                  │
-│  모든 fab에서 "E5"로 보이지만, 실제 edge 이름은 fab마다 다름!     │
-│  edge index는 각 fab의 edges[] 배열 내 순서                      │
-└─────────────────────────────────────────────────────────────────┘
+fabStore.slots (카메라 거리 기반 동적 할당, 최대 renderConfig.maxVisibleFabs 개)
+  ├─ slot[0]: fabIndex=5,  offsetX=550, offsetY=0   ← 카메라에 가장 가까운 fab
+  ├─ slot[1]: fabIndex=4,  offsetX=440, offsetY=0
+  └─ ...
+
+// EdgeRenderer / NodesRenderer / StationRenderer
+{slots.map(slot => (
+  <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+    {/* 원본 mesh — 같은 geometry/material을 group 안에 다시 인스턴스화 */}
+  </group>
+))}
 ```
+
+카메라 이동 시 `fabStore.updateSlots(cameraX, cameraY)`가 가장 가까운 fab N개를 다시 골라 slot에 재할당 — 전체 fab을 그리지 않고 가까운 것만 그려 draw call 절약.
+
+#### 정리
+
+- 시뮬: 모든 fab이 좌표상 겹친 채로 돈다 (FabContext 격리로 충돌 안 남)
+- 매 step 끝: Worker가 위치+회전 4 floats만 fab offset 더해서 렌더 버퍼에 복사
+- Main: 렌더 버퍼를 그대로 InstancedMesh로 한 번에 set, 맵은 slot group 한 번에 평행이동
+
+**상세 문서**:
+- [Three.js 렌더링 컴포넌트 개요](../src/components/three/README.md)
+- [VehicleArrayMode (InstancedMesh + SAB 직접 read)](../src/components/three/entities/vehicle/vehicleArrayMode/README.md)
+- [FabContext.step / writeToRenderRegion](../src/shmSimulator/core/README.md#step-흐름--7-단계)
 
 ---
 
@@ -426,33 +445,29 @@ Main Thread (매 프레임)
 
 ## 7. 렌더링 아키텍처
 
-### 7.1 Slot 기반 렌더링
+### 7.1 Slot 기반 렌더링 (맵)
 
-화면에 보이는 FAB만 렌더링하여 성능 최적화합니다.
-
-**자세한 내용**: [Three.js 렌더링 시스템 - Slot 기반 렌더링](../src/components/three/README.md#slot-기반-맵-렌더링)
+화면에 보이는 FAB만 렌더링한다. 카메라 거리 기반으로 `renderConfig.maxVisibleFabs` 개 (default 9) 슬롯에 동적 할당.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     카메라 뷰포트                                │
-│                                                                  │
-│    ┌─────────────────────────────────────────────────────┐      │
-│    │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐           │      │
-│    │  │ S0  │ │ S1  │ │ S2  │ │ S3  │ │ S4  │           │      │
-│    │  │fab_0│ │fab_1│ │fab_2│ │fab_3│ │fab_4│           │      │
-│    │  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘           │      │
-│    │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐           │      │
-│    │  │ S5  │ │ S6  │ │ S7  │ │ S8  │ │ S9  │  ...      │      │
-│    │  │fab_5│ │fab_6│ │fab_7│ │fab_8│ │fab_9│           │      │
-│    │  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘           │      │
-│    │                                                     │      │
-│    │  maxVisibleFabs = 25 (설정값)                       │      │
-│    │  카메라에서 가장 가까운 25개 FAB만 렌더링            │      │
-│    └─────────────────────────────────────────────────────┘      │
-│                                                                  │
-│    나머지 FAB들은 시뮬레이션만 (렌더링 안 함)                   │
-└─────────────────────────────────────────────────────────────────┘
+fabStore.slots — 카메라 위치 기반 동적 재할당 (fabStore.updateSlots)
+  ├─ slot[0]: fabIndex=5,  offsetX=550, offsetY=0    ← 카메라 최근접
+  ├─ slot[1]: fabIndex=4,  offsetX=440, offsetY=0
+  └─ ...
+
+EdgeRenderer / NodesRenderer / StationRenderer:
+  {slots.map(slot => (
+    <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
+      {/* 원본 맵 데이터 — Three.js group transform 자동 적용 */}
+    </group>
+  ))}
 ```
+
+slot에 할당되지 않은 fab은 **렌더링만** 생략 — 시뮬레이션은 모든 fab이 계속 돌고 있음 (Worker는 카메라를 모름).
+
+차량은 별도 경로로 fab offset이 적용됨 — Worker가 시뮬→렌더 버퍼 복사 시점에 `+fabOffsetX/Y`. 자세한 설명: [§4.4 fab offset이 적용되는 두 경로](#44-fab-offset이-적용되는-두-경로)
+
+**자세한 내용**: [Three.js 렌더링 컴포넌트](../src/components/three/README.md)
 
 ### 7.2 렌더러 구조
 
@@ -508,7 +523,7 @@ for (const vehicle of vehicles) {
 | `SimulationEngine` | `shmSimulator/core/` | FAB 총괄, 시뮬레이션 루프 |
 | `FabContext` | `shmSimulator/core/` | 개별 FAB 시뮬레이션 |
 | `EngineStore` | `shmSimulator/core/` | 메모리 접근, 차량 데이터 관리 |
-| `LockMgr` | `common/vehicle/logic/` | Merge 노드 잠금 관리 - [상세 문서](../src/common/vehicle/logic/README.md) |
+| `LockMgr` | `common/vehicle/logic/LockMgr/` | Merge 노드 잠금 관리 - [상세 문서](../src/common/vehicle/logic/LockMgr/README.md) |
 | `TransferMgr` | `shmSimulator/core/` | 차량 이동 명령 처리 |
 | `AutoMgr` | `shmSimulator/core/` | 자동 라우팅 |
 | `DispatchMgr` | `shmSimulator/core/` | 배차 관리 |
@@ -606,3 +621,133 @@ FAB별 다익스트라:   O(E/N log V/N) where N = FAB 수
   - Sensor Buffer:  50,000 × 128 = 6.4 MB
   - 총: ~11 MB (매우 경량)
 ```
+
+---
+
+## 11. Lock 시스템 (Merge Node 충돌 방지)
+
+여러 edge가 하나의 node로 합류하는 지점에서 차량이 동시 진입하면 충돌이 발생한다.
+**LockMgr**이 한 번에 한 대에게만 진입 허가(grant)를 부여하는 신호등 역할을 한다.
+
+### 11.1 핵심 설계 — Checkpoint 기반 lazy 평가
+
+10만대 × 60fps 환경에서 **매 프레임** 모든 차량에 대해 merge 탐색 / 거리 계산 /
+lock 요청을 수행하면 너무 비싸다 (≈ 600만 호출/초). 대신 **경로 결정 시점**에
+차량별 checkpoint 리스트를 미리 계산해 두고, 매 프레임은
+`currentEdge === cpEdge && currentRatio >= cpRatio` 비교 2개만 한다.
+99%는 여기서 조기 종료되고, 1%만 본격 lock 로직이 돌아간다.
+
+```
+Vehicle 경로: E10 → E11(merge) → E12
+
+checkpoints = [
+  { edge:10, ratio:0.70, flags:REQ,     target:E11 },  // 5.1m 전  → lock 요청
+  { edge:10, ratio:0.85, flags:WAIT,    target:E11 },  // 1.89m 전 → grant 대기
+  { edge:11, ratio:0.20, flags:RELEASE, target:E11 },  // merge 통과 후 → 해제
+]
+```
+
+### 11.2 Deadlock Zone — 다이아몬드 교착 해결
+
+두 분기점이 같은 합류점 쌍으로 모두 도달 가능한 다이아몬드 구조에서는 순수 FIFO로
+영구 교착이 생길 수 있다 — FIFO 1번이 *물리적으로 즉시 통과 불가능한 차량*일 때
+그 lock이 영원히 안 풀려서 *즉시 통과 가능한* 다른 차량이 무한 대기.
+
+**검출 (정적 분석, 시뮬 시작 시 1회)**: Main thread의 `nodeStore.detectDeadlockZones()`가
+맵을 훑어서 — 분기점 A·D 두 개가 같은 합류점 {B, C}로 모두 도달 가능하면 그
+합류점들을 DZ로 마킹. reachable 판정은 **1-hop 직접** OR **2-hop curve-passthrough**
+(변형 DZ 2 — 곡선 끼어 있는 형태도 포함).
+
+**런타임 (DZ 마킹된 노드에 통합 적용되는 3종 메커니즘)**:
+
+1. **Auto gate** — checkpoint 발화와 무관하게, edge 진입 직후 자동 REQ → grant 또는
+   STOP, merge 통과 후 자동 RELEASE. checkpoint 처리 누락(타이밍 race)으로 stuck되는
+   case를 막는 안전망.
+2. **Approaching-edge priority grant** — 큐에서 head를 그대로 grant하지 않고,
+   *지금 즉시 통과 가능한* 차량(`currentEdge.to_node === merge`)을 우선 grant.
+3. **Stuck holder swap** — holder가 velocity=0으로 2초 이상 stuck이고 큐에 ready한
+   차량이 있으면 holder 강제 이전. 최후의 안전망.
+
+3종은 **개별 노드별로 다른 해결책이 아니라**, DZ로 마킹된 *모든* 노드에 같은 메커니즘이
+자동 적용된다.
+
+→ **상세 (checkpoint flags / 처리 흐름 / catch-up loop / DZ 메커니즘 코드 / 파일 맵)**:
+[`../src/common/vehicle/logic/LockMgr/README.md`](../src/common/vehicle/logic/LockMgr/README.md)
+
+---
+
+## 12. 로그 / 관측 시스템
+
+### 12.1 왜 OPFS + binary
+
+브라우저 안에서 도는 시뮬레이션의 이벤트를 파일에 영구 저장해야 한다. 후보를
+검토했을 때 hot path를 견디는 건 OPFS가 유일했다:
+
+| 옵션 | 한계 |
+|------|------|
+| `localStorage` | 5MB, string only |
+| `IndexedDB` | async + tx 오버헤드 → 60FPS × 수천 record/s 못 견딤 |
+| File System Access API | 매번 사용자 권한 prompt |
+| **OPFS** (`FileSystemSyncAccessHandle`) | Worker에서 sync raw byte write. 권한 불필요 |
+
+포맷은 binary 고정 크기 record. text 로그가 차량 800대 × 하루 = ~100GB 쌓이는 걸
+경험한 적 있어서 — 정상 동작 로그를 GB 단위로 들고 있을 이유 없고, 문제 구간만
+잘라서 보면 된다는 판단. binary로 5~10배 압축 + Python `numpy.fromfile` 한 줄로 read.
+
+### 12.2 두 layer
+
+```
+FabContext.step():
+  ├─ 1. checkCollisions
+  ├─ 2. lockMgr.updateAll()   ── onLockEvent ──┐
+  ├─ 3. updateMovement        ── onEdgeTransit ─┤
+  ├─ 4. autoMgr.update()      ── onPathFound ──┤   콜백 hook
+  ├─ 4.5. path-change reconcile                │
+  ├─ 5. ReplaySnapshot (0.5s)                  │
+  ├─ 6. DebugSnapshot (100ms) ──┐              │
+  ├─ 7. flushOrderStats (2s)    │              │
+  └─ 8. writeToRenderRegion     │              │
+                                ▼              ▼
+            ┌────────────────────────┐  ┌─────────────────────────┐
+            │ SnapshotLogger          │  │ SimLogger (event-driven)│
+            │ - 가변 크기 block       │  │ - 고정 크기 record 10종 │
+            │ - 100ms마다 전체 차량   │  │ - 16 ~ 44B/record       │
+            │   + edge queue snapshot │  │ - 512 records buffer    │
+            └───────────┬─────────────┘  └─────┬───────────┬───────┘
+                        ▼                       ▼           ▼
+                  OPFS (Worker sync write)             DbShipper
+                  files: {sessionId}_{fabId}_*.bin    (선택, MQTT)
+                                                       │
+                                                       ▼
+                                          PostgreSQL (ML dataset 적재)
+```
+
+- **SimLogger** — event-driven. `ML_ORDER_COMPLETE` / `ML_EDGE_TRANSIT` / `ML_LOCK` /
+  `ML_REPLAY_SNAPSHOT` (학습용) + 6종 dev 이벤트 (디버그용). 모두 고정 크기 record.
+- **SnapshotLogger** — 시간 주기 (100ms). 그 시점 전체 차량 상태 + 활성 edge queue를
+  가변 크기 block으로. deadlock 추적 / replay 용도.
+- **OPFS + MQTT 병행** — OPFS는 단일 세션 로컬 분석용. MQTT는 PostgreSQL 적재(ML dataset).
+  둘은 독립이라 한쪽 끊겨도 다른 쪽 무사.
+
+### 12.3 분석 워크플로우
+
+```
+Browser (OPFS)
+   │ simLogUtils.downloadSimLogFile(fileName)
+   ▼
+Downloads/*.bin
+   │ mv → logs/{sessionId}/
+   ▼
+scripts/log_parser/
+   ├─ log_parser.py            # .bin → DataFrame
+   ├─ analyze.py               # 이벤트별 분석
+   └─ snapshot_streaming.py    # 큰 snapshot.bin (>200MB OOM 방지)
+```
+
+스키마는 write side (`SimLogger.ts` / `protocol.ts`)와 read side
+(`scripts/log_parser/*.py`)에 양쪽 수동으로 같은 byte layout을 적어둠 — AI에게
+양쪽 동시에 작성하게 하면 sync 비용이 거의 0이라 IDL을 따로 두지 않았다.
+FlatBuffers 스키마 정의 + flatc codegen은 한 번 시도했지만 ML 파이프라인을
+본격적으로 짤 때 다시 도입 예정 ([`schema/dev_log.fbs`](../schema/dev_log.fbs)).
+
+**상세**: [`src/logger/README.md`](../src/logger/README.md)

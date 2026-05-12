@@ -7,8 +7,8 @@
     "curvePreBrakeCheckInterval": -1
   },
   "log": {
-    "devLogEnabled": true,
-    "edgeTransitLogEnabled": true
+    "devLogEnabled": false,
+    "edgeTransitLogEnabled": false
   },
   "lock": {
     "waitDistanceFromMergingStr": 2.9,

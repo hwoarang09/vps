@@ -516,7 +516,7 @@ for (const veh of vehicles) {
 ```
 
 ## 관련 문서
-- [시스템 전체 아키텍처](../../doc/README.md)
+- [시스템 전체 아키텍처](../../doc/SYSTEM_ARCHITECTURE.md)
 - [shmSimulator 사용법](../shmSimulator/README.md)
 - [Three.js 렌더링](../components/three/README.md)
 - [Store 모드별 구현](../store/vehicle/README.md)

@@ -80,29 +80,30 @@ void main() {
 - GC 압력 제거 (Zero-GC)
 - GPU가 병렬로 transform 수행
 
-### Slot 기반 맵 렌더링
+### Slot 기반 맵 렌더링 (정적 데이터 경로)
 
-**원본 맵 데이터 1개**만 저장하고, **slot offset**으로 여러 FAB을 렌더링합니다.
+맵(edge / node / station)은 정적이라 SAB을 거치지 않는다. **원본 맵 1벌**만 메모리에 저장하고, slot마다 다른 `position`을 가진 `<group>`으로 N번 렌더한다. mesh geometry/material 자체는 1벌 — Three.js scene graph가 group transform을 자식 draw call에 자동으로 곱한다.
 
 ```
-원본 맵 데이터 (1개)        Slot 기반 렌더링 (최대 25개)
-┌─────────┐               ┌─────┐ ┌─────┐ ┌─────┐
-│edge0001 │               │fab0 │ │fab1 │ │fab2 │ ...
-│node0001 │    →          │+0,0 │ │+110 │ │+220 │
-└─────────┘    offset     └─────┘ └─────┘ └─────┘
-                적용
+originalMapData (1벌)      Slot 기반 렌더링 (최대 renderConfig.maxVisibleFabs)
+┌─────────┐                ┌─────┐ ┌─────┐ ┌─────┐
+│  edges  │   →            │fab5 │ │fab4 │ │fab6 │ ...
+│  nodes  │  slot offset   │+550 │ │+440 │ │+660 │   (카메라 가까운 순)
+└─────────┘                └─────┘ └─────┘ └─────┘
 ```
 
-**동작:**
-1. 카메라 위치 변화 감지 (100 단위 이상 이동 시)
-2. 가장 가까운 25개 FAB 선택
-3. 각 FAB의 offset 계산
-4. slot offset으로 렌더링
+**동작 (`fabStore.updateSlots`)**:
+1. 카메라 위치 변화 감지
+2. 모든 fab을 카메라 거리순 정렬, 가장 가까운 `maxVisibleFabs` 개 선택 (default 9)
+3. slot 배열의 `fabIndex` / `offsetX` / `offsetY` 갱신
+4. EdgeRenderer / NodesRenderer / StationRenderer가 `slots.map(slot => <group position={[slot.offsetX, slot.offsetY, 0]}>)` 패턴으로 렌더
 
-**이유:**
-- 맵 데이터 메모리를 1/N로 절약 (50개 FAB → 원본 1개만)
-- 화면에 보이는 FAB만 렌더링 (성능 최적화)
-- 카메라 이동 시에만 slot 업데이트 (불필요한 계산 방지)
+**이유**:
+- 맵 데이터 메모리를 1/N로 절약 (24개 FAB → 원본 1벌)
+- 화면에 보이는 fab만 그려 draw call 절약
+- 카메라 이동 시에만 slot 재할당 → useFrame 안에서 계산 무료
+
+> **참고**: 차량은 정반대 경로 — Worker가 매 step 끝에 fab offset 적용한 좌표를 렌더 버퍼(SAB)에 써 두고 Main이 그대로 읽음. 두 경로 비교는 [`SYSTEM_ARCHITECTURE.md §4.4`](../../../doc/SYSTEM_ARCHITECTURE.md#44-fab-offset이-적용되는-두-경로) 참조.
 
 ---
 

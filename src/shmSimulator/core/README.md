@@ -1,744 +1,436 @@
-# shmSimulator/core - 시뮬레이션 엔진 핵심
+# shmSimulator/core — 시뮬레이션 엔진 핵심
 
-Worker 내부에서 실행되는 시뮬레이션 엔진의 핵심 컴포넌트입니다. React/Zustand와 완전히 독립적으로 동작합니다.
-
-## 개념 (왜 이렇게 설계했나)
-
-### Worker 기반 독립 시뮬레이션
-
-Main Thread는 렌더링과 UI만 담당하고, 모든 시뮬레이션 로직은 Worker에서 실행됩니다.
-
-```
-Main Thread                     Worker Thread (각각)
-┌─────────────────┐            ┌─────────────────────────┐
-│ React/Zustand   │            │ SimulationEngine (1개)  │
-│ Three.js        │            │   └─ FabContext[]       │
-│                 │            │      ├─ FabContext      │
-│ READ ONLY       │            │      ├─ FabContext      │
-│     ↓           │            │      └─ FabContext      │
-│ SharedBuffer ◀──┼────────────┼────────────────────────  │
-└─────────────────┘            └─────────────────────────┘
-```
-
-**구조:**
-- **Worker 1개당 SimulationEngine 1개**
-- **SimulationEngine 1개당 여러 FabContext 관리**
-- 각 FabContext는 독립적인 매니저(LockMgr, TransferMgr, AutoMgr 등) 소유
-
-**이유:**
-- Main Thread의 렌더링 성능 보장 (60 FPS UI 유지)
-- 시뮬레이션과 렌더링의 독립적인 FPS 관리
-- 멀티 워커로 FAB 병렬 처리 가능
-
-### FAB별 독립 컨텍스트
-
-각 FAB은 **독립적인 평행우주**처럼 동작합니다. `FabContext`가 FAB 하나의 모든 것을 관리합니다.
-
-**계층 구조:**
-
-```
-Worker 0 (worker.entry.ts)
-└── engine: SimulationEngine (1개)
-    └── fabContexts: Map<string, FabContext>
-        ├── "fab_0_0" → FabContext
-        │   ├── edges: Edge[]              ← edge0001, edge0002...
-        │   ├── nodes: Node[]              ← (x, y) 좌표
-        │   ├── EngineStore                ← SharedBuffer[0~999]
-        │   ├── LockMgr                    ← 독립 인스턴스
-        │   ├── TransferMgr                ← 독립 인스턴스
-        │   ├── AutoMgr                    ← 독립 인스턴스
-        │   ├── DispatchMgr                ← 독립 인스턴스
-        │   └── RoutingMgr                 ← 독립 인스턴스
-        │
-        ├── "fab_0_1" → FabContext
-        │   ├── edges: Edge[]              ← edge1001, edge1002...
-        │   ├── nodes: Node[]              ← (x+110, y) 좌표
-        │   ├── EngineStore                ← SharedBuffer[1000~1999]
-        │   └── ...                        ← 독립적인 매니저들
-        │
-        └── "fab_0_2" → FabContext
-            └── ...
-
-Worker 1 (worker.entry.ts)
-└── engine: SimulationEngine (1개)
-    └── fabContexts: Map<string, FabContext>
-        ├── "fab_1_0" → FabContext
-        ├── "fab_1_1" → FabContext
-        └── ...
-```
-
-**핵심:**
-- **Worker 1개당 SimulationEngine 1개** (worker.entry.ts에서 생성)
-- **SimulationEngine이 여러 FabContext 관리** (Map으로 저장)
-- **각 FabContext는 독립적인 매니저 인스턴스 소유** (fab_0_0의 LockMgr ≠ fab_0_1의 LockMgr)
-
-**이유:**
-- FAB 간 완전한 격리 (한 FAB의 버그가 다른 FAB에 영향 없음)
-- 각 FAB이 자신만의 맵 복사본에서 경로탐색 수행 (성능 향상)
-- 멀티 워커 환경에서 FAB별 분산 처리 용이
-
-### 메모리 영역 분리
-
-멀티 워커 환경에서는 각 Worker가 SharedArrayBuffer의 특정 영역만 접근합니다.
-
-```
-SharedArrayBuffer (전체)
-┌─────────────────┬─────────────────┬─────────────────┐
-│ FAB 0 영역      │ FAB 1 영역      │ FAB 2 영역      │
-│ [0~21999]       │ [22000~43999]   │ [44000~65999]   │
-│ Worker 0 담당   │ Worker 0 담당   │ Worker 1 담당   │
-└─────────────────┴─────────────────┴─────────────────┘
-```
-
-**이유:**
-- 영역이 겹치지 않으므로 Atomics 불필요 (성능 향상)
-- Worker 간 메모리 충돌 방지
-- 각 Worker는 할당된 영역만 접근 (버그 방지)
-
-### 맵 데이터 복제
-
-#### 시뮬레이션 (Worker)
-각 FAB은 **offset된 맵 복사본**을 가집니다. `SimulationEngine.calculateFabData()`가 원본 맵에서 FAB별 맵을 생성합니다.
-
-```
-원본 맵              fab_0 (복사)        fab_1 (복사+offset)
-edge0001 (0,0)   →   edge0001 (0,0)      edge1001 (110,0)
-node0001 (0,0)   →   node0001 (0,0)      node1001 (110,0)
-```
-
-**이유:**
-- 각 FabContext가 자신의 맵에서 경로탐색/충돌감지 수행
-- FAB별 독립적인 edge index 관리 (0~N)
-- 시뮬레이션 코드가 FAB을 의식하지 않아도 됨 (단순화)
-
-#### 렌더링 (Main Thread)
-**원본 맵 1개 + Slot offset**으로 여러 FAB을 표시합니다 (메모리 절약).
-
-```
-originalMapData (1개)
-    ↓
-slots (최대 25개)
-┌──────┬──────┬──────┐
-│ fab0 │ fab1 │ fab2 │ ...
-│ +0,0 │ +110 │ +220 │
-└──────┴──────┴──────┘
-```
-
-**이유:**
-- 맵 데이터 메모리 1벌만 사용 (절약)
-- 렌더링 시 slot offset만 적용하면 됨 (간단)
+Worker 내부에서 실행되는 시뮬레이션 엔진. React/Zustand/Three.js와 완전히 독립.
 
 ---
 
-## 코드 가이드 (API, 사용법)
+## 1. 책임 분리
 
-### SimulationEngine
+| 스레드 | 역할 | 코드 위치 |
+|--------|------|----------|
+| **Main** | 렌더링, UI, MQTT 송수신 | `components/three/`, `store/`, `mqttStore` |
+| **Worker** | 물리/충돌/lock/라우팅 | `shmSimulator/`, `common/vehicle/` |
+| **데이터 통로** | SharedArrayBuffer (zero-copy) | `MemoryLayoutManager` |
 
-Worker 내부에서 실행되는 시뮬레이션 총괄 클래스입니다.
+**postMessage는 명령/이벤트용, SharedArrayBuffer는 데이터용**. 매 프레임 수천 대 × 88 bytes 차량 데이터를 postMessage로 보내면 성능이 무너지므로, 위치/속도 같은 hot-path 데이터는 SAB 위에서 직접 read/write.
 
-#### 주요 메서드
+---
+
+## 2. Worker ↔ FAB 매핑
+
+```
+Main Thread
+  └─ MultiWorkerController
+      ├─ MemoryLayoutManager.calculateLayout()      ← FabMemoryAssignment 산출
+      ├─ MemoryLayoutManager.distributeToWorkers()  ← ceil(fabs/workers) 단위 연속 block
+      │
+      ├─ Worker 0 (worker.entry.ts)
+      │   └─ SimulationEngine (1개)
+      │       └─ fabContexts: Map<string, FabContext>
+      │           ├─ "fab_0_0" → FabContext (매니저 5종 독립 인스턴스)
+      │           ├─ "fab_0_1" → FabContext
+      │           └─ ...
+      │
+      └─ Worker 1
+          └─ SimulationEngine (1개)
+              └─ ...
+```
+
+- **Worker당 SimulationEngine 1개** (`worker.entry.ts`에서 생성)
+- **SimulationEngine당 FabContext N개** (Map 보관)
+- **각 FabContext가 매니저 5종을 독자 소유**: `LockMgr`, `TransferMgr`, `AutoMgr`, `DispatchMgr`, `RoutingMgr` — FAB 간 완전 격리
+
+---
+
+## 3. 메모리 — 시뮬 버퍼 vs 렌더 버퍼 (2-layer)
+
+| 버퍼 | 레이아웃 | 쓰는 쪽 | 읽는 쪽 |
+|------|---------|---------|---------|
+| **시뮬 버퍼** (4종, FabInitData 안) | FAB별 region 분리 (`FabMemoryAssignment`) | Worker (`FabContext.step`) | Worker |
+| **렌더 버퍼** (`vehicleRenderBuffer`, `sensorRenderBuffer`) | 모든 FAB 연속 (전역 인덱스) | Worker (`writeToRenderRegion`, 매 스텝 끝) | Main (Three.js `useFrame`) |
+
+**왜 2-layer로 나눴나**
+- 시뮬: region 분리 → Worker 간 메모리 겹침 없음 → Atomics 불필요
+- 렌더: 연속 레이아웃이어야 `InstancedMesh` attribute를 한 번에 업데이트 가능
+- **fab 좌표 offset (`fabOffset.x/y`) 적용은 렌더 버퍼에 쓸 때만** — 시뮬은 원본 좌표를 그대로 사용
+
+### 시뮬 버퍼 4종 (FAB별 region)
+
+`FabInitData`에 SharedArrayBuffer 4개:
+
+| 버퍼 | 내용 | 1차량당 크기 |
+|------|------|------------|
+| `sharedBuffer` | Vehicle 데이터 (위치/속도/edge ratio/status/...) | `VEHICLE_DATA_SIZE * 4 bytes` (22 floats) |
+| `sensorPointBuffer` | Sensor 포인트 (충돌 감지용) | `SENSOR_DATA_SIZE * 4 bytes` |
+| `pathBuffer` | 경로 (Dijkstra 결과) | `MAX_PATH_LENGTH * 4 bytes` (Int32) |
+| `checkpointBuffer` | Lock checkpoint 리스트 | `CHECKPOINT_SECTION_SIZE * 4 bytes` |
+
+각 버퍼는 `FabMemoryAssignment.{vehicle|sensor|path|checkpoint}Region`의 `{offset, size}`로 FAB별 region 분할. `MemoryLayoutManager.calculateLayout()`이 산출.
+
+---
+
+## 4. 맵 데이터 — `SharedMapRef` (zero-copy)
+
+옛 구조는 FAB마다 맵을 복제했지만 (`edge1001`, `edge2001` 식 이름 변환), **현재는 모든 FAB이 같은 `edges`/`nodes` 배열을 참조**.
+
+- Main → Worker로 `sharedMapData`를 **init 시 1회 postMessage**
+- `SimulationEngine.buildSharedMapRef()`가 `SharedMapRef` 1개를 만들어 모든 `FabContext`에 동일 참조 주입
+- edge_name 변환 **없음**. 시뮬은 원본 좌표를 그대로 사용
+- FAB 간 시각적 분리는 `fabOffset = calculateFabOffset(col, row)`을 **렌더 버퍼 쓸 때만** 적용 (`writeToRenderRegion`)
+
+```typescript
+interface SharedMapRef {
+  edges: Edge[];                                  // 원본 (FAB 공유)
+  nodes: Node[];                                  // 원본 (FAB 공유)
+  edgeNameToIndex: Map<string, number>;           // 공유 lookup
+  nodeNameToIndex: Map<string, number>;
+  stations: StationRawData[];
+  waitRelocations?: Map<string, WaitRelocationEntry>;  // 변형 DZ wait relocation
+}
+```
+
+레거시 모드 (`sharedMapRef` 없이 fab별 `edges`/`nodes` 받는 경로)도 코드에는 남아있지만 멀티-FAB 환경에서는 사실상 미사용.
+
+---
+
+## 5. SimulationEngine API
+
+`core/SimulationEngine.ts` — Worker 내 시뮬레이션 총괄.
 
 ```typescript
 class SimulationEngine {
-  /**
-   * 초기화 (Worker에서 호출됨)
-   * @param payload - Main Thread에서 전달받은 초기화 데이터
-   * @returns FAB별 실제 차량 수
-   */
-  init(payload: InitPayload): Record<string, number>
-
-  /**
-   * 시뮬레이션 시작 (60 FPS 내부 루프)
-   */
-  start(): void
-
-  /**
-   * 시뮬레이션 정지
-   */
+  // === Lifecycle ===
+  init(payload: InitPayload): Record<string, number>     // fabId → actualNumVehicles
+  start(): void                                          // 60 FPS setInterval 시작
   stop(): void
+  dispose(): void
 
-  /**
-   * 단일 시뮬레이션 스텝 (모든 FabContext.step() 호출)
-   * @param delta - 프레임 간격 (초 단위)
-   */
-  step(delta: number): void
+  // === FAB 관리 ===
+  addFab(fab: FabInitData, globalConfig: SimulationConfig): number
+  removeFab(fabId: string): boolean
+  getFabContext(fabId: string): FabContext | undefined
+  getFabIds(): string[]
+  forEachFab(fn: (ctx: FabContext) => void): void
 
-  /**
-   * 특정 FAB에 명령 전달
-   * @param fabId - FAB 식별자 (예: "fab_0_0")
-   * @param command - 명령 객체
-   */
+  // === 메인 루프 ===
+  step(delta: number): void                              // 각 FabContext.step() 호출
+
+  // === 명령 처리 ===
   handleCommand(fabId: string, command: unknown): void
 
-  /**
-   * FAB 동적 추가
-   */
-  addFab(fabData: FabInitData, config: SimulationConfig): number
+  // === 렌더 버퍼 분배 (Main → Worker) ===
+  setRenderBuffers(
+    vehicleRenderBuffer: SharedArrayBuffer,
+    sensorRenderBuffer: SharedArrayBuffer,
+    fabAssignments: FabRenderAssignment[],
+    totalVehicles: number
+  ): void
 
-  /**
-   * FAB 동적 제거
-   */
-  removeFab(fabId: string): boolean
+  // === 로깅 ===
+  setLoggerPort(port: MessagePort, workerId: number): Promise<void>
+  flushLogs(): void
 
-  /**
-   * 특정 FAB 컨텍스트 가져오기
-   */
-  getFabContext(fabId: string): FabContext | undefined
+  // === 통계 조회 ===
+  getTotalVehicleCount(): number
+  getVehicleCountsByFab(): Record<string, number>
+  getSimulationTime(): number                            // ms 누적
+  getLockTableData(fabId: string): LockTableData | null
 }
 ```
 
-#### 초기화 흐름
+### `init()` 흐름
 
-```typescript
-// worker.entry.ts
-const engine = new SimulationEngine();
-
-function handleInit(payload: InitPayload) {
-  // 1. Engine 초기화
-  const fabVehicleCounts = engine.init(payload);
-
-  // 2. 내부적으로:
-  //    - FabContext 생성 (각 FAB마다)
-  //    - calculateFabData()로 맵 복제
-  //    - SharedBuffer 영역 할당
-  //    - 차량 초기화
-
-  // 3. Main Thread에 완료 알림
-  postMessage({
-    type: "INITIALIZED",
-    fabVehicleCounts
-  });
-
-  // 4. 시뮬레이션 시작
-  engine.start();
-}
+```
+1. payload.sharedMapData가 있으면 → buildSharedMapRef() 1회 호출 (모든 FAB 공유 참조)
+2. payload.fabs 순회:
+   a. fab별 config 병합: { ...globalConfig, ...fab.config }  (fab override 우선)
+   b. calculateFabOffset(col, row)                            (렌더용 좌표 offset)
+   c. params = { sharedBuffer, sensorPointBuffer, pathBuffer, checkpointBuffer,
+                 sharedMapRef, fabOffset, memoryAssignment, config, ... }
+   d. new FabContext(params) → fabContexts.set(fabId, ctx)
+3. return fabVehicleCounts  // { fabId → actualNumVehicles }
 ```
 
-#### 시뮬레이션 루프 (step() 호출 구조)
+### `step()` 내부
 
 ```typescript
-// SimulationEngine 내부
-start(): void {
-  const targetInterval = 1000 / this.config.targetFps;  // 60 FPS → 16.67ms
-
-  this.loopHandle = setInterval(() => {
-    const now = performance.now();
-    const realDelta = (now - this.lastStepTime) / 1000;
-    this.lastStepTime = now;
-
-    this.step(realDelta);  // ← SimulationEngine.step() 호출
-  }, targetInterval);
-}
-
-// SimulationEngine.step() - 전체 엔진 업데이트
 step(delta: number): void {
-  const stepStart = performance.now();
-  const clampedDelta = Math.min(delta, this.config.maxDelta);
+  if (!this.isRunning) return;
 
-  // 모든 FAB 업데이트 (순회)
-  for (const context of this.fabContexts.values()) {
-    context.step(clampedDelta);  // ← FabContext.step() 호출
+  const clampedDelta = Math.min(delta, this.config.maxDelta);
+  this.simulationTime += clampedDelta * 1000;             // ms 단위 누적
+
+  for (const ctx of this.fabContexts.values()) {
+    ctx.step(clampedDelta, this.simulationTime);          // simulationTime 전달
   }
 
-  // 성능 측정 및 통계 수집
-  const stepEnd = performance.now();
-  this.stepTimes.push(stepEnd - stepStart);
-  this.reportPerfStats();  // 5초마다 통계 보고
+  this.perfStats.addSample(stepTimeMs);                   // RollingPerformanceStats (5초 윈도우)
+  if (now - lastPerfReportTime >= 5000) {
+    this.reportPerfStats();                               // PERF_STATS postMessage
+  }
 }
 ```
-
-**step() 호출 계층:**
-
-```
-Worker Thread (60 FPS setInterval)
-    ↓
-SimulationEngine.step(delta)              ← 엔진 전체 관리
-    ├─ delta 클램핑 (최대값 제한)
-    ├─ 성능 측정 시작
-    │
-    └─ for (const context of fabContexts.values()) {
-           context.step(clampedDelta)     ← 각 FAB별 시뮬레이션
-               │
-               ├─ 1. checkCollisions()         (충돌 감지)
-               ├─ 2. updateMovement()          (이동 업데이트)
-               └─ 3. autoMgr.update()          (자동 라우팅)
-       }
-    │
-    └─ 성능 통계 수집 및 Main Thread에 보고
-```
-
-**역할 분리:**
-- `SimulationEngine.step()`: 모든 FAB 순회, 성능 측정, 통계 보고
-- `FabContext.step()`: 개별 FAB의 실제 시뮬레이션 로직 (충돌→이동→라우팅)
 
 ---
 
-### FabContext
+## 6. FabContext API
 
-FAB 하나의 시뮬레이션을 담당하는 핵심 클래스입니다.
+`core/FabContext/index.ts` — FAB 1개의 시뮬레이션 + 렌더 버퍼 변환을 담당.
 
-#### 주요 속성
+### 인스턴스 멤버
 
 ```typescript
 class FabContext {
-  // FAB 식별자
+  // === 식별 / 설정 ===
   public readonly fabId: string;
+  private readonly config: SimulationConfig;
+  private actualNumVehicles: number;
 
-  // 메모리
-  private readonly store: EngineStore;              // SharedBuffer 접근
+  // === 시뮬 메모리 ===
+  private readonly store: EngineStore;                    // sharedBuffer 래퍼
   private readonly vehicleDataArray: VehicleDataArrayBase;
   private readonly sensorPointArray: SensorPointArrayBase;
   private readonly edgeVehicleQueue: EdgeVehicleQueue;
+  private checkpointArray: Float32Array | null;
 
-  // 맵 데이터 (offset된 복사본)
+  // === 렌더 메모리 (setRenderBuffer 후 할당) ===
+  private vehicleRenderData: Float32Array | null;
+  private sensorRenderData: Float32Array | null;
+  private fabOffset: FabRenderOffset;                     // {x, y} 렌더 좌표 offset
+  private sectionOffsets: SensorSectionOffsets | null;
+
+  // === 맵 (sharedMapRef 참조 또는 fab 전용) ===
   private edges: Edge[];
   private nodes: Node[];
-  private edgeNameToIndex: Map<string, number>;    // edge1001 → 0
+  private edgeNameToIndex: Map<string, number>;
+  private readonly nodeNameToIndex: Map<string, number>;
 
-  // 로직 매니저
-  private readonly lockMgr: LockMgr;                // Merge 노드 잠금
-  private readonly transferMgr: TransferMgr;        // 차량 이동 명령
-  private readonly autoMgr: AutoMgr;                // 자동 라우팅
-  private readonly dispatchMgr: DispatchMgr;        // 배차 관리
-  public readonly routingMgr: RoutingMgr;           // 경로 계산
+  // === 매니저 5종 (FAB별 독립 인스턴스) ===
+  private readonly lockMgr: LockMgr;
+  private readonly transferMgr: TransferMgr;
+  private readonly dispatchMgr: DispatchMgr;
+  public  readonly routingMgr: RoutingMgr;                // public — handleCommand가 직접 호출
+  private readonly autoMgr: AutoMgr;
 
-  // 런타임
-  private actualNumVehicles: number;                // 실제 차량 수
+  // === 라우팅 / 통계 (per-fab) ===
+  private routingContext: RoutingContext;                 // BPR/EWMA config
+  private readonly edgeStatsTracker: EdgeStatsTracker;    // EWMA 관측치
+
+  // === 로깅 ===
+  private simLogger: SimLogger | null;
+  private snapshotLogger: SnapshotLogger | null;
+
+  // === 런타임 상태 ===
+  private readonly vehicleLoopMap: Map<number, VehicleLoop>;       // SIMPLE_LOOP 모드
+  private readonly vehicleBayLoopMap: Map<number, VehicleBayLoop>; // LOOP 모드
+  private readonly edgeEnterTimes: Map<number, number>;            // EWMA용
+  private readonly collisionCheckTimers: Map<number, number>;
+  private readonly curveBrakeCheckTimers: Map<number, number>;
 }
 ```
 
-#### 주요 메서드
+### 메서드
 
 ```typescript
-class FabContext {
-  /**
-   * 단일 시뮬레이션 스텝
-   * @param clampedDelta - 프레임 간격 (초 단위, clamped)
-   */
-  step(clampedDelta: number): void
+// 메인 루프
+step(clampedDelta: number, simulationTime: number = 0): void
 
-  /**
-   * 외부 명령 처리 (MQTT/REST)
-   */
-  handleCommand(command: unknown): void
+// 렌더 버퍼 연결 (Main → Worker, SET_RENDER_BUFFER 메시지 처리)
+setRenderBuffer(
+  vehicleRenderBuffer, sensorRenderBuffer,
+  vehicleRenderOffset, actualVehicles,
+  totalVehicles, vehicleStartIndex
+): void
 
-  /**
-   * 실제 차량 수 반환
-   */
-  getActualNumVehicles(): number
+// 명령 처리 (MQTT/REST)
+handleCommand(command: unknown): void                     // → routingMgr.receiveMessage
 
-  /**
-   * 차량 데이터 배열 반환
-   */
-  getVehicleData(): Float32Array
+// 런타임 설정 변경
+setTransferMode(mode), setTransferEnabled(b), setTransferRate(rateMode, ...)
+updateMovementConfig({ linearMaxSpeed, linearAcceleration, ... })
+updateRoutingConfig(strategy, bprAlpha?, bprBeta?, rerouteInterval?, ewmaAlpha?)
 
-  /**
-   * 리소스 정리 (GC 대상)
-   */
-  dispose(): void
-}
+// 로깅
+async setLoggerPort(port: MessagePort, workerId): Promise<void>
+flushLogs(): void
+resetOrderStats(simulationTime: number): void
+
+// 조회 / 정리
+getActualNumVehicles(): number
+getVehicleData(): Float32Array
+getLockTableData(): LockTableData
+dispose(): void
 ```
 
-#### FabContext.step() 내부 동작
+### `step()` 흐름 — 7 단계
 
-**SimulationEngine.step()에서 호출되며, 이 FAB의 실제 시뮬레이션을 수행합니다.**
-
-```typescript
-// FabContext.step() - 개별 FAB의 시뮬레이션 로직
-step(clampedDelta: number): void {
-  // 1. 충돌 감지 (Collision Check)
-  const collisionCtx: CollisionCheckContext = {
-    vehicleArrayData: this.vehicleDataArray.getData(),
-    edgeArray: this.edges,
-    edgeVehicleQueue: this.edgeVehicleQueue,
-    sensorPointArray: this.sensorPointArray,
-    config: this.config,
-  };
-  checkCollisions(collisionCtx);
-  // → 앞차와의 거리 체크, 센서 충돌 감지
-  // → 차량 상태를 MOVING/STOPPED/BLOCKED로 변경
-
-  // 2. 이동 업데이트 (Movement Update)
-  const movementCtx: MovementUpdateContext = {
-    vehicleDataArray: this.vehicleDataArray,
-    sensorPointArray: this.sensorPointArray,
-    edgeArray: this.edges,
-    actualNumVehicles: this.actualNumVehicles,
-    vehicleLoopMap: this.vehicleLoopMap,
-    edgeNameToIndex: this.edgeNameToIndex,
-    store: {
-      moveVehicleToEdge: this.store.moveVehicleToEdge.bind(this.store),
-      transferMode: this.store.transferMode,
-    },
-    lockMgr: this.lockMgr,
-    transferMgr: this.transferMgr,
-    clampedDelta,
-    config: this.config,
-  };
-  updateMovement(movementCtx);
-  // → 속도/위치 업데이트 (가속/감속)
-  // → edge 이동 처리 (edge 끝에 도달 시 다음 edge로)
-  // → SharedBuffer에 쓰기 (Main Thread가 읽을 수 있도록)
-
-  // 3. 자동 라우팅 (Auto Routing)
-  this.autoMgr.update(
-    this.store.transferMode,
-    this.actualNumVehicles,
-    this.vehicleDataArray,
-    this.edges,
-    this.edgeNameToIndex,
-    this.transferMgr
-  );
-  // → 목적지 도착 확인
-  // → 새 경로 자동 설정 (TransferMgr 큐에 추가)
-}
 ```
+FabContext.step(clampedDelta, simulationTime)
+  │
+  └─ executeSimulationStep(ctx)  (simulation-step.ts)
+      │
+      ├─ 0. simLogger 콜백 등록 (lock 이벤트 logging hook)
+      │
+      ├─ 1. checkCollisions()             ← 앞차 거리·sensor 충돌 → MOVING/STOPPED/BLOCKED 결정
+      │
+      ├─ 2. lockMgr.updateAll()           ← merge node에서 멈출지 결정
+      │                                       (checkpoint 처리 — REQ/WAIT/RELEASE/PREP)
+      │
+      ├─ 3. updateMovement()              ← 1·2에서 정지 안 된 차량만 이동
+      │   ├─ 가속/감속/위치 적분
+      │   ├─ edge 전환 (edge 끝 도달 시)
+      │   └─ onEdgeTransit 콜백:
+      │       ├─ edgeStatsTracker.observe(edgeIdx, transitSec)   ← EWMA 갱신
+      │       └─ simLogger.logEdgeTransit / logTransfer
+      │
+      ├─ 4. autoMgr.update()              ← 목적지 도착 시 Dijkstra로 새 경로 (rerouteInterval)
+      │
+      ├─ 4.5. transferMgr.getPathChangedVehicles()
+      │       └─ for each: lockMgr.processPathChange(vehId, info)
+      │                                   ← 경로 바뀐 차량의 lock 재정합
+      │                                     (orphan lock 정리, missed checkpoint 즉시 처리)
+      │
+      ├─ 5. Replay snapshot (simLogger.isReplayEnabled, 0.5s 주기 + 속도→0 전환 감지)
+      └─ 6. Debug snapshot (snapshotLogger, 100ms 주기 — vehicle pos + active edge queues)
 
-**3단계 실행 순서 (중요):**
-1. **충돌 감지 먼저**: 차량 상태 결정 (정지/감속 필요 여부)
-2. **이동 업데이트**: 충돌 상태를 반영하여 위치/속도 갱신
-3. **자동 라우팅 마지막**: 다음 프레임부터 적용될 경로 설정
+  (back in FabContext.step)
+      ├─ 7. flushOrderStats(simulationTime)   ← 2초마다 ORDER_STATS postMessage
+      └─ 8. writeToRenderRegion()             ← 시뮬 버퍼 → 렌더 버퍼 (+ fabOffset 적용)
+```
 
 ---
 
-### EngineStore
+## 7. EngineStore — `IVehicleStore` 구현체
 
-SharedArrayBuffer 접근을 래핑하는 클래스입니다. Zustand `vehicleArrayStore`를 대체합니다.
-
-#### 주요 메서드
+`core/EngineStore.ts`. 옛 Zustand `vehicleArrayStore`를 대체. SAB region 위에 `VehicleDataArrayBase` + `EdgeVehicleQueue`를 래핑.
 
 ```typescript
 class EngineStore implements IVehicleStore {
-  /**
-   * SharedArrayBuffer 설정 (하위호환: 전체 버퍼)
-   */
-  setSharedBuffer(buffer: SharedArrayBuffer): void
+  // SAB 연결
+  setSharedBuffer(buffer): void                                       // 전체 버퍼 (레거시)
+  setSharedBufferWithRegion(buffer, region: VehicleMemoryRegion): void // 멀티 워커
 
-  /**
-   * SharedArrayBuffer 설정 (멀티 워커: 영역 제한)
-   */
-  setSharedBufferWithRegion(
-    buffer: SharedArrayBuffer,
-    region: VehicleMemoryRegion
-  ): void
+  // 차량 CRUD
+  addVehicle(idx, data), removeVehicle(idx)
+  clearVehicleData(idx), clearAllVehicles()
+  moveVehicleToEdge(idx, newEdgeIdx, edgeRatio?)
 
-  // 데이터 접근
-  getVehicleDataArray(): VehicleDataArrayBase
-  getEdgeVehicleQueue(): EdgeVehicleQueue
-  getVehicleData(): Float32Array
+  // 차량 속성 (대부분 ops/* 함수에 위임)
+  set/getVehiclePosition, set/getVehicleRotation, set/getVehicleVelocity
+  set/getVehicleMovingStatus, set/getVehicleEdgeRatio, set/getVehicleCurrentEdge
+  setVehicleAcceleration, setVehicleDeceleration
 
-  // 차량 속성
-  setVehiclePosition(vehicleIndex: number, x: number, y: number, z: number): void
-  getVehiclePosition(vehicleIndex: number): { x: number; y: number; z: number }
-  setVehicleVelocity(vehicleIndex: number, velocity: number): void
-  getVehicleVelocity(vehicleIndex: number): number
-  setVehicleCurrentEdge(vehicleIndex: number, edgeIndex: number): void
-  getVehicleCurrentEdge(vehicleIndex: number): number
+  // Edge 큐
+  addVehicleToEdgeList, removeVehicleFromEdgeList
+  getVehiclesInEdge, getEdgeVehicleCount
 
-  // Edge 큐 관리
-  addVehicleToEdgeList(edgeIndex: number, vehicleIndex: number): void
-  removeVehicleFromEdgeList(edgeIndex: number, vehicleIndex: number): void
-  getVehiclesInEdge(edgeIndex: number): number[]
-
-  // 차량 관리
-  addVehicle(vehicleIndex: number, data: AddVehicleData): void
-  removeVehicle(vehicleIndex: number): void
-  moveVehicleToEdge(vehicleIndex: number, newEdgeIndex: number, edgeRatio?: number): void
-
-  // 리소스 정리
-  dispose(): void
+  // Public 속성 (FabContext가 직접 읽음)
+  public actualNumVehicles: number
+  public transferMode: TransferMode
+  public transferEnabled: boolean
+  public transferRateMode: 'utilization' | 'throughput'
+  public transferUtilizationPercent: number
+  public transferThroughputPerHour: number
 }
 ```
 
-#### 사용 예시
+---
 
-```typescript
-// FabContext 내부
-const store = new EngineStore(maxVehicles, maxEdges, true);
+## 8. 초기화 시퀀스
 
-// SharedBuffer 설정 (멀티 워커)
-store.setSharedBufferWithRegion(sharedBuffer, {
-  offset: 0,
-  size: 88000,
-  maxVehicles: 1000
-});
-
-// 차량 데이터 접근
-const vehicleData = store.getVehicleData();
-const position = store.getVehiclePosition(0);
-store.setVehicleVelocity(0, 5.0);
-
-// Edge 큐 관리
-store.addVehicleToEdgeList(edgeIndex, vehicleIndex);
-const vehiclesInEdge = store.getVehiclesInEdge(edgeIndex);
+```
+Main Thread                                        Worker Thread
+─────────────                                      ─────────────
+MultiWorkerController.start()
+  ├─ MemoryLayoutManager.calculateLayout()             ← FabMemoryAssignment 산출
+  ├─ MemoryLayoutManager.distributeToWorkers()         ← workerCount Worker 생성
+  │
+  ├─ for each worker:
+  │   postMessage({ type: "INIT", payload }) ───────►  handleInit(payload)
+  │                                                    │
+  │                                                    ├─ engine = new SimulationEngine()
+  │                                                    │
+  │                                                    └─ engine.init(payload):
+  │                                                        ├─ buildSharedMapRef(payload.sharedMapData)
+  │                                                        │
+  │                                                        └─ for each fabData:
+  │                                                             ├─ calculateFabOffset(col, row)
+  │                                                             └─ new FabContext(params)
+  │                                                                  └─ initializeFab():
+  │                                                                       ├─ store.setSharedBufferWithRegion(vehicleRegion)
+  │                                                                       ├─ sensorPointArray.setBufferWithRegion(sensorRegion)
+  │                                                                       ├─ transferMgr.setPathBufferFromAutoMgr(pathRegion)
+  │                                                                       ├─ transferMgr.setCheckpointBuffer(checkpointRegion)
+  │                                                                       ├─ edges/nodes ← sharedMapRef
+  │                                                                       ├─ initializeVehicles(...)
+  │                                                                       ├─ lockMgr.init(...) + preLockMergeNodes()
+  │                                                                       └─ autoMgr.initStations(...)
+  │
+  │   ◄─────────────────────────────────────────────  postMessage({ type: "INITIALIZED", fabVehicleCounts })
+  │
+  ├─ MemoryLayoutManager.calculateRenderLayout(actualVehicles)
+  │
+  ├─ for each worker:
+  │   postMessage({ type: "SET_RENDER_BUFFER", ... }) ► engine.setRenderBuffers(...)
+  │                                                       └─ for each: ctx.setRenderBuffer(...)
+  │
+  └─ postMessage({ type: "START" }) ───────────────────► engine.start()
+                                                            └─ setInterval(1000/targetFps, step)
 ```
 
 ---
 
-## 초기화 흐름
-
-```
-Main Thread                  Worker Thread (worker.entry.ts)
-     │                            │
-     ├─ init() 호출               │
-     │                            │
-     ├─ Worker 생성               │
-     ├─ SharedBuffer 할당         │
-     │                            │
-     ├─ postMessage(INIT) ────────▶ handleInit(payload)
-     │                            │
-     │                            ├─ engine = new SimulationEngine()  ← Worker당 1개
-     │                            ├─ engine.init(payload)
-     │                            │   │
-     │                            │   ├─ for each fabData:
-     │                            │   │   ├─ calculateFabData()  ← 맵 복제
-     │                            │   │   ├─ new FabContext(params)  ← FAB별 생성
-     │                            │   │   │   ├─ new EngineStore()
-     │                            │   │   │   ├─ new LockMgr()       ← 독립 인스턴스
-     │                            │   │   │   ├─ new TransferMgr()   ← 독립 인스턴스
-     │                            │   │   │   ├─ new DispatchMgr()   ← 독립 인스턴스
-     │                            │   │   │   ├─ new RoutingMgr()    ← 독립 인스턴스
-     │                            │   │   │   ├─ new AutoMgr()       ← 독립 인스턴스
-     │                            │   │   │   │
-     │                            │   │   │   ├─ store.setSharedBufferWithRegion()
-     │                            │   │   │   ├─ edgeNameToIndex 빌드
-     │                            │   │   │   └─ initializeVehicles()
-     │                            │   │   │
-     │                            │   │   └─ fabContexts.set(fabId, context)
-     │                            │   │
-     │                            │   └─ return fabVehicleCounts
-     │                            │
-     │◀─────────────────────────── postMessage(INITIALIZED)
-     │                            │
-     │                            ├─ engine.start()  ← 60 FPS 루프 시작
-     │                            │
-     ▼                            ▼
-```
-
-**핵심:**
-- Worker마다 `SimulationEngine` 1개 생성 (worker.entry.ts)
-- `SimulationEngine.init()`에서 각 FAB마다 `FabContext` 생성
-- 각 `FabContext`는 독립적인 매니저 인스턴스 소유
-
----
-
-## 시뮬레이션 루프 (전체 흐름)
-
-```
-Worker Thread (60 FPS setInterval)
-     │
-     ├─ setInterval(16.67ms)
-     │       │
-     │       ├─ const delta = (now - lastTime) / 1000
-     │       │
-     │       ├─ SimulationEngine.step(delta)  ◄─ 엔진 전체 관리
-     │       │       │
-     │       │       ├─ const clampedDelta = Math.min(delta, maxDelta)
-     │       │       ├─ 성능 측정 시작
-     │       │       │
-     │       │       ├─ for (const context of fabContexts.values()) {
-     │       │       │       │
-     │       │       │       ├─ FabContext.step(clampedDelta)  ◄─ FAB별 시뮬레이션
-     │       │       │       │       │
-     │       │       │       │       ├─ 1. checkCollisions()
-     │       │       │       │       │      └─ 앞차 거리 체크, 센서 충돌 감지
-     │       │       │       │       │         → MOVING/STOPPED/BLOCKED 상태 변경
-     │       │       │       │       │
-     │       │       │       │       ├─ 2. updateMovement()
-     │       │       │       │       │      ├─ 속도/위치 업데이트 (충돌 상태 반영)
-     │       │       │       │       │      ├─ edge 이동 처리
-     │       │       │       │       │      └─ SharedBuffer에 쓰기
-     │       │       │       │       │
-     │       │       │       │       └─ 3. autoMgr.update()
-     │       │       │       │              └─ 목적지 도착 시 새 경로 설정
-     │       │       │       │
-     │       │       │       └─ (다음 FabContext.step())
-     │       │       │   }
-     │       │       │
-     │       │       ├─ 성능 측정 종료
-     │       │       └─ reportPerfStats() (5초마다 통계 보고)
-     │       │
-     │       └─ (다음 프레임 대기)
-     │
-     ▼
-```
-
-**step() 호출 계층:**
-- `SimulationEngine.step()`: 전체 FAB 순회 + 성능 측정
-- `FabContext.step()`: 개별 FAB의 충돌→이동→라우팅 (3단계)
-
----
-
-## 명령 처리 흐름
+## 9. 명령 처리 (MQTT → Worker)
 
 ```
 MQTT Broker
-     │
-     ├─ 차량 이동 명령
-     ▼
+   │ publish to VPS/cmd/{fabId}
+   ▼
 Main Thread
-     │
-     ├─ mqttStore.onMessage()
-     ├─ useShmSimulatorStore.sendCommand()
-     ├─ MultiWorkerController.sendCommand(fabId, payload)
-     │
-     ├─ postMessage({ type: "COMMAND", fabId, payload })
-     ▼
-Worker Thread
-     │
-     ├─ handleCommand(fabId, payload)
-     ├─ engine.handleCommand(fabId, payload)
-     │       │
-     │       ├─ context = fabContexts.get(fabId)
-     │       ├─ context.handleCommand(payload)
-     │       │       │
-     │       │       ├─ routingMgr.receiveMessage(payload)
-     │       │       │       │
-     │       │       │       ├─ dispatchMgr.handleTransfer()
-     │       │       │       │       │
-     │       │       │       │       ├─ 경로 탐색 (Dijkstra)
-     │       │       │       │       └─ transferMgr.startTransfer()
-     │       │       │       │               │
-     │       │       │       │               └─ 이동 큐에 추가
-     │       │       │       │
-     │       │       │       └─ (다음 프레임에서 실행)
-     │       │       │
-     │       │       └─ autoMgr.update()에서 transferMgr 큐 처리
-     │       │
-     │       └─ (다음 FabContext로)
-     │
-     ▼
+   ├─ mqttStore.onMessage()
+   ├─ useShmSimulatorStore.sendCommand(fabId, payload)
+   └─ MultiWorkerController.sendCommand(fabId, payload):
+        workerIdx = fabToWorkerMap.get(fabId)
+        workers[workerIdx].postMessage({ type: "COMMAND", fabId, payload })
+   ▼
+Worker (worker.entry.ts handleCommand)
+   └─ engine.handleCommand(fabId, payload)
+        └─ ctx = fabContexts.get(fabId)
+           └─ ctx.handleCommand(payload)
+              └─ routingMgr.receiveMessage(payload)
+                 └─ dispatchMgr.handleTransfer():
+                    ├─ Dijkstra 경로 탐색
+                    └─ transferMgr.startTransfer() → 이동 큐 등록
+                       (다음 step()의 autoMgr.update / movementUpdate에서 소비)
 ```
 
 ---
 
-## 개발 가이드
+## 10. 주의사항
 
-### 새로운 Manager 추가
+### React/Zustand 의존성 금지
+Worker 코드 (`shmSimulator/` 하위)에서는 React hook / Zustand store 직접 import 금지. 모든 데이터는 `init(payload)` 또는 message로 전달.
 
-```typescript
-// 1. managers/NewMgr.ts 생성
-export class NewMgr {
-  init(): void { ... }
-  update(context: Context): void { ... }
-}
+### 매니저 위치
+- **공통** (어느 스레드에서도 import 가능): `common/vehicle/logic/{LockMgr,TransferMgr,AutoMgr,Dijkstra}/`
+- **Worker 전용** (공통 매니저를 묶는 layer): `shmSimulator/managers/{DispatchMgr,RoutingMgr}.ts`
 
-// 2. FabContext에 추가
-class FabContext {
-  private readonly newMgr: NewMgr;
-
-  constructor(params: FabInitParams) {
-    this.newMgr = new NewMgr();
-  }
-
-  step(delta: number): void {
-    // ... 기존 로직
-
-    // 4. step()에서 호출
-    this.newMgr.update(context);
-  }
-}
-```
-
-### 메모리 레이아웃 변경
-
-```typescript
-// 1. VehicleDataArrayBase.ts 수정
-export const OFFSET = {
-  // ...
-  CUSTOM_FIELD: 21,  // 새 필드 추가
-} as const;
-
-// 2. MemoryLayoutManager.ts 수정
-private readonly VEHICLE_DATA_SIZE = 22;  // floats per vehicle
-
-// 3. 관련 접근 메서드 추가
-// EngineStore.ts
-setCustomField(vehicleIndex: number, value: number): void {
-  const ptr = vehicleIndex * VEHICLE_DATA_SIZE + OFFSET.CUSTOM_FIELD;
-  this.vehicleDataArray.getData()[ptr] = value;
-}
-```
-
-### 성능 측정
-
-```typescript
-// FabContext.ts
-step(delta: number): void {
-  const stepStart = performance.now();
-
-  checkCollisions(collisionCtx);
-  const collisionTime = performance.now() - stepStart;
-
-  updateMovement(movementCtx);
-  const movementTime = performance.now() - stepStart - collisionTime;
-
-  this.autoMgr.update(...);
-  const autoTime = performance.now() - stepStart - collisionTime - movementTime;
-
-  const totalTime = performance.now() - stepStart;
-
-  if (totalTime > 16.67) {  // 60 FPS 기준
-    console.warn(`[${this.fabId}] Slow frame: ${totalTime.toFixed(2)}ms`);
-    console.warn(`  collision: ${collisionTime.toFixed(2)}ms`);
-    console.warn(`  movement: ${movementTime.toFixed(2)}ms`);
-    console.warn(`  auto: ${autoTime.toFixed(2)}ms`);
-  }
-}
-```
-
----
-
-## 주의사항
-
-### React 의존성 제거
-
-Worker 내부에서는 React/Zustand를 사용할 수 없습니다.
-
-```typescript
-// ❌ Worker에서 금지
-import { useStore } from "@/store/vehicleStore";
-const edges = edgeStore.getState().edges;
-
-// ✅ 모든 데이터는 init() payload로 전달
-init(payload: InitPayload) {
-  const edges = payload.fabs[0].edges;  // JSON 직렬화된 데이터
-}
-```
-
-### 에러 처리
-
-```typescript
-// ❌ String(error) 사용 금지
-worker.onerror = (error) => {
-  console.log(String(error));  // '[object Object]'
-};
-
-// ✅ error.message 사용
-worker.onerror = (error) => {
-  if (error instanceof ErrorEvent) {
-    console.log(error.message);
-  }
-};
-```
+### Edge index — 1-based vs 0-based
+- SHM 안의 `CURRENT_EDGE` / `NEXT_EDGE`: **1-based** (`0` = sentinel "없음")
+- `edges[]` 배열 직접 접근: **0-based**
+- 권장: `getEdgeByIndex(idx)` 사용 (내부에서 `edges[idx-1]` 처리)
 
 ### 반복문
+`for (const ctx of map.values())` 사용. hot path에서는 `Map.forEach`보다 V8 인라이닝이 안정적.
 
-```typescript
-// ❌ forEach 금지
-fabContexts.forEach((ctx) => ctx.step(delta));
-
-// ✅ for...of 사용
-for (const ctx of fabContexts.values()) {
-  ctx.step(delta);
-}
-```
+### Error 객체 직렬화
+Worker에서 Main으로 에러 전송 시 `error.message` 사용. `String(error)`는 `[object Object]`로 깨짐.
 
 ---
 
-## 관련 문서
+## 11. 관련 문서
 
-- [시뮬레이터 전체 개요](../README.md)
-- [시스템 아키텍처](../../../doc/SYSTEM_ARCHITECTURE.md)
-- [Multi-Worker Architecture](../../../doc/dev_req/MULTI_WORKER_ARCHITECTURE.md)
-- [Vehicle 비즈니스 로직](../../common/vehicle/README.md)
+- [SYSTEM_ARCHITECTURE](../../../doc/SYSTEM_ARCHITECTURE.md)
+- [LockMgr 상세](../../common/vehicle/logic/LockMgr/README.md)
+- [Vehicle Memory Layout](../../common/vehicle/memory/README.md)
+- [MemoryLayoutManager](../MemoryLayoutManager.ts) — FAB별 region 분할 로직
