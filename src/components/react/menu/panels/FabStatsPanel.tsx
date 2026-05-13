@@ -18,12 +18,13 @@ import FloatingPanel from "../shared/FloatingPanel";
 import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
+import { RankingTab } from "./FabStats/RankingTab";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface FabStats {
+export interface FabStats {
   fabId: string;
   vehicleCount: number;
   avgSpeed: number;
@@ -62,7 +63,7 @@ interface HistoryPoint {
 // Compute
 // ============================================================================
 
-function computeFabStats(
+export function computeFabStats(
   fabId: string,
   fullData: Float32Array,
   workerStartOffset: number,
@@ -202,7 +203,7 @@ const IDLE_POLICY_LABEL: Record<string, string> = {
 
 const RANK_BADGE = ["🥇", "🥈", "🥉"];
 
-const FabCard: React.FC<{ fab: FabStats; fabIndex: number; rank: number }> = ({ fab, fabIndex, rank }) => {
+export const FabCard: React.FC<{ fab: FabStats; fabIndex: number; rank: number }> = ({ fab, fabIndex, rank }) => {
   const n = fab.vehicleCount;
   const orderStats = useOrderStatsStore((s) => s.fabStats[fab.fabId]);
   const globalRouting = useFabConfigStore((s) => s.routingConfig);
@@ -498,9 +499,10 @@ const TrendTab: React.FC<{
 // Main Panel
 // ============================================================================
 
-type TabKey = "cards" | "compare" | "trend";
+type TabKey = "ranking" | "cards" | "compare" | "trend";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "ranking", label: "Ranking" },
   { key: "cards", label: "Cards" },
   { key: "compare", label: "Compare" },
   { key: "trend", label: "Trend" },
@@ -519,7 +521,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
   const orderStatsMap = useOrderStatsStore((s) => s.fabStats);
   const [fabStatsList, setFabStatsList] = useState<FabStats[]>([]);
-  const [tab, setTab] = useState<TabKey>("cards");
+  const [tab, setTab] = useState<TabKey>("ranking");
   const [defaults] = useState(getCenterDefaults);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(Date.now());
@@ -647,6 +649,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
       ) : (
         <>
+          {tab === "ranking" && <RankingTab fabStatsList={fabStatsList} />}
           {tab === "cards" && (() => {
             // throughput 내림차순 정렬 — 1등이 위, 꼴등이 아래. fabIndex(원본)는 보존.
             const ranked = fabStatsList

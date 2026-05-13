@@ -4,7 +4,8 @@ import type { OrderStatsData } from "@/shmSimulator/MultiWorkerController";
 export interface FabOrderStats extends OrderStatsData {
   // OrderStatsData fields inherited:
   // simulationTime, completed, throughputPerHour,
-  // leadTimeP50, leadTimeP95, leadTimeMean, totalPathChanges
+  // leadTimeP50, leadTimeP95, leadTimeMean, totalPathChanges,
+  // leadTimeHistogram, leadTimeBucketSec
 }
 
 interface OrderStatsStore {

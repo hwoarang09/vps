@@ -401,6 +401,17 @@ export class FabContext {
     const stats = this.autoMgr.getOrderStats();
     const elapsed = simulationTime - stats.resetSimTime;
     const sorted = stats.leadTimes.slice().sort((a, b) => a - b);
+
+    // Lead time histogram: bucket 폭 10초, 마지막 bucket은 overflow
+    const BUCKET_SEC = 10;
+    const NUM_BUCKETS = 13; // 0-10, 10-20, ..., 110-120, 120+
+    const histogram = new Array<number>(NUM_BUCKETS).fill(0);
+    for (let i = 0; i < sorted.length; i++) {
+      const sec = sorted[i] / 1000;
+      const idx = Math.min(NUM_BUCKETS - 1, Math.floor(sec / BUCKET_SEC));
+      histogram[idx]++;
+    }
+
     globalThis.postMessage({
       type: "ORDER_STATS",
       fabId: this.fabId,
@@ -411,6 +422,8 @@ export class FabContext {
       leadTimeP95: percentileSorted(sorted, 0.95) / 1000,
       leadTimeMean: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length / 1000 : 0,
       totalPathChanges: this.autoMgr.getTotalPathChanges(),
+      leadTimeHistogram: histogram,
+      leadTimeBucketSec: BUCKET_SEC,
     });
   }
 

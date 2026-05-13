@@ -29,6 +29,9 @@ export interface OrderStatsData {
   leadTimeP95: number;
   leadTimeMean: number;
   totalPathChanges: number;
+  /** Lead time histogram: 각 index는 BUCKET_SEC 폭. 마지막 index는 overflow bucket. */
+  leadTimeHistogram: number[];
+  leadTimeBucketSec: number;
 }
 
 /**
@@ -474,6 +477,8 @@ export class MultiWorkerController {
           leadTimeP95: message.leadTimeP95,
           leadTimeMean: message.leadTimeMean,
           totalPathChanges: message.totalPathChanges,
+          leadTimeHistogram: message.leadTimeHistogram,
+          leadTimeBucketSec: message.leadTimeBucketSec,
         });
         break;
     }
