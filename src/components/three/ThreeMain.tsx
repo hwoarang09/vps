@@ -8,6 +8,7 @@ import { Perf } from "r3f-perf";
 
 import MapRenderer from "./entities/renderers/MapRenderer";
 import Floor from "./scene/Floor";
+import ActiveFabBorder from "./scene/ActiveFabBorder";
 // import AxisHelper from "./scene/AxisHelper";
 import TextRenderer from "./entities/renderers/TextRenderer";
 import FabLabelRenderer from "./entities/renderers/FabLabelRenderer";
@@ -41,6 +42,7 @@ const ThemedSceneContent: React.FC = () => {
       )}
 
       <Floor />
+      <ActiveFabBorder />
       {/* <AxisHelper /> */}
       <MapRenderer />
       <TextRenderer />

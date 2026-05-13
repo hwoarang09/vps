@@ -4,6 +4,7 @@ import MenuContainer from "@components/react/menu/MenuContainer";
 import KeyboardShortcutHandler from "@components/react/system/KeyboardShortcutHandler";
 import UnusualMoveModal from "@components/three/overlays/UnusualMoveModal";
 import LoadingScreen from "@components/react/LoadingScreen";
+import IconWarmCache from "@components/react/IconWarmCache";
 import { initConfigFromDb } from "@/config/persistedConfig";
 import { useLoadingStore } from "@store/ui/loadingStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
@@ -62,6 +63,7 @@ const App: React.FC = () => {
           <UnusualMoveModal />
         </div>
       )}
+      <IconWarmCache />
       <LoadingScreen />
     </>
   );
