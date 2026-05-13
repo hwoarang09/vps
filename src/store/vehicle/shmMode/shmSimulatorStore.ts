@@ -11,6 +11,7 @@ import { getSimulationConfig } from "@/config/worker/simulationConfig";
 import { MQTT_WS_URL } from "@/config/logConfig";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
+import { useLoadingStore } from "@/store/ui/loadingStore";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -186,6 +187,13 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     controller.onOrderStats((fabId, stats) => {
       useOrderStatsStore.getState().updateFabStats(fabId, stats);
     });
+
+    controller.onFabsInitialized((fabIds) => {
+      useLoadingStore.getState().addFabsInitialized(fabIds.length);
+    });
+
+    // 로딩 진행도에 fab 총개수 등록 (loading screen이 살아 있을 때만 의미 있음)
+    useLoadingStore.getState().setFabsTotal(fabs.length);
 
     try {
       // Routing config from fabConfigStore

@@ -126,6 +126,7 @@ export class MultiWorkerController {
   private onUnusualMoveCallback: ((data: UnusualMoveData) => void) | null = null;
   private onLogSessionCallback: ((sessionId: string) => void) | null = null;
   private onOrderStatsCallback: ((fabId: string, stats: OrderStatsData) => void) | null = null;
+  private onFabsInitializedCallback: ((fabIds: string[]) => void) | null = null;
 
   // Rule D.1: Add readonly modifier - never reassigned after constructor
   // Lock 테이블 요청 대기
@@ -149,6 +150,10 @@ export class MultiWorkerController {
 
   onOrderStats(callback: (fabId: string, stats: OrderStatsData) => void): void {
     this.onOrderStatsCallback = callback;
+  }
+
+  onFabsInitialized(callback: (fabIds: string[]) => void): void {
+    this.onFabsInitializedCallback = callback;
   }
 
   resetOrderStats(fabId?: string): void {
@@ -392,9 +397,11 @@ export class MultiWorkerController {
         if (e.data.type === "INITIALIZED") {
           workerInfo.isInitialized = true;
 
+          const initializedFabIds = Object.keys(e.data.fabVehicleCounts);
           for (const [fabId, count] of Object.entries(e.data.fabVehicleCounts)) {
             this.fabVehicleCounts.set(fabId, count);
           }
+          this.onFabsInitializedCallback?.(initializedFabIds);
 
           resolve();
         } else if (e.data.type === "ERROR") {

@@ -1,9 +1,10 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useEdgeStore } from "@/store/map/edgeStore";
 import { useNodeStore } from "@/store/map/nodeStore";
 import { useStationStore } from "@/store/map/stationStore";
 import { useFabStore } from "@/store/map/fabStore";
+import { useLoadingStore } from "@/store/ui/loadingStore";
 import EdgeRenderer from "./EdgeRenderer";
 import NodesRenderer from "./NodesRenderer";
 import StationRenderer from "./StationRenderer";
@@ -25,6 +26,11 @@ const CAMERA_MOVE_THRESHOLD = 100;
  */
 const MapRenderer: React.FC = () => {
   useRenderCheck("MapRenderer");
+
+  // 첫 마운트 시 로딩 진행도에 map 단계 완료 신호
+  useEffect(() => {
+    useLoadingStore.getState().setMapLoaded();
+  }, []);
 
   // 단일 fab 또는 슬롯 미초기화 시 store 데이터 사용
   const storeEdges = useEdgeStore((state) => state.edges);
