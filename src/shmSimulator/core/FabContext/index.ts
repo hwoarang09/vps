@@ -423,16 +423,25 @@ export class FabContext {
     const waiting = summarize(stats.waitingTimes);
     const delivery = summarize(stats.deliveryTimes);
 
+    // 4-stage 평균 (lifecycle bar 비율 — 초 단위)
+    const safeAvg = (sum: number, n: number) => (n > 0 ? sum / n / 1000 : 0);
+    const stageMeans = {
+      pickupApproachMean: safeAvg(stats.pickupApproachSum, stats.stageCount),
+      loadingMean: safeAvg(stats.loadingSum, stats.stageCount),
+      dropApproachMean: safeAvg(stats.dropApproachSum, stats.stageCount),
+      unloadingMean: safeAvg(stats.unloadingSum, stats.stageCount),
+    };
+
     globalThis.postMessage({
       type: "ORDER_STATS",
       fabId: this.fabId,
       simulationTime,
       completed: stats.completed,
       throughputPerHour: elapsed > 0 ? (stats.completed / elapsed) * 3_600_000 : 0,
+      totalPathChanges: this.autoMgr.getTotalPathChanges(),
       leadTimeP50: lead.p50,
       leadTimeP95: lead.p95,
       leadTimeMean: lead.mean,
-      totalPathChanges: this.autoMgr.getTotalPathChanges(),
       leadTimeHistogram: lead.histogram,
       leadTimeBucketSec: BUCKET_SEC,
       waitingTimeP50: waiting.p50,
@@ -443,6 +452,7 @@ export class FabContext {
       deliveryTimeP95: delivery.p95,
       deliveryTimeMean: delivery.mean,
       deliveryTimeHistogram: delivery.histogram,
+      ...stageMeans,
     });
   }
 

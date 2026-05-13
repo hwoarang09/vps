@@ -25,13 +25,28 @@ export interface OrderStatsData {
   simulationTime: number;
   completed: number;
   throughputPerHour: number;
+  totalPathChanges: number;
+  /** Lead time = drop완료 - 반송생성. histogram bucket 폭 BUCKET_SEC초. */
   leadTimeP50: number;
   leadTimeP95: number;
   leadTimeMean: number;
-  totalPathChanges: number;
-  /** Lead time histogram: 각 index는 BUCKET_SEC 폭. 마지막 index는 overflow bucket. */
   leadTimeHistogram: number[];
   leadTimeBucketSec: number;
+  /** Waiting time = pickup완료 - 반송생성 */
+  waitingTimeP50: number;
+  waitingTimeP95: number;
+  waitingTimeMean: number;
+  waitingTimeHistogram: number[];
+  /** Delivery time = drop완료 - pickup완료 */
+  deliveryTimeP50: number;
+  deliveryTimeP95: number;
+  deliveryTimeMean: number;
+  deliveryTimeHistogram: number[];
+  /** Lifecycle 4-stage 평균 (초). pickupApproach + loading = waiting, dropApproach + unloading = delivery */
+  pickupApproachMean: number;
+  loadingMean: number;
+  dropApproachMean: number;
+  unloadingMean: number;
 }
 
 /**
@@ -473,12 +488,24 @@ export class MultiWorkerController {
           simulationTime: message.simulationTime,
           completed: message.completed,
           throughputPerHour: message.throughputPerHour,
+          totalPathChanges: message.totalPathChanges,
           leadTimeP50: message.leadTimeP50,
           leadTimeP95: message.leadTimeP95,
           leadTimeMean: message.leadTimeMean,
-          totalPathChanges: message.totalPathChanges,
           leadTimeHistogram: message.leadTimeHistogram,
           leadTimeBucketSec: message.leadTimeBucketSec,
+          waitingTimeP50: message.waitingTimeP50,
+          waitingTimeP95: message.waitingTimeP95,
+          waitingTimeMean: message.waitingTimeMean,
+          waitingTimeHistogram: message.waitingTimeHistogram,
+          deliveryTimeP50: message.deliveryTimeP50,
+          deliveryTimeP95: message.deliveryTimeP95,
+          deliveryTimeMean: message.deliveryTimeMean,
+          deliveryTimeHistogram: message.deliveryTimeHistogram,
+          pickupApproachMean: message.pickupApproachMean,
+          loadingMean: message.loadingMean,
+          dropApproachMean: message.dropApproachMean,
+          unloadingMean: message.unloadingMean,
         });
         break;
     }

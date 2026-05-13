@@ -114,7 +114,7 @@ export const RankingMaster: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
             <ChevronDown size={12} className="text-gray-500" />
           </button>
           {sortMenuOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg z-10 max-h-60 overflow-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg z-10 max-h-60 overflow-auto vps-scrollbar">
               {RANKING_METRICS.map((m) => (
                 <button
                   key={m.key}
@@ -138,7 +138,7 @@ export const RankingMaster: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto vps-scrollbar">
         {ranked.length === 0 ? (
           <div className="p-3 text-[11px] text-gray-500">No fabs.</div>
         ) : (

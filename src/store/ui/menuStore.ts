@@ -18,6 +18,7 @@ export interface MenuState {
   tooltipMessage: string | null;
   tooltipPosition: { x: number; y: number } | null;
   tooltipLevel: number | null;
+  tooltipPlacement: "default" | "anchor" | null;
 
   // Methods
   getCurrentTopLevel: () => number;
@@ -31,7 +32,8 @@ export interface MenuState {
     menuId: string,
     message: string,
     position: { x: number; y: number },
-    buttonLevel: number
+    buttonLevel: number,
+    placement?: "default" | "anchor"
   ) => void;
   hideTooltip: () => void;
 }
@@ -52,6 +54,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   tooltipMessage: null,
   tooltipPosition: null,
   tooltipLevel: null,
+  tooltipPlacement: null,
 
   // Calculate current top level
   getCurrentTopLevel: () => {
@@ -84,6 +87,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: null,
       tooltipPosition: null,
       tooltipLevel: null,
+      tooltipPlacement: null,
     });
   },
 
@@ -107,6 +111,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: null,
       tooltipPosition: null,
       tooltipLevel: null,
+      tooltipPlacement: null,
     });
   },
 
@@ -134,6 +139,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: null,
       tooltipPosition: null,
       tooltipLevel: null,
+      tooltipPlacement: null,
     });
   },
 
@@ -146,6 +152,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: null,
       tooltipPosition: null,
       tooltipLevel: null,
+      tooltipPlacement: null,
     });
   },
 
@@ -158,7 +165,8 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     menuId: string,
     message: string,
     position: { x: number; y: number },
-    buttonLevel: number
+    buttonLevel: number,
+    placement: "default" | "anchor" = "default"
   ) => {
     // 항상 툴팁 표시
     set({
@@ -166,6 +174,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: message,
       tooltipPosition: position,
       tooltipLevel: buttonLevel,
+      tooltipPlacement: placement,
     });
   },
 
@@ -175,6 +184,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       tooltipMessage: null,
       tooltipPosition: null,
       tooltipLevel: null,
+      tooltipPlacement: null,
     });
   },
 }));

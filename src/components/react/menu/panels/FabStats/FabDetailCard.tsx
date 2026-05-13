@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  RadialBarChart, RadialBar, PieChart, Pie, Cell, ResponsiveContainer,
+  RadialBarChart, RadialBar, PieChart, Pie, Cell, ResponsiveContainer, PolarAngleAxis,
 } from "recharts";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
@@ -18,7 +18,7 @@ const IDLE_POLICY_LABEL: Record<string, string> = {
 // Speed Gauge — 반원 게이지 (스피드미터 모양)
 // ============================================================================
 
-const SpeedGauge: React.FC<{ avg: number; max: number; nominalMax?: number }> = ({ avg, max, nominalMax }) => {
+export const SpeedGauge: React.FC<{ avg: number; max: number; nominalMax?: number }> = ({ avg, max, nominalMax }) => {
   // 게이지의 최대 기준: nominalMax (예: linearMaxSpeed) 가 있으면 그걸, 없으면 관측 max
   const ceil = nominalMax ?? Math.max(max, 1);
   const ratio = Math.min(1, Math.max(0, avg / ceil));
@@ -40,6 +40,7 @@ const SpeedGauge: React.FC<{ avg: number; max: number; nominalMax?: number }> = 
           endAngle={-30}
           barSize={14}
         >
+          <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
           <RadialBar
             dataKey="value"
             cornerRadius={8}

@@ -119,14 +119,26 @@ export class AutoMgr {
   private readonly lastPath: Map<number, number[]> = new Map();
   private readonly pathChangeCount: Map<number, number> = new Map();
   // Order completion stats (throughput + timing 분포)
-  // leadTime     = drop완료 - 반송생성  (=picking 향해 출발한 시점)
-  // waitingTime  = pickup완료 - 반송생성  (픽업까지 걸린 시간)
-  // deliveryTime = drop완료 - pickup완료  (드롭까지 걸린 시간)
+  // 분포용 raw 배열 (histogram + p50/p95/mean):
+  //   leadTime     = drop완료 - 반송생성
+  //   waitingTime  = pickup완료 - 반송생성
+  //   deliveryTime = drop완료 - pickup완료
+  // 4-stage 평균용 누적 (lifecycle bar 비율 표시):
+  //   pickupApproach = t2 - t1 (move_to_pickup → pickup_arrive)
+  //   loading        = t3 - t2 (pickup_arrive → pickup_done)
+  //   dropApproach   = t4 - t3 (pickup_done → drop_arrive)
+  //   unloading      = t5 - t4 (drop_arrive → drop_done)
   private orderStats = {
     completed: 0,
     leadTimes: [] as number[],
     waitingTimes: [] as number[],
     deliveryTimes: [] as number[],
+    // 4-stage 평균 누적 (sum, count로 평균 추출)
+    pickupApproachSum: 0,
+    loadingSum: 0,
+    dropApproachSum: 0,
+    unloadingSum: 0,
+    stageCount: 0, // 4 stage 모두 동일 (한 order 끝날 때 +1)
     resetSimTime: 0,
   };
 
@@ -261,9 +273,11 @@ export class AutoMgr {
 
       // --- UNLOADING complete: resume with existing loop pathBuffer ---
       else if (jobState === JobState.UNLOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
-        // Record timing 분포 before clearing order data
+        // Record timing 분포 + 4-stage 평균 before clearing order data
         const moveToPickupTs = data[ptr + OrderData.MOVE_TO_PICKUP_TS];
+        const pickupArriveTs = data[ptr + OrderData.PICKUP_ARRIVE_TS];
         const pickupDoneTs = data[ptr + OrderData.PICKUP_DONE_TS];
+        const dropArriveTs = data[ptr + OrderData.DROP_ARRIVE_TS];
         data[ptr + OrderData.DROP_DONE_TS] = simulationTime;
         if (moveToPickupTs > 0) {
           this.orderStats.completed++;
@@ -271,6 +285,14 @@ export class AutoMgr {
           if (pickupDoneTs > 0) {
             this.orderStats.waitingTimes.push(pickupDoneTs - moveToPickupTs);
             this.orderStats.deliveryTimes.push(simulationTime - pickupDoneTs);
+          }
+          // 4-stage 평균 누적 (timestamp 모두 유효할 때만)
+          if (pickupArriveTs > 0 && pickupDoneTs > 0 && dropArriveTs > 0) {
+            this.orderStats.pickupApproachSum += pickupArriveTs - moveToPickupTs;
+            this.orderStats.loadingSum += pickupDoneTs - pickupArriveTs;
+            this.orderStats.dropApproachSum += dropArriveTs - pickupDoneTs;
+            this.orderStats.unloadingSum += simulationTime - dropArriveTs;
+            this.orderStats.stageCount++;
           }
         }
 
@@ -882,6 +904,11 @@ export class AutoMgr {
     leadTimes: number[];
     waitingTimes: number[];
     deliveryTimes: number[];
+    pickupApproachSum: number;
+    loadingSum: number;
+    dropApproachSum: number;
+    unloadingSum: number;
+    stageCount: number;
     resetSimTime: number;
   } {
     return this.orderStats;
@@ -894,6 +921,11 @@ export class AutoMgr {
       leadTimes: [],
       waitingTimes: [],
       deliveryTimes: [],
+      pickupApproachSum: 0,
+      loadingSum: 0,
+      dropApproachSum: 0,
+      unloadingSum: 0,
+      stageCount: 0,
       resetSimTime: simulationTime,
     };
     this.pathChangeCount.clear();

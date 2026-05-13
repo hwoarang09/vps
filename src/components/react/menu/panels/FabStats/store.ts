@@ -15,20 +15,30 @@ export type RankingMetricKey = typeof RANKING_METRICS[number]["key"];
 
 type SortOrder = "asc" | "desc";
 
+export type TimingKey = "lead" | "waiting" | "delivery";
+export type DetailTabKey = "distribution" | "parameters";
+
 interface FabStatsUIStore {
   rankingSortBy: RankingMetricKey;
   rankingSortOrder: SortOrder;
   selectedFabId: string | null;
+  // Detail 내부 상태
+  detailTab: DetailTabKey;
+  selectedTiming: TimingKey;
 
   setRankingSortBy: (key: RankingMetricKey) => void;
   toggleRankingSortOrder: () => void;
   setSelectedFabId: (id: string | null) => void;
+  setDetailTab: (tab: DetailTabKey) => void;
+  setSelectedTiming: (timing: TimingKey) => void;
 }
 
 export const useFabStatsUIStore = create<FabStatsUIStore>((set) => ({
   rankingSortBy: "throughput",
   rankingSortOrder: "desc",
   selectedFabId: null,
+  detailTab: "distribution",
+  selectedTiming: "lead",
 
   setRankingSortBy: (key) =>
     set((state) => {
@@ -44,4 +54,6 @@ export const useFabStatsUIStore = create<FabStatsUIStore>((set) => ({
     set((state) => ({ rankingSortOrder: state.rankingSortOrder === "desc" ? "asc" : "desc" })),
 
   setSelectedFabId: (id) => set({ selectedFabId: id }),
+  setDetailTab: (tab) => set({ detailTab: tab }),
+  setSelectedTiming: (timing) => set({ selectedTiming: timing }),
 }));

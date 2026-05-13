@@ -10,13 +10,15 @@ import {
 } from "./shared/types";
 
 export const MenuTooltip: React.FC = () => {
-  const { tooltipMessage, tooltipPosition, tooltipLevel } = useMenuStore();
+  const { tooltipMessage, tooltipPosition, tooltipLevel, tooltipPlacement } = useMenuStore();
 
   if (!tooltipMessage || !tooltipPosition || !tooltipLevel) return null;
 
-  // Level 2+ menus: tooltip below, Level 1 menu: tooltip above
+  // anchor placement: 호출자가 준 좌표 그대로 (보정 없음) — quick-view toolbar 등 작은 버튼용
+  // default placement: bottom 메뉴 컨벤션 (level 1 = 위, level 2+ = 아래로 ±54 보정)
+  const isAnchorMode = tooltipPlacement === "anchor";
   const isSubMenu = tooltipLevel >= 2;
-  const topOffset = isSubMenu ? 54 : -54;
+  const topOffset = isAnchorMode ? 0 : isSubMenu ? 54 : -54;
 
   return (
     <div

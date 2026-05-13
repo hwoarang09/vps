@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  /* 공통 스크롤바 — Bruno Simon 미니멀 다크 톤
+     사용: <div className="vps-scrollbar overflow-auto">…</div> */
+  .vps-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 130, 160, 0.4) transparent;
+  }
+  .vps-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .vps-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .vps-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(100, 130, 160, 0.4);
+    border-radius: 3px;
+    transition: background 0.15s ease;
+  }
+  .vps-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 130, 160, 0.75);
+  }
+  .vps-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}

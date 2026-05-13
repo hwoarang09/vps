@@ -24,6 +24,8 @@ import { RankingTab } from "./FabStats/RankingTab";
 // Types
 // ============================================================================
 
+export const SPEED_HISTOGRAM_BUCKETS = 10;
+
 export interface FabStats {
   fabId: string;
   vehicleCount: number;
@@ -52,6 +54,9 @@ export interface FabStats {
   sensorCollisionCount: number;
   avgPathRemaining: number;
   maxPathRemaining: number;
+  /** Speed 분포 — 0~nominalMax 사이 SPEED_HISTOGRAM_BUCKETS 개. 마지막은 max 초과 overflow */
+  speedHistogram: number[];
+  speedBucketCeil: number; // bucket 상한 (예: nominalMax)
 }
 
 interface HistoryPoint {
@@ -68,8 +73,12 @@ export function computeFabStats(
   fullData: Float32Array,
   workerStartOffset: number,
   vehicleCount: number,
+  speedCeil: number = 5,
 ): FabStats {
   const startIdx = workerStartOffset / (VEHICLE_DATA_SIZE * Float32Array.BYTES_PER_ELEMENT);
+
+  const speedHistogram = new Array<number>(SPEED_HISTOGRAM_BUCKETS).fill(0);
+  const bucketWidth = speedCeil / SPEED_HISTOGRAM_BUCKETS;
 
   const stats: FabStats = {
     fabId, vehicleCount,
@@ -82,6 +91,8 @@ export function computeFabStats(
     stopPathBlocked: 0, stopDestReached: 0, stopLoadOnOff: 0,
     sensorCollisionCount: 0,
     avgPathRemaining: 0, maxPathRemaining: 0,
+    speedHistogram,
+    speedBucketCeil: speedCeil,
   };
 
   if (vehicleCount === 0) return stats;
@@ -96,6 +107,11 @@ export function computeFabStats(
     totalSpeed += velocity;
     if (velocity > stats.maxSpeed) stats.maxSpeed = velocity;
     if (velocity >= 0.01 && velocity < stats.minSpeed) stats.minSpeed = velocity;
+    // Speed histogram bucket increment (overflow는 마지막 bucket에 누적)
+    const bucketIdx = velocity <= 0
+      ? 0
+      : Math.min(SPEED_HISTOGRAM_BUCKETS - 1, Math.floor(velocity / bucketWidth));
+    speedHistogram[bucketIdx]++;
 
     const ms = fullData[ptr + MovementData.MOVING_STATUS];
     if (ms === 0) stats.stoppedCount++;
@@ -520,6 +536,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const controller = useShmSimulatorStore((s) => s.controller);
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
   const orderStatsMap = useOrderStatsStore((s) => s.fabStats);
+  const baseLinearMaxSpeed = useFabConfigStore((s) => s.baseConfig.movement.linear.maxSpeed);
   const [fabStatsList, setFabStatsList] = useState<FabStats[]>([]);
   const [tab, setTab] = useState<TabKey>("ranking");
   const [defaults] = useState(getCenterDefaults);
@@ -575,7 +592,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         const assignment = workerLayout.fabAssignments.get(fabId);
         if (!assignment) continue;
         const vehicleCount = controller.getActualNumVehicles(fabId);
-        stats.push(computeFabStats(fabId, fullData, assignment.vehicleRegion.offset, vehicleCount));
+        stats.push(computeFabStats(fabId, fullData, assignment.vehicleRegion.offset, vehicleCount, baseLinearMaxSpeed));
       }
       setFabStatsList(stats);
       pushHistory(stats);
@@ -586,7 +603,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       intervalRef.current = setInterval(update, UPDATE_INTERVAL_MS);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [controller, isRunning, pushHistory]);
+  }, [controller, isRunning, pushHistory, baseLinearMaxSpeed]);
 
   const total = fabStatsList.reduce(
     (acc, f) => ({

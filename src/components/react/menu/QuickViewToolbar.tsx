@@ -92,7 +92,7 @@ const QuickViewToolbar: React.FC = () => {
 
   const handleMouseEnter = (e: React.MouseEvent, id: string, tooltip: string) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    showTooltip(id, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom + 4 }, 2);
+    showTooltip(id, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom + 4 }, 2, "anchor");
   };
 
   const buttonExtra = "w-9 h-9 mx-0 text-zinc-100";

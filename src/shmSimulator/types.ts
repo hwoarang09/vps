@@ -421,6 +421,11 @@ export type MainMessage =
       leadTimeBucketSec: number;
       waitingTimeP50: number; waitingTimeP95: number; waitingTimeMean: number; waitingTimeHistogram: number[];
       deliveryTimeP50: number; deliveryTimeP95: number; deliveryTimeMean: number; deliveryTimeHistogram: number[];
+      // 4-stage 평균 (초)
+      pickupApproachMean: number;
+      loadingMean: number;
+      dropApproachMean: number;
+      unloadingMean: number;
     }
   | { type: "LOGS_FLUSHED" };
 
