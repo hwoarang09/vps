@@ -13,7 +13,7 @@ import { useMenuStore } from "@/store/ui/menuStore";
 import { useMqttStore } from "@/store/system/mqttStore";
 import { MenuTooltip } from "./MenuTooltip";
 import QuickViewToolbar from "./QuickViewToolbar";
-import KpiHud from "./KpiHud";
+import LeftHud from "./leftHud/LeftHud";
 import CommandPalette from "./CommandPalette";
 
 const MenuContainer: React.FC = () => {
@@ -62,7 +62,7 @@ const MenuContainer: React.FC = () => {
       <QuickViewToolbar />
 
       {/* KPI HUD - Top Left, below MqttStatusIndicator */}
-      <KpiHud />
+      <LeftHud />
 
       {/* Level 1 Menu (Bottom) */}
       <MenuLevel1 />
