@@ -2,7 +2,7 @@
 // TODO: vis-heatmap, vis-traffic-flow, vis-deadlock-zone are not yet wired in
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Activity, Radar, Tag, Binary, Palette, Check } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
@@ -38,10 +38,17 @@ const QuickViewToolbar: React.FC = () => {
   const { showTooltip, hideTooltip } = useMenuStore();
   const activeMainMenu = useMenuStore((s) => s.activeMainMenu);
   const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
-  const [logOpen, setLogOpen] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
-  const [labelOpen, setLabelOpen] = useState(false);
-  const [sensorOpen, setSensorOpen] = useState(false);
+  // 한 번에 하나의 드롭다운만 열기
+  type DropdownName = "log" | "theme" | "labels" | "sensor" | null;
+  const [openDropdown, setOpenDropdown] = useState<DropdownName>(null);
+  const toggleDropdown = (name: Exclude<DropdownName, null>) =>
+    setOpenDropdown((prev) => (prev === name ? null : name));
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const logOpen = openDropdown === "log";
+  const themeOpen = openDropdown === "theme";
+  const labelOpen = openDropdown === "labels";
+  const sensorOpen = openDropdown === "sensor";
   const themeName = useThemeStore((s) => s.themeName);
   const setTheme = useThemeStore((s) => s.setTheme);
 
@@ -57,11 +64,20 @@ const QuickViewToolbar: React.FC = () => {
 
   // 하단/서브 메뉴 상태가 바뀌면 드롭다운 강제 닫기
   useEffect(() => {
-    setLogOpen(false);
-    setThemeOpen(false);
-    setLabelOpen(false);
-    setSensorOpen(false);
+    setOpenDropdown(null);
   }, [activeMainMenu, activeSubMenu]);
+
+  // 바깥 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openDropdown]);
 
   const labelOptions: LabelOption[] = [
     { key: "fab", label: "Fab Labels", get: () => showFabLabels, toggle: toggleFabLabels },
@@ -71,7 +87,6 @@ const QuickViewToolbar: React.FC = () => {
     { key: "bay", label: "Bay Labels", get: () => showBayText, toggle: toggleBayText },
     { key: "station", label: "Station Text", get: () => showStationText, toggle: toggleStationText },
   ];
-  const anyLabelOn = labelOptions.some((o) => o.get());
 
   const items: ToggleItem[] = [
     {
@@ -99,6 +114,7 @@ const QuickViewToolbar: React.FC = () => {
 
   return (
     <div
+      ref={toolbarRef}
       className={twMerge(
         menuContainerVariants({ level: 2 }),
         "fixed top-4 right-4 z-50 flex-row items-center gap-1.5 p-1.5 space-x-0",
@@ -123,10 +139,10 @@ const QuickViewToolbar: React.FC = () => {
       {/* Sensor dropdown */}
       <div className="relative">
         <button
-          onClick={() => setSensorOpen(!sensorOpen)}
+          onClick={() => toggleDropdown("sensor")}
           onMouseEnter={(e) => handleMouseEnter(e, "sensor", "Sensor Box")}
           onMouseLeave={hideTooltip}
-          className={twMerge(menuButtonVariants({ active: showSensorBox || sensorOpen }), buttonExtra)}
+          className={twMerge(menuButtonVariants({ active: sensorOpen }), buttonExtra)}
         >
           <Radar size={16} />
         </button>
@@ -177,10 +193,10 @@ const QuickViewToolbar: React.FC = () => {
       {/* Label dropdown */}
       <div className="relative">
         <button
-          onClick={() => setLabelOpen(!labelOpen)}
+          onClick={() => toggleDropdown("labels")}
           onMouseEnter={(e) => handleMouseEnter(e, "labels", "Labels")}
           onMouseLeave={hideTooltip}
-          className={twMerge(menuButtonVariants({ active: anyLabelOn || labelOpen }), buttonExtra)}
+          className={twMerge(menuButtonVariants({ active: labelOpen }), buttonExtra)}
         >
           <Tag size={16} />
         </button>
@@ -219,7 +235,7 @@ const QuickViewToolbar: React.FC = () => {
       {/* Theme picker */}
       <div className="relative">
         <button
-          onClick={() => setThemeOpen(!themeOpen)}
+          onClick={() => toggleDropdown("theme")}
           onMouseEnter={(e) => handleMouseEnter(e, "theme", `Theme: ${THEMES[themeName]?.label ?? ""}`)}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: themeOpen }), buttonExtra)}
@@ -235,7 +251,7 @@ const QuickViewToolbar: React.FC = () => {
                 key={t.name}
                 onClick={() => {
                   setTheme(t.name);
-                  setThemeOpen(false);
+                  setOpenDropdown(null);
                 }}
                 className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 ${
                   t.name === themeName ? "bg-zinc-700 text-white" : "text-zinc-200"
@@ -254,7 +270,7 @@ const QuickViewToolbar: React.FC = () => {
       {/* SimLog button (was LogIndicator) */}
       <div className="relative">
         <button
-          onClick={() => setLogOpen(!logOpen)}
+          onClick={() => toggleDropdown("log")}
           onMouseEnter={(e) => handleMouseEnter(e, "simlogs", "SimLogger Files")}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: logOpen }), buttonExtra)}
@@ -263,7 +279,7 @@ const QuickViewToolbar: React.FC = () => {
         </button>
         {logOpen && (
           <div className="absolute top-12" style={{ right: 0 }}>
-            <SimLogFileManager isOpen={true} onToggle={() => setLogOpen(false)} hideButton={true} />
+            <SimLogFileManager isOpen={true} onToggle={() => setOpenDropdown(null)} hideButton={true} />
           </div>
         )}
       </div>

@@ -130,10 +130,17 @@ const LoadingScreen: React.FC = () => {
           />
         </div>
 
-        <div className="flex justify-between items-center w-full text-[11px] tracking-wider uppercase">
-          <span className="text-neutral-500">{isFading ? "" : label}</span>
-          <span className="text-neutral-400 font-mono">
-            {isFading ? "" : `${shownPercent}%`}
+        <div className="flex justify-between items-center w-full text-[11px] tracking-wider uppercase gap-2">
+          <span
+            className={`text-neutral-500 flex-1 text-left truncate transition-opacity ${isFading ? "opacity-0" : "opacity-100"}`}
+          >
+            {label}
+          </span>
+          <span
+            className={`text-neutral-400 font-mono tabular-nums text-right flex-shrink-0 transition-opacity ${isFading ? "opacity-0" : "opacity-100"}`}
+            style={{ width: "3.5ch" }}
+          >
+            {shownPercent}%
           </span>
         </div>
       </div>

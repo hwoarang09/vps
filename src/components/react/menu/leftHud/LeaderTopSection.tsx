@@ -1,7 +1,7 @@
 import React from "react";
 import { useFabStore } from "@/store/map/fabStore";
 import { useCameraStore } from "@/store/ui/cameraStore";
-import { GRADIENT_CLASS } from "./LiveKpiSection";
+import { useHudStyles, SectionLabel } from "./LiveKpiSection";
 
 export interface LeaderEntry {
   fabIdx: number;
@@ -11,27 +11,20 @@ export interface LeaderEntry {
   throughput: number;
 }
 
-const MEDALS = ["🥇", "🥈", "🥉"];
-
-const STRATEGY_COLOR: Record<string, string> = {
-  DISTANCE: "text-zinc-400",
-  BPR: "text-sky-300",
-  EWMA: "text-purple-300",
-};
-
-const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div
-    className="text-[10px] uppercase tracking-[0.18em] text-zinc-300 font-semibold pl-2"
-    style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
-  >
-    {children}
-  </div>
-);
+// 작은 메달 뱃지 색 (background)
+const RANK_BG = ["bg-yellow-500", "bg-zinc-400", "bg-amber-700"];
 
 const LeaderTopSection: React.FC<{ leaders: LeaderEntry[]; activeFabIdx: number }> = ({
   leaders,
   activeFabIdx,
 }) => {
+  const hud = useHudStyles();
+  const isLight = hud.primaryText !== "text-white";
+
+  const strategyColor: Record<string, string> = isLight
+    ? { DISTANCE: "text-zinc-600", BPR: "text-sky-700", EWMA: "text-purple-700" }
+    : { DISTANCE: "text-zinc-300", BPR: "text-sky-300", EWMA: "text-purple-300" };
+
   if (leaders.length === 0) return null;
 
   const handleClick = (entry: LeaderEntry) => {
@@ -51,36 +44,37 @@ const LeaderTopSection: React.FC<{ leaders: LeaderEntry[]; activeFabIdx: number 
   };
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 pointer-events-auto">
       <SectionLabel>Leaders · Throughput</SectionLabel>
-      <div className={`${GRADIENT_CLASS} min-w-[260px] py-1 pointer-events-auto`}>
+      <div className="flex flex-col gap-1">
         {leaders.map((entry, rank) => {
-          const strategyCls = STRATEGY_COLOR[entry.strategy] ?? "text-zinc-300";
-          const isActive = entry.fabIdx === activeFabIdx;
+          const strategyCls = strategyColor[entry.strategy] ?? hud.dimText;
           return (
             <button
               key={entry.fabId}
               onClick={() => handleClick(entry)}
-              className={`w-full flex items-center gap-2 px-3 py-1 text-left transition-colors ${
-                isActive ? "bg-cyan-500/20" : "hover:bg-white/5"
-              }`}
+              className={`${hud.gradientClass} w-full flex items-center gap-2 px-3 py-1.5 min-w-[200px] text-left hover:brightness-125 transition`}
             >
-              <span className="text-base flex-shrink-0">{MEDALS[rank]}</span>
               <span
-                className="font-mono text-[11px] font-bold text-white w-[28px]"
-                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
+                className={`${RANK_BG[rank]} w-5 h-5 rounded-full flex items-center justify-center font-mono text-[11px] font-bold text-white flex-shrink-0 leading-none ring-1 ring-black/30`}
+              >
+                {rank + 1}
+              </span>
+              <span
+                className={`font-mono text-[11px] font-bold ${hud.primaryText} w-[28px]`}
+                style={hud.textOutlineStyle}
               >
                 {entry.label}
               </span>
               <span
                 className={`text-[10px] uppercase tracking-wider ${strategyCls}`}
-                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
+                style={hud.textOutlineStyle}
               >
                 {entry.strategy}
               </span>
               <span
-                className="font-mono text-[11px] text-zinc-200 tabular-nums flex-1 text-right"
-                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
+                className={`font-mono text-[11px] ${hud.primaryText} tabular-nums flex-1 text-right`}
+                style={hud.textOutlineStyle}
               >
                 {entry.throughput.toFixed(0)}
               </span>

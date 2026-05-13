@@ -41,6 +41,9 @@ export interface Theme {
   textVehicleStrokeColor: string;
   textVehicleStrokeWidth: number;
   textVehicleSpacing: number;
+
+  // HUD (좌측 fixed overlay) — 'dark' 면 어두운 그라데이션 + 흰글자, 'light' 면 밝은 그라데이션 + 검은글자
+  hudMode: "dark" | "light";
 }
 
 export const DEFAULT_THEME: Theme = {
@@ -78,6 +81,8 @@ export const DEFAULT_THEME: Theme = {
   textVehicleStrokeColor: "",
   textVehicleStrokeWidth: 0,
   textVehicleSpacing: 0.15,
+
+  hudMode: "dark",
 };
 
 export const WHITE_THEME: Theme = {
@@ -115,6 +120,8 @@ export const WHITE_THEME: Theme = {
   textVehicleStrokeColor: "#000000",
   textVehicleStrokeWidth: 10,
   textVehicleSpacing: 0.24,
+
+  hudMode: "light",
 };
 
 export const THEMES: Record<string, Theme> = {

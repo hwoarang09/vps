@@ -1,5 +1,5 @@
 import React from "react";
-import { GRADIENT_CLASS } from "./LiveKpiSection";
+import { useHudStyles, SectionLabel } from "./LiveKpiSection";
 
 const ROUTING_LABEL: Record<string, string> = {
   DISTANCE: "Dist",
@@ -28,16 +28,28 @@ interface Props {
   };
 }
 
-const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div
-    className="text-[10px] uppercase tracking-[0.18em] text-zinc-300 font-semibold pl-2"
-    style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
-  >
-    {children}
-  </div>
-);
+const ParamRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
+  const hud = useHudStyles();
+  return (
+    <div className={`${hud.gradientClass} flex items-center gap-2.5 px-3 py-1.5 min-w-[200px]`}>
+      <span
+        className={`text-[10px] uppercase tracking-wider ${hud.dimText} flex-shrink-0 w-[60px]`}
+        style={hud.textOutlineStyle}
+      >
+        {label}
+      </span>
+      <span
+        className="font-mono text-[12px] font-semibold flex-1 text-right"
+        style={hud.textOutlineStyle}
+      >
+        {children}
+      </span>
+    </div>
+  );
+};
 
 const ActiveFabSection: React.FC<Props> = ({ routing, transferMode, transferRate }) => {
+  const hud = useHudStyles();
   const routingShort = ROUTING_LABEL[routing.strategy] ?? routing.strategy;
   let routingParam = "";
   if (routing.strategy === "BPR") {
@@ -51,27 +63,23 @@ const ActiveFabSection: React.FC<Props> = ({ routing, transferMode, transferRate
     ? `${transferRate.utilizationPercent}%`
     : `${transferRate.throughputPerHour}/h`;
 
+  // 강조 색은 light mode에서 더 진한 톤으로
+  const routingAccent = hud.primaryText === "text-white" ? "text-purple-300" : "text-purple-700";
+  const modeAccent = hud.primaryText === "text-white" ? "text-cyan-300" : "text-cyan-700";
+
   return (
     <div className="flex flex-col gap-1">
-      <SectionLabel>Active Fab</SectionLabel>
-      <div className={`${GRADIENT_CLASS} min-w-[260px] px-3 py-1.5 flex flex-col gap-0.5`}>
-        <div
-          className="flex items-center gap-2 text-[11px] font-mono"
-          style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
-        >
-          <span className="text-purple-300">
-            {routingShort}
-            <span className="text-zinc-400">{routingParam}</span>
-          </span>
-        </div>
-        <div
-          className="flex items-center gap-2 text-[11px] font-mono"
-          style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
-        >
-          <span className="text-cyan-300">{modeShort}</span>
-          <span className="text-zinc-500">·</span>
-          <span className="text-zinc-300">{rateStr}</span>
-        </div>
+      <SectionLabel>Parameters</SectionLabel>
+      <div className="flex flex-col gap-1">
+        <ParamRow label="Routing">
+          <span className={routingAccent}>{routingShort}</span>
+          <span className={hud.dimText}>{routingParam}</span>
+        </ParamRow>
+        <ParamRow label="Transfer">
+          <span className={modeAccent}>{modeShort}</span>
+          <span className={hud.mutedText}> · </span>
+          <span className={hud.primaryText}>{rateStr}</span>
+        </ParamRow>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import {
   LogicData,
   StopReason,
 } from "@/common/vehicle/initialize/constants";
-import LiveKpiSection, { KpiSnapshot, Trend } from "./LiveKpiSection";
+import LiveKpiSection, { KpiSnapshot, Trend, useHudStyles } from "./LiveKpiSection";
 import ActiveFabSection from "./ActiveFabSection";
 import LeaderTopSection, { LeaderEntry } from "./LeaderTopSection";
 
@@ -169,21 +169,22 @@ const HudLayout: React.FC<HudLayoutProps> = ({
   snapshot, fabLabel, routing, transferMode, transferRate, leaders, activeFabIdx,
 }) => {
   const [open, setOpen] = useState(true);
+  const hud = useHudStyles();
 
   return (
     <div className="fixed top-4 left-4 z-50 flex flex-col gap-3 pointer-events-none">
       {/* Top header — active fab name + master toggle */}
-      <div className="flex items-center justify-between min-w-[260px] pr-1">
+      <div className="flex items-center justify-between min-w-[200px] pr-1">
         <span
-          className="text-base font-mono font-bold text-white tracking-wider"
-          style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}
+          className={`text-base font-mono font-bold ${hud.primaryText} tracking-wider`}
+          style={hud.textOutlineStyle}
         >
           Fab {fabLabel}
         </span>
         <button
           onClick={() => setOpen(!open)}
-          className="text-zinc-200 hover:text-white p-0.5 pointer-events-auto"
-          style={{ textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}
+          className={`${hud.dimText} hover:${hud.primaryText} p-0.5 pointer-events-auto`}
+          style={hud.textOutlineStyle}
           aria-label={open ? "Collapse all" : "Expand all"}
         >
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
