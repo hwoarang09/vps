@@ -451,8 +451,8 @@ const TREND_METRICS = [
 
 type TrendMetricKey = typeof TREND_METRICS[number]["key"];
 
-const UPDATE_INTERVAL_MS = 2500;
-const MAX_HISTORY = 120; // 120 * 2.5s = 5 min window
+const UPDATE_INTERVAL_MS = 10000;
+const MAX_HISTORY = 120; // 120 * 10s = 20 min window
 
 const TrendTab: React.FC<{
   fabStatsList: FabStats[];

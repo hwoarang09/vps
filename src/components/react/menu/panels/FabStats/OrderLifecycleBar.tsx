@@ -62,43 +62,56 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
   const waitingPct = pcts[0] + pcts[1];
   const deliveryStartPct = waitingPct;
 
-  // SVG brace 영역 — 0~100 viewbox
-  const BraceMark: React.FC<{
-    startPct: number; endPct: number; y: number;
+  // Brace (스테이플러 모양) — 가로선 + 좌우 ticks, 중앙에 라벨이 선을 끊으며 표시
+  const Brace: React.FC<{
+    startPct: number; endPct: number; top: number;
     color: string; active: boolean; onClick: () => void;
-  }> = ({ startPct, endPct, y, color, active, onClick }) => {
+    label: string; value: number; activeTextClass: string;
+  }> = ({ startPct, endPct, top, color, active, onClick, label, value, activeTextClass }) => {
     const w = endPct - startPct;
+    const lineThickness = active ? 2 : 1;
     return (
-      <g
+      <button
+        type="button"
         onClick={onClick}
-        style={{ cursor: "pointer" }}
-        className="group"
+        className="absolute group cursor-pointer"
+        style={{
+          left: `${startPct}%`,
+          width: `${w}%`,
+          top,
+          height: 14,
+          opacity: active ? 1 : 0.6,
+        }}
       >
-        {/* hit area (투명 큰 영역) */}
-        <rect x={startPct} y={y - 5} width={w} height={14} fill="transparent" />
-        {/* 가로선 + 양 끝 ticks (스테이플러 심) */}
-        <line
-          x1={startPct + 0.3} y1={y} x2={endPct - 0.3} y2={y}
-          stroke={color} strokeWidth={active ? 1.4 : 0.8}
-          opacity={active ? 1 : 0.55}
-          className="group-hover:opacity-100"
-          vectorEffect="non-scaling-stroke"
+        {/* 좌측 tick */}
+        <div
+          className="absolute left-0 top-0 transition-colors group-hover:!opacity-100"
+          style={{ width: lineThickness, height: 6, background: color, opacity: active ? 1 : 0.75 }}
         />
-        <line
-          x1={startPct + 0.3} y1={y - 2.5} x2={startPct + 0.3} y2={y + 2.5}
-          stroke={color} strokeWidth={active ? 1.4 : 0.8}
-          opacity={active ? 1 : 0.55}
-          className="group-hover:opacity-100"
-          vectorEffect="non-scaling-stroke"
+        {/* 우측 tick */}
+        <div
+          className="absolute right-0 top-0 transition-colors group-hover:!opacity-100"
+          style={{ width: lineThickness, height: 6, background: color, opacity: active ? 1 : 0.75 }}
         />
-        <line
-          x1={endPct - 0.3} y1={y - 2.5} x2={endPct - 0.3} y2={y + 2.5}
-          stroke={color} strokeWidth={active ? 1.4 : 0.8}
-          opacity={active ? 1 : 0.55}
-          className="group-hover:opacity-100"
-          vectorEffect="non-scaling-stroke"
+        {/* 가로선 */}
+        <div
+          className="absolute left-0 right-0 top-0 transition-colors group-hover:!opacity-100"
+          style={{ height: lineThickness, background: color, opacity: active ? 1 : 0.75 }}
         />
-      </g>
+        {/* 중앙 라벨 — 가로선을 끊으면서 강조 (배경색으로 line break) */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-[-6px] px-1.5 bg-panel-bg-solid whitespace-nowrap">
+          <span
+            className={`text-[10.5px] tabular-nums font-semibold transition-colors ${
+              active
+                ? `${activeTextClass} font-bold`
+                : "text-gray-400 group-hover:text-white"
+            }`}
+          >
+            {label}
+            <span className="ml-1">{fmtSec(value)}</span>
+          </span>
+        </div>
+      </button>
     );
   };
 
@@ -116,7 +129,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
       </div>
 
       {/* Stacked bar */}
-      <div className="flex h-8 rounded overflow-hidden bg-panel-bg-solid mb-1.5">
+      <div className="flex h-4 rounded overflow-hidden bg-panel-bg-solid mb-1.5">
         {segments.map((seg, i) => {
           const pct = pcts[i];
           if (pct < 0.5) return null;
@@ -159,59 +172,32 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
         })}
       </div>
 
-      {/* SVG brace 영역 (Waiting / Delivery / Lead) */}
-      <svg viewBox="0 0 100 22" preserveAspectRatio="none" className="w-full" style={{ height: 44 }}>
-        <BraceMark
-          startPct={0} endPct={waitingPct} y={3}
+      {/* Brace 영역 — Waiting/Delivery (top=0), Lead (top=20) */}
+      <div className="relative mt-2.5" style={{ height: 40 }}>
+        <Brace
+          startPct={0} endPct={waitingPct} top={0}
           color={TIMING_COLORS.waiting}
           active={selectedTiming === "waiting"}
           onClick={() => setSelectedTiming("waiting")}
+          label="Waiting" value={p + l}
+          activeTextClass="text-accent-cyan"
         />
-        <BraceMark
-          startPct={deliveryStartPct} endPct={100} y={3}
+        <Brace
+          startPct={deliveryStartPct} endPct={100} top={0}
           color={TIMING_COLORS.delivery}
           active={selectedTiming === "delivery"}
           onClick={() => setSelectedTiming("delivery")}
+          label="Delivery" value={d + u}
+          activeTextClass="text-purple-300"
         />
-        <BraceMark
-          startPct={0} endPct={100} y={14}
+        <Brace
+          startPct={0} endPct={100} top={22}
           color={TIMING_COLORS.lead}
           active={selectedTiming === "lead"}
           onClick={() => setSelectedTiming("lead")}
+          label="Lead" value={total}
+          activeTextClass="text-green-300"
         />
-      </svg>
-
-      {/* Brace 라벨 (선택된 timing 강조) */}
-      <div className="flex items-center justify-between text-[10.5px] mt-1 px-1">
-        <div className="flex gap-3">
-          <button
-            onClick={() => setSelectedTiming("waiting")}
-            className={`flex items-center gap-1 transition-opacity ${selectedTiming === "waiting" ? "opacity-100" : "opacity-50 hover:opacity-100"}`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIMING_COLORS.waiting }} />
-            <span className={selectedTiming === "waiting" ? "text-accent-cyan font-bold" : "text-gray-400"}>
-              Waiting <span className="tabular-nums ml-0.5">{fmtSec(p + l)}</span>
-            </span>
-          </button>
-          <button
-            onClick={() => setSelectedTiming("delivery")}
-            className={`flex items-center gap-1 transition-opacity ${selectedTiming === "delivery" ? "opacity-100" : "opacity-50 hover:opacity-100"}`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIMING_COLORS.delivery }} />
-            <span className={selectedTiming === "delivery" ? "text-purple-300 font-bold" : "text-gray-400"}>
-              Delivery <span className="tabular-nums ml-0.5">{fmtSec(d + u)}</span>
-            </span>
-          </button>
-        </div>
-        <button
-          onClick={() => setSelectedTiming("lead")}
-          className={`flex items-center gap-1 transition-opacity ${selectedTiming === "lead" ? "opacity-100" : "opacity-50 hover:opacity-100"}`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIMING_COLORS.lead }} />
-          <span className={selectedTiming === "lead" ? "text-green-300 font-bold" : "text-gray-400"}>
-            Lead <span className="tabular-nums ml-0.5">{fmtSec(total)}</span>
-          </span>
-        </button>
       </div>
     </div>
   );
