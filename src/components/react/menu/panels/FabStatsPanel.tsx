@@ -531,12 +531,15 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "trend", label: "Trend" },
 ];
 
-// 화면 왼쪽 0부터 너비의 2/3 차지. 우측 1/3은 Three.js 시각화 영역.
+// 상단 testSetting / 하단 MenuLevel1 안 가리게 위아래 reserve.
+// 가로는 화면의 40%.
 function getCenterDefaults() {
+  const TOP_RESERVE = 75;     // 상단 testSetting (TopControlBar) + 여유
+  const BOTTOM_RESERVE = 105; // 하단 MenuLevel1+2
   const x = 0;
-  const y = 0;
-  const w = Math.max(600, Math.round(window.innerWidth * (2 / 3)));
-  const h = Math.max(400, window.innerHeight);
+  const y = TOP_RESERVE;
+  const w = Math.max(500, Math.round(window.innerWidth * 0.55));
+  const h = Math.max(400, window.innerHeight - TOP_RESERVE - BOTTOM_RESERVE);
   return { x, y, w, h };
 }
 
@@ -613,31 +616,6 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [controller, isRunning, pushHistory, baseLinearMaxSpeed]);
 
-  const total = fabStatsList.reduce(
-    (acc, f) => ({
-      vehicles: acc.vehicles + f.vehicleCount,
-      moving: acc.moving + f.movingCount,
-      stopped: acc.stopped + f.stoppedCount,
-    }),
-    { vehicles: 0, moving: 0, stopped: 0 },
-  );
-
-  const tabBar = (
-    <div className="flex border-b border-gray-700 bg-gray-800/40 px-4">
-      {TABS.map(t => (
-        <button
-          key={t.key}
-          onClick={() => setTab(t.key)}
-          className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-            tab === t.key
-              ? "border-accent-cyan text-accent-cyan"
-              : "border-transparent text-gray-500 hover:text-gray-300"
-          }`}
-        >{t.label}</button>
-      ))}
-    </div>
-  );
-
   return (
     <FloatingPanel
       title="Fab Stats"
@@ -651,23 +629,30 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       bgClass="bg-gray-900/80"
       headerExtra={
         fabStatsList.length > 0 ? (
-          <div className="flex items-center gap-3 text-[11px] text-gray-400">
-            <span>Total <span className="text-white font-bold">{total.vehicles}</span></span>
-            <span>Moving <span className="text-accent-green font-bold">{total.moving}</span></span>
-            <span>Stopped <span className="text-amber-400 font-bold">{total.stopped}</span></span>
+          <div className="flex items-center gap-1 ml-2">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors ${
+                  tab === t.key
+                    ? "border-accent-cyan text-accent-cyan"
+                    : "border-transparent text-gray-500 hover:text-gray-300"
+                }`}
+              >{t.label}</button>
+            ))}
             <button
               onClick={() => {
                 controller?.resetOrderStats();
                 useOrderStatsStore.getState().resetAll();
               }}
-              className="px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
+              className="ml-auto px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
             >
               Reset KPI
             </button>
           </div>
         ) : undefined
       }
-      subHeader={tabBar}
     >
       {fabStatsList.length === 0 ? (
         <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
