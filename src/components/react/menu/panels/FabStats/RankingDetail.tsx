@@ -52,11 +52,11 @@ const ThroughputCard: React.FC<{ fabId: string }> = ({ fabId }) => {
 
 const SpeedCard: React.FC<{ fab: FabStats; nominalMax: number }> = ({ fab, nominalMax }) => {
   return (
-    <div className={panelCardVariants({ variant: "default", padding: "sm" }) + " flex flex-col"}>
-      <div className="mb-1">
+    <div className={panelCardVariants({ variant: "default", padding: "sm" }) + " flex flex-col flex-1 min-h-0"}>
+      <div className="shrink-0 mb-1">
         <SpeedGauge avg={fab.avgSpeed} max={fab.maxSpeed} nominalMax={nominalMax} />
       </div>
-      <div className="flex-1 min-h-[80px] border-t border-gray-700/50 pt-1.5">
+      <div className="flex-1 min-h-0 border-t border-gray-700/50 pt-1.5">
         <SpeedHistogram fab={fab} />
       </div>
     </div>
@@ -75,14 +75,14 @@ const DistributionTab: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab })
       <OrderLifecycleBar fabId={fab.fabId} />
 
       <div className="flex-1 min-h-0 grid grid-cols-[1fr_2fr] gap-2">
-        {/* 좌측: Throughput + Speed (gauge + histogram) */}
-        <div className="grid grid-rows-[auto_1fr] gap-2 min-h-0">
+        {/* 좌측: Throughput + Speed (gauge + histogram) — 콘텐츠 위에서 쌓이고 아래는 빈 영역 */}
+        <div className="flex flex-col gap-2 min-h-0">
           <ThroughputCard fabId={fab.fabId} />
           <SpeedCard fab={fab} nominalMax={baseLinearMaxSpeed} />
         </div>
 
         {/* 우측: Timing histogram (Lead/Waiting/Delivery — lifecycle bar 클릭으로 전환) */}
-        <div className={panelCardVariants({ variant: "default", padding: "sm" }) + " min-h-[280px]"}>
+        <div className={panelCardVariants({ variant: "default", padding: "sm" }) + " min-h-0"}>
           <TimingHistogram fabId={fab.fabId} />
         </div>
       </div>
@@ -128,7 +128,7 @@ export const RankingDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
   else if (strategy === "EWMA") strategyText = `EWMA α=${ewmaAlpha}`;
 
   return (
-    <div className="h-full flex flex-col p-2 gap-2">
+    <div className="h-full min-h-0 flex flex-col p-2 gap-2 overflow-hidden">
       {/* Header */}
       <div className="shrink-0 flex items-baseline gap-2 px-1 pb-1 border-b border-gray-700/50">
         <span className="text-base font-bold text-accent-orange">{fab.fabId}</span>

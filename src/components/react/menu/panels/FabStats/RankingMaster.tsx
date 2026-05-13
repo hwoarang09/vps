@@ -101,7 +101,7 @@ export const RankingMaster: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
   const currentMetric = RANKING_METRICS.find((m) => m.key === sortBy)!;
 
   return (
-    <div className="h-full flex flex-col bg-gray-900/40 border-r border-gray-700/50">
+    <div className="h-full min-h-0 flex flex-col bg-gray-900/40 border-r border-gray-700/50 overflow-hidden">
       {/* Sort controls */}
       <div className="shrink-0 p-2 border-b border-gray-700/50 flex items-center gap-1.5">
         <div ref={sortMenuRef} className="relative flex-1">
@@ -138,7 +138,7 @@ export const RankingMaster: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-auto vps-scrollbar">
+      <div className="flex-1 min-h-0 overflow-auto vps-scrollbar">
         {ranked.length === 0 ? (
           <div className="p-3 text-[11px] text-gray-500">No fabs.</div>
         ) : (

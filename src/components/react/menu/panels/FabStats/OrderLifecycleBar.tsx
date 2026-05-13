@@ -103,20 +103,20 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
   };
 
   return (
-    <div className="bg-panel-bg-solid/40 border border-gray-700/60 rounded-md p-2">
+    <div className="bg-panel-bg-solid/40 border border-gray-700/60 rounded-md p-3">
       {/* Header */}
-      <div className="flex items-baseline justify-between mb-1.5 px-1">
-        <span className="text-[10px] font-semibold text-gray-300">
+      <div className="flex items-baseline justify-between mb-2 px-1">
+        <span className="text-[11px] font-semibold text-gray-300">
           Order Lifecycle <span className="text-gray-500">(avg)</span>
         </span>
-        <span className="text-[10px] text-gray-500">
+        <span className="text-[10.5px] text-gray-500">
           n = <span className="text-gray-300 tabular-nums">{stats.completed.toLocaleString()}</span>
           <span className="ml-2">total <span className="text-gray-300 tabular-nums">{fmtSec(total)}</span></span>
         </span>
       </div>
 
       {/* Stacked bar */}
-      <div className="flex h-5 rounded overflow-hidden bg-panel-bg-solid mb-1">
+      <div className="flex h-8 rounded overflow-hidden bg-panel-bg-solid mb-1.5">
         {segments.map((seg, i) => {
           const pct = pcts[i];
           if (pct < 0.5) return null;
@@ -141,7 +141,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
       </div>
 
       {/* Segment 라벨 */}
-      <div className="relative h-3.5 mb-0.5">
+      <div className="relative h-5 mb-1">
         {segments.map((seg, i) => {
           const left = pcts.slice(0, i).reduce((a, b) => a + b, 0);
           const pct = pcts[i];
@@ -149,7 +149,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
           return (
             <div
               key={seg.key}
-              className="absolute text-[8.5px] text-gray-500 leading-none text-center"
+              className="absolute text-[10px] text-gray-500 leading-tight text-center"
               style={{ left: `${left}%`, width: `${pct}%`, top: 0 }}
             >
               <span className="block truncate">{seg.label}</span>
@@ -160,7 +160,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
       </div>
 
       {/* SVG brace 영역 (Waiting / Delivery / Lead) */}
-      <svg viewBox="0 0 100 22" preserveAspectRatio="none" className="w-full" style={{ height: 28 }}>
+      <svg viewBox="0 0 100 22" preserveAspectRatio="none" className="w-full" style={{ height: 44 }}>
         <BraceMark
           startPct={0} endPct={waitingPct} y={3}
           color={TIMING_COLORS.waiting}
@@ -182,7 +182,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
       </svg>
 
       {/* Brace 라벨 (선택된 timing 강조) */}
-      <div className="flex items-center justify-between text-[9px] mt-0.5 px-1">
+      <div className="flex items-center justify-between text-[10.5px] mt-1 px-1">
         <div className="flex gap-3">
           <button
             onClick={() => setSelectedTiming("waiting")}
