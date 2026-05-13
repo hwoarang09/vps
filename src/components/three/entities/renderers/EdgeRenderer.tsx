@@ -5,6 +5,8 @@ import { Edge, EdgeType } from "@/types";
 import { getEdgeConfig } from "@/config/threejs/renderConfig";
 import { useFabStore } from "@/store/map/fabStore";
 import { useEdgeControlStore } from "@/store/ui/edgeControlStore";
+import { useMapHoverStore } from "@/store/ui/mapHoverStore";
+import { useEdgeStore } from "@/store/map/edgeStore";
 import { useThemeStore } from "@/store/ui/themeStore";
 import * as THREE from "three";
 import edgeVertexShader from "../edge/shaders/edgeVertex.glsl?raw";
@@ -209,6 +211,18 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   const selectedEdgeIndex = useEdgeControlStore((state) => state.selectedEdgeIndex);
   const selectedFabIndex = useEdgeControlStore((state) => state.selectedFabIndex);
 
+  // Subscribe to hovered edge from map text hover store
+  const hoveredKind = useMapHoverStore((s) => s.kind);
+  const hoveredName = useMapHoverStore((s) => s.name);
+  const hoveredFabIndex = useMapHoverStore((s) => s.fabIndex);
+  const edgeNameToIndex = useEdgeStore((s) => s.edgeNameToIndex);
+  // edgeNameToIndex는 1-based, edgeToInstanceMap key는 0-based → -1 보정
+  const hoveredEdgeIndex = (() => {
+    if (hoveredKind !== "edge" || !hoveredName) return null;
+    const oneBased = edgeNameToIndex?.get(hoveredName);
+    return oneBased !== undefined ? oneBased - 1 : null;
+  })();
+
   // 단일 fab이거나 슬롯이 없으면 기본 렌더링
   if (fabs.length <= 1 || slots.length === 0) {
     return (
@@ -219,6 +233,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           color={railColor}
           renderOrder={RENDER_ORDER_RAIL_LINEAR}
           selectedEdgeIndex={selectedEdgeIndex}
+          hoveredEdgeIndex={hoveredEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
@@ -226,6 +241,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
           selectedEdgeIndex={selectedEdgeIndex}
+          hoveredEdgeIndex={hoveredEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
@@ -233,6 +249,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_180}
           selectedEdgeIndex={selectedEdgeIndex}
+          hoveredEdgeIndex={hoveredEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
@@ -240,6 +257,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
           selectedEdgeIndex={selectedEdgeIndex}
+          hoveredEdgeIndex={hoveredEdgeIndex}
         />
         <EdgeTypeRenderer
           edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
@@ -247,6 +265,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
           color={railColor}
           renderOrder={RENDER_ORDER_RAIL_CURVE_90}
           selectedEdgeIndex={selectedEdgeIndex}
+          hoveredEdgeIndex={hoveredEdgeIndex}
         />
       </group>
     );
@@ -256,8 +275,9 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
   return (
     <group>
       {slots.map((slot, slotIndex) => {
-        // Only highlight in the selected fab
+        // Only highlight in the relevant fab
         const effectiveSelectedIndex = slotIndex === selectedFabIndex ? selectedEdgeIndex : null;
+        const effectiveHoveredIndex = slotIndex === hoveredFabIndex ? hoveredEdgeIndex : null;
         return (
           <group key={slot.slotId} position={[slot.offsetX, slot.offsetY, 0]}>
             <EdgeTypeRenderer
@@ -266,6 +286,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
               color={railColor}
               renderOrder={RENDER_ORDER_RAIL_LINEAR}
               selectedEdgeIndex={effectiveSelectedIndex}
+              hoveredEdgeIndex={effectiveHoveredIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_90]}
@@ -273,6 +294,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
               color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_90}
               selectedEdgeIndex={effectiveSelectedIndex}
+              hoveredEdgeIndex={effectiveHoveredIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_180]}
@@ -280,6 +302,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
               color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_180}
               selectedEdgeIndex={effectiveSelectedIndex}
+              hoveredEdgeIndex={effectiveHoveredIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.CURVE_CSC]}
@@ -287,6 +310,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
               color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_CSC}
               selectedEdgeIndex={effectiveSelectedIndex}
+              hoveredEdgeIndex={effectiveHoveredIndex}
             />
             <EdgeTypeRenderer
               edgesWithIndex={edgesByType[EdgeType.S_CURVE]}
@@ -294,6 +318,7 @@ const EdgeRenderer: React.FC<EdgeRendererProps> = ({
               color={railColor}
               renderOrder={RENDER_ORDER_RAIL_CURVE_90}
               selectedEdgeIndex={effectiveSelectedIndex}
+              hoveredEdgeIndex={effectiveHoveredIndex}
             />
           </group>
         );
@@ -308,6 +333,7 @@ interface EdgeTypeRendererProps {
   color: string;
   renderOrder: number;
   selectedEdgeIndex: number | null;
+  hoveredEdgeIndex: number | null;
 }
 
 const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
@@ -316,6 +342,7 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   color,
   renderOrder,
   selectedEdgeIndex,
+  hoveredEdgeIndex,
 }) => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const selectedAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
@@ -388,41 +415,45 @@ const EdgeTypeRenderer: React.FC<EdgeTypeRendererProps> = ({
   }, [instanceCount]);
 
 
-  // Update selected state (no React re-render, just GPU buffer update)
-  const updateSelectedState = useCallback((newSelectedIndex: number | null) => {
-    const attr = selectedAttrRef.current;
-    if (!attr) return;
+  // Update highlight state (selected + hovered both flip aSelected to 1).
+  // Single buffer update per change; clears any prev indices not currently active.
+  const prevHoveredRef = useRef<number | null>(null);
+  const updateHighlightState = useCallback(
+    (newSelected: number | null, newHovered: number | null) => {
+      const attr = selectedAttrRef.current;
+      if (!attr) return;
+      const array = attr.array as Float32Array;
 
-    const array = attr.array as Float32Array;
+      const clearIdx = (idx: number | null) => {
+        if (idx === null) return;
+        if (idx === newSelected || idx === newHovered) return; // still active
+        const info = edgeToInstanceMap.get(idx);
+        if (!info) return;
+        for (let i = 0; i < info.count; i++) array[info.start + i] = 0;
+      };
+      const setIdx = (idx: number | null) => {
+        if (idx === null) return;
+        const info = edgeToInstanceMap.get(idx);
+        if (!info) return;
+        for (let i = 0; i < info.count; i++) array[info.start + i] = 1;
+      };
 
-    // Clear previous selection
-    if (prevSelectedRef.current !== null) {
-      const prevInfo = edgeToInstanceMap.get(prevSelectedRef.current);
-      if (prevInfo) {
-        for (let i = 0; i < prevInfo.count; i++) {
-          array[prevInfo.start + i] = 0;
-        }
-      }
-    }
+      clearIdx(prevSelectedRef.current);
+      clearIdx(prevHoveredRef.current);
+      setIdx(newSelected);
+      setIdx(newHovered);
 
-    // Set new selection
-    if (newSelectedIndex !== null) {
-      const info = edgeToInstanceMap.get(newSelectedIndex);
-      if (info) {
-        for (let i = 0; i < info.count; i++) {
-          array[info.start + i] = 1;
-        }
-      }
-    }
+      attr.needsUpdate = true;
+      prevSelectedRef.current = newSelected;
+      prevHoveredRef.current = newHovered;
+    },
+    [edgeToInstanceMap],
+  );
 
-    attr.needsUpdate = true;
-    prevSelectedRef.current = newSelectedIndex;
-  }, [edgeToInstanceMap]);
-
-  // React to selectedEdgeIndex changes
+  // React to either index change
   useEffect(() => {
-    updateSelectedState(selectedEdgeIndex);
-  }, [selectedEdgeIndex, updateSelectedState]);
+    updateHighlightState(selectedEdgeIndex, hoveredEdgeIndex);
+  }, [selectedEdgeIndex, hoveredEdgeIndex, updateHighlightState]);
 
   // Update instance matrices (원본 데이터만 처리, fab visibility 없음)
   useEffect(() => {

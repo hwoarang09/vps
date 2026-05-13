@@ -5,7 +5,7 @@
 
 🔗 **Live demo**: <https://vps-amhs.vercel.app/>
 
-![Hero](public/pic/hero.png)
+![Initial scene after loading](public/pic/hero.png)
 
 ---
 
@@ -16,6 +16,11 @@
 - 결과는 실시간 KPI 카드 + 비교 차트 + 타임라인 트렌드로 즉시 본다.
 
 ## 핵심 시각화
+
+### Multi-Fab Runtime — 다중 fab 동시 운행
+N개의 FAB이 한 화면에서 평행우주처럼 동시에 돌아간다. 각 fab은 다른 라우팅 전략·차량 수·정책으로 굴러가고, 우측 1/3은 Three.js로 실시간 차량 흐름을, 좌측 2/3은 실시간 통계·비교 패널로 본다.
+
+![Multi-Fab Runtime](public/pic/hero2.png)
 
 ### Fab Config — fab별 파라미터 설정
 라우팅 전략(BPR α/β, Random Walk 등) · IDLE policy · vehicle 수 등 fab마다 독립적으로 세팅. 같은 토폴로지에 다른 정책을 꽂아 동시 비교할 수 있다.

@@ -9,6 +9,7 @@ import { useEdgeStore } from "@store/map/edgeStore";
 import { useNodeStore } from "@store/map/nodeStore";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import InstancedText, { TextGroup } from "./InstancedText";
+import TextHitAreas from "./TextHitAreas";
 import { textToDigits } from "./useDigitMaterials";
 import { VehicleSystemType } from "@/types/vehicle";
 import type { Edge, Node } from "@/types";
@@ -162,6 +163,13 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     }));
   }, [useArrayData, edgeTexts, edgeTextsArray, updateTrigger]);
 
+  // group idx → 객체 이름 매핑 (hit area 의 instanceId 로 역참조).
+  // groups 와 동일한 순서로 만들어야 함.
+  const edgeNames = useMemo((): string[] => {
+    if (useArrayData) return edgeTextsArray.map((item) => item.name);
+    return Object.keys(edgeTexts);
+  }, [useArrayData, edgeTexts, edgeTextsArray, updateTrigger]);
+
   const stationGroups = useMemo((): TextGroup[] => {
     if (useArrayData) {
       return stationTextsArray.map(item => ({
@@ -204,7 +212,16 @@ const MapTextRenderer: React.FC<Props> = (props) => {
         <InstancedText groups={nodeGroups} scale={scale} color={nodeColor} fabOffsetRef={fabOffsetRef} />
       )}
       {showEdgeText && edgeGroups.length > 0 && (
-        <InstancedText groups={edgeGroups} scale={scale} color={edgeColor} fabOffsetRef={fabOffsetRef} />
+        <>
+          <InstancedText groups={edgeGroups} scale={scale} color={edgeColor} fabOffsetRef={fabOffsetRef} />
+          <TextHitAreas
+            kind="edge"
+            groups={edgeGroups}
+            names={edgeNames}
+            scale={scale}
+            fabOffsetRef={fabOffsetRef}
+          />
+        </>
       )}
       {showStationText && stationGroups.length > 0 && (
         <InstancedText groups={stationGroups} scale={scale} color={stationColor} fabOffsetRef={fabOffsetRef} />
