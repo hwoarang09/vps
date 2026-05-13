@@ -524,11 +524,17 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "trend", label: "Trend" },
 ];
 
+// 좌측 HUD / 상단 testSetting / 하단 메뉴는 가리지 않고,
+// 우측 ~25%는 Three.js 시각화(선택된 fab 보이게)에 양보.
 function getCenterDefaults() {
-  const w = Math.round(window.innerWidth * 0.65);
-  const h = Math.round(window.innerHeight * 0.65);
-  const x = Math.round((window.innerWidth - w) / 2);
-  const y = Math.round((window.innerHeight - h) / 2);
+  const HUD_W = 200;          // 좌측 HUD reserve
+  const TOP_RESERVE = 60;     // 상단 testSetting / LogIndicator reserve
+  const BOTTOM_RESERVE = 120; // 하단 메뉴 (Lv1+Lv2) reserve
+  const RIGHT_RESERVE = Math.round(window.innerWidth * 0.25); // Three.js 우측 여백
+  const x = HUD_W;
+  const y = TOP_RESERVE;
+  const w = Math.max(600, window.innerWidth - HUD_W - RIGHT_RESERVE);
+  const h = Math.max(400, window.innerHeight - TOP_RESERVE - BOTTOM_RESERVE);
   return { x, y, w, h };
 }
 
