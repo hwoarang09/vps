@@ -162,7 +162,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
           active={selectedTiming === "waiting"}
           onClick={() => setSelectedTiming("waiting")}
           label="Waiting" value={p + l}
-          textColorClass="text-accent-cyan"
+          textColorClass="text-pink-300"
         />
         <Brace
           startPct={deliveryStartPct} endPct={100} top={0}

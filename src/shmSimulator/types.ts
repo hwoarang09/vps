@@ -420,7 +420,9 @@ export type MainMessage =
       leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; leadTimeHistogram: number[];
       leadTimeBucketSec: number;
       waitingTimeP50: number; waitingTimeP95: number; waitingTimeMean: number; waitingTimeHistogram: number[];
+      waitingTimeBucketSec: number;
       deliveryTimeP50: number; deliveryTimeP95: number; deliveryTimeMean: number; deliveryTimeHistogram: number[];
+      deliveryTimeBucketSec: number;
       // 4-stage 평균 (초)
       pickupApproachMean: number;
       loadingMean: number;

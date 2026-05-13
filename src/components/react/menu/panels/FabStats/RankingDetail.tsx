@@ -9,6 +9,7 @@ import { SpeedHistogram } from "./charts/SpeedHistogram";
 import { TimingHistogram } from "./charts/TimingHistogram";
 import { OrderLifecycleBar } from "./OrderLifecycleBar";
 import { ParametersTab } from "./ParametersTab";
+import { VEHICLE_JOB_STATE_COLORS, MOVEMENT_STATUS_COLORS } from "@/config/colors";
 
 const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
 
@@ -28,16 +29,21 @@ const ThroughputCard: React.FC<{ fabId: string }> = ({ fabId }) => {
     <div className={panelCardVariants({ variant: "default", padding: "sm" })}>
       <div className="flex items-baseline justify-between mb-1">
         <span className="text-[10px] text-gray-500 uppercase tracking-wider">Throughput</span>
-        {stats && stats.completed > 0 && (
-          <span className="text-[9px] text-gray-500">✓ {stats.completed.toLocaleString()}</span>
-        )}
+        <span className="text-[10px] text-gray-500 uppercase tracking-wider">Completed</span>
       </div>
       {stats && stats.completed > 0 ? (
-        <div className="flex items-baseline gap-1">
-          <span className="text-3xl font-bold text-green-300 leading-none tabular-nums">
-            {stats.throughputPerHour.toFixed(0)}
-          </span>
-          <span className="text-[11px] text-gray-400">/hr</span>
+        <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-bold text-green-300 leading-none tabular-nums">
+              {stats.throughputPerHour.toFixed(0)}
+            </span>
+            <span className="text-[11px] text-gray-400">/hr</span>
+          </div>
+          <div className="flex items-baseline gap-1 ml-auto">
+            <span className="text-3xl font-bold text-accent-cyan leading-none tabular-nums">
+              {stats.completed.toLocaleString()}
+            </span>
+          </div>
         </div>
       ) : (
         <span className="text-xs text-gray-500">—</span>
@@ -47,7 +53,72 @@ const ThroughputCard: React.FC<{ fabId: string }> = ({ fabId }) => {
 };
 
 // ============================================================================
-// Speed card (좌하단) — Gauge + Histogram 묶음
+// Job State Bar — 차량 상태 분포 (가로 stacked bar 한 줄)
+// 우측에 sensor 정지 (movement=stopped) 차량 별도 표시
+// ============================================================================
+
+const JobStateBar: React.FC<{ fab: FabStats }> = ({ fab }) => {
+  const total = fab.vehicleCount;
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-[10px] text-gray-600 italic">
+        No vehicles
+      </div>
+    );
+  }
+
+  const stopped = fab.stoppedCount;
+  const stoppedPct = (stopped / total) * 100;
+
+  const segments = [
+    { count: fab.jobIdle, color: "#6b7280", label: "Idle" },
+    { count: fab.jobMoveToLoad, color: VEHICLE_JOB_STATE_COLORS.MOVE_TO_LOAD, label: "→Load" },
+    { count: fab.jobLoading, color: VEHICLE_JOB_STATE_COLORS.LOADING, label: "Loading" },
+    { count: fab.jobMoveToUnload, color: VEHICLE_JOB_STATE_COLORS.MOVE_TO_UNLOAD, label: "→Drop" },
+    { count: fab.jobUnloading, color: VEHICLE_JOB_STATE_COLORS.UNLOADING, label: "Unloading" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-1 h-full">
+      <div className="flex items-baseline justify-between text-[10px] shrink-0">
+        <span className="text-gray-400 uppercase tracking-wider font-semibold">Job State</span>
+        <span style={{ color: MOVEMENT_STATUS_COLORS.stopped }}>
+          stopped <span className="tabular-nums font-bold">{stopped}</span>
+          <span className="text-gray-500 ml-0.5">({stoppedPct.toFixed(0)}%)</span>
+        </span>
+      </div>
+      <div className="flex h-3 rounded overflow-hidden bg-panel-bg-solid shrink-0">
+        {segments.map((s, i) => {
+          const pct = (s.count / total) * 100;
+          if (pct < 0.5) return null;
+          return (
+            <div
+              key={i}
+              title={`${s.label}: ${s.count} (${pct.toFixed(0)}%)`}
+              className="h-full"
+              style={{ width: `${pct}%`, background: s.color }}
+            />
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] mt-0.5">
+        {segments.map((s, i) => {
+          if (s.count === 0) return null;
+          return (
+            <span key={i} className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color }} />
+              <span className="text-gray-400">{s.label}</span>
+              <span className="tabular-nums text-gray-300">{s.count}</span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Speed card (좌하단) — Gauge + (Histogram + JobStateBar 위아래 절반)
 // ============================================================================
 
 const SpeedCard: React.FC<{ fab: FabStats; nominalMax: number }> = ({ fab, nominalMax }) => {
@@ -56,8 +127,13 @@ const SpeedCard: React.FC<{ fab: FabStats; nominalMax: number }> = ({ fab, nomin
       <div className="shrink-0 mb-1">
         <SpeedGauge avg={fab.avgSpeed} max={fab.maxSpeed} nominalMax={nominalMax} />
       </div>
-      <div className="flex-1 min-h-0 border-t border-gray-700/50 pt-1.5">
-        <SpeedHistogram fab={fab} />
+      <div className="flex-1 min-h-0 grid grid-rows-2 gap-1.5 border-t border-gray-700/50 pt-1.5">
+        <div className="min-h-0">
+          <SpeedHistogram fab={fab} />
+        </div>
+        <div className="min-h-0 border-t border-gray-700/50 pt-1.5">
+          <JobStateBar fab={fab} />
+        </div>
       </div>
     </div>
   );

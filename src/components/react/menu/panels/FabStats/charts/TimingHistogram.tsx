@@ -17,13 +17,14 @@ const TIMING_META: Record<TimingKey, {
   histogramKey: "leadTimeHistogram" | "waitingTimeHistogram" | "deliveryTimeHistogram";
   p50Key: "leadTimeP50" | "waitingTimeP50" | "deliveryTimeP50";
   p95Key: "leadTimeP95" | "waitingTimeP95" | "deliveryTimeP95";
+  bucketSecKey: "leadTimeBucketSec" | "waitingTimeBucketSec" | "deliveryTimeBucketSec";
   barColor: string;
   p50Color: string;
   p95Color: string;
 }> = {
-  lead:     { label: "Lead",     histogramKey: "leadTimeHistogram",     p50Key: "leadTimeP50",     p95Key: "leadTimeP95",     barColor: TIMING_COLORS.lead,     p50Color: PERCENTILE_COLORS.p50, p95Color: PERCENTILE_COLORS.p95 },
-  waiting:  { label: "Waiting",  histogramKey: "waitingTimeHistogram",  p50Key: "waitingTimeP50",  p95Key: "waitingTimeP95",  barColor: TIMING_COLORS.waiting,  p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
-  delivery: { label: "Delivery", histogramKey: "deliveryTimeHistogram", p50Key: "deliveryTimeP50", p95Key: "deliveryTimeP95", barColor: TIMING_COLORS.delivery, p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
+  lead:     { label: "Lead",     histogramKey: "leadTimeHistogram",     p50Key: "leadTimeP50",     p95Key: "leadTimeP95",     bucketSecKey: "leadTimeBucketSec",     barColor: TIMING_COLORS.lead,     p50Color: PERCENTILE_COLORS.p50, p95Color: PERCENTILE_COLORS.p95 },
+  waiting:  { label: "Waiting",  histogramKey: "waitingTimeHistogram",  p50Key: "waitingTimeP50",  p95Key: "waitingTimeP95",  bucketSecKey: "waitingTimeBucketSec",  barColor: TIMING_COLORS.waiting,  p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
+  delivery: { label: "Delivery", histogramKey: "deliveryTimeHistogram", p50Key: "deliveryTimeP50", p95Key: "deliveryTimeP95", bucketSecKey: "deliveryTimeBucketSec", barColor: TIMING_COLORS.delivery, p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
 };
 
 export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
@@ -33,7 +34,7 @@ export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
 
   const { data, total, hasData, p50, p95, bucketSec } = useMemo(() => {
     const hist = stats?.[meta.histogramKey];
-    const bucket = stats?.leadTimeBucketSec ?? 10;
+    const bucket = stats?.[meta.bucketSecKey] ?? 10;
     if (!hist || hist.length === 0) {
       return { data: [], total: 0, hasData: false, p50: 0, p95: 0, bucketSec: bucket };
     }
@@ -42,7 +43,7 @@ export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
       const isOverflow = i === hist.length - 1;
       const label = isOverflow
         ? `${i * bucket}+`
-        : `${i * bucket}-${(i + 1) * bucket}`;
+        : `${(i + 1) * bucket}`;
       return { bucket: label, count, idx: i, isOverflow };
     });
     return {
@@ -53,7 +54,7 @@ export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
       p95: stats?.[meta.p95Key] ?? 0,
       bucketSec: bucket,
     };
-  }, [stats, meta.histogramKey, meta.p50Key, meta.p95Key]);
+  }, [stats, meta.histogramKey, meta.p50Key, meta.p95Key, meta.bucketSecKey]);
 
   if (!hasData) {
     return (
@@ -84,14 +85,13 @@ export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
       </div>
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+          <BarChart data={data} margin={{ top: 22, right: 10, bottom: 0, left: -10 }}>
             <XAxis
               dataKey="bucket"
               tick={{ fill: "#9ca3af", fontSize: 9 }}
-              interval={0}
-              angle={-30}
-              textAnchor="end"
-              height={36}
+              interval={Math.max(0, Math.floor(data.length / 8) - 1)}
+              tickMargin={6}
+              height={22}
             />
             <YAxis
               tick={{ fill: "#9ca3af", fontSize: 9 }}

@@ -37,11 +37,13 @@ export interface OrderStatsData {
   waitingTimeP95: number;
   waitingTimeMean: number;
   waitingTimeHistogram: number[];
+  waitingTimeBucketSec: number;
   /** Delivery time = drop완료 - pickup완료 */
   deliveryTimeP50: number;
   deliveryTimeP95: number;
   deliveryTimeMean: number;
   deliveryTimeHistogram: number[];
+  deliveryTimeBucketSec: number;
   /** Lifecycle 4-stage 평균 (초). pickupApproach + loading = waiting, dropApproach + unloading = delivery */
   pickupApproachMean: number;
   loadingMean: number;
@@ -498,10 +500,12 @@ export class MultiWorkerController {
           waitingTimeP95: message.waitingTimeP95,
           waitingTimeMean: message.waitingTimeMean,
           waitingTimeHistogram: message.waitingTimeHistogram,
+          waitingTimeBucketSec: message.waitingTimeBucketSec,
           deliveryTimeP50: message.deliveryTimeP50,
           deliveryTimeP95: message.deliveryTimeP95,
           deliveryTimeMean: message.deliveryTimeMean,
           deliveryTimeHistogram: message.deliveryTimeHistogram,
+          deliveryTimeBucketSec: message.deliveryTimeBucketSec,
           pickupApproachMean: message.pickupApproachMean,
           loadingMean: message.loadingMean,
           dropApproachMean: message.dropApproachMean,

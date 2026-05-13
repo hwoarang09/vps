@@ -402,15 +402,19 @@ export class FabContext {
     const elapsed = simulationTime - stats.resetSimTime;
 
     // ── Timing 분포 공통 처리 ─────────────────────────────
-    // BUCKET 폭 10초, 13 buckets (0-10, 10-20, ..., 110-120, 120+)
-    const BUCKET_SEC = 10;
-    const NUM_BUCKETS = 13;
-    const summarize = (raw: number[]) => {
+    // Timing별 BUCKET 폭/개수 분리. 마지막 bucket은 overflow.
+    //   Waiting/Delivery: 0~180s (3분), 5s 폭 × 36 + overflow = 37 buckets (180+)
+    //   Lead             : 0~360s (6분), 10s 폭 × 36 + overflow = 37 buckets (360+)
+    const NUM_BUCKETS = 37;
+    const WAITING_BUCKET_SEC = 5;
+    const DELIVERY_BUCKET_SEC = 5;
+    const LEAD_BUCKET_SEC = 10;
+    const summarize = (raw: number[], bucketSec: number) => {
       const sorted = raw.slice().sort((a, b) => a - b);
       const histogram = new Array<number>(NUM_BUCKETS).fill(0);
       for (let i = 0; i < sorted.length; i++) {
         const sec = sorted[i] / 1000;
-        const idx = Math.min(NUM_BUCKETS - 1, Math.floor(sec / BUCKET_SEC));
+        const idx = Math.min(NUM_BUCKETS - 1, Math.floor(sec / bucketSec));
         histogram[idx]++;
       }
       const p50 = percentileSorted(sorted, 0.5) / 1000;
@@ -419,9 +423,9 @@ export class FabContext {
       return { p50, p95, mean, histogram };
     };
 
-    const lead = summarize(stats.leadTimes);
-    const waiting = summarize(stats.waitingTimes);
-    const delivery = summarize(stats.deliveryTimes);
+    const lead = summarize(stats.leadTimes, LEAD_BUCKET_SEC);
+    const waiting = summarize(stats.waitingTimes, WAITING_BUCKET_SEC);
+    const delivery = summarize(stats.deliveryTimes, DELIVERY_BUCKET_SEC);
 
     // 4-stage 평균 (lifecycle bar 비율 — 초 단위)
     const safeAvg = (sum: number, n: number) => (n > 0 ? sum / n / 1000 : 0);
@@ -443,15 +447,17 @@ export class FabContext {
       leadTimeP95: lead.p95,
       leadTimeMean: lead.mean,
       leadTimeHistogram: lead.histogram,
-      leadTimeBucketSec: BUCKET_SEC,
+      leadTimeBucketSec: LEAD_BUCKET_SEC,
       waitingTimeP50: waiting.p50,
       waitingTimeP95: waiting.p95,
       waitingTimeMean: waiting.mean,
       waitingTimeHistogram: waiting.histogram,
+      waitingTimeBucketSec: WAITING_BUCKET_SEC,
       deliveryTimeP50: delivery.p50,
       deliveryTimeP95: delivery.p95,
       deliveryTimeMean: delivery.mean,
       deliveryTimeHistogram: delivery.histogram,
+      deliveryTimeBucketSec: DELIVERY_BUCKET_SEC,
       ...stageMeans,
     });
   }

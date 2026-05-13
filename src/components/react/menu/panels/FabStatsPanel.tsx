@@ -262,15 +262,22 @@ export const FabCard: React.FC<{ fab: FabStats; fabIndex: number; rank: number }
         <span className="text-[10px] text-gray-500 ml-auto shrink-0">{n} veh</span>
       </div>
 
-      {/* Throughput hero — 카드의 가장 큰 숫자 */}
+      {/* Throughput + Completed hero — 카드의 가장 큰 숫자 */}
       {orderStats && orderStats.completed > 0 ? (
         <div className="mb-2 pb-2 border-b border-gray-700/50">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-green-300 leading-none tabular-nums">
-              {orderStats.throughputPerHour.toFixed(0)}
-            </span>
-            <span className="text-xs text-gray-400">/hr</span>
-            <span className="text-[10px] text-gray-500 ml-auto">{orderStats.completed} done</span>
+          <div className="flex items-baseline gap-3">
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-bold text-green-300 leading-none tabular-nums">
+                {orderStats.throughputPerHour.toFixed(0)}
+              </span>
+              <span className="text-xs text-gray-400">/hr</span>
+            </div>
+            <div className="flex items-baseline gap-1 ml-auto">
+              <span className="text-3xl font-bold text-accent-cyan leading-none tabular-nums">
+                {orderStats.completed.toLocaleString()}
+              </span>
+              <span className="text-xs text-gray-400">done</span>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-x-3 mt-1">
             <Stat label="LT p50" value={`${orderStats.leadTimeP50.toFixed(1)}s`} color="text-accent-cyan" />
@@ -524,17 +531,12 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "trend", label: "Trend" },
 ];
 
-// 좌측 HUD / 상단 testSetting / 하단 메뉴는 가리지 않고,
-// 우측 ~25%는 Three.js 시각화(선택된 fab 보이게)에 양보.
+// 화면 왼쪽 0부터 너비의 2/3 차지. 우측 1/3은 Three.js 시각화 영역.
 function getCenterDefaults() {
-  const HUD_W = 200;          // 좌측 HUD reserve
-  const TOP_RESERVE = 60;     // 상단 testSetting / LogIndicator reserve
-  const BOTTOM_RESERVE = 120; // 하단 메뉴 (Lv1+Lv2) reserve
-  const RIGHT_RESERVE = Math.round(window.innerWidth * 0.25); // Three.js 우측 여백
-  const x = HUD_W;
-  const y = TOP_RESERVE;
-  const w = Math.max(600, window.innerWidth - HUD_W - RIGHT_RESERVE);
-  const h = Math.max(400, window.innerHeight - TOP_RESERVE - BOTTOM_RESERVE);
+  const x = 0;
+  const y = 0;
+  const w = Math.max(600, Math.round(window.innerWidth * (2 / 3)));
+  const h = Math.max(400, window.innerHeight);
   return { x, y, w, h };
 }
 
@@ -640,6 +642,7 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     <FloatingPanel
       title="Fab Stats"
       onClose={onClose}
+      zIndex={1100}
       dragResizeOpts={{
         defaultX: defaults.x, defaultY: defaults.y,
         defaultW: defaults.w, defaultH: defaults.h,

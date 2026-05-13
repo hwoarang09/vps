@@ -35,14 +35,15 @@ export const ORDER_SEGMENT_COLORS = {
 
 /**
  * Order Timing 그룹 색상 — Order Lifecycle의 묶음 단위
+ * 묶음의 "시작 단계" 색을 그룹 대표색으로 (= 차량이 그 구간 들어갈 때의 색)
  * - lead     : 전체 lead time (green)
- * - waiting  : pickupApproach + loading (그 묶음의 끝 단계 색 = LOADING cyan)
- * - delivery : dropApproach + unloading (묶음의 시작 단계 색 = MOVE_TO_UNLOAD purple)
+ * - waiting  : pickupApproach + loading 묶음 → MOVE_TO_LOAD (분홍)
+ * - delivery : dropApproach + unloading 묶음 → MOVE_TO_UNLOAD (파랑)
  */
 export const TIMING_COLORS = {
   lead: "#22c55e", // 초록
-  waiting: VEHICLE_JOB_STATE_COLORS.LOADING, // 청록 (cyan)
-  delivery: VEHICLE_JOB_STATE_COLORS.MOVE_TO_UNLOAD, // 보라
+  waiting: VEHICLE_JOB_STATE_COLORS.MOVE_TO_LOAD, // 분홍
+  delivery: VEHICLE_JOB_STATE_COLORS.MOVE_TO_UNLOAD, // 파랑
 } as const;
 
 /**
