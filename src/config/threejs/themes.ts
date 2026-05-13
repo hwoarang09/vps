@@ -69,8 +69,8 @@ export const DEFAULT_THEME: Theme = {
   directionalIntensity: 0.8,
   fillIntensity: 0,
 
-  railColor: "#0066ff",
-  railBorderColor: "#0066ff",
+  railColor: "#94a3b8",
+  railBorderColor: "#94a3b8",
   railBorderWidth: 0,
 
   stationEqColor: "#7a7a7a",
@@ -83,7 +83,7 @@ export const DEFAULT_THEME: Theme = {
   vehicleBracket: false,
 
   textNode: "#00ff00",
-  textEdge: "#0066ff",
+  textEdge: "#1f2937",
   textStation: "#FFD700",
   textBay: "#ffffff",
   textBayOpacity: 0.7,

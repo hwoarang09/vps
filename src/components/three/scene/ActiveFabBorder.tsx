@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import type { Mesh, MeshBasicMaterial } from "three";
+import * as THREE from "three";
 import { useFabStore } from "@/store/map/fabStore";
 
 const COLOR_BRIGHT = "#ffa726";
@@ -16,42 +16,54 @@ const LINE_THICKNESS = 0.12;
 const LINE_OPACITY = 0.22;
 const LINE_INSET = 1.0;
 
-interface SegmentSpec {
+interface PerimeterSegment {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-interface CornerBounds {
-  xMin: number;
-  xMax: number;
-  yMin: number;
-  yMax: number;
-  cornerLen: number;
+// L-shape bracket with arms extending +x (length D) and +y (length D), thickness t.
+// Outer corner at (-r, -r), inner elbow softened with a small concave arc.
+// Outer arm tips are rounded (semicircular caps). CCW winding from outer corner.
+function makeCornerL(D: number, t: number): THREE.Shape {
+  const r = t / 2;
+  const iR = Math.min(r * 0.5, D * 0.3); // inner elbow round radius
+  const shape = new THREE.Shape();
+  shape.moveTo(-r, -r);
+  shape.lineTo(D - r, -r);
+  // Right cap of horizontal arm
+  shape.absarc(D - r, 0, r, -Math.PI / 2, Math.PI / 2, false);
+  shape.lineTo(r + iR, r);
+  // Inner elbow (concave, CW since the polygon is CCW)
+  shape.absarc(r + iR, r + iR, iR, -Math.PI / 2, Math.PI, true);
+  shape.lineTo(r, D - r);
+  // Top cap of vertical arm
+  shape.absarc(0, D - r, r, 0, Math.PI, false);
+  shape.lineTo(-r, -r);
+  return shape;
 }
 
-// Each L-arm reaches exactly D from the corner along both axes, regardless of t.
-// Vertical: spans y[corner-t/2, corner+D]  (sticks out by t/2 to form clean corner)
-// Horizontal: spans x[corner+t/2, corner+D] (shortened to avoid overlap with vertical)
-function buildCornerSegments(b: CornerBounds, t: number): SegmentSpec[] {
-  const { xMin, xMax, yMin, yMax, cornerLen: D } = b;
-  const vH = D + t / 2; // vertical arm length (extends slightly past corner edge)
-  const hW = D - t / 2; // horizontal arm length (shortened to start past vertical)
-  return [
-    // bottom-left @ (xMin, yMin)
-    { x: xMin + D / 2 + t / 4, y: yMin, w: hW, h: t },
-    { x: xMin, y: yMin + D / 2 - t / 4, w: t, h: vH },
-    // bottom-right @ (xMax, yMin)
-    { x: xMax - D / 2 - t / 4, y: yMin, w: hW, h: t },
-    { x: xMax, y: yMin + D / 2 - t / 4, w: t, h: vH },
-    // top-left @ (xMin, yMax)
-    { x: xMin + D / 2 + t / 4, y: yMax, w: hW, h: t },
-    { x: xMin, y: yMax - D / 2 + t / 4, w: t, h: vH },
-    // top-right @ (xMax, yMax)
-    { x: xMax - D / 2 - t / 4, y: yMax, w: hW, h: t },
-    { x: xMax, y: yMax - D / 2 + t / 4, w: t, h: vH },
-  ];
+// Stadium (rounded-pill) shape for thin perimeter lines.
+function makeStadium(w: number, h: number): THREE.Shape {
+  const shape = new THREE.Shape();
+  if (w >= h) {
+    const r = h / 2;
+    const hr = Math.max(0, w / 2 - r);
+    shape.moveTo(-hr, -r);
+    shape.lineTo(hr, -r);
+    shape.absarc(hr, 0, r, -Math.PI / 2, Math.PI / 2, false);
+    shape.lineTo(-hr, r);
+    shape.absarc(-hr, 0, r, Math.PI / 2, 3 * Math.PI / 2, false);
+  } else {
+    const r = w / 2;
+    const hr = Math.max(0, h / 2 - r);
+    shape.moveTo(-r, -hr);
+    shape.absarc(0, -hr, r, Math.PI, 2 * Math.PI, false);
+    shape.lineTo(r, hr);
+    shape.absarc(0, hr, r, 0, Math.PI, false);
+  }
+  return shape;
 }
 
 const ActiveFabBorder: React.FC = () => {
@@ -76,49 +88,65 @@ const ActiveFabBorder: React.FC = () => {
     return { width, height, centerX, centerY, xMin, xMax, yMin, yMax, cornerLen };
   }, [fabs, activeFabIndex]);
 
-  const cornerSegments = useMemo<SegmentSpec[]>(() => {
+  // One L-shape per layer (bright/glow), shared across 4 corners via mesh scale.
+  const brightShape = useMemo(
+    () => (bounds ? makeCornerL(bounds.cornerLen, CORNER_THICKNESS) : null),
+    [bounds],
+  );
+  const glowShape = useMemo(
+    () => (bounds ? makeCornerL(bounds.cornerLen, CORNER_GLOW_THICKNESS) : null),
+    [bounds],
+  );
+
+  // 4 corner placements. scale flips the L's arm direction.
+  const cornerConfigs = useMemo(() => {
     if (!bounds) return [];
-    return buildCornerSegments(bounds, CORNER_THICKNESS);
+    return [
+      { key: "bl", x: bounds.xMin, y: bounds.yMin, sx: 1, sy: 1 },
+      { key: "br", x: bounds.xMax, y: bounds.yMin, sx: -1, sy: 1 },
+      { key: "tl", x: bounds.xMin, y: bounds.yMax, sx: 1, sy: -1 },
+      { key: "tr", x: bounds.xMax, y: bounds.yMax, sx: -1, sy: -1 },
+    ];
   }, [bounds]);
 
-  const glowSegments = useMemo<SegmentSpec[]>(() => {
-    if (!bounds) return [];
-    return buildCornerSegments(bounds, CORNER_GLOW_THICKNESS);
-  }, [bounds]);
-
-  const perimeterSegments = useMemo<SegmentSpec[]>(() => {
+  const perimeterSegments = useMemo<PerimeterSegment[]>(() => {
     if (!bounds) return [];
     const { xMin, xMax, yMin, yMax, width, height, centerX, centerY } = bounds;
     const t = LINE_THICKNESS;
     const w = Math.max(0, width - LINE_INSET * 2);
     const h = Math.max(0, height - LINE_INSET * 2);
     return [
-      { x: centerX, y: yMin, w, h: t }, // bottom
-      { x: centerX, y: yMax, w, h: t }, // top
-      { x: xMin, y: centerY, w: t, h }, // left
-      { x: xMax, y: centerY, w: t, h }, // right
+      { x: centerX, y: yMin, w, h: t },
+      { x: centerX, y: yMax, w, h: t },
+      { x: xMin, y: centerY, w: t, h },
+      { x: xMax, y: centerY, w: t, h },
     ];
   }, [bounds]);
 
-  const glowRef = useRef<Mesh[]>([]);
+  const perimeterShapes = useMemo(
+    () => perimeterSegments.map((s) => makeStadium(s.w, s.h)),
+    [perimeterSegments],
+  );
+
+  const glowRef = useRef<THREE.Mesh[]>([]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
-    const pulse = 0.45 + Math.sin(t * 2.2) * 0.18; // 0.27 ~ 0.63
+    const pulse = 0.45 + Math.sin(t * 2.2) * 0.18;
     for (const mesh of glowRef.current) {
       if (!mesh) continue;
-      const mat = mesh.material as MeshBasicMaterial;
+      const mat = mesh.material as THREE.MeshBasicMaterial;
       mat.opacity = pulse;
     }
   });
 
-  if (!bounds) return null;
+  if (!bounds || !brightShape || !glowShape) return null;
 
   return (
     <group position={[0, 0, BORDER_Z]}>
-      {/* Soft perimeter line (faint) */}
+      {/* Soft perimeter line (faint, stadium-shaped) */}
       {perimeterSegments.map((s, i) => (
         <mesh key={`p-${i}`} position={[s.x, s.y, 0]}>
-          <planeGeometry args={[s.w, s.h]} />
+          <shapeGeometry args={[perimeterShapes[i]]} />
           <meshBasicMaterial
             color={COLOR_GLOW}
             transparent
@@ -129,31 +157,37 @@ const ActiveFabBorder: React.FC = () => {
         </mesh>
       ))}
 
-      {/* Corner glow (wide, soft, animated) */}
-      {glowSegments.map((s, i) => (
+      {/* Corner glow L (wide, soft, animated) */}
+      {cornerConfigs.map((c, i) => (
         <mesh
-          key={`g-${i}`}
-          position={[s.x, s.y, 0.001]}
+          key={`g-${c.key}`}
+          position={[c.x, c.y, 0.001]}
+          scale={[c.sx, c.sy, 1]}
           ref={(el) => {
             if (el) glowRef.current[i] = el;
           }}
         >
-          <planeGeometry args={[s.w, s.h]} />
+          <shapeGeometry args={[glowShape]} />
           <meshBasicMaterial
             color={COLOR_GLOW}
             transparent
             opacity={0.5}
             toneMapped={false}
             depthWrite={false}
+            side={THREE.DoubleSide}
           />
         </mesh>
       ))}
 
-      {/* Corner bracket (sharp, bright) */}
-      {cornerSegments.map((s, i) => (
-        <mesh key={`c-${i}`} position={[s.x, s.y, 0.002]}>
-          <planeGeometry args={[s.w, s.h]} />
-          <meshBasicMaterial color={COLOR_BRIGHT} toneMapped={false} />
+      {/* Corner bracket L (sharp, bright) */}
+      {cornerConfigs.map((c) => (
+        <mesh
+          key={`c-${c.key}`}
+          position={[c.x, c.y, 0.002]}
+          scale={[c.sx, c.sy, 1]}
+        >
+          <shapeGeometry args={[brightShape]} />
+          <meshBasicMaterial color={COLOR_BRIGHT} toneMapped={false} side={THREE.DoubleSide} />
         </mesh>
       ))}
     </group>

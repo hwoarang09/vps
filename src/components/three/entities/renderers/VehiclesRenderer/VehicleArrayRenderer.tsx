@@ -18,6 +18,15 @@ import {
   LogicData as ShmLogicData,
   JobState,
 } from "@/common/vehicle/initialize/constants";
+import { VEHICLE_JOB_STATE_COLORS, hexToRgb01 } from "@/config/colors";
+
+// 매 프레임 hex 파싱 방지 위해 모듈 로드 시점에 RGB 튜플 pre-compute (Zero-GC)
+const RGB_MOVE_TO_LOAD = hexToRgb01(VEHICLE_JOB_STATE_COLORS.MOVE_TO_LOAD);
+const RGB_LOADING = hexToRgb01(VEHICLE_JOB_STATE_COLORS.LOADING);
+const RGB_MOVE_TO_UNLOAD = hexToRgb01(VEHICLE_JOB_STATE_COLORS.MOVE_TO_UNLOAD);
+const RGB_UNLOADING = hexToRgb01(VEHICLE_JOB_STATE_COLORS.UNLOADING);
+const RGB_ERROR = hexToRgb01(VEHICLE_JOB_STATE_COLORS.ERROR);
+const RGB_IDLE = hexToRgb01(VEHICLE_JOB_STATE_COLORS.IDLE);
 
 // GLSL에서 사용할 DEG_TO_RAD 상수 (Math.PI / 180)
 const DEG_TO_RAD_GLSL = "0.017453292519943295";
@@ -211,20 +220,34 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
   // Job state → color 매핑 (tempColor 재사용으로 Zero-GC)
   const tempColor = useMemo(() => new THREE.Color(), []);
 
+  // pulse(0~1) 만큼 base 색을 흰색 쪽으로 lerp — 깜빡 효과를 base 색 위에 입힘
+  const pulseLerp = (
+    rgb: readonly [number, number, number],
+    pulse: number,
+    amount: number,
+  ): THREE.Color => {
+    const k = pulse * amount;
+    return tempColor.setRGB(
+      rgb[0] + (1 - rgb[0]) * k,
+      rgb[1] + (1 - rgb[1]) * k,
+      rgb[2] + (1 - rgb[2]) * k,
+    );
+  };
+
   const getJobStateColor = (jobState: number, pulse: number): THREE.Color => {
     switch (jobState) {
       case JobState.MOVE_TO_LOAD:
-        return tempColor.setRGB(1.0, 0.05, 0.85);                    // 비비드 핑크
+        return tempColor.setRGB(RGB_MOVE_TO_LOAD[0], RGB_MOVE_TO_LOAD[1], RGB_MOVE_TO_LOAD[2]);
       case JobState.LOADING:
-        return tempColor.setRGB(1.0, pulse * 0.2, 0.7 + pulse * 0.3); // 핑크 깜빡
+        return pulseLerp(RGB_LOADING, pulse, 0.5); // 청록 깜빡
       case JobState.MOVE_TO_UNLOAD:
-        return tempColor.setRGB(1.0, 0.4, 0.0);                      // 비비드 주황
+        return tempColor.setRGB(RGB_MOVE_TO_UNLOAD[0], RGB_MOVE_TO_UNLOAD[1], RGB_MOVE_TO_UNLOAD[2]);
       case JobState.UNLOADING:
-        return tempColor.setRGB(1.0, 0.25 + pulse * 0.5, 0.0);       // 주황 깜빡
+        return pulseLerp(RGB_UNLOADING, pulse, 0.5); // 주황 깜빡
       case JobState.ERROR:
-        return tempColor.setRGB(1.0, 0.0, 0.0);                      // 빨강
+        return tempColor.setRGB(RGB_ERROR[0], RGB_ERROR[1], RGB_ERROR[2]);
       default:
-        return tempColor.setRGB(1.0, 1.0, 1.0);                      // 흰색 (IDLE)
+        return tempColor.setRGB(RGB_IDLE[0], RGB_IDLE[1], RGB_IDLE[2]); // IDLE
     }
   };
 

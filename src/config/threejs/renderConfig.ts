@@ -114,7 +114,7 @@ const loadRenderConfig = async (): Promise<RenderConfig> => {
         selectedColor: "#ff0000",
         text: {
           visible: true,
-          color: "#0a2966",
+          color: "#475569",
           scale: 0.6,
         },
       },

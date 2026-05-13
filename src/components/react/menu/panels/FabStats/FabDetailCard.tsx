@@ -6,6 +6,10 @@ import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { panelCardVariants } from "../../shared/panelStyles";
 import type { FabStats } from "../FabStatsPanel";
+import {
+  VEHICLE_JOB_STATE_COLORS,
+  MOVEMENT_STATUS_COLORS,
+} from "@/config/colors";
 
 const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
 const IDLE_POLICY_LABEL: Record<string, string> = {
@@ -173,20 +177,20 @@ export const FabDetailCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ f
 
   // Job state slices
   const jobSlices: DonutSlice[] = [
-    { key: "moveToLoad", value: fab.jobMoveToLoad, color: "#3b82f6", label: "→ Load" },
-    { key: "loading", value: fab.jobLoading, color: "#06b6d4", label: "Loading" },
-    { key: "moveToUnload", value: fab.jobMoveToUnload, color: "#a78bfa", label: "→ Unload" },
-    { key: "unloading", value: fab.jobUnloading, color: "#f97316", label: "Unloading" },
+    { key: "moveToLoad", value: fab.jobMoveToLoad, color: VEHICLE_JOB_STATE_COLORS.MOVE_TO_LOAD, label: "→ Load" },
+    { key: "loading", value: fab.jobLoading, color: VEHICLE_JOB_STATE_COLORS.LOADING, label: "Loading" },
+    { key: "moveToUnload", value: fab.jobMoveToUnload, color: VEHICLE_JOB_STATE_COLORS.MOVE_TO_UNLOAD, label: "→ Unload" },
+    { key: "unloading", value: fab.jobUnloading, color: VEHICLE_JOB_STATE_COLORS.UNLOADING, label: "Unloading" },
     { key: "idle", value: fab.jobIdle, color: "#6b7280", label: "Idle" },
-    { key: "error", value: fab.jobError, color: "#ef4444", label: "Error" },
-    { key: "init", value: fab.jobInitializing, color: "#374151", label: "Init" },
+    { key: "error", value: fab.jobError, color: VEHICLE_JOB_STATE_COLORS.ERROR, label: "Error" },
+    { key: "init", value: fab.jobInitializing, color: VEHICLE_JOB_STATE_COLORS.INIT, label: "Init" },
   ];
 
   // Movement slices
   const moveSlices: DonutSlice[] = [
-    { key: "moving", value: fab.movingCount, color: "#22c55e", label: "Moving" },
-    { key: "stopped", value: fab.stoppedCount, color: "#f59e0b", label: "Stopped" },
-    { key: "paused", value: fab.pausedCount, color: "#6b7280", label: "Paused" },
+    { key: "moving", value: fab.movingCount, color: MOVEMENT_STATUS_COLORS.moving, label: "Moving" },
+    { key: "stopped", value: fab.stoppedCount, color: MOVEMENT_STATUS_COLORS.stopped, label: "Stopped" },
+    { key: "paused", value: fab.pausedCount, color: MOVEMENT_STATUS_COLORS.paused, label: "Paused" },
   ];
 
   return (

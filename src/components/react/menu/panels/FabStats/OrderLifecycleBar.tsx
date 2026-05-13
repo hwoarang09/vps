@@ -1,21 +1,10 @@
 import React from "react";
 import { useFabStatsUIStore, type TimingKey } from "./store";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
+import { ORDER_SEGMENT_COLORS, TIMING_COLORS as PALETTE_TIMING_COLORS } from "@/config/colors";
 
-// Segment 별 색
-const SEG_COLORS = {
-  pickupApproach: "#3b82f6", // blue   (→Pickup)
-  loading: "#06b6d4",         // cyan   (Load)
-  dropApproach: "#a78bfa",    // purple (→Drop)
-  unloading: "#f97316",       // orange (Unload)
-};
-
-// Timing → 묶음 색
-const TIMING_COLORS: Record<TimingKey, string> = {
-  lead: "#22c55e",      // green
-  waiting: "#06b6d4",   // cyan
-  delivery: "#a78bfa",  // purple
-};
+const SEG_COLORS = ORDER_SEGMENT_COLORS;
+const TIMING_COLORS: Record<TimingKey, string> = PALETTE_TIMING_COLORS;
 
 interface Props {
   fabId: string;
@@ -62,55 +51,48 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
   const waitingPct = pcts[0] + pcts[1];
   const deliveryStartPct = waitingPct;
 
-  // Brace (스테이플러 모양) — 가로선 + 좌우 ticks, 중앙에 라벨이 선을 끊으며 표시
+  // Brace — flex로 line을 텍스트 양옆에 split. line은 텍스트 수직 가운데 통과.
   const Brace: React.FC<{
     startPct: number; endPct: number; top: number;
     color: string; active: boolean; onClick: () => void;
-    label: string; value: number; activeTextClass: string;
-  }> = ({ startPct, endPct, top, color, active, onClick, label, value, activeTextClass }) => {
+    label: string; value: number; textColorClass: string;
+  }> = ({ startPct, endPct, top, color, active, onClick, label, value, textColorClass }) => {
     const w = endPct - startPct;
-    const lineThickness = active ? 2 : 1;
     return (
       <button
         type="button"
         onClick={onClick}
-        className="absolute group cursor-pointer"
+        className="absolute group cursor-pointer flex items-center gap-1.5"
         style={{
           left: `${startPct}%`,
           width: `${w}%`,
           top,
-          height: 14,
-          opacity: active ? 1 : 0.6,
+          height: 16,
         }}
       >
-        {/* 좌측 tick */}
+        {/* 좌측 line */}
         <div
-          className="absolute left-0 top-0 transition-colors group-hover:!opacity-100"
-          style={{ width: lineThickness, height: 6, background: color, opacity: active ? 1 : 0.75 }}
+          className={`flex-1 h-px transition-opacity ${
+            active ? "opacity-100" : "opacity-50 group-hover:opacity-100"
+          }`}
+          style={{ background: color }}
         />
-        {/* 우측 tick */}
+        {/* 중앙 라벨 — 항상 timing color, active 시 bold만 토글 */}
+        <span
+          className={`text-[10.5px] tabular-nums whitespace-nowrap transition-all ${textColorClass} ${
+            active ? "font-bold" : "font-medium"
+          }`}
+        >
+          {label}
+          <span className="ml-1">{fmtSec(value)}</span>
+        </span>
+        {/* 우측 line */}
         <div
-          className="absolute right-0 top-0 transition-colors group-hover:!opacity-100"
-          style={{ width: lineThickness, height: 6, background: color, opacity: active ? 1 : 0.75 }}
+          className={`flex-1 h-px transition-opacity ${
+            active ? "opacity-100" : "opacity-50 group-hover:opacity-100"
+          }`}
+          style={{ background: color }}
         />
-        {/* 가로선 */}
-        <div
-          className="absolute left-0 right-0 top-0 transition-colors group-hover:!opacity-100"
-          style={{ height: lineThickness, background: color, opacity: active ? 1 : 0.75 }}
-        />
-        {/* 중앙 라벨 — 가로선을 끊으면서 강조 (배경색으로 line break) */}
-        <div className="absolute left-1/2 -translate-x-1/2 top-[-6px] px-1.5 bg-panel-bg-solid whitespace-nowrap">
-          <span
-            className={`text-[10.5px] tabular-nums font-semibold transition-colors ${
-              active
-                ? `${activeTextClass} font-bold`
-                : "text-gray-400 group-hover:text-white"
-            }`}
-          >
-            {label}
-            <span className="ml-1">{fmtSec(value)}</span>
-          </span>
-        </div>
       </button>
     );
   };
@@ -180,7 +162,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
           active={selectedTiming === "waiting"}
           onClick={() => setSelectedTiming("waiting")}
           label="Waiting" value={p + l}
-          activeTextClass="text-accent-cyan"
+          textColorClass="text-accent-cyan"
         />
         <Brace
           startPct={deliveryStartPct} endPct={100} top={0}
@@ -188,7 +170,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
           active={selectedTiming === "delivery"}
           onClick={() => setSelectedTiming("delivery")}
           label="Delivery" value={d + u}
-          activeTextClass="text-purple-300"
+          textColorClass="text-blue-300"
         />
         <Brace
           startPct={0} endPct={100} top={22}
@@ -196,7 +178,7 @@ export const OrderLifecycleBar: React.FC<Props> = ({ fabId }) => {
           active={selectedTiming === "lead"}
           onClick={() => setSelectedTiming("lead")}
           label="Lead" value={total}
-          activeTextClass="text-green-300"
+          textColorClass="text-green-300"
         />
       </div>
     </div>

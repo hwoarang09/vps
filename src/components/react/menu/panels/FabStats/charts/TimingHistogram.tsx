@@ -4,11 +4,14 @@ import {
 } from "recharts";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useFabStatsUIStore, type TimingKey } from "../store";
+import { TIMING_COLORS, PERCENTILE_COLORS } from "@/config/colors";
 
 interface Props {
   fabId: string;
 }
 
+// p50/p95 마커 색은 percentile 팔레트 사용. lead-tab은 bar가 green이라 p50을 cyan으로,
+// waiting/delivery tab은 bar가 cyan/purple이라 p50을 green으로 대비.
 const TIMING_META: Record<TimingKey, {
   label: string;
   histogramKey: "leadTimeHistogram" | "waitingTimeHistogram" | "deliveryTimeHistogram";
@@ -18,9 +21,9 @@ const TIMING_META: Record<TimingKey, {
   p50Color: string;
   p95Color: string;
 }> = {
-  lead:     { label: "Lead",     histogramKey: "leadTimeHistogram",     p50Key: "leadTimeP50",     p95Key: "leadTimeP95",     barColor: "#22c55e", p50Color: "#06b6d4", p95Color: "#f59e0b" },
-  waiting:  { label: "Waiting",  histogramKey: "waitingTimeHistogram",  p50Key: "waitingTimeP50",  p95Key: "waitingTimeP95",  barColor: "#06b6d4", p50Color: "#22c55e", p95Color: "#f59e0b" },
-  delivery: { label: "Delivery", histogramKey: "deliveryTimeHistogram", p50Key: "deliveryTimeP50", p95Key: "deliveryTimeP95", barColor: "#a78bfa", p50Color: "#22c55e", p95Color: "#f59e0b" },
+  lead:     { label: "Lead",     histogramKey: "leadTimeHistogram",     p50Key: "leadTimeP50",     p95Key: "leadTimeP95",     barColor: TIMING_COLORS.lead,     p50Color: PERCENTILE_COLORS.p50, p95Color: PERCENTILE_COLORS.p95 },
+  waiting:  { label: "Waiting",  histogramKey: "waitingTimeHistogram",  p50Key: "waitingTimeP50",  p95Key: "waitingTimeP95",  barColor: TIMING_COLORS.waiting,  p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
+  delivery: { label: "Delivery", histogramKey: "deliveryTimeHistogram", p50Key: "deliveryTimeP50", p95Key: "deliveryTimeP95", barColor: TIMING_COLORS.delivery, p50Color: TIMING_COLORS.lead,    p95Color: PERCENTILE_COLORS.p95 },
 };
 
 export const TimingHistogram: React.FC<Props> = ({ fabId }) => {
