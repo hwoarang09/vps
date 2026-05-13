@@ -17,6 +17,7 @@ import { VehicleSystemType } from "@/types/vehicle";
 import { RENDER_ORDER_TEXT } from "@/utils/renderOrder";
 import { getVehicleRenderConfig } from "@/config/threejs/renderConfig";
 import { useThemeStore } from "@/store/ui/themeStore";
+import { useVisualizationStore } from "@/store/ui/visualizationStore";
 
 const LOD_DIST_SQ = 20 * 20;
 const CAM_HEIGHT_CUTOFF = 50;
@@ -58,7 +59,8 @@ const VehicleTextRenderer: React.FC<Props> = ({
 }) => {
   const vehicleConfig = getVehicleRenderConfig();
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
-  const isVisible = vehicleConfig.text.visible;
+  const storeShowVehicleText = useVisualizationStore((s) => s.showVehicleText);
+  const isVisible = vehicleConfig.text.visible && storeShowVehicleText;
   const strokeColor = useThemeStore((s) => s.theme.textVehicleStrokeColor);
   const strokeWidth = useThemeStore((s) => s.theme.textVehicleStrokeWidth);
   const themeSpacing = useThemeStore((s) => s.theme.textVehicleSpacing);

@@ -410,7 +410,18 @@ export type MainMessage =
   | { type: "LOCK_TABLE"; fabId: string; requestId: string; data: LockTableData }
   | { type: "UNUSUAL_MOVE"; data: UnusualMoveData }
   | { type: "LOG_SESSION_STARTED"; sessionId: string; fabId: string }
-  | { type: "ORDER_STATS"; fabId: string; simulationTime: number; completed: number; throughputPerHour: number; leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; totalPathChanges: number; leadTimeHistogram: number[]; leadTimeBucketSec: number }
+  | {
+      type: "ORDER_STATS";
+      fabId: string;
+      simulationTime: number;
+      completed: number;
+      throughputPerHour: number;
+      totalPathChanges: number;
+      leadTimeP50: number; leadTimeP95: number; leadTimeMean: number; leadTimeHistogram: number[];
+      leadTimeBucketSec: number;
+      waitingTimeP50: number; waitingTimeP95: number; waitingTimeMean: number; waitingTimeHistogram: number[];
+      deliveryTimeP50: number; deliveryTimeP95: number; deliveryTimeMean: number; deliveryTimeHistogram: number[];
+    }
   | { type: "LOGS_FLUSHED" };
 
 // UnusualMove 이벤트 데이터

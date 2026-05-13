@@ -9,6 +9,13 @@ import { getShmSensorPointData, useShmSimulatorStore } from "@/store/vehicle/shm
 import { SENSOR_ATTR_SIZE, SensorSection } from "@/shmSimulator/MemoryLayoutManager";
 import { getMarkerConfig } from "@/config/threejs/renderConfig";
 import { VehicleSystemType } from "@/types/vehicle";
+import { useSensorColorStore } from "@/store/ui/sensorColorStore";
+
+// hex 문자열("#RRGGBB") → 숫자(0xRRGGBB)
+const hexToNumber = (hex: string): number => {
+  const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
+  return parseInt(cleaned, 16);
+};
 
 // -----------------------------------------------------------------------------
 // Shader Definitions (GPU Logic)
@@ -118,12 +125,8 @@ function InstancedQuadLines({
     transparent: true,
   }), [color]);
 
-  useEffect(() => {
-    return () => {
-      geometry.dispose();
-      material.dispose();
-    };
-  }, [geometry, material]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
 
   // 3. Update Loop
   useFrame(() => {
@@ -329,9 +332,16 @@ function SelectedSensorGlow({
   const quadsRef = useRef<SensorGlowQuad[] | null>(null);
   const selectedVehicle = useVehicleControlStore((s) => s.selectedVehicle);
 
-  // zone colors: body=cyan, zone0=yellow, zone1=orange, zone2=red
+  // zone colors: body, zone0, zone1, zone2 (store에서 동적으로)
   const GLOW_LAYER_COUNT = 10;
-  const zoneColors = useMemo(() => [0x00ffff, 0xffff00, 0xff8800, 0xff0000], []);
+  const bodyHex = useSensorColorStore((s) => s.bodyColor);
+  const zone0Hex = useSensorColorStore((s) => s.zone0Color);
+  const zone1Hex = useSensorColorStore((s) => s.zone1Color);
+  const zone2Hex = useSensorColorStore((s) => s.zone2Color);
+  const zoneColors = useMemo(
+    () => [hexToNumber(bodyHex), hexToNumber(zone0Hex), hexToNumber(zone1Hex), hexToNumber(zone2Hex)],
+    [bodyHex, zone0Hex, zone1Hex, zone2Hex],
+  );
 
   useEffect(() => {
     const group = groupRef.current;
@@ -347,7 +357,7 @@ function SelectedSensorGlow({
       for (const q of quads) q.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numVehicles]);
+  }, [numVehicles, zoneColors]);
 
   useFrame(({ camera }) => {
     const quads = quadsRef.current;
@@ -481,6 +491,10 @@ interface SensorDebugRendererProps {
  */
 export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererProps) {
   const isSharedMemory = mode === VehicleSystemType.SharedMemory;
+  const bodyColor = useSensorColorStore((s) => s.bodyColor);
+  const zone0Color = useSensorColorStore((s) => s.zone0Color);
+  const zone1Color = useSensorColorStore((s) => s.zone1Color);
+  const zone2Color = useSensorColorStore((s) => s.zone2Color);
 
   const getData = () => isSharedMemory ? getShmSensorPointData() : sensorPointArray.getData();
 
@@ -488,30 +502,30 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
 
   return (
     <>
-      {/* Outer / Approach (Yellow) - zone0 */}
+      {/* Outer / Approach - zone0 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
-        color="#ffff00"
+        color={zone0Color}
         getData={getData}
         dataOffset={0}
         isSharedMemory={isSharedMemory}
         startEndSection={SensorSection.ZONE0_STARTEND}
         otherSection={SensorSection.ZONE0_OTHER}
       />
-      {/* Middle / Brake (Orange) - zone1 */}
+      {/* Middle / Brake - zone1 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
-        color="#ff8800"
+        color={zone1Color}
         getData={getData}
         dataOffset={1}
         isSharedMemory={isSharedMemory}
         startEndSection={SensorSection.ZONE1_STARTEND}
         otherSection={SensorSection.ZONE1_OTHER}
       />
-      {/* Inner / Stop (Red) - zone2 */}
+      {/* Inner / Stop - zone2 */}
       <InstancedQuadLines
         numVehicles={numVehicles}
-        color="#ff0000"
+        color={zone2Color}
         getData={getData}
         dataOffset={2}
         isSharedMemory={isSharedMemory}
@@ -521,7 +535,7 @@ export function SensorDebugRenderer({ numVehicles, mode }: SensorDebugRendererPr
       {/* Body (Cyan) - zone0 startEnd + body other */}
       <InstancedQuadLines
         numVehicles={numVehicles}
-        color="#00ffff"
+        color={bodyColor}
         getData={getData}
         dataOffset={0}
         isBody={true}

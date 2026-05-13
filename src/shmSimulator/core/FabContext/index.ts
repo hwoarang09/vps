@@ -400,17 +400,28 @@ export class FabContext {
   private flushOrderStats(simulationTime: number): void {
     const stats = this.autoMgr.getOrderStats();
     const elapsed = simulationTime - stats.resetSimTime;
-    const sorted = stats.leadTimes.slice().sort((a, b) => a - b);
 
-    // Lead time histogram: bucket 폭 10초, 마지막 bucket은 overflow
+    // ── Timing 분포 공통 처리 ─────────────────────────────
+    // BUCKET 폭 10초, 13 buckets (0-10, 10-20, ..., 110-120, 120+)
     const BUCKET_SEC = 10;
-    const NUM_BUCKETS = 13; // 0-10, 10-20, ..., 110-120, 120+
-    const histogram = new Array<number>(NUM_BUCKETS).fill(0);
-    for (let i = 0; i < sorted.length; i++) {
-      const sec = sorted[i] / 1000;
-      const idx = Math.min(NUM_BUCKETS - 1, Math.floor(sec / BUCKET_SEC));
-      histogram[idx]++;
-    }
+    const NUM_BUCKETS = 13;
+    const summarize = (raw: number[]) => {
+      const sorted = raw.slice().sort((a, b) => a - b);
+      const histogram = new Array<number>(NUM_BUCKETS).fill(0);
+      for (let i = 0; i < sorted.length; i++) {
+        const sec = sorted[i] / 1000;
+        const idx = Math.min(NUM_BUCKETS - 1, Math.floor(sec / BUCKET_SEC));
+        histogram[idx]++;
+      }
+      const p50 = percentileSorted(sorted, 0.5) / 1000;
+      const p95 = percentileSorted(sorted, 0.95) / 1000;
+      const mean = sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length / 1000 : 0;
+      return { p50, p95, mean, histogram };
+    };
+
+    const lead = summarize(stats.leadTimes);
+    const waiting = summarize(stats.waitingTimes);
+    const delivery = summarize(stats.deliveryTimes);
 
     globalThis.postMessage({
       type: "ORDER_STATS",
@@ -418,12 +429,20 @@ export class FabContext {
       simulationTime,
       completed: stats.completed,
       throughputPerHour: elapsed > 0 ? (stats.completed / elapsed) * 3_600_000 : 0,
-      leadTimeP50: percentileSorted(sorted, 0.5) / 1000,
-      leadTimeP95: percentileSorted(sorted, 0.95) / 1000,
-      leadTimeMean: sorted.length > 0 ? sorted.reduce((a, b) => a + b, 0) / sorted.length / 1000 : 0,
+      leadTimeP50: lead.p50,
+      leadTimeP95: lead.p95,
+      leadTimeMean: lead.mean,
       totalPathChanges: this.autoMgr.getTotalPathChanges(),
-      leadTimeHistogram: histogram,
+      leadTimeHistogram: lead.histogram,
       leadTimeBucketSec: BUCKET_SEC,
+      waitingTimeP50: waiting.p50,
+      waitingTimeP95: waiting.p95,
+      waitingTimeMean: waiting.mean,
+      waitingTimeHistogram: waiting.histogram,
+      deliveryTimeP50: delivery.p50,
+      deliveryTimeP95: delivery.p95,
+      deliveryTimeMean: delivery.mean,
+      deliveryTimeHistogram: delivery.histogram,
     });
   }
 

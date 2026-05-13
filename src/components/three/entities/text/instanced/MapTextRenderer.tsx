@@ -7,6 +7,7 @@ import { useFabStore } from "@store/map/fabStore";
 import { useThemeStore } from "@store/ui/themeStore";
 import { useEdgeStore } from "@store/map/edgeStore";
 import { useNodeStore } from "@store/map/nodeStore";
+import { useVisualizationStore } from "@store/ui/visualizationStore";
 import InstancedText, { TextGroup } from "./InstancedText";
 import { textToDigits } from "./useDigitMaterials";
 import { VehicleSystemType } from "@/types/vehicle";
@@ -74,10 +75,14 @@ const MapTextRenderer: React.FC<Props> = (props) => {
     stationColor = stationTextConfig.COLOR,
   } = props;
 
-  // Text visibility flags from config
-  const showNodeText = nodeConfig.text.visible;
-  const showEdgeText = edgeConfig.text.visible;
-  const showStationText = stationConfig.text.visible;
+  // Text visibility = config flag AND store toggle
+  const storeShowNode = useVisualizationStore((s) => s.showNodeText);
+  const storeShowEdge = useVisualizationStore((s) => s.showEdgeText);
+  const storeShowStation = useVisualizationStore((s) => s.showStationText);
+  const storeShowBay = useVisualizationStore((s) => s.showBayText);
+  const showNodeText = nodeConfig.text.visible && storeShowNode;
+  const showEdgeText = edgeConfig.text.visible && storeShowEdge;
+  const showStationText = stationConfig.text.visible && storeShowStation;
   const {
     nodeTexts, edgeTexts, stationTexts,
     nodeTextsArray, edgeTextsArray, stationTextsArray,
@@ -204,7 +209,7 @@ const MapTextRenderer: React.FC<Props> = (props) => {
       {showStationText && stationGroups.length > 0 && (
         <InstancedText groups={stationGroups} scale={scale} color={stationColor} fabOffsetRef={fabOffsetRef} />
       )}
-      {bayGroups.length > 0 && (
+      {storeShowBay && bayGroups.length > 0 && (
         <InstancedText
           groups={bayGroups}
           scale={BAY_LABEL_SCALE}

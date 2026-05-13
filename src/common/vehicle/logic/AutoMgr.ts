@@ -118,8 +118,17 @@ export class AutoMgr {
   // Path change tracking (oscillation measurement)
   private readonly lastPath: Map<number, number[]> = new Map();
   private readonly pathChangeCount: Map<number, number> = new Map();
-  // Order completion stats (throughput + lead time)
-  private orderStats = { completed: 0, leadTimes: [] as number[], resetSimTime: 0 };
+  // Order completion stats (throughput + timing 분포)
+  // leadTime     = drop완료 - 반송생성  (=picking 향해 출발한 시점)
+  // waitingTime  = pickup완료 - 반송생성  (픽업까지 걸린 시간)
+  // deliveryTime = drop완료 - pickup완료  (드롭까지 걸린 시간)
+  private orderStats = {
+    completed: 0,
+    leadTimes: [] as number[],
+    waitingTimes: [] as number[],
+    deliveryTimes: [] as number[],
+    resetSimTime: 0,
+  };
 
   /**
    * Initializes available stations for routing.
@@ -252,12 +261,17 @@ export class AutoMgr {
 
       // --- UNLOADING complete: resume with existing loop pathBuffer ---
       else if (jobState === JobState.UNLOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
-        // Record lead time before clearing order data
+        // Record timing 분포 before clearing order data
         const moveToPickupTs = data[ptr + OrderData.MOVE_TO_PICKUP_TS];
+        const pickupDoneTs = data[ptr + OrderData.PICKUP_DONE_TS];
         data[ptr + OrderData.DROP_DONE_TS] = simulationTime;
         if (moveToPickupTs > 0) {
           this.orderStats.completed++;
           this.orderStats.leadTimes.push(simulationTime - moveToPickupTs);
+          if (pickupDoneTs > 0) {
+            this.orderStats.waitingTimes.push(pickupDoneTs - moveToPickupTs);
+            this.orderStats.deliveryTimes.push(simulationTime - pickupDoneTs);
+          }
         }
 
         data[ptr + LogicData.JOB_STATE] = JobState.IDLE;
@@ -863,13 +877,25 @@ export class AutoMgr {
    * Dispose all internal data to allow garbage collection
    */
   /** Order completion stats for KPI reporting */
-  getOrderStats(): { completed: number; leadTimes: number[]; resetSimTime: number } {
+  getOrderStats(): {
+    completed: number;
+    leadTimes: number[];
+    waitingTimes: number[];
+    deliveryTimes: number[];
+    resetSimTime: number;
+  } {
     return this.orderStats;
   }
 
   /** Reset order stats (for skipping warmup period) */
   resetOrderStats(simulationTime: number): void {
-    this.orderStats = { completed: 0, leadTimes: [], resetSimTime: simulationTime };
+    this.orderStats = {
+      completed: 0,
+      leadTimes: [],
+      waitingTimes: [],
+      deliveryTimes: [],
+      resetSimTime: simulationTime,
+    };
     this.pathChangeCount.clear();
   }
 
