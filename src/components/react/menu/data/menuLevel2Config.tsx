@@ -1,7 +1,6 @@
 // components/react/menu/data/menuLevel2Config.tsx
 import {
   Timer,
-  FileCheck,
   Circle,
 } from "lucide-react";
 
@@ -14,7 +13,6 @@ import imgSim from "@/assets/icons/game/menu-sim.png";
 import imgGauge from "@/assets/icons/game/icon-gauge.svg";
 import imgTrains from "@/assets/icons/game/menu-trains.png";
 import imgRouting from "@/assets/icons/game/menu-routing.png";
-import imgInspect from "@/assets/icons/game/sim-inspect.svg";
 import imgSignal from "@/assets/icons/game/signal-wait-stop.png";
 import imgLabel from "@/assets/icons/game/special-label.png";
 import imgFluids from "@/assets/icons/game/menu-fluids.png";
@@ -48,14 +46,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       shortcutLabel: "d",
       iconFn: () => pngIcon(imgLabel),
     },
-    {
-      id: "stats-kpi-export",
-      label: "Export KPI",
-      iconFn: (isActive?: boolean) => (
-        <FileCheck size={ICON_SIZE_LARGE}
-          style={{ stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR, strokeWidth: 2 }} />
-      ),
-    },
   ],
   Operation: [
     {
@@ -75,34 +65,6 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       label: "Schedule",
       iconFn: (isActive: boolean) => (
         <Timer
-          size={ICON_SIZE_LARGE}
-          style={{
-            stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
-            strokeWidth: 2,
-          }}
-        />
-      ),
-    },
-    {
-      id: "operation-menu-1",
-      label: "Routes",
-      iconFn: () => pngIcon(imgRouting),
-    },
-    {
-      id: "operation-menu-3",
-      label: "Monitor",
-      iconFn: () => pngIcon(imgInspect),
-    },
-    {
-      id: "operation-menu-4",
-      label: "Alerts",
-      iconFn: () => pngIcon(imgSignal),
-    },
-    {
-      id: "operation-menu-5",
-      label: "Logs",
-      iconFn: (isActive: boolean) => (
-        <FileCheck
           size={ICON_SIZE_LARGE}
           style={{
             stroke: isActive ? ACTIVE_STROKE_COLOR : INACTIVE_STROKE_COLOR,
