@@ -222,8 +222,11 @@ export class AutoMgr {
             data[ptr + MovementData.TARGET_RATIO] = srcStation.ratio;
             this.pendingSrcStation.delete(vehId);
           }
-        } else if (!srcStation && isStopped) {
-          // Pre-load done, vehicle stopped at src → start LOADING
+        } else if (!srcStation && isStopped
+          && data[ptr + MovementData.EDGE_RATIO] >= data[ptr + MovementData.TARGET_RATIO]) {
+          // Pre-load done, vehicle stopped *at the station position* → start LOADING.
+          // isStopped 만으로는 lock 대기·충돌·정체로 station 직전에 멈춘 것을 station 도착과
+          // 구분 못 함 → EDGE_RATIO 가 TARGET_RATIO(=station.ratio) 에 도달했는지도 확인.
           data[ptr + LogicData.JOB_STATE] = JobState.LOADING;
           data[ptr + OrderData.PICKUP_ARRIVE_TS] = simulationTime;
           data[ptr + OrderData.PICKUP_START_TS] = simulationTime;
@@ -262,8 +265,10 @@ export class AutoMgr {
           data[ptr + MovementData.TARGET_RATIO] = destStation.ratio;
           // Mark with a sentinel dwell timer (Infinity) to prevent re-trigger
           this.dwellTimers.set(vehId, Infinity);
-        } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex) {
-          // Stopped at dest station → start UNLOADING
+        } else if (isStopped && destStation && currentEdgeIdx === destStation.edgeIndex
+          && data[ptr + MovementData.EDGE_RATIO] >= data[ptr + MovementData.TARGET_RATIO]) {
+          // Stopped *at the dest station position* → start UNLOADING.
+          // (lock/충돌 로 station 직전에 멈춘 경우를 도착으로 오판하지 않도록 ratio 확인)
           data[ptr + LogicData.JOB_STATE] = JobState.UNLOADING;
           data[ptr + OrderData.DROP_ARRIVE_TS] = simulationTime;
           data[ptr + OrderData.DROP_START_TS] = simulationTime;

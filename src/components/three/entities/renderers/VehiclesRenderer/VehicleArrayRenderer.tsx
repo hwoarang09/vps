@@ -16,7 +16,9 @@ import { useVisualizationStore } from "@/store/ui/visualizationStore";
 import {
   VEHICLE_DATA_SIZE as SHM_VEHICLE_DATA_SIZE,
   LogicData as ShmLogicData,
+  MovementData as ShmMovementData,
   JobState,
+  MovingStatus,
 } from "@/common/vehicle/initialize/constants";
 import { VEHICLE_JOB_STATE_COLORS, hexToRgb01 } from "@/config/colors";
 
@@ -234,16 +236,26 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
     );
   };
 
-  const getJobStateColor = (jobState: number, pulse: number): THREE.Color => {
+  const getJobStateColor = (
+    jobState: number,
+    movingStatus: number,
+    pulse: number,
+  ): THREE.Color => {
+    // 깜빡임은 차량이 멈춰서 픽업/드롭 dwell 중일 때만 — 이동 중에는 깜빡 금지
+    const stopped = movingStatus === MovingStatus.STOPPED;
     switch (jobState) {
       case JobState.MOVE_TO_LOAD:
         return tempColor.setRGB(RGB_MOVE_TO_LOAD[0], RGB_MOVE_TO_LOAD[1], RGB_MOVE_TO_LOAD[2]);
       case JobState.LOADING:
-        return pulseLerp(RGB_LOADING, pulse, 0.5); // 청록 깜빡
+        return stopped
+          ? pulseLerp(RGB_LOADING, pulse, 0.5) // 청록 깜빡 (정지 상태에서만)
+          : tempColor.setRGB(RGB_LOADING[0], RGB_LOADING[1], RGB_LOADING[2]);
       case JobState.MOVE_TO_UNLOAD:
         return tempColor.setRGB(RGB_MOVE_TO_UNLOAD[0], RGB_MOVE_TO_UNLOAD[1], RGB_MOVE_TO_UNLOAD[2]);
       case JobState.UNLOADING:
-        return pulseLerp(RGB_UNLOADING, pulse, 0.5); // 주황 깜빡
+        return stopped
+          ? pulseLerp(RGB_UNLOADING, pulse, 0.5) // 주황 깜빡 (정지 상태에서만)
+          : tempColor.setRGB(RGB_UNLOADING[0], RGB_UNLOADING[1], RGB_UNLOADING[2]);
       case JobState.ERROR:
         return tempColor.setRGB(RGB_ERROR[0], RGB_ERROR[1], RGB_ERROR[2]);
       default:
@@ -277,8 +289,10 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
       if (bodyMesh && fullData) {
         const pulse = (Math.sin(state.clock.elapsedTime * 6) + 1) * 0.5; // 0~1 깜빡임
         for (let i = 0; i < actualNumVehicles; i++) {
-          const jobState = fullData[i * SHM_VEHICLE_DATA_SIZE + ShmLogicData.JOB_STATE];
-          bodyMesh.setColorAt(i, getJobStateColor(jobState, pulse));
+          const base = i * SHM_VEHICLE_DATA_SIZE;
+          const jobState = fullData[base + ShmLogicData.JOB_STATE];
+          const movingStatus = fullData[base + ShmMovementData.MOVING_STATUS];
+          bodyMesh.setColorAt(i, getJobStateColor(jobState, movingStatus, pulse));
         }
         if (bodyMesh.instanceColor) bodyMesh.instanceColor.needsUpdate = true;
       }
