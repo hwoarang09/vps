@@ -11,6 +11,7 @@ import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import { useFabStore } from "@store/map/fabStore";
 import { preloadMenuIcons } from "@/utils/preloadIcons";
+import { Analytics } from "@vercel/analytics/react";
 import "./index.css";
 
 const focusCameraOnFabZero = () => {
@@ -65,6 +66,7 @@ const App: React.FC = () => {
       )}
       <IconWarmCache />
       <LoadingScreen />
+      <Analytics />
     </>
   );
 };

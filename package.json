@@ -1,7 +1,7 @@
 {
   "name": "vos_r3f",
   "private": true,
-  "version": "0.4.49",
+  "version": "0.4.50",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,7 @@
     "@react-three/fiber": "^9.4.2",
     "@react-three/rapier": "^2.2.0",
     "@tailwindcss/vite": "^4.1.11",
+    "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

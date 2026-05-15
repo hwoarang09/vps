@@ -2,6 +2,9 @@
 
 > AMHS 시뮬레이터의 라우팅을 EWMA → ML 예측 기반으로 바꾸는 프로젝트.
 > 이 문서는 설계 논의 전체(의문 → 답변)를 정리한 것.
+>
+> **v2 (2026-05-16)**: 피어 리뷰 반영 — oscillation 완화 기법 구체화, projected_demand
+> ablation 실험 설계, TDSP FIFO violation 측정, graph topology static feature 추가.
 
 ---
 
@@ -97,6 +100,11 @@ non-stationary면 긴 horizon에도 신호가 생김.
 
 추가 기법:
 - **Quantile regression**: P50뿐 아니라 P90도 예측 → 분산 큰 edge 회피하는 risk-averse 라우팅
+  - Dijkstra cost 활용 방식 (stage 2에서 택일·튜닝):
+    - `cost = α·P50 + (1−α)·P90` — α로 보수성 조절 (균형)
+    - `cost = P50, 단 P90 > 임계값이면 회피` — 조건부 회피
+    - `cost = P90` — 완전 보수적
+  - 어떤 방식을 쓰느냐가 모델 출력 활용법을 정함 → stage 2에서 명시해야 막히지 않음
 - 5개 head 만들지 말고 **horizon h를 입력 feature로** → 단일 모델로 임의 horizon 쿼리 (TDSP 보간에 유리)
 
 딥러닝은 stage 4~5: spatio-temporal 모델(Graph WaveNet 계열)이 다단계 전파를
@@ -124,6 +132,7 @@ non-stationary면 긴 horizon에도 신호가 생김.
 |---|---|---|
 | 정적 | length, max_speed(직선5/곡선1), station_count | 수치 |
 | 정적 | is_merge, is_junction, deadlock_zone_type, is_curve | 범주 |
+| 정적(topology) | betweenness_centrality, dist_to_nearest_merge, dist_to_nearest_station, on_loop_vs_highway | 수치/범주 |
 | 동적(t) | cur_vehicle_count, cur_avg_speed, lock_wait_count | 수치 |
 | 동적(t) | last_transit_time, ewma_transit_time | 수치 |
 | 의도 | **projected_demand(i, h)** | 수치 |
@@ -132,6 +141,10 @@ non-stationary면 긴 horizon에도 신호가 생김.
 | horizon | h (10/30/60/120/180) | 수치 |
 | 정체성(보조) | edge_id | 범주 |
 | **정답** | actual transit_time(i, t+h) | 수치 |
+
+topology feature는 그래프에서 **한 번 계산하고 끝**(networkx 등). edge의 그래프상 위치
+자체가 정적 정보 — betweenness가 높으면 critical edge, merge/station 거리는 혼잡 prior.
+비용 거의 0인데 LightGBM에 강한 구조 prior를 줌.
 
 트리의 뿌리→잎 경로가 곧 feature 조합 (`if is_merge AND proj_demand>10 AND length<5 → ...`).
 범주형은 one-hot 안 함 — LightGBM categorical 네이티브 지원 (edge_id one-hot 하면 900컬럼 폭발).
@@ -283,12 +296,27 @@ length, 현재차량수 옆에 그냥 숫자 컬럼 하나. 모델은 "proj_dema
 
 모든 차량이 같은 예측으로 라우팅 → 다들 "혼잡 예측 edge" 회피 → 그 edge는 안 막히고
 우회로가 막힘 → 다음 cycle 반대로. 고전적 dynamic traffic assignment 진동.
-예측이 자기부정적이 됨.
+예측이 자기부정적이 됨. 리라우팅 잦을수록 feedback 강 → 위험 큼.
 
-완화: stochastic routing(예측에 노이즈/top-2 확률 분배), damping(예측 cost를 EWMA로
-천천히 반영), 평가지표를 차량 개별 ETA가 아닌 시스템 throughput/cycle time 분산으로.
+### 완화 기법 (구체)
 
-리라우팅 잦을수록 feedback 강 → oscillation 위험 큼.
+```
+방법 1 (path-level stochastic): 차량별 top-K 경로 sample.
+  softmax(−cost/τ) 분포에서 선택 → 같은 OD pair여도 차량마다 다른 path
+방법 2 (cost-level noise): cost 조회 시 차량마다 N(0, σ) 노이즈 추가
+  → 같은 예측 cost를 차량마다 다르게 해석
+방법 3 (damping): deployed_cost = β·EWMA + (1−β)·ML
+  → β로 ML 영향력 조절. 배포 초기 β 크게 시작, oscillation 약하면 β 줄임
+```
+
+### Oscillation 측정 metric (반드시 같이 계산)
+
+- **edge load variance over time**: edge별 차량수 시계열의 시간 분산
+- **path 안정성**: 같은 OD pair의 연속 Dijkstra 호출 결과 경로의 Jaccard 유사도
+  (낮으면 경로가 매번 출렁임 = 진동)
+- **throughput rolling std**: 낮을수록 안정
+
+metric 정의 없이 "완화했다"고 말할 수 없음 — 측정 지표부터 깔아둔다.
 
 ---
 
@@ -305,8 +333,14 @@ a(u) > 180이면 180s 예측으로 clamp
 ```
 
 → 그래서 horizon을 입력 feature로 두면 임의 a(u)를 바로 쿼리 가능.
-주의: TDSP가 최적해를 보장하려면 FIFO 속성(늦게 출발해 먼저 도착 불가) 필요 →
-예측 시계열을 약간 smoothing하면 안전.
+**주의 — FIFO 속성:** TDSP가 최적해를 보장하려면 FIFO(늦게 출발해 먼저 도착 불가)가
+성립해야 한다. 정확한 조건은 "출발시각 τ + cost(τ)"가 τ에 대해 단조 비감소, 즉
+`cost'(τ) ≥ −1`. **smoothing만으로는 보장 안 됨.** 실용 옵션:
+- (a) 예측 cost 후처리로 단조 보정 강제 (arrival = τ+cost(τ)를 단조 clamp)
+- (b) FIFO violation rate를 실측해서 충분히 낮으면 그냥 진행 (대부분 이쪽)
+- (c) 비FIFO TDSP 알고리즘 (비쌈)
+
+어느 쪽이든 **FIFO violation rate 측정**을 먼저 깔아둔다 (§4 검증·측정 설계).
 
 ---
 
@@ -324,6 +358,27 @@ a(u) > 180이면 180s 예측으로 clamp
 
 각 stage마다 throughput / cycle time A/B 측정. **측정 안 하면 portfolio 가치 없음.**
 ML이 baseline 3개를 못 이기면 ML 안 한 것만 못함.
+
+### 검증·측정 설계 (이론 주장마다 증거를 붙인다)
+
+- **stage 0 — autocorrelation decay 스크립트**: edge transit time 시계열을 lag
+  10/30/60/120/180s로 ACF 계산 + persistence skill 곡선. Python 한 페이지 분량.
+  이 곡선이 "의미 있는 horizon 개수"의 근거.
+- **stage 1 — projected_demand ablation** ← 이 프로젝트의 핵심 증거:
+  - 실험 A: projected_demand **빼고** 학습 → 배포 → throughput 측정
+  - 실험 B: projected_demand **넣고** 학습 → 배포 → throughput 측정
+  - A ≈ B → projected_demand가 분포 shift를 못 메움 → §1 Q12 가설 자체가 틀림
+  - A < B → 이론 확증. portfolio narrative의 실증 근거 (면접에서 "증거?"에 대한 답)
+  - 측정은 throughput뿐 아니라 §2의 oscillation metric도 함께
+- **stage 4 — oscillation metric**: §2의 3개 metric 정의·계산. 완화 기법 적용 전후 비교
+- **TDSP — FIFO violation rate 측정**: §3의 (b) 옵션 판단 근거
+- **deploy 시 projected_demand cold-start**:
+  - projected_demand는 *이미 존재하는* committed path(과거 reroute 시점 결정)에서
+    계산됨 → 매 추론마다 즉시 풀어야 하는 순환(fixpoint)이 **아님**. ML 예측 → 새 path
+    → 미래 projected_demand 변화로 이어지는 **시간 지연 feedback** (oscillation과 동류)
+  - 진짜 문제는 t=0 **cold-start** 하나: 배포 직후엔 committed path가 없음
+    → 첫 N분은 EWMA 라우팅으로 path를 채운 뒤 ML로 전환
+  - 운영 중에는 stale snapshot(직전 tick의 path)으로 계산해도 충분
 
 ---
 
@@ -349,8 +404,10 @@ ML이 baseline 3개를 못 이기면 ML 안 한 것만 못함.
 3. [ ] Static dump (edge/node 정적 표) export 확인
 4. [ ] 데이터 수집용 **리라우팅 빈도 1개 확정** (5 edge마다 권장)
 5. [ ] Python offline: raw → 슬라이딩 윈도우 → feature/label parquet 변환 스크립트
-6. [ ] stage 0: autocorrelation decay 측정 + baseline 3개
-7. [ ] stage 1: LightGBM 단일 horizon
+6. [ ] stage 0: autocorrelation decay 측정 스크립트 + baseline 3개
+7. [ ] graph topology static feature 계산 (betweenness centrality 등, networkx)
+8. [ ] stage 1: LightGBM 단일 horizon + **projected_demand ablation 실험**(§4 검증 설계)
+9. [ ] oscillation metric 3종 + FIFO violation rate 측정 코드 (stage 4 전 준비)
 
 ---
 
