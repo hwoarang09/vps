@@ -451,7 +451,7 @@ const LockInfoPanel: React.FC = () => {
                     inputRef.current?.blur();
                   }
                 }}
-                placeholder={nodeName || "Search node..."}
+                placeholder={nodeName || "Search merge node..."}
                 className="flex-1 min-w-0 px-1 py-1.5 text-sm focus:outline-none bg-transparent text-white placeholder-gray-500"
               />
               <button
@@ -464,7 +464,7 @@ const LockInfoPanel: React.FC = () => {
             {isNodeListOpen && (
               <div className="absolute z-10 w-full mt-1 bg-panel-bg-solid border border-panel-border rounded shadow-lg">
                 <div className="p-1 text-xs text-gray-500 border-b border-panel-border">
-                  {allNodes.length} nodes
+                  {allNodes.length} merge nodes
                 </div>
                 <div className="max-h-48 overflow-y-auto">
                   {allNodes

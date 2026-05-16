@@ -11,6 +11,7 @@ import { getTestSettings } from "@/config/react/testSettingConfig";
 import SimulationParamsModal from "./SimulationParamsModal";
 import TopControlBar from "./TopControlBar";
 import WelcomeHint from "./WelcomeHint";
+import AppBranding from "./AppBranding";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { useEdgeStore } from "@/store/map/edgeStore";
@@ -347,6 +348,9 @@ const VehicleTest: React.FC = () => {
 
   return (
     <>
+      {/* 상단 좌측 VPS 제목 + 우하단 버전 */}
+      <AppBranding />
+
       {/* Top Control Bar - MenuLevel1/2 style */}
       <TopControlBar
         vehicleCount={inputValue}

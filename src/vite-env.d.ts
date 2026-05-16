@@ -22,6 +22,9 @@ declare module "*.glsl" {
   export default content;
 }
 
+// 빌드 시 vite define 으로 주입되는 package.json version
+declare const __APP_VERSION__: string;
+
 // Global window extensions
 interface Window {
   vehicleDataArray?: any;
