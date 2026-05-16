@@ -66,10 +66,13 @@ interface MatrixCtx {
   quaternion: THREE.Quaternion;
   scale: THREE.Vector3;
   euler: THREE.Euler;
+  tmpVec: THREE.Vector3;
 }
 
 /**
  * edge의 renderingPoints를 기반으로 InstancedMesh에 quad를 설정한다.
+ * @param endRatio edge를 어디까지 그릴지 (0~1). 1이면 전체. 목적지 edge는
+ *                 station 위치 ratio까지만 그려서 "역 끝까지"가 아닌 "역까지"만 칠한다.
  * @returns 실제 설정된 instance 수
  */
 function buildEdgeOverlay(
@@ -77,15 +80,21 @@ function buildEdgeOverlay(
   mesh: THREE.InstancedMesh,
   ctx: MatrixCtx,
   startIdx = 0,
+  endRatio = 1,
 ): number {
   const points = edge.renderingPoints;
   if (!points || points.length === 0) return 0;
+  if (endRatio <= 0) return 0;
 
   const isLinear = !edge.vos_rail_type || edge.vos_rail_type === EdgeType.LINEAR;
 
   if (isLinear) {
     const startPos = points[0];
-    const endPos = points.at(-1)!;
+    const fullEnd = points.at(-1)!;
+    // 목적지 edge면 start→ratio 지점까지만
+    const endPos = endRatio >= 1
+      ? fullEnd
+      : ctx.tmpVec.copy(startPos).lerp(fullEnd, endRatio);
     const length = startPos.distanceTo(endPos);
     if (length < 0.01) return 0;
 
@@ -105,12 +114,24 @@ function buildEdgeOverlay(
   }
 
   // CURVE: 세그먼트별 quad
-  const segCount = Math.min(points.length - 1, MAX_SEGMENTS);
+  const fullSeg = points.length - 1;
+  const segCap = Math.min(fullSeg, MAX_SEGMENTS);
+  // 잘라낼 위치 (float 세그먼트 인덱스). endRatio<1 이면 그 비율까지만.
+  const limit = endRatio >= 1 ? segCap : Math.min(segCap, endRatio * fullSeg);
   let idx = 0;
 
-  for (let i = 0; i < segCount; i++) {
+  for (let i = 0; i < segCap; i++) {
+    if (i >= limit) break;
     const s = points[i];
-    const e = points[i + 1];
+    let e: THREE.Vector3;
+    if (i + 1 <= limit) {
+      e = points[i + 1];
+    } else {
+      // 마지막 부분 세그먼트: i ~ i+1 사이를 (limit - i) 만큼만
+      const frac = limit - i;
+      if (frac < 0.001) break;
+      e = ctx.tmpVec.copy(points[i]).lerp(points[i + 1], frac);
+    }
     const length = s.distanceTo(e);
     if (length < 0.001) continue;
 
@@ -139,6 +160,7 @@ const EdgeOverlayMesh: React.FC<{
 }> = ({ color, zOffset, getEdgeIndex }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const prevEdgeIndexRef = useRef<number | null>(null);
+  const prevEndRatioRef = useRef<number>(1);
 
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const material = useMemo(() => new THREE.ShaderMaterial({
@@ -151,9 +173,14 @@ const EdgeOverlayMesh: React.FC<{
     fragmentShader: overlayFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
+    // depthTest 유지: 차량 본체 등 진짜 위에 있는 geometry에는 정상적으로 가려짐
     depthTest: true,
     depthWrite: false,
-    depthFunc: THREE.LessEqualDepth,
+    // polygonOffset: 같은 평면의 일반 edge는 항상 덮음 (슬로프 기반이라 곡선 각도 무관).
+    // 차량처럼 실제 Z가 떨어진 geometry는 못 이기므로 차량 본체는 가리지 않음.
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   }), [color, zOffset]);
 
   const ctx = useMemo<MatrixCtx>(() => ({
@@ -162,6 +189,7 @@ const EdgeOverlayMesh: React.FC<{
     quaternion: new THREE.Quaternion(),
     scale: new THREE.Vector3(),
     euler: new THREE.Euler(),
+    tmpVec: new THREE.Vector3(),
   }), []);
 
   // InstancedMesh boots with count=MAX_SEGMENTS and zero matrices → all instances
@@ -185,8 +213,13 @@ const EdgeOverlayMesh: React.FC<{
 
     const edgeIndex = getEdgeIndex();
 
-    if (edgeIndex === prevEdgeIndexRef.current) return;
+    // 이 edge가 목적지 edge면 station ratio까지만 그림
+    const hl = useVehicleEdgeHighlightStore.getState();
+    const endRatio = edgeIndex !== null && edgeIndex === hl.destEdgeIndex ? hl.destRatio : 1;
+
+    if (edgeIndex === prevEdgeIndexRef.current && endRatio === prevEndRatioRef.current) return;
     prevEdgeIndexRef.current = edgeIndex;
+    prevEndRatioRef.current = endRatio;
 
     if (edgeIndex === null || edgeIndex < 1) {
       mesh.count = 0;
@@ -200,7 +233,7 @@ const EdgeOverlayMesh: React.FC<{
       return;
     }
 
-    const count = buildEdgeOverlay(edge, mesh, ctx);
+    const count = buildEdgeOverlay(edge, mesh, ctx, 0, endRatio);
     mesh.count = count;
     if (count > 0) {
       mesh.instanceMatrix.needsUpdate = true;
@@ -222,6 +255,8 @@ const PathOverlayMesh: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const prevLenRef = useRef<number>(-1);
   const prevFirstRef = useRef<number>(-1);
+  const prevDestEdgeRef = useRef<number | null>(null);
+  const prevDestRatioRef = useRef<number>(1);
 
   const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
   const material = useMemo(() => new THREE.ShaderMaterial({
@@ -234,9 +269,12 @@ const PathOverlayMesh: React.FC = () => {
     fragmentShader: pathFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
+    // depthTest 유지 + polygonOffset: 일반 edge는 덮되 차량 본체엔 가려짐
     depthTest: true,
     depthWrite: false,
-    depthFunc: THREE.LessEqualDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   }), []);
 
   const ctx = useMemo<MatrixCtx>(() => ({
@@ -245,6 +283,7 @@ const PathOverlayMesh: React.FC = () => {
     quaternion: new THREE.Quaternion(),
     scale: new THREE.Vector3(),
     euler: new THREE.Euler(),
+    tmpVec: new THREE.Vector3(),
   }), []);
 
   // Avoid the 1-frame origin-flicker before useFrame initializes count=0
@@ -265,14 +304,24 @@ const PathOverlayMesh: React.FC = () => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    const pathEdgeIndices = useVehicleEdgeHighlightStore.getState().pathEdgeIndices;
+    const hl = useVehicleEdgeHighlightStore.getState();
+    const pathEdgeIndices = hl.pathEdgeIndices;
+    const destEdgeIndex = hl.destEdgeIndex;
+    const destRatio = hl.destRatio;
     const len = pathEdgeIndices.length;
     const first = len > 0 ? pathEdgeIndices[0] : -1;
 
-    // 빠른 변경 감지: 길이 + 첫 번째 원소
-    if (len === prevLenRef.current && first === prevFirstRef.current) return;
+    // 빠른 변경 감지: 길이 + 첫 번째 원소 + 목적지
+    if (
+      len === prevLenRef.current &&
+      first === prevFirstRef.current &&
+      destEdgeIndex === prevDestEdgeRef.current &&
+      destRatio === prevDestRatioRef.current
+    ) return;
     prevLenRef.current = len;
     prevFirstRef.current = first;
+    prevDestEdgeRef.current = destEdgeIndex;
+    prevDestRatioRef.current = destRatio;
 
     if (len === 0) {
       mesh.count = 0;
@@ -287,7 +336,9 @@ const PathOverlayMesh: React.FC = () => {
       const edge = edges[edgeIdx - 1];
       if (!edge) continue;
 
-      const count = buildEdgeOverlay(edge, mesh, ctx, totalCount);
+      // 목적지 edge면 station ratio까지만
+      const endRatio = edgeIdx === destEdgeIndex ? destRatio : 1;
+      const count = buildEdgeOverlay(edge, mesh, ctx, totalCount, endRatio);
       totalCount += count;
     }
 

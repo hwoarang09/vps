@@ -724,6 +724,26 @@ const VehicleMonitor: React.FC<VehicleMonitorProps> = ({ selected, vehicles, isS
     highlightStore.setCurrentEdge(currentEdgeIdx >= 1 ? currentEdgeIdx : null);
     highlightStore.setNextEdge(nextEdgeIdx >= 1 ? nextEdgeIdx : null);
 
+    // 목적지 edge를 station 위치 ratio까지만 그리도록 전달.
+    // destEdgeIndex 는 SHM destinationEdge 사용 — 경로(pathData)와 동일한 index 공간이라
+    // station 이름 → edgeNameToIndex 경로의 mismatch가 없다.
+    {
+        let destEdgeIndex: number | null = null;
+        let destRatio = 1;
+        if (destinationEdgeIdx !== undefined && destinationEdgeIdx >= 1) {
+            destEdgeIndex = destinationEdgeIdx;
+            // ratio: 그 edge 위 station의 nearest_edge_distance (0~1)
+            const st = useStationStore.getState().stations.find(
+                (s) => s.nearest_edge === destinationEdgeName
+            );
+            if (st) {
+                const r = Number.parseFloat(st.nearest_edge_distance);
+                destRatio = Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : 1;
+            }
+        }
+        highlightStore.setDestination(destEdgeIndex, destRatio);
+    }
+
     // Path edges highlight (SHM only)
     if (isShmMode) {
         const pathData = useShmSimulatorStore.getState().getPathData();
