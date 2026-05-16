@@ -10,6 +10,7 @@ import { VehicleSystemType } from "@/types/vehicle";
 import { getTestSettings } from "@/config/react/testSettingConfig";
 import SimulationParamsModal from "./SimulationParamsModal";
 import TopControlBar from "./TopControlBar";
+import WelcomeHint from "./WelcomeHint";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { getLockMgr, resetLockMgr } from "@/common/vehicle/logic/LockMgr/index";
 import { useEdgeStore } from "@/store/map/edgeStore";
@@ -379,6 +380,9 @@ const VehicleTest: React.FC = () => {
 
       {/* Simulation Parameters Modal */}
       <SimulationParamsModal />
+
+      {/* 첫 로딩 완료 시 1회 노출되는 온보딩 안내 모달 */}
+      <WelcomeHint isTestCreated={isTestCreated} />
     </>
   );
 };

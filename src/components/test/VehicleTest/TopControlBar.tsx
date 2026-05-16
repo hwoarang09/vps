@@ -58,8 +58,9 @@ const ActionButton: React.FC<ActionButtonProps> = ({
   };
 
   const getIconColor = () => {
-    if (disabled) return "text-gray-500";
+    // 활성 상태(현재 상태를 나타냄)는 disabled 여도 또렷하게 흰색으로
     if (isActive) return "text-white";
+    if (disabled) return "text-gray-500";
     switch (variant) {
       case "success": return "text-accent-green";
       case "danger": return "text-accent-red";
@@ -77,10 +78,19 @@ const ActionButton: React.FC<ActionButtonProps> = ({
       className={twMerge(
         menuButtonVariants({ active: isActive, size: "small" }),
         compactButtonClass,
-        disabled && "opacity-50 cursor-not-allowed"
+        // active 버튼은 "현재 상태" 표시이므로 disabled 여도 흐려지지 않음
+        disabled && !isActive && "opacity-50 cursor-not-allowed",
+        disabled && isActive && "cursor-default"
       )}
     >
-      <div className={twMerge("flex items-center gap-1", getIconColor())}>
+      <div
+        className={twMerge(
+          "flex items-center gap-1",
+          getIconColor(),
+          // 하늘색 배경 위 흰 아이콘 대비 강화
+          isActive && "drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+        )}
+      >
         {icon}
         {label && <span className="text-[10px] font-bold">{label}</span>}
       </div>
@@ -246,7 +256,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
 
         {/* Play/Pause Section */}
         <ActionButton
-          icon={<Play size={14} />}
+          icon={<Play size={15} fill="currentColor" strokeWidth={0} />}
           tooltip="Play Simulation"
           onClick={onPlay}
           menuId="play"
@@ -256,7 +266,7 @@ const TopControlBar: React.FC<TopControlBarProps> = ({
         />
 
         <ActionButton
-          icon={<Pause size={14} />}
+          icon={<Pause size={15} fill="currentColor" strokeWidth={0} />}
           tooltip="Pause Simulation"
           onClick={onPause}
           menuId="pause"
