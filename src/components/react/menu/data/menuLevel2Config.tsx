@@ -118,6 +118,12 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       shortcutLabel: "l",
       iconFn: () => pngIcon(imgSignal),
     },
+    {
+      id: "devtools-log-settings",
+      label: "Log Settings",
+      shortcutLabel: "g",
+      iconFn: () => pngIcon(imgDevToolsGear),
+    },
   ],
   Search: [
     {

@@ -9,6 +9,7 @@ import { useCameraStore } from "@/store/ui/cameraStore";
 import { useVehicleControlStore } from "@/store/ui/vehicleControlStore";
 import { useVisualizationStore } from "@/store/ui/visualizationStore";
 import LockInfoPanel from "./panels/LockInfoPanel";
+import LogSettingsPanel from "./panels/LogSettingsPanel";
 import EdgeControlPanel from "./panels/EdgeControlPanel";
 import NodeControlPanel from "./panels/NodeControlPanel";
 import IndividualControlPanel from "./panels/IndividualControlPanel";
@@ -74,6 +75,11 @@ const RightPanel: React.FC = () => {
     // DevTools Lock Panel
     if (activeSubMenu === "devtools-lock") {
       return <LockInfoPanel />;
+    }
+
+    // DevTools Log Settings Panel
+    if (activeSubMenu === "devtools-log-settings") {
+      return <LogSettingsPanel />;
     }
 
     // Search Vehicle Panel
@@ -175,6 +181,7 @@ const RightPanel: React.FC = () => {
       "stats-db": "DB History",
       // DevTools
       "devtools-lock": "Lock Info",
+      "devtools-log-settings": "Log Settings",
       // Search
       "search-vehicle": "Vehicle Search",
       "search-node": "Node Search",
@@ -194,6 +201,7 @@ const RightPanel: React.FC = () => {
     if (activeThirdMenu) return getMenuLabel(activeThirdMenu);
     if (activeSubMenu === "vis-performance") return "Performance Monitor";
     if (activeSubMenu === "devtools-lock") return "Lock Info";
+    if (activeSubMenu === "devtools-log-settings") return "Log Settings";
     if (activeSubMenu === "search-vehicle") return "Vehicle Search";
     if (activeSubMenu === "search-edge") return "Edge Search";
     if (activeSubMenu === "search-node") return "Node Search";

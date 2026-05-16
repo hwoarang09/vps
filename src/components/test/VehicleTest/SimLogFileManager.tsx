@@ -7,6 +7,9 @@ import {
   extractSessionId,
   type SimLogFileInfo,
 } from "@/logger";
+import LogSettingsPanel from "@/components/react/menu/panels/LogSettingsPanel";
+
+type LogTab = "settings" | "download";
 
 interface SimLogFileManagerProps {
   isOpen: boolean;
@@ -24,6 +27,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
   const [files, setFiles] = useState<SimLogFileInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [tab, setTab] = useState<LogTab>("settings");
 
   const loadFiles = useCallback(async () => {
     setIsLoading(true);
@@ -195,9 +199,9 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
               alignItems: "center",
             }}
           >
-            <span>SimLogger Files</span>
+            <span>SimLogger</span>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              {files.length > 0 && (
+              {tab === "download" && files.length > 0 && (
                 <button
                   onClick={handleDeleteAll}
                   style={{
@@ -230,6 +234,38 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
             </div>
           </div>
 
+          {/* Tab bar */}
+          <div style={{ display: "flex", borderBottom: "1px solid #444" }}>
+            {([
+              { id: "settings", label: "설정" },
+              { id: "download", label: `다운로드 (${sessions.length})` },
+            ] as { id: LogTab; label: string }[]).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  flex: 1,
+                  padding: "7px 0",
+                  background: tab === t.id ? "rgba(155,89,182,0.25)" : "transparent",
+                  border: "none",
+                  borderBottom: tab === t.id ? "2px solid #9b59b6" : "2px solid transparent",
+                  color: tab === t.id ? "#bb8fce" : "#999",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Settings tab */}
+          {tab === "settings" && <LogSettingsPanel />}
+
+          {/* Download tab */}
+          {tab === "download" && (
+          <>
           {/* Session selector */}
           {sessions.length > 0 && (
             <div
@@ -368,6 +404,8 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
               ))
             )}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>

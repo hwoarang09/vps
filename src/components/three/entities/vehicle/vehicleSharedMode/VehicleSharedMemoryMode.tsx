@@ -18,6 +18,7 @@ import { getWorkerCount } from "@/config/worker/workerConfig";
 import { getBodyLength, getBodyWidth } from "@/config/threejs/vehicleConfig";
 import { createFabGridSeparated } from "@/utils/fab/fabUtils";
 import { useCFGStore } from "@/store/system/cfgStore";
+import { useLogSettingsStore } from "@/store/ui/logSettingsStore";
 
 /**
  * VehicleSharedMemoryMode
@@ -60,6 +61,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
 
 
     // Build config from cfgStore values
+    // 로그 설정(logSettingsStore)을 config 에 주입 → 워커 SimLogger 로 전달
+    const logSettings = useLogSettingsStore.getState();
     const config = {
       bodyLength: getBodyLength(),
       bodyWidth: getBodyWidth(),
@@ -69,6 +72,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       curveMaxSpeed: getCurveMaxSpeed(),
       approachMinSpeed: getApproachMinSpeed(),
       brakeMinSpeed: getBrakeMinSpeed(),
+      logEvents: logSettings.logEvents,
+      logSessionNote: logSettings.logSessionNote || undefined,
     };
 
     // 멀티 Fab 확인

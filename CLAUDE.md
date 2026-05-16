@@ -79,6 +79,7 @@ The project strictly separates **Rendering** (Main Thread) and **Simulation** (W
 | `/sensor-collision` | `.ai-agents/sensor_collision.md` | Sensor collision 작업 |
 | `/shm-simulator` | `.ai-agents/shmSimulator_agents.md` | ShmSimulator 작업 |
 | `/threejs-agents` | `.ai-agents/threejs_agents.md` | Three.js 렌더링 작업 |
+| `/ml-routing-agents` | `.ai-agents/ml_routing_agents.md` | ML 기반 edge cost 예측 라우팅 프로젝트 |
 | `/transfer-agents` | `.ai-agents/transfer_agents.md` | Transfer 시스템 작업 |
 | `/visualization` | `.ai-agents/visualization.md` | Visualization 작업 |
 
