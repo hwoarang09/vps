@@ -41,6 +41,7 @@ function parseLoopsMap(content: string): BayLoopEntry[] {
 interface CFGStore {
   isLoading: boolean;
   error: string | null;
+  currentMapName: string;
   vehicleConfigs: VehicleConfig[];
   bayLoopEntries: BayLoopEntry[];
   loadCFGFiles: (mapFolder: string) => Promise<void>;
@@ -484,11 +485,12 @@ const loadCFGFile = async (mapFolder: string, filename: string): Promise<string>
 export const useCFGStore = create<CFGStore>((set, get) => ({
   isLoading: false,
   error: null,
+  currentMapName: "",
   vehicleConfigs: [],
   bayLoopEntries: [],
 
   loadCFGFiles: async (mapFolder: string) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, currentMapName: mapFolder });
 
     try {
       // 1. Load and parse nodes.cfg

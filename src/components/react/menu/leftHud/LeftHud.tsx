@@ -172,7 +172,7 @@ const HudLayout: React.FC<HudLayoutProps> = ({
   const hud = useHudStyles();
 
   return (
-    <div className="fixed top-4 left-4 z-50 flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-20 left-4 z-50 flex flex-col gap-3 pointer-events-none">
       {/* Top header — active fab name + master toggle */}
       <div className="flex items-center justify-between min-w-[200px] pr-1">
         <span

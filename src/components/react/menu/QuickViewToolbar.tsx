@@ -117,7 +117,7 @@ const QuickViewToolbar: React.FC = () => {
       ref={toolbarRef}
       className={twMerge(
         menuContainerVariants({ level: 2 }),
-        "fixed top-4 right-4 z-50 flex-row items-center gap-1.5 p-1.5 space-x-0",
+        "fixed top-3 right-3 z-50 flex-row items-center gap-1.5 p-1.5 space-x-0",
       )}
     >
       {/* Visualization toggles */}
