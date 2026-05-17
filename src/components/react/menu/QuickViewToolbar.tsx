@@ -13,14 +13,6 @@ import { menuButtonVariants, menuContainerVariants } from "./shared/menuStyles";
 import { twMerge } from "tailwind-merge";
 import SimLogFileManager from "@/components/test/VehicleTest/SimLogFileManager";
 
-interface ToggleItem {
-  id: string;
-  icon: React.ReactNode;
-  tooltip: string;
-  getActive: () => boolean;
-  action: () => void;
-}
-
 interface LabelOption {
   key: string;
   label: string;
@@ -30,7 +22,7 @@ interface LabelOption {
 
 const QuickViewToolbar: React.FC = () => {
   const {
-    showPerfLeft, showSensorBox,
+    showPerfLeft, showPerfRight, showSensorBox,
     showFabLabels, showNodeText, showEdgeText, showVehicleText, showStationText, showBayText,
     togglePerfLeft, togglePerfRight, toggleSensorBox,
     toggleFabLabels, toggleNodeText, toggleEdgeText, toggleVehicleText, toggleStationText, toggleBayText,
@@ -39,7 +31,7 @@ const QuickViewToolbar: React.FC = () => {
   const activeMainMenu = useMenuStore((s) => s.activeMainMenu);
   const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
   // 한 번에 하나의 드롭다운만 열기
-  type DropdownName = "log" | "theme" | "labels" | "sensor" | null;
+  type DropdownName = "log" | "theme" | "labels" | "sensor" | "perf" | null;
   const [openDropdown, setOpenDropdown] = useState<DropdownName>(null);
   const toggleDropdown = (name: Exclude<DropdownName, null>) =>
     setOpenDropdown((prev) => (prev === name ? null : name));
@@ -49,6 +41,7 @@ const QuickViewToolbar: React.FC = () => {
   const themeOpen = openDropdown === "theme";
   const labelOpen = openDropdown === "labels";
   const sensorOpen = openDropdown === "sensor";
+  const perfOpen = openDropdown === "perf";
   const themeName = useThemeStore((s) => s.themeName);
   const setTheme = useThemeStore((s) => s.setTheme);
 
@@ -88,16 +81,6 @@ const QuickViewToolbar: React.FC = () => {
     { key: "station", label: "Station Text", get: () => showStationText, toggle: toggleStationText },
   ];
 
-  const items: ToggleItem[] = [
-    {
-      id: "quick-perf",
-      icon: <Activity size={16} />,
-      tooltip: "Performance",
-      getActive: () => showPerfLeft,
-      action: () => { togglePerfLeft(); togglePerfRight(); },
-    },
-  ];
-
   const sensorZones: Array<{ key: string; label: string; color: string; set: (hex: string) => void }> = [
     { key: "body", label: "Body", color: bodyColor, set: setBodyColor },
     { key: "zone0", label: "Zone 0 (Outer)", color: zone0Color, set: setZone0Color },
@@ -125,21 +108,40 @@ const QuickViewToolbar: React.FC = () => {
         "fixed top-3 right-3 z-50 flex-row items-center gap-1.5 p-1.5 space-x-0",
       )}
     >
-      {/* Visualization toggles */}
-      {items.map((item) => {
-        const isActive = item.getActive();
-        return (
-          <button
-            key={item.id}
-            className={twMerge(menuButtonVariants({ active: isActive }), buttonExtra)}
-            onClick={() => handleClick(item.action)}
-            onMouseEnter={(e) => handleMouseEnter(e, item.id, item.tooltip)}
-            onMouseLeave={hideTooltip}
-          >
-            {item.icon}
-          </button>
-        );
-      })}
+      {/* Performance dropdown */}
+      <div className="relative">
+        <button
+          onClick={() => handleClick(() => toggleDropdown("perf"))}
+          onMouseEnter={(e) => handleMouseEnter(e, "quick-perf", "Performance")}
+          onMouseLeave={hideTooltip}
+          className={twMerge(menuButtonVariants({ active: perfOpen || showPerfLeft }), buttonExtra)}
+        >
+          <Activity size={16} />
+        </button>
+        {perfOpen && (
+          <div className="absolute top-12 right-0 min-w-[200px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden">
+            {[
+              { label: "Custom Stats", on: showPerfLeft, toggle: togglePerfLeft },
+              { label: "r3f-perf GPU Stats", on: showPerfRight, toggle: togglePerfRight },
+            ].map(({ label, on, toggle }) => (
+              <button
+                key={label}
+                onClick={toggle}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 text-left"
+              >
+                <span
+                  className={`w-4 h-4 flex items-center justify-center rounded-sm border ${
+                    on ? "bg-cyan-400/20 border-cyan-300" : "bg-zinc-900 border-zinc-500"
+                  }`}
+                >
+                  {on && <Check size={12} className="text-cyan-300" strokeWidth={3} />}
+                </span>
+                <span className={on ? "text-white" : "text-zinc-300"}>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Sensor dropdown */}
       <div className="relative">

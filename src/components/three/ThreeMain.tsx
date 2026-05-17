@@ -79,7 +79,7 @@ const ThreeScene: React.FC = () => {
 
         <ThemedSceneContent />
 
-        {showPerfRight && <Perf position="bottom-left" deepAnalyze={true} style={{ bottom: "280px", left: "16px" }} />}
+        {showPerfRight && <Perf position="bottom-right" deepAnalyze={true} style={{ bottom: "16px", right: "16px" }} />}
       </Canvas>
 
       {showPerfLeft && <PerformanceMonitorUI />}
