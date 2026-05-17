@@ -149,17 +149,17 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
       {!hideButton && (
         <button
           onClick={handleToggle}
-          className="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 border border-zinc-600 rounded text-xs font-bold cursor-pointer"
+          className="px-2.5 py-1 bg-panel-bg-light hover:bg-panel-bg text-zinc-200 border border-panel-border rounded text-xs font-bold cursor-pointer"
         >
           SimLogs({sessions.length})
         </button>
       )}
 
       {isOpen && (
-        <div className="absolute top-full mt-1 right-0 min-w-[420px] max-w-[520px] max-h-[500px] overflow-y-auto rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur z-[2000]">
+        <div className="absolute top-full mt-1 right-0 min-w-[420px] max-w-[520px] max-h-[500px] overflow-y-auto rounded-md bg-panel-bg border border-panel-border shadow-lg backdrop-blur z-[2000]">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-panel-border">
             <span className="text-zinc-200 text-sm font-bold">SimLogger</span>
             <div className="flex items-center gap-2">
               {tab === "download" && files.length > 0 && (
@@ -180,7 +180,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
           </div>
 
           {/* Tab bar */}
-          <div className="flex border-b border-zinc-700">
+          <div className="flex border-b border-panel-border">
             {([
               { id: "settings", label: "설정" },
               { id: "download", label: `다운로드 (${sessions.length})` },
@@ -191,7 +191,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
                 className={`flex-1 py-1.5 text-xs font-bold cursor-pointer border-b-2 transition-colors ${
                   tab === t.id
                     ? "bg-cyan-400/10 border-cyan-400 text-cyan-300"
-                    : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/30"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-panel-bg-light/30"
                 }`}
               >
                 {t.label}
@@ -207,11 +207,11 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
             <>
               {/* Session selector */}
               {sessions.length > 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-700">
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-panel-border">
                   <select
                     value={selectedSession ?? ""}
                     onChange={(e) => setSelectedSession(e.target.value)}
-                    className="flex-1 bg-zinc-900 text-zinc-300 border border-zinc-600 rounded px-2 py-1 text-xs cursor-pointer"
+                    className="flex-1 bg-panel-bg-solid text-zinc-300 border border-panel-border rounded px-2 py-1 text-xs cursor-pointer"
                   >
                     {sessions.map((s) => (
                       <option key={s.sessionId} value={s.sessionId}>
@@ -246,7 +246,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
                   currentGroup.files.map((file) => (
                     <div
                       key={file.fileName}
-                      className="flex items-center gap-2.5 px-2.5 py-2 m-1 bg-zinc-900/50 border border-zinc-700 rounded text-xs"
+                      className="flex items-center gap-2.5 px-2.5 py-2 m-1 bg-panel-bg-solid/50 border border-panel-border rounded text-xs"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="text-zinc-300 font-bold mb-0.5">{file.eventType}</div>

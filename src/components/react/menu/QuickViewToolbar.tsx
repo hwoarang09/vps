@@ -119,7 +119,7 @@ const QuickViewToolbar: React.FC = () => {
           <Activity size={16} />
         </button>
         {perfOpen && (
-          <div className="absolute top-12 right-0 min-w-[200px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden">
+          <div className="absolute top-12 right-0 min-w-[200px] rounded-md bg-panel-bg border border-panel-border shadow-lg backdrop-blur overflow-hidden">
             {[
               { label: "Custom Stats", on: showPerfLeft, toggle: togglePerfLeft },
               { label: "r3f-perf GPU Stats", on: showPerfRight, toggle: togglePerfRight },
@@ -127,11 +127,11 @@ const QuickViewToolbar: React.FC = () => {
               <button
                 key={label}
                 onClick={toggle}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 text-left"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-panel-bg-light text-left"
               >
                 <span
                   className={`w-4 h-4 flex items-center justify-center rounded-sm border ${
-                    on ? "bg-cyan-400/20 border-cyan-300" : "bg-zinc-900 border-zinc-500"
+                    on ? "bg-cyan-400/20 border-cyan-300" : "bg-panel-bg-solid border-panel-border"
                   }`}
                 >
                   {on && <Check size={12} className="text-cyan-300" strokeWidth={3} />}
@@ -154,16 +154,16 @@ const QuickViewToolbar: React.FC = () => {
           <Radar size={16} />
         </button>
         {sensorOpen && (
-          <div className="absolute top-12 right-0 min-w-[220px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden">
+          <div className="absolute top-12 right-0 min-w-[220px] rounded-md bg-panel-bg border border-panel-border shadow-lg backdrop-blur overflow-hidden">
             <button
               onClick={toggleSensorBox}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 text-left border-b border-zinc-700"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-panel-bg-light text-left border-b border-panel-border"
             >
               <span
                 className={`w-5 h-5 flex items-center justify-center rounded border ${
                   showSensorBox
                     ? "bg-cyan-400/20 border-cyan-300"
-                    : "bg-zinc-900 border-zinc-500"
+                    : "bg-panel-bg-solid border-panel-border"
                 }`}
               >
                 {showSensorBox && <Check size={14} className="text-cyan-300" strokeWidth={3} />}
@@ -175,7 +175,7 @@ const QuickViewToolbar: React.FC = () => {
             {sensorZones.map((zone) => (
               <label
                 key={zone.key}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 cursor-pointer"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-panel-bg-light cursor-pointer"
               >
                 <input
                   type="color"
@@ -189,7 +189,7 @@ const QuickViewToolbar: React.FC = () => {
             ))}
             <button
               onClick={resetSensorColors}
-              className="w-full px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white border-t border-zinc-700 text-center"
+              className="w-full px-3 py-2 text-xs text-zinc-300 hover:bg-panel-bg-light hover:text-white border-t border-panel-border text-center"
             >
               Reset
             </button>
@@ -208,20 +208,20 @@ const QuickViewToolbar: React.FC = () => {
           <Tag size={16} />
         </button>
         {labelOpen && (
-          <div className="absolute top-12 right-0 min-w-[180px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden">
+          <div className="absolute top-12 right-0 min-w-[180px] rounded-md bg-panel-bg border border-panel-border shadow-lg backdrop-blur overflow-hidden">
             {labelOptions.map((opt) => {
               const on = opt.get();
               return (
                 <button
                   key={opt.key}
                   onClick={opt.toggle}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-200 hover:bg-panel-bg-light text-left"
                 >
                   <span
                     className={`w-4 h-4 flex items-center justify-center rounded-sm border ${
                       on
                         ? "bg-cyan-400/20 border-cyan-300"
-                        : "bg-zinc-900 border-zinc-500"
+                        : "bg-panel-bg-solid border-panel-border"
                     }`}
                   >
                     {on && <Check size={12} className="text-cyan-300" strokeWidth={3} />}
@@ -251,7 +251,7 @@ const QuickViewToolbar: React.FC = () => {
         </button>
         {themeOpen && (
           <div
-            className="absolute top-12 right-0 min-w-[160px] rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur overflow-hidden"
+            className="absolute top-12 right-0 min-w-[160px] rounded-md bg-panel-bg border border-panel-border shadow-lg backdrop-blur overflow-hidden"
           >
             {Object.values(THEMES).map((t) => (
               <button
@@ -260,8 +260,8 @@ const QuickViewToolbar: React.FC = () => {
                   setTheme(t.name);
                   setOpenDropdown(null);
                 }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 ${
-                  t.name === themeName ? "bg-zinc-700 text-white" : "text-zinc-200"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-panel-bg-light ${
+                  t.name === themeName ? "bg-panel-bg-light text-white" : "text-zinc-200"
                 }`}
               >
                 {t.label}
