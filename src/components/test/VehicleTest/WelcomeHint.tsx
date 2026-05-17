@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Play, Mouse, MousePointer2, Keyboard, X } from "lucide-react";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
-import { useFabStore } from "@/store/map/fabStore";
 
 const DONT_SHOW_KEY = "vps_welcome_dont_show";
 const SHOW_DELAY_MS = 1000;
@@ -25,17 +24,11 @@ const CONTROLS = [
 const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fabCountY, numVehicles }) => {
   const isPaused = useVehicleTestStore((s) => s.isPaused);
   const setPaused = useVehicleTestStore((s) => s.setPaused);
-  const activeFabIndex = useFabStore((s) => s.activeFabIndex);
-  const fabs = useFabStore((s) => s.fabs);
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
   const [dontShow, setDontShow] = useState(false);
   const hasShownRef = useRef(false);
-
-  const activeFab = fabs[Math.max(0, Math.min(activeFabIndex, fabs.length - 1))];
-  const fabLabel = activeFab ? `${activeFab.col}_${activeFab.row}` : "0_0";
-  const totalFabs = fabs.length || fabCountX * fabCountY;
 
   useEffect(() => {
     if (!isTestCreated || hasShownRef.current) return;
@@ -106,19 +99,10 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
           Simulation Ready
         </p>
 
-        {/* Fab 정보 */}
-        <div className="flex flex-col gap-3 mb-8">
-          <div className="flex items-baseline justify-between">
-            <span className="text-white/40 text-sm font-mono">Currently viewing</span>
-            <span className="text-white text-sm font-mono font-semibold">Fab {fabLabel}</span>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-white/40 text-sm font-mono">Total</span>
-            <span className="text-white/70 text-sm font-mono">
-              {totalFabs} fabs ({fabCountX}×{fabCountY}) · {numVehicles.toLocaleString()} vehicles
-            </span>
-          </div>
-        </div>
+        {/* 시뮬레이션 규모 */}
+        <p className="text-white/55 text-sm font-mono mb-8">
+          {fabCountX}×{fabCountY} fabs · {numVehicles.toLocaleString()} vehicles
+        </p>
 
         {/* 구분선 */}
         <div className="w-full h-px bg-white/8 mb-7" />
