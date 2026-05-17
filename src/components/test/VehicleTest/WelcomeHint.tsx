@@ -1,6 +1,6 @@
 // components/test/VehicleTest/WelcomeHint.tsx
 import React, { useEffect, useRef, useState } from "react";
-import { Play, Mouse, MousePointer2, Keyboard } from "lucide-react";
+import { Play, Mouse, MousePointer2, Keyboard, X } from "lucide-react";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
 import { useFabStore } from "@/store/map/fabStore";
 
@@ -84,7 +84,7 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex flex-col w-[480px] px-12 py-10 rounded-2xl"
+        className="relative flex flex-col w-[480px] px-12 py-10 rounded-2xl"
         style={{
           background: "rgba(14, 17, 26, 0.97)",
           border: "1px solid rgba(255,255,255,0.13)",
@@ -93,6 +93,14 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
           transition: `transform ${FADE_MS}ms ease-in-out`,
         }}
       >
+        {/* X 닫기 버튼 */}
+        <button
+          onClick={dismiss}
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-white/25 hover:text-white/60 transition-colors duration-150"
+        >
+          <X size={14} />
+        </button>
+
         {/* 헤더 */}
         <p className="text-white/40 text-xs font-mono tracking-[0.3em] uppercase mb-7">
           Simulation Ready
@@ -143,8 +151,8 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
           Start Simulation
         </button>
 
-        {/* Don't show again + 닫기 */}
-        <div className="flex items-center justify-between mt-5">
+        {/* Don't show again */}
+        <div className="flex items-center justify-end mt-5">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -155,7 +163,6 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
             />
             <span className="text-white/30 text-xs font-mono">Don't show again</span>
           </label>
-          <span className="text-white/20 text-xs font-mono">click outside to close</span>
         </div>
       </div>
     </div>
