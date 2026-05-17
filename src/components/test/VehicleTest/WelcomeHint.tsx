@@ -133,8 +133,10 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
                      text-white text-base font-semibold tracking-wide
                      transition-all duration-150 hover:brightness-110 active:scale-[0.98]"
           style={{
-            background: "rgba(255,255,255,0.09)",
-            border: "1px solid rgba(255,255,255,0.22)",
+            background: "rgba(103, 232, 249, 0.12)",
+            border: "1px solid rgba(103, 232, 249, 0.35)",
+            color: "#a5f3fc",
+            boxShadow: "0 0 20px rgba(103, 232, 249, 0.15)",
           }}
         >
           <Play size={15} fill="currentColor" strokeWidth={0} />
