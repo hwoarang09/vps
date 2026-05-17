@@ -32,7 +32,7 @@ const TriCheckbox: React.FC<{
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
-      style={{ cursor: "pointer", width: 14, height: 14, accentColor: "#9b59b6", flexShrink: 0 }}
+      style={{ cursor: "pointer", width: 14, height: 14, accentColor: "#67e8f9", flexShrink: 0 }}
     />
   );
 };
@@ -102,7 +102,7 @@ const GroupRow: React.FC<{ groupKey: string }> = ({ groupKey }) => {
                 type="checkbox"
                 checked={!!logEvents[ev]}
                 onChange={(e) => setEvent(ev, e.target.checked)}
-                style={{ cursor: "pointer", width: 12, height: 12, accentColor: "#9b59b6" }}
+                style={{ cursor: "pointer", width: 12, height: 12, accentColor: "#67e8f9" }}
               />
               {LOG_EVENT_LABELS[ev]}
             </label>

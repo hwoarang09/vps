@@ -1,45 +1,60 @@
 // components/test/VehicleTest/WelcomeHint.tsx
-// 첫 로딩 완료 시 1회 노출되는 온보딩 모달
-// - 포트폴리오 방문자에게 "Play 버튼으로 시뮬레이션 시작" 안내
-// - Bruno Simon 톤: 풀스크린 다크 + 얇은 흰 라인 + 천천히 ease-in-out fade
-
 import React, { useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Mouse, MousePointer2, Keyboard } from "lucide-react";
 import { useVehicleTestStore } from "@store/vehicle/vehicleTestStore";
+import { useFabStore } from "@/store/map/fabStore";
+
+const DONT_SHOW_KEY = "vps_welcome_dont_show";
+const SHOW_DELAY_MS = 1000;
+const FADE_MS = 600;
 
 interface WelcomeHintProps {
-  /** 테스트(차량) 생성 완료 여부 — true 가 되면 잠시 후 모달 노출 */
   isTestCreated: boolean;
+  fabCountX: number;
+  fabCountY: number;
+  numVehicles: number;
 }
 
-// 차량 렌더가 화면에 자리잡을 시간을 준 뒤 노출
-const SHOW_DELAY_MS = 1200;
-// fade 길이 (CSS duration 과 일치시킬 것)
-const FADE_MS = 700;
+const CONTROLS = [
+  { icon: <Play size={14} fill="currentColor" strokeWidth={0} />, key: "Space", desc: "Start / Pause" },
+  { icon: <Mouse size={14} />, key: "Scroll", desc: "Zoom in / out" },
+  { icon: <MousePointer2 size={14} />, key: "Drag", desc: "Pan camera" },
+  { icon: <Keyboard size={14} />, key: "1 – 5", desc: "Menu shortcuts" },
+];
 
-const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated }) => {
+const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fabCountY, numVehicles }) => {
   const isPaused = useVehicleTestStore((s) => s.isPaused);
   const setPaused = useVehicleTestStore((s) => s.setPaused);
+  const activeFabIndex = useFabStore((s) => s.activeFabIndex);
+  const fabs = useFabStore((s) => s.fabs);
 
-  const [mounted, setMounted] = useState(false); // DOM 존재 여부
-  const [visible, setVisible] = useState(false); // opacity 토글
-  const hasShownRef = useRef(false); // 세션당 1회만
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [dontShow, setDontShow] = useState(false);
+  const hasShownRef = useRef(false);
 
-  // 첫 로딩 완료 → 잠시 후 노출
+  const activeFab = fabs[Math.max(0, Math.min(activeFabIndex, fabs.length - 1))];
+  const fabLabel = activeFab ? `${activeFab.col}_${activeFab.row}` : "0_0";
+  const totalFabs = fabs.length || fabCountX * fabCountY;
+
   useEffect(() => {
     if (!isTestCreated || hasShownRef.current) return;
     hasShownRef.current = true;
+
+    if (localStorage.getItem(DONT_SHOW_KEY) === "true") {
+      setTimeout(() => setPaused(false), 300);
+      return;
+    }
+
     const t = setTimeout(() => {
-      // 이미 재생 중이면 굳이 띄우지 않음
       if (useVehicleTestStore.getState().isPaused) {
         setMounted(true);
         requestAnimationFrame(() => setVisible(true));
       }
     }, SHOW_DELAY_MS);
     return () => clearTimeout(t);
-  }, [isTestCreated]);
+  }, [isTestCreated, setPaused]);
 
-  // 재생이 시작되면(어떤 경로로든) 자동으로 닫힘
   useEffect(() => {
     if (!isPaused && mounted) dismiss();
   }, [isPaused, mounted]);
@@ -50,7 +65,8 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated }) => {
   };
 
   const handlePlay = () => {
-    setPaused(false); // 시뮬레이션 재생 → isPaused effect 가 dismiss 처리
+    if (dontShow) localStorage.setItem(DONT_SHOW_KEY, "true");
+    setPaused(false);
   };
 
   if (!mounted) return null;
@@ -60,51 +76,85 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated }) => {
       onClick={dismiss}
       className="fixed inset-0 z-[2000] flex items-center justify-center"
       style={{
-        background: "rgba(8, 10, 16, 0.62)",
-        backdropFilter: "blur(2px)",
+        background: "rgba(6, 8, 14, 0.72)",
+        backdropFilter: "blur(4px)",
         opacity: visible ? 1 : 0,
         transition: `opacity ${FADE_MS}ms ease-in-out`,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex flex-col items-center text-center px-12 py-10 rounded-2xl"
+        className="flex flex-col w-[480px] px-12 py-10 rounded-2xl"
         style={{
-          background: "rgba(20, 24, 34, 0.92)",
-          border: "1px solid rgba(255, 255, 255, 0.18)",
-          boxShadow: "0 8px 40px rgba(0, 0, 0, 0.55)",
-          transform: visible ? "translateY(0)" : "translateY(8px)",
+          background: "rgba(14, 17, 26, 0.97)",
+          border: "1px solid rgba(255,255,255,0.13)",
+          boxShadow: "0 16px 64px rgba(0,0,0,0.65)",
+          transform: visible ? "translateY(0)" : "translateY(12px)",
           transition: `transform ${FADE_MS}ms ease-in-out`,
         }}
       >
-        <p className="text-white/60 text-xs font-mono tracking-[0.2em] uppercase mb-3">
+        {/* 헤더 */}
+        <p className="text-white/40 text-xs font-mono tracking-[0.3em] uppercase mb-7">
           Simulation Ready
         </p>
-        <p className="text-white text-lg font-semibold leading-relaxed">
-          <span className="text-accent-green">▶ Play</span> 버튼을 누르면
-          <br />
-          시뮬레이션이 시작됩니다
-        </p>
 
+        {/* Fab 정보 */}
+        <div className="flex flex-col gap-3 mb-8">
+          <div className="flex items-baseline justify-between">
+            <span className="text-white/40 text-sm font-mono">Currently viewing</span>
+            <span className="text-white text-sm font-mono font-semibold">Fab {fabLabel}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-white/40 text-sm font-mono">Total</span>
+            <span className="text-white/70 text-sm font-mono">
+              {totalFabs} fabs ({fabCountX}×{fabCountY}) · {numVehicles.toLocaleString()} vehicles
+            </span>
+          </div>
+        </div>
+
+        {/* 구분선 */}
+        <div className="w-full h-px bg-white/8 mb-7" />
+
+        {/* Controls */}
+        <div className="flex flex-col gap-3.5 mb-9">
+          {CONTROLS.map(({ icon, key, desc }) => (
+            <div key={key} className="flex items-center gap-4">
+              <span className="text-white/30 w-4 flex justify-center flex-shrink-0">{icon}</span>
+              <span className="text-white/55 text-sm font-mono w-16">{key}</span>
+              <span className="text-white/40 text-sm">{desc}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Start 버튼 */}
         <button
           onClick={handlePlay}
-          className="mt-7 flex items-center gap-2 px-7 py-2.5 rounded-xl
-                     text-white font-semibold
-                     transition-all duration-150 hover:scale-[1.04]"
+          className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl
+                     text-white text-base font-semibold tracking-wide
+                     transition-all duration-150 hover:brightness-110 active:scale-[0.98]"
           style={{
-            background:
-              "radial-gradient(circle, rgba(60,150,220,0.85) 0%, rgba(94,197,255,0.95) 100%)",
-            border: "1px solid rgba(255, 255, 255, 0.45)",
-            boxShadow: "0 0 18px rgba(94, 197, 255, 0.45)",
+            background: "rgba(255,255,255,0.09)",
+            border: "1px solid rgba(255,255,255,0.22)",
           }}
         >
-          <Play size={16} fill="currentColor" strokeWidth={0} />
-          <span>Play</span>
+          <Play size={15} fill="currentColor" strokeWidth={0} />
+          Start Simulation
         </button>
 
-        <p className="mt-6 text-white/35 text-[11px] font-mono">
-          상단 컨트롤 바에서도 제어할 수 있어요 · 클릭해서 닫기
-        </p>
+        {/* Don't show again + 닫기 */}
+        <div className="flex items-center justify-between mt-5">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={dontShow}
+              onChange={(e) => setDontShow(e.target.checked)}
+              className="w-3.5 h-3.5 cursor-pointer"
+              style={{ accentColor: "#67e8f9" }}
+            />
+            <span className="text-white/30 text-xs font-mono">Don't show again</span>
+          </label>
+          <span className="text-white/20 text-xs font-mono">click outside to close</span>
+        </div>
       </div>
     </div>
   );

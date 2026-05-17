@@ -41,7 +41,6 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     }
   }, []);
 
-  // Group files by sessionId
   const sessions = useMemo<SessionGroup[]>(() => {
     const map = new Map<string, SimLogFileInfo[]>();
     for (const file of files) {
@@ -57,12 +56,10 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
         totalSize: sessionFiles.reduce((s, f) => s + f.size, 0),
       });
     }
-    // newest first (sessionId contains timestamp)
     groups.sort((a, b) => b.sessionId.localeCompare(a.sessionId));
     return groups;
   }, [files]);
 
-  // Auto-select first session
   useEffect(() => {
     if (sessions.length > 0 && (!selectedSession || !sessions.find(s => s.sessionId === selectedSession))) {
       setSelectedSession(sessions[0].sessionId);
@@ -135,9 +132,7 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
     return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   };
 
-  /** sessionId에서 짧은 표시명 생성 */
   const shortLabel = (sid: string): string => {
-    // "sim_fab_0_0_1772566076417" → timestamp 부분 추출해서 시간으로 변환
     const match = sid.match(/(\d{13})$/);
     if (match) {
       const d = new Date(Number(match[1]));
@@ -150,92 +145,42 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
   const currentGroup = sessions.find(s => s.sessionId === selectedSession);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div className="relative">
       {!hideButton && (
         <button
           onClick={handleToggle}
-          style={{
-            padding: "3px 10px",
-            background: "#9b59b6",
-            color: "white",
-            border: "2px solid #8e44ad",
-            borderRadius: "4px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
+          className="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 border border-zinc-600 rounded text-xs font-bold cursor-pointer"
         >
           SimLogs({sessions.length})
         </button>
       )}
 
       {isOpen && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 5px)",
-            right: 0,
-            background: "rgba(20, 20, 20, 0.98)",
-            border: "2px solid #9b59b6",
-            borderRadius: "8px",
-            minWidth: "420px",
-            maxWidth: "520px",
-            maxHeight: "500px",
-            overflowY: "auto",
-            zIndex: 2000,
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
-          }}
-        >
+        <div className="absolute top-full mt-1 right-0 min-w-[420px] max-w-[520px] max-h-[500px] overflow-y-auto rounded-md bg-zinc-800/95 border border-zinc-600 shadow-lg backdrop-blur z-[2000]">
+
           {/* Header */}
-          <div
-            style={{
-              padding: "10px 15px",
-              borderBottom: "1px solid #555",
-              fontWeight: "bold",
-              fontSize: "13px",
-              color: "#9b59b6",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span>SimLogger</span>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-700">
+            <span className="text-zinc-200 text-sm font-bold">SimLogger</span>
+            <div className="flex items-center gap-2">
               {tab === "download" && files.length > 0 && (
                 <button
                   onClick={handleDeleteAll}
-                  style={{
-                    background: "#c0392b",
-                    border: "1px solid #a93226",
-                    color: "white",
-                    fontSize: "10px",
-                    cursor: "pointer",
-                    padding: "3px 8px",
-                    borderRadius: "3px",
-                    fontWeight: "bold",
-                  }}
+                  className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded cursor-pointer border border-red-600"
                 >
                   Delete All
                 </button>
               )}
               <button
                 onClick={handleToggle}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#aaa",
-                  fontSize: "16px",
-                  cursor: "pointer",
-                  padding: "0 5px",
-                }}
+                className="text-zinc-400 hover:text-zinc-200 text-base px-1 cursor-pointer"
               >
-                x
+                ×
               </button>
             </div>
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: "flex", borderBottom: "1px solid #444" }}>
+          <div className="flex border-b border-zinc-700">
             {([
               { id: "settings", label: "설정" },
               { id: "download", label: `다운로드 (${sessions.length})` },
@@ -243,17 +188,11 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                style={{
-                  flex: 1,
-                  padding: "7px 0",
-                  background: tab === t.id ? "rgba(155,89,182,0.25)" : "transparent",
-                  border: "none",
-                  borderBottom: tab === t.id ? "2px solid #9b59b6" : "2px solid transparent",
-                  color: tab === t.id ? "#bb8fce" : "#999",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
+                className={`flex-1 py-1.5 text-xs font-bold cursor-pointer border-b-2 transition-colors ${
+                  tab === t.id
+                    ? "bg-cyan-400/10 border-cyan-400 text-cyan-300"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/30"
+                }`}
               >
                 {t.label}
               </button>
@@ -265,146 +204,73 @@ const SimLogFileManager: React.FC<SimLogFileManagerProps> = ({ isOpen, onToggle,
 
           {/* Download tab */}
           {tab === "download" && (
-          <>
-          {/* Session selector */}
-          {sessions.length > 0 && (
-            <div
-              style={{
-                padding: "8px 15px",
-                borderBottom: "1px solid #444",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <select
-                value={selectedSession ?? ""}
-                onChange={(e) => setSelectedSession(e.target.value)}
-                style={{
-                  flex: 1,
-                  background: "#2a2a2a",
-                  color: "#ddd",
-                  border: "1px solid #666",
-                  borderRadius: "4px",
-                  padding: "4px 8px",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-              >
-                {sessions.map((s) => (
-                  <option key={s.sessionId} value={s.sessionId}>
-                    {shortLabel(s.sessionId)} ({s.files.length} files, {formatSize(s.totalSize)})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleDownloadSession}
-                title="Download all files in this session"
-                style={{
-                  padding: "3px 8px",
-                  background: "#3498db",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  fontSize: "10px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  flexShrink: 0,
-                }}
-              >
-                DL All
-              </button>
-              <button
-                onClick={handleDeleteSession}
-                title="Delete all files in this session"
-                style={{
-                  padding: "3px 8px",
-                  background: "#e74c3c",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "3px",
-                  fontSize: "10px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  flexShrink: 0,
-                }}
-              >
-                Del
-              </button>
-            </div>
-          )}
-
-          {/* File list for selected session */}
-          <div style={{ padding: "5px" }}>
-            {isLoading ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#aaa" }}>Loading...</div>
-            ) : !currentGroup ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#aaa" }}>No SimLog files</div>
-            ) : (
-              currentGroup.files.map((file) => (
-                <div
-                  key={file.fileName}
-                  style={{
-                    padding: "8px 10px",
-                    margin: "5px",
-                    background: "rgba(50, 50, 50, 0.5)",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    border: "1px solid #444",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        color: "#bb8fce",
-                        fontWeight: "bold",
-                        marginBottom: "2px",
-                      }}
-                    >
-                      {file.eventType}
-                    </div>
-                    <div style={{ color: "#aaa", fontSize: "10px" }}>
-                      {formatSize(file.size)} | {file.recordCount.toLocaleString()} records
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDownload(file)}
-                    style={{
-                      padding: "3px 8px",
-                      background: "#3498db",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "3px",
-                      fontSize: "10px",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+            <>
+              {/* Session selector */}
+              {sessions.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 border-b border-zinc-700">
+                  <select
+                    value={selectedSession ?? ""}
+                    onChange={(e) => setSelectedSession(e.target.value)}
+                    className="flex-1 bg-zinc-900 text-zinc-300 border border-zinc-600 rounded px-2 py-1 text-xs cursor-pointer"
                   >
-                    DL
+                    {sessions.map((s) => (
+                      <option key={s.sessionId} value={s.sessionId}>
+                        {shortLabel(s.sessionId)} ({s.files.length} files, {formatSize(s.totalSize)})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleDownloadSession}
+                    title="Download all files in this session"
+                    className="px-2 py-1 bg-blue-700 hover:bg-blue-600 text-white text-[10px] font-bold rounded cursor-pointer flex-shrink-0"
+                  >
+                    DL All
                   </button>
                   <button
-                    onClick={() => handleDelete(file)}
-                    style={{
-                      padding: "3px 8px",
-                      background: "#e74c3c",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "3px",
-                      fontSize: "10px",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+                    onClick={handleDeleteSession}
+                    title="Delete all files in this session"
+                    className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded cursor-pointer flex-shrink-0"
                   >
                     Del
                   </button>
                 </div>
-              ))
-            )}
-          </div>
-          </>
+              )}
+
+              {/* File list */}
+              <div className="p-1.5">
+                {isLoading ? (
+                  <div className="py-5 text-center text-zinc-500 text-sm">Loading...</div>
+                ) : !currentGroup ? (
+                  <div className="py-5 text-center text-zinc-500 text-sm">No SimLog files</div>
+                ) : (
+                  currentGroup.files.map((file) => (
+                    <div
+                      key={file.fileName}
+                      className="flex items-center gap-2.5 px-2.5 py-2 m-1 bg-zinc-900/50 border border-zinc-700 rounded text-xs"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-zinc-300 font-bold mb-0.5">{file.eventType}</div>
+                        <div className="text-zinc-500 text-[10px]">
+                          {formatSize(file.size)} | {file.recordCount.toLocaleString()} records
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDownload(file)}
+                        className="px-2 py-1 bg-blue-700 hover:bg-blue-600 text-white text-[10px] font-bold rounded cursor-pointer flex-shrink-0"
+                      >
+                        DL
+                      </button>
+                      <button
+                        onClick={() => handleDelete(file)}
+                        className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded cursor-pointer flex-shrink-0"
+                      >
+                        Del
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </div>
       )}

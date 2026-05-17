@@ -386,7 +386,12 @@ const VehicleTest: React.FC = () => {
       <SimulationParamsModal />
 
       {/* 첫 로딩 완료 시 1회 노출되는 온보딩 안내 모달 */}
-      <WelcomeHint isTestCreated={isTestCreated} />
+      <WelcomeHint
+        isTestCreated={isTestCreated}
+        fabCountX={fabCountX}
+        fabCountY={fabCountY}
+        numVehicles={customNumVehicles}
+      />
     </>
   );
 };

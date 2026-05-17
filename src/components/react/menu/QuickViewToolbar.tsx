@@ -110,6 +110,11 @@ const QuickViewToolbar: React.FC = () => {
     showTooltip(id, tooltip, { x: rect.left + rect.width / 2, y: rect.bottom + 4 }, 2, "anchor");
   };
 
+  const handleClick = (action: () => void) => {
+    hideTooltip();
+    action();
+  };
+
   const buttonExtra = "w-9 h-9 mx-0 text-zinc-100";
 
   return (
@@ -127,7 +132,7 @@ const QuickViewToolbar: React.FC = () => {
           <button
             key={item.id}
             className={twMerge(menuButtonVariants({ active: isActive }), buttonExtra)}
-            onClick={item.action}
+            onClick={() => handleClick(item.action)}
             onMouseEnter={(e) => handleMouseEnter(e, item.id, item.tooltip)}
             onMouseLeave={hideTooltip}
           >
@@ -139,7 +144,7 @@ const QuickViewToolbar: React.FC = () => {
       {/* Sensor dropdown */}
       <div className="relative">
         <button
-          onClick={() => toggleDropdown("sensor")}
+          onClick={() => handleClick(() => toggleDropdown("sensor"))}
           onMouseEnter={(e) => handleMouseEnter(e, "sensor", "Sensor Box")}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: sensorOpen }), buttonExtra)}
@@ -193,7 +198,7 @@ const QuickViewToolbar: React.FC = () => {
       {/* Label dropdown */}
       <div className="relative">
         <button
-          onClick={() => toggleDropdown("labels")}
+          onClick={() => handleClick(() => toggleDropdown("labels"))}
           onMouseEnter={(e) => handleMouseEnter(e, "labels", "Labels")}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: labelOpen }), buttonExtra)}
@@ -235,7 +240,7 @@ const QuickViewToolbar: React.FC = () => {
       {/* Theme picker */}
       <div className="relative">
         <button
-          onClick={() => toggleDropdown("theme")}
+          onClick={() => handleClick(() => toggleDropdown("theme"))}
           onMouseEnter={(e) => handleMouseEnter(e, "theme", `Theme: ${THEMES[themeName]?.label ?? ""}`)}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: themeOpen }), buttonExtra)}
@@ -270,12 +275,12 @@ const QuickViewToolbar: React.FC = () => {
       {/* SimLog button (was LogIndicator) */}
       <div className="relative">
         <button
-          onClick={() => toggleDropdown("log")}
+          onClick={() => handleClick(() => toggleDropdown("log"))}
           onMouseEnter={(e) => handleMouseEnter(e, "simlogs", "SimLogger Files")}
           onMouseLeave={hideTooltip}
           className={twMerge(menuButtonVariants({ active: logOpen }), buttonExtra)}
         >
-          <Binary size={16} className={logOpen ? "text-white" : "text-purple-400"} />
+          <Binary size={16} />
         </button>
         {logOpen && (
           <div className="absolute top-12" style={{ right: 0 }}>
