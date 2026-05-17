@@ -292,6 +292,36 @@ def parse_file(filepath: str, event_types=None):
     return records
 
 
+def iter_file(filepath: str, event_types=None):
+    """고정 크기 단일 타입 파일을 한 레코드씩 yield (스트리밍).
+
+    parse_file 은 전체를 list 로 메모리에 올림 — checkpoint(수백 MB) 같은 큰
+    파일에서 OOM. 이 generator 는 raw bytes 만 한 번 읽고 레코드를 하나씩
+    내보내므로, 호출자가 필터링하면 매칭된 레코드만 메모리에 남는다.
+
+    snapshot/route 가변 블록은 미지원 — parse_file 을 사용할 것.
+    """
+    filepath = Path(filepath)
+    if not filepath.exists():
+        print(f"[ERROR] File not found: {filepath}", file=sys.stderr)
+        return
+
+    if event_types is None:
+        event_types = detect_file_type(str(filepath))
+    if not event_types or len(event_types) != 1:
+        raise ValueError(f"iter_file 은 단일 타입 파일 전용: {filepath.name}")
+    etype = event_types[0]
+    if etype in ('snapshot',) or etype == 2:
+        raise ValueError(f"iter_file 은 가변 블록 미지원({filepath.name}) — parse_file 사용")
+
+    _, record_size, fmt = EVENT_TYPES[etype]
+    columns = COLUMNS[etype]
+    raw = filepath.read_bytes()
+    num_records = len(raw) // record_size
+    for i in range(num_records):
+        yield dict(zip(columns, struct.unpack_from(fmt, raw, i * record_size)))
+
+
 def filter_records(records, veh_id=None, ts_from=None, ts_to=None):
     """레코드 필터링"""
     filtered = records

@@ -20,7 +20,13 @@ from pathlib import Path
 from collections import defaultdict
 
 # 바이너리 파싱은 log_parser 에 일원화 (중복 제거 — 단일 파서)
-from log_parser import parse_file as lp_parse_file, FILE_SUFFIX_TO_TYPES
+from log_parser import (parse_file as lp_parse_file,
+                        iter_file as lp_iter_file,
+                        FILE_SUFFIX_TO_TYPES)
+
+# 가변 블록(snapshot) 은 절대 dict list 로 안 올림 — 항상 streaming.
+# route 는 가변이지만 작아서 parse_file 로 통째 로드.
+_VARIABLE_SUFFIXES = {'snapshot', 'route'}
 
 # ==============================================================================
 # 분석용 enum 매핑 (이벤트 타입/바이너리 포맷은 log_parser 가 관리)
@@ -48,39 +54,73 @@ LOCK_DETAIL_NAMES = {
 }
 
 
-def load_session(session_dir: Path) -> dict[str, list[dict]]:
-    """세션 디렉토리의 모든 .bin 파일 로드. {suffix: [records]} 반환.
-    바이너리 파싱은 log_parser 에 일원화 — snapshot/route 가변 블록도 lp_parse_file 가 처리.
+def _file_suffix(f: Path) -> Optional[str]:
+    """파일명 접미사로 suffix 판별 (예: ..._edge_transit.bin → 'edge_transit')."""
+    return next((s for s in FILE_SUFFIX_TO_TYPES if f.stem.endswith(f'_{s}')), None)
+
+
+def load_session(session_dir: Path,
+                 needed: Optional[set] = None,
+                 veh_filter: Optional[int] = None,
+                 ts_from: int = 0,
+                 ts_to: Optional[int] = None) -> dict[str, list[dict]]:
+    """세션 .bin 파일 로드. {suffix: [records]} 반환.
+
+    메모리 안전 (큰 세션에서 WSL OOM 회피):
+      - needed 에 없는 suffix 는 스킵 — 명령에 필요한 파일만 로드.
+      - snapshot 은 절대 dict list 로 안 올림 (가변 블록 → 수 GB 폭증).
+        snapshot 이 필요한 명령은 snapshot_streaming 으로 직접 streaming.
+      - 고정 크기 파일은 lp_iter_file 로 streaming 파싱 후 즉시 필터 —
+        checkpoint(수백 MB, 수백만 레코드) 도 매칭 레코드만 메모리에 남음.
+      - veh_filter / ts 범위를 파싱 단계에서 적용 → peak 메모리 = raw bytes.
     """
     result = {}
     for f in sorted(session_dir.glob('*.bin')):
-        # 파일명 접미사로 suffix 판별 (예: ..._edge_transit.bin → 'edge_transit')
-        suffix = next((s for s in FILE_SUFFIX_TO_TYPES if f.stem.endswith(f'_{s}')), None)
+        suffix = _file_suffix(f)
         if suffix is None:
             continue
-        records = lp_parse_file(f)
+        if needed is not None and suffix not in needed:
+            continue
+        if suffix == 'snapshot':
+            continue  # streaming 전용 — 절대 통째 로드 안 함
+
+        if suffix in _VARIABLE_SUFFIXES:
+            # route: 가변 블록이지만 작음 — 통째 로드
+            records = lp_parse_file(f)
+        else:
+            # 고정 크기 파일: streaming 파싱 + 즉시 필터
+            records = []
+            for r in lp_iter_file(f):
+                if veh_filter is not None and r.get('veh_id') != veh_filter:
+                    continue
+                if ts_to is not None and 'ts' in r and not (ts_from <= r['ts'] <= ts_to):
+                    continue
+                records.append(r)
+
         if records:
             result[suffix] = records
             print(f"  loaded {f.name}: {len(records):,} records")
     return result
 
 
-def find_veh_at_ts(snapshots: list[dict], veh_id: int, ts: int) -> dict | None:
-    """주어진 ts에 가장 가까운 snapshot frame 에서 veh_id 의 상태 반환"""
-    if not snapshots:
-        return None
-    # 이진 탐색으로 가장 가까운 frame
-    lo, hi = 0, len(snapshots) - 1
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if snapshots[mid]['ts'] <= ts:
-            lo = mid
-        else:
-            hi = mid - 1
-    frame = snapshots[lo]
-    for v in frame['vehicles']:
-        if v['vehId'] == veh_id:
-            return {'frame_ts': frame['ts'], **v}
+def _needed_suffixes(args) -> Optional[set]:
+    """선택된 명령이 실제로 읽는 .bin suffix 집합.
+
+    이걸로 load_session 이 불필요한 큰 파일(특히 checkpoint)을 안 읽게 한다.
+    summary/checkpoint/compare_pair 는 main 에서 별도 처리 — 여기 안 옴.
+    """
+    if args.deadlock:
+        return {'lock', 'edge_transit', 'transfer', 'path'}
+    if args.lock_detail:
+        return {'lock_detail', 'lock'}
+    if args.lock_node is not None:
+        return {'lock'}
+    if args.stuck:
+        return {'edge_transit'}
+    if args.transfers:
+        return {'path', 'edge_transit', 'replay'}
+    if args.veh is not None:  # vehicle_timeline / raw
+        return {'edge_transit', 'path', 'replay', 'transfer', 'lock', 'checkpoint'}
     return None
 
 
@@ -101,16 +141,48 @@ def fmt_ms(ms: int) -> str:
 # 분석 기능
 # ==============================================================================
 
-def cmd_summary(data: dict):
-    """세션 전체 요약"""
+def cmd_summary(session_dir: Path):
+    """세션 전체 요약 — 파일별 streaming 집계 (O(1) 메모리, 큰 세션 안전)."""
+    from snapshot_streaming import iter_snapshot_frames
+
     print("\n=== Session Summary ===")
-    for suffix, records in sorted(data.items()):
-        if not records:
+    files = sorted(session_dir.glob('*.bin'))
+    if not files:
+        print("  (.bin 파일 없음)")
+        return
+
+    for f in files:
+        suffix = _file_suffix(f)
+        if suffix is None:
             continue
-        ts_list = [r['ts'] for r in records if 'ts' in r]
-        veh_ids = set(r['veh_id'] for r in records if 'veh_id' in r)
-        t_range = f"{fmt_ts(min(ts_list))} ~ {fmt_ts(max(ts_list))}" if ts_list else "?"
-        print(f"  {suffix:<15} {len(records):>8,} records  vehs={len(veh_ids):>4}  time={t_range}")
+
+        cnt = 0
+        ts_min = ts_max = None
+        veh_ids = set()
+
+        if suffix == 'snapshot':
+            # 가변 블록 — frame 만 streaming 으로 카운트 (vehicle dict 안 만듦)
+            peak_v = 0
+            for fr in iter_snapshot_frames(f):
+                cnt += 1
+                peak_v = max(peak_v, fr['num_v'])
+                ts_min = fr['ts'] if ts_min is None else min(ts_min, fr['ts'])
+                ts_max = fr['ts'] if ts_max is None else max(ts_max, fr['ts'])
+            t_range = f"{fmt_ts(ts_min)} ~ {fmt_ts(ts_max)}" if ts_min is not None else "?"
+            print(f"  {suffix:<15} {cnt:>9,} frames   peakV={peak_v:>4}  time={t_range}")
+            continue
+
+        records = lp_parse_file(f) if suffix in _VARIABLE_SUFFIXES else lp_iter_file(f)
+        for r in records:
+            cnt += 1
+            if 'ts' in r:
+                ts = r['ts']
+                ts_min = ts if ts_min is None else min(ts_min, ts)
+                ts_max = ts if ts_max is None else max(ts_max, ts)
+            if 'veh_id' in r:
+                veh_ids.add(r['veh_id'])
+        t_range = f"{fmt_ts(ts_min)} ~ {fmt_ts(ts_max)}" if ts_min is not None else "?"
+        print(f"  {suffix:<15} {cnt:>9,} records  vehs={len(veh_ids):>4}  time={t_range}")
 
 
 def cmd_vehicle_timeline(data: dict, veh_id: int, ts_from: int, ts_to: int):
@@ -403,11 +475,11 @@ def cmd_deadlock(data: dict, veh_ids: list[int], node_id: int | None = None):
             print(f"    {common_edges}")
 
 
-def cmd_lock_node(data: dict, node_idx: int, ts_from: int, ts_to: int):
+def cmd_lock_node(session_dir: Path, data: dict, node_idx: int, ts_from: int, ts_to: int):
     """특정 노드의 lock activity 통합 분석:
        - 시간순 모든 lock event (REQ/WAIT/GRANT/RELEASE)
        - 차량별 사이클 요약
-       - 각 이벤트 시점의 차량 위치 (snapshot 가장 가까운 frame)
+       - 각 이벤트 시점의 차량 위치 (snapshot streaming 캡처)
        - holder timeline + 잔존 holder 식별
     """
     ETYPE = {0: 'REQ', 1: 'GRANT', 2: 'RELEASE', 3: 'WAIT'}
@@ -418,7 +490,16 @@ def cmd_lock_node(data: dict, node_idx: int, ts_from: int, ts_to: int):
         print(f"  node_idx={node_idx} 에 대한 lock event 없음 (in [{fmt_ts(ts_from)} ~ {fmt_ts(ts_to)}])")
         return
     locks.sort(key=lambda r: r['ts'])
-    snapshots = data.get('snapshot', [])
+
+    # snapshot 은 통째 로드하면 OOM — 필요한 ts/veh 만 streaming 캡처
+    snap_pos = {}  # ts -> { vehId: {edge,ratio,vel,stop} }
+    snap_files = list(session_dir.glob('*_snapshot.bin'))
+    if snap_files:
+        from snapshot_streaming import capture_at_ts_list
+        ts_list = sorted({r['ts'] for r in locks})
+        veh_set = {r['veh_id'] for r in locks}
+        captured = capture_at_ts_list(snap_files[0], ts_list, veh_set)
+        snap_pos = {ts: c['data'] for ts, c in captured.items()}
 
     print(f"\n=== node_idx={node_idx} lock activity ({len(locks)} events) ===")
     print(f"{'ts':>10}  {'veh':>4}  {'event':<8}  {'holder':>6}  {'wait_ms':>7}  {'pos at ts':<48}")
@@ -433,10 +514,10 @@ def cmd_lock_node(data: dict, node_idx: int, ts_from: int, ts_to: int):
         et = ETYPE.get(r['event_type'], str(r['event_type']))
         holder_hint = r['holder_hint'] if r['holder_hint'] != 255 else '-'
 
-        # 위치
-        snap = find_veh_at_ts(snapshots, r['veh_id'], r['ts'])
-        if snap:
-            pos = f"edge={snap['currentEdge']:>4} ratio={snap['ratio']:.3f} vel={snap['velocity']:.2f} stop={snap['stopReason']}"
+        # 위치 (snapshot streaming 캡처에서 조회)
+        vd = snap_pos.get(r['ts'], {}).get(r['veh_id'])
+        if vd:
+            pos = f"edge={vd['edge']:>4} ratio={vd['ratio']:.3f} vel={vd['vel']:.2f} stop={vd['stop']}"
         else:
             pos = '(no snapshot)'
 
@@ -569,7 +650,7 @@ def _format_cp_flags(flags: int) -> str:
     return '|'.join(parts) if parts else f'0x{flags:02x}'
 
 
-def cmd_checkpoint(data: dict, ts_from: int, ts_to: int,
+def cmd_checkpoint(session_dir: Path, ts_from: int, ts_to: int,
                    veh_filter: Optional[int] = None,
                    edge_filter: Optional[int] = None,
                    action_filter: Optional[str] = None,
@@ -578,21 +659,25 @@ def cmd_checkpoint(data: dict, ts_from: int, ts_to: int,
 
     LOCK_REQUEST CP 가 누락되거나 처리 stuck 되는 케이스(N216 류 deadlock) 진단용.
 
+    checkpoint.bin 은 수백만 레코드 — streaming 으로 읽으며 필터 통과분만 보관(OOM 회피).
+
     필터:
       veh_filter    : 특정 차량만
       edge_filter   : checkpoint 의 cp_edge 또는 current_edge 가 일치
       action_filter : LOADED/HIT/MISS/WAITING/WAIT_BLOCKED 부분 일치
       flag_filter   : REQ/WAIT/REL/PREP/SLOW 부분 일치 (LOCK_REQUEST 만 보고 싶을 때 'REQ')
     """
-    cps = data.get('checkpoint', [])
-    if not cps:
+    cp_files = list(session_dir.glob('*_checkpoint.bin'))
+    if not cp_files:
         print("  checkpoint event 0 (DEV_CHECKPOINT 미활성화 또는 발화 없음)")
         print("  → logger-setup.ts 에서 events.checkpoint = true 강제 설정 후 재실행 필요")
         return
 
-    # 필터 적용
+    # 필터 적용 — 파일을 streaming 으로 읽으며 통과분만 누적
+    total = 0
     filtered = []
-    for r in cps:
+    for r in lp_iter_file(cp_files[0]):
+        total += 1
         if not (ts_from <= r['ts'] <= ts_to):
             continue
         if veh_filter is not None and r['veh_id'] != veh_filter:
@@ -608,7 +693,7 @@ def cmd_checkpoint(data: dict, ts_from: int, ts_to: int,
         filtered.append((r, action_name, flag_str))
 
     if not filtered:
-        print(f"  필터 통과 event 0 (전체 {len(cps)} 중)")
+        print(f"  필터 통과 event 0 (전체 {total:,} 중)")
         return
 
     # 시간순 출력
@@ -703,7 +788,7 @@ def cmd_ratio_jump(session_dir: Path, veh_id: int, ts_from: int, ts_to: int,
         print(f"{j['ts']:>10} {j['edge']:>6} {j['prev_ratio']:>11.3f} {j['cur_ratio']:>10.3f} {j['delta']:>+8.3f} {j['prev_vel']:>9.3f} {j['cur_vel']:>8.3f} {note:<20}")
 
 
-def cmd_compare_pair(session_dir: Path, data: dict, vehs: list[int],
+def cmd_compare_pair(session_dir: Path, vehs: list[int],
                      ts_from: int, ts_to: int, sample_every_ms: int = 1000):
     """두 차량의 위치를 시간순으로 비교 (deadlock 조사 시 누가 앞에 있는지 확인용).
 
@@ -856,21 +941,48 @@ def main():
         cmd_ratio_jump(session_dir, args.veh, ts_from, ts_to, args.jump_threshold)
         return
 
-    print(f"Loading session: {session_dir}")
-    data = load_session(session_dir)
-    if not data:
-        print("[ERROR] .bin 파일을 찾을 수 없습니다", file=sys.stderr)
-        sys.exit(1)
-
     ts_from = parse_ts(args.ts_from)
     ts_to   = parse_ts(args.ts_to)
+    full_ts = (args.ts_from == '0' and args.ts_to == '999999999')
 
+    # --- load_session 불필요한 명령들 (streaming 전용) ---
     if args.compare_pair:
         if not args.pair or len(args.pair) < 2:
             print("[ERROR] --compare-pair 에 --pair VEH1 VEH2 필요", file=sys.stderr)
             sys.exit(1)
-        cmd_compare_pair(session_dir, data, args.pair, ts_from, ts_to, args.sample_ms)
-    elif args.deadlock:
+        cmd_compare_pair(session_dir, args.pair, ts_from, ts_to, args.sample_ms)
+        return
+
+    if args.checkpoint:
+        # checkpoint.bin 은 수백만 레코드 — 필터 없이 전부 출력하면 무의미 + OOM 위험
+        if (args.veh is None and args.cp_edge is None and not args.cp_action
+                and not args.cp_flag and full_ts):
+            print("[ERROR] --checkpoint 단독 실행은 레코드가 너무 많습니다 (수백만).\n"
+                  "        --veh / --cp-edge / --cp-action / --cp-flag / --from~--to 중 "
+                  "하나로 필터하세요.", file=sys.stderr)
+            sys.exit(1)
+        cmd_checkpoint(session_dir, ts_from, ts_to,
+                       veh_filter=args.veh, edge_filter=args.cp_edge,
+                       action_filter=args.cp_action, flag_filter=args.cp_flag)
+        return
+
+    # 명령 플래그가 없으면 세션 요약 — 파일별 streaming 집계
+    is_summary = not (args.deadlock or args.lock_detail or args.lock_node is not None
+                      or args.stuck or args.transfers or args.veh is not None)
+    if is_summary:
+        cmd_summary(session_dir)
+        return
+
+    # --- load_session 필요한 명령들 — 필요한 파일만 선택 로드 ---
+    needed = _needed_suffixes(args)
+    print(f"Loading session: {session_dir}")
+    data = load_session(session_dir, needed=needed, veh_filter=args.veh,
+                        ts_from=ts_from, ts_to=(None if full_ts else ts_to))
+    if not data:
+        print("[ERROR] 필요한 .bin 파일을 찾을 수 없습니다", file=sys.stderr)
+        sys.exit(1)
+
+    if args.deadlock:
         if not args.pair or len(args.pair) < 2:
             print("[ERROR] --deadlock 에는 --pair VEH1 VEH2 필요", file=sys.stderr)
             sys.exit(1)
@@ -880,14 +992,8 @@ def main():
                         veh_filter=args.veh,
                         node_filter=args.lock_node,
                         type_filter=args.detail_type)
-    elif args.checkpoint:
-        cmd_checkpoint(data, ts_from, ts_to,
-                       veh_filter=args.veh,
-                       edge_filter=args.cp_edge,
-                       action_filter=args.cp_action,
-                       flag_filter=args.cp_flag)
     elif args.lock_node is not None:
-        cmd_lock_node(data, args.lock_node, ts_from, ts_to)
+        cmd_lock_node(session_dir, data, args.lock_node, ts_from, ts_to)
     elif args.stuck:
         cmd_stuck(data)
     elif args.transfers:
@@ -897,8 +1003,6 @@ def main():
             cmd_raw(data, args.veh, ts_from, ts_to, args.limit)
         else:
             cmd_vehicle_timeline(data, args.veh, ts_from, ts_to)
-    else:
-        cmd_summary(data)
 
 
 if __name__ == '__main__':
