@@ -63,6 +63,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
     // Build config from cfgStore values
     // 로그 설정(logSettingsStore)을 config 에 주입 → 워커 SimLogger 로 전달
     const logSettings = useLogSettingsStore.getState();
+    // 차량 초기화 설정(Veh 패널) — 배치 시드 + fab별 대수
+    const vehInit = useFabConfigStore.getState().vehInit;
     const config = {
       bodyLength: getBodyLength(),
       bodyWidth: getBodyWidth(),
@@ -74,6 +76,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       brakeMinSpeed: getBrakeMinSpeed(),
       logEvents: logSettings.logEvents,
       logSessionNote: logSettings.logSessionNote || undefined,
+      // Fixed 모드면 고정 시드, Random 모드면 null(매번 랜덤)
+      vehiclePlacementSeed: vehInit.seedMode === "fixed" ? vehInit.seed : null,
     };
 
     // 멀티 Fab 확인
@@ -86,7 +90,6 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
       const { fabCountX, fabCountY } = fabStore;
       const totalFabs = fabCountX * fabCountY;
       const vehiclesPerFab = Math.floor(numVehicles / totalFabs);
-      const maxVehiclesPerFab = vehiclesPerFab;
 
 
       // 각 Fab별로 분리된 데이터 생성 (fabId만 필요)
@@ -109,6 +112,11 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
         // Fab별 설정 적용 (baseConfig + override)
         const fabConfig = fabConfigStore.getFabConfig(fabData.fabIndex);
 
+        // 대수: custom 모드면 fab별 지정값, 아니면 균등 분배
+        const fabVehCount = vehInit.mode === "custom"
+          ? (vehInit.perFabCounts[fabData.fabIndex] ?? vehiclesPerFab)
+          : vehiclesPerFab;
+
         // Fab별 config override 생성 (SimulationConfig의 Partial)
         const sensorPresets = fabConfigStore.getFabSensorPresets(fabData.fabIndex);
         const hasSensorOverride = !!fabConfigStore.getFabSensorOverride(fabData.fabIndex);
@@ -130,8 +138,8 @@ const VehicleSharedMemoryMode: React.FC<VehicleSharedMemoryModeProps> = ({
           fabId: fabData.fabId,
           edges: [], // sharedMapData 사용하므로 빈 배열
           nodes: [], // sharedMapData 사용하므로 빈 배열
-          numVehicles: vehiclesPerFab,
-          maxVehicles: maxVehiclesPerFab,  // 실제 차량 수 + 10% 여유
+          numVehicles: fabVehCount,
+          maxVehicles: fabVehCount,
           transferMode,
           stations: [], // sharedMapData 사용하므로 빈 배열
           bayLoopEntries,

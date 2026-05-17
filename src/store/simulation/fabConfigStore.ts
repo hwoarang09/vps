@@ -153,6 +153,32 @@ export interface TransferRateConfig {
   throughputPerHour: number;
 }
 
+/**
+ * 차량 대수 분배 방식
+ * - equal: 전역 단일 대수를 모든 fab에 균등 분배 (기존 동작)
+ * - custom: fab별 개별 대수 지정
+ */
+export type VehDistributionMode = 'equal' | 'custom';
+
+/**
+ * 초기 배치 시드 방식
+ * - random: 매번 다른 분포
+ * - fixed: 고정 시드로 재현 가능한 분포
+ */
+export type PlacementSeedMode = 'random' | 'fixed';
+
+/**
+ * 차량 초기화 설정 (대수 분배 + 배치 시드)
+ */
+export interface VehInitConfig {
+  mode: VehDistributionMode;
+  /** custom 모드: fabIndex -> 대수 */
+  perFabCounts: Record<number, number>;
+  seedMode: PlacementSeedMode;
+  /** seedMode === 'fixed' 일 때 사용할 시드 */
+  seed: number;
+}
+
 interface FabConfigStore {
   // 기본 설정 (readonly, simulationConfig에서 로드)
   baseConfig: BaseSimulationConfig;
@@ -175,6 +201,9 @@ interface FabConfigStore {
   // 모달 상태
   isModalOpen: boolean;
 
+  // 차량 초기화 설정 (대수 분배 + 배치 시드)
+  vehInit: VehInitConfig;
+
   // Actions
   setBaseConfig: (config: BaseSimulationConfig) => void;
   setFabOverride: (fabIndex: number, override: FabConfigOverride) => void;
@@ -182,6 +211,11 @@ interface FabConfigStore {
   clearAllOverrides: () => void;
   setModalOpen: (open: boolean) => void;
   setRoutingConfig: (config: Partial<RoutingConfig>) => void;
+  setVehInit: (update: Partial<VehInitConfig>) => void;
+  /** custom 모드: 단일 fab 대수 설정 */
+  setPerFabCount: (fabIndex: number, count: number) => void;
+  /** custom 모드: 여러 fab 대수 일괄 설정 */
+  setPerFabCounts: (counts: Record<number, number>) => void;
   setTransferEnabled: (enabled: boolean) => void;
   setTransferModeConfig: (mode: TransferMode) => void;
   setTransferRateConfig: (config: Partial<TransferRateConfig>) => void;
@@ -265,6 +299,13 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
 
   isModalOpen: false,
 
+  vehInit: {
+    mode: 'equal',
+    perFabCounts: {},
+    seedMode: 'random',
+    seed: 12345,
+  },
+
   setBaseConfig: (config) => {
     set({ baseConfig: config });
   },
@@ -301,6 +342,30 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
   setRoutingConfig: (config) => {
     set((state) => ({
       routingConfig: { ...state.routingConfig, ...config },
+    }));
+  },
+
+  setVehInit: (update) => {
+    set((state) => ({
+      vehInit: { ...state.vehInit, ...update },
+    }));
+  },
+
+  setPerFabCount: (fabIndex, count) => {
+    set((state) => ({
+      vehInit: {
+        ...state.vehInit,
+        perFabCounts: { ...state.vehInit.perFabCounts, [fabIndex]: count },
+      },
+    }));
+  },
+
+  setPerFabCounts: (counts) => {
+    set((state) => ({
+      vehInit: {
+        ...state.vehInit,
+        perFabCounts: { ...state.vehInit.perFabCounts, ...counts },
+      },
     }));
   },
 

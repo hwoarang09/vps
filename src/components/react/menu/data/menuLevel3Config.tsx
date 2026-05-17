@@ -10,9 +10,10 @@ export interface MenuLevel3Item {
  */
 export const menuLevel3Config: Record<string, MenuLevel3Item[]> = {
   "operation-menu-8": [
-    { id: "params-movement", label: "Movement", shortcutLabel: "1" },
+    { id: "params-movement", label: "Move", shortcutLabel: "1" },
     { id: "params-lock", label: "Lock", shortcutLabel: "2" },
     { id: "params-routing", label: "Routing", shortcutLabel: "3" },
     { id: "params-mode", label: "Mode", shortcutLabel: "4" },
+    { id: "params-veh", label: "Veh", shortcutLabel: "5" },
   ],
 };

@@ -61,5 +61,6 @@ export const tooltipsByLevel: {
     "params-lock": "Lock 거리·전략 설정",
     "params-routing": "길찾기 가중치 전략",
     "params-mode": "반송 모드 설정 (Global/Per-Fab)",
+    "params-veh": "차량 대수·초기 배치 시드 설정",
   },
 };

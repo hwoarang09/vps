@@ -18,6 +18,7 @@ import MovementParamsPanel from "./panels/params/MovementParamsPanel";
 import LockParamsPanel from "./panels/params/LockParamsPanel";
 import RoutingParamsPanel from "./panels/params/RoutingParamsPanel";
 import ModeParamsPanel from "./panels/params/ModeParamsPanel";
+import VehParamsPanel from "./panels/params/VehParamsPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -102,6 +103,7 @@ const RightPanel: React.FC = () => {
     if (activeThirdMenu === "params-lock") return <LockParamsPanel />;
     if (activeThirdMenu === "params-routing") return <RoutingParamsPanel />;
     if (activeThirdMenu === "params-mode") return <ModeParamsPanel />;
+    if (activeThirdMenu === "params-veh") return <VehParamsPanel />;
 
     // Operation Map/CFG Panel
     if (activeSubMenu === "operation-menu-6") {
@@ -188,10 +190,11 @@ const RightPanel: React.FC = () => {
       "search-edge": "Edge Search",
       "search-station": "Station Search",
       // Params (lv3)
-      "params-movement": "Movement",
+      "params-movement": "Move",
       "params-lock": "Lock",
       "params-routing": "Routing",
       "params-mode": "Mode",
+      "params-veh": "Veh",
     };
     return labels[menuId] || menuId;
   };
