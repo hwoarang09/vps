@@ -9,6 +9,7 @@ const VehParamsPanel: React.FC = () => {
   const { vehInit, setVehInit, setPerFabCounts } = useFabConfigStore();
   const { fabs, fabCountX, fabCountY } = useFabStore();
   const targetTotal = useVehicleTestStore((s) => s.numVehicles);
+  const requestRecreate = useVehicleTestStore((s) => s.requestRecreate);
 
   const fabCount = fabs.length;
   const hasFabs = fabCount > 0;
@@ -354,9 +355,15 @@ const VehParamsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* 적용 시점 안내 */}
+      {/* 즉시 적용 — 차량 삭제 후 재생성 (상단 바 Delete + Create 통합) */}
+      <button
+        onClick={() => requestRecreate()}
+        className="w-full px-3 py-2 text-sm font-bold rounded bg-accent-cyan text-zinc-900 hover:bg-accent-cyan/80 transition-all"
+      >
+        적용 (차량 재생성)
+      </button>
       <div className="text-[10px] text-gray-600">
-        변경값은 다음 차량 Create 시 적용됩니다.
+        현재 대수·시드 설정으로 차량을 삭제 후 다시 생성합니다.
       </div>
     </div>
   );

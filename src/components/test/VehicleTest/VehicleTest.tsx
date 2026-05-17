@@ -33,7 +33,7 @@ import { getPersistedConfig } from "@/config/persistedConfig";
  */
 
 const VehicleTest: React.FC = () => {
-  const { stopTest, isPaused, setPaused, selectedSettingId, settingChangeSeq } = useVehicleTestStore();
+  const { stopTest, isPaused, setPaused, selectedSettingId, settingChangeSeq, recreateSeq } = useVehicleTestStore();
   const edges = useEdgeStore((state) => state.edges);
   const { setTransferMode } = useVehicleArrayStore();
 
@@ -345,6 +345,16 @@ const VehicleTest: React.FC = () => {
     loadTestSetting(selectedSettingId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingChangeSeq]);
+
+  // React to recreate request from Veh panel — 차량 삭제 후 재생성 (변경값 즉시 적용)
+  const recreateSeqRef = useRef(recreateSeq);
+  useEffect(() => {
+    if (recreateSeqRef.current === recreateSeq) return;
+    recreateSeqRef.current = recreateSeq;
+    handleDelete();
+    handleCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recreateSeq]);
 
   return (
     <>
