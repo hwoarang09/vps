@@ -430,9 +430,9 @@ ML이 baseline 3개를 못 이기면 ML 안 한 것만 못함.
 
 ## 6. 다음 스텝 (TODO)
 
-1. [ ] **Transition 로그** 존재 여부 코드 확인 (없으면 추가)
-2. [ ] **Route 로그(committed path)** 설계·추가 — projected_demand의 전제, 신규
-3. [ ] Static dump (edge/node 정적 표) export 확인
+1. [x] **Transition 로그** 존재 확인 — `ML_EDGE_TRANSIT` 이미 기록 중
+2. [x] **Route 로그(committed path)** — `ML_ROUTE` 구현 완료 (v0.4.73, Q10 표 참조)
+3. [ ] Static dump (edge/node 정적 표) export 확인 ← **다음 작업**
 4. [ ] 데이터 수집용 **리라우팅 빈도 1개 확정** (5 edge마다 권장)
 5. [ ] Python offline: raw → 슬라이딩 윈도우 → feature/label parquet 변환 스크립트
 6. [ ] stage 0: autocorrelation decay 측정 스크립트 + baseline 3개

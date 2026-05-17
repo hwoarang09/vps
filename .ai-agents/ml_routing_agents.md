@@ -13,9 +13,10 @@ EWMA로 계산하는 Dijkstra edge cost를, 시계열 ML 모델이 예측한 미
 설계 결정·근거는 전부 거기 있다. 이 파일은 **현재 진행 상태 + 코드 포인터**만 들고 간다.
 설계 내용을 여기 복붙하지 말 것 — doc이 single source of truth.
 
-## 현재 상태 (2026-05-17)
+## 현재 상태 (2026-05-18)
 
-**설계 단계 완료, 구현 미착수.** 로드맵 stage 0부터 시작.
+**로그 인프라 구현 완료** — Transition / Lock / Route(committed path) 로깅 모두 동작.
+다음은 Static dump export 확인 + offline 변환 스크립트(로드맵 stage 0).
 
 ### 로드맵 (doc §4)
 | stage | 목표 |
@@ -38,21 +39,26 @@ EWMA로 계산하는 Dijkstra edge cost를, 시계열 ML 모델이 예측한 미
 | edge cost (EWMA) | RoutingManager 내부 — ML cost 테이블이 대체할 지점 |
 | offline 분석 스크립트 | `scripts/log_parser/` 패턴 따라 신규 추가 예정 |
 
-## 기존 로그 현황 (TODO 1 조사 결과)
+## 로그 현황
 
-`src/logger/protocol.ts` 확인 결과:
-- ✅ **Transition 로그 존재** — `ML_EDGE_TRANSIT = 3` (24B: ts, vehId, edgeId, enterTs, exitTs, edgeLen).
-  정답 transit_time 추출 가능.
-- ⚠️ **Route 로그는 반쪽만** — `DEV_PATH = 11` (ts, vehId, destEdge, pathLen).
-  목적지+길이만 있고 **committed path의 edge 순서 전체가 없음** → projected_demand 계산 불가.
-  → **신규 full Route 로그 추가가 진짜 남은 작업** (doc §6 TODO #2).
-- ✅ Lock 로그 존재 — `ML_LOCK = 4`.
+`src/logger/protocol.ts` 기준:
+- ✅ **Transition** — `ML_EDGE_TRANSIT = 3` (24B). 정답 transit_time 추출 가능.
+- ✅ **Route** — `ML_ROUTE = 2` (412B 고정: ts, vehId, pathLen + edge u32×100, `ROUTE_MAX_EDGES=100`).
+  committed path 전체 edge 순서(1-based) 기록 → projected_demand 계산 가능.
+  Dijkstra 경로 산출 시 `AutoMgr.onPathFound` → `SimLogger.logRoute`. 파서는 `log_parser.py` `parse_route_file`.
+  (`DEV_PATH=11`은 메타만 남기는 별도 로그로 잔존.)
+- ✅ **Lock** — `ML_LOCK = 4`.
+- ✅ **orderComplete** — `ML_ORDER_COMPLETE = 1` (40B, 반송 6 타임스탬프). 반송 완주 시 1건.
+- ⚠️ veh_state / edge_queue 는 불필요로 판단되어 제거됨 (offline 복원 가능 — doc Q10).
+- 바이너리 파싱은 `log_parser.py` 단일 소스 (analyze.py가 import). UI 다운로드 목록은 `simLogUtils.ts` 가
+  `protocol.ts`에서 suffix↔recordSize 자동 생성.
+- 로그 설정(어떤 이벤트 남길지)은 Log Settings 패널 → Play 시점에 확정, 진행 중 잠금.
 
 ## 다음 스텝 (doc §6 TODO)
 
 1. [x] Transition 로그 존재 확인 → `ML_EDGE_TRANSIT` 있음
-2. [ ] **Route 로그(committed path 전체 edge 순서)** 설계·추가 ← 최우선 신규 작업
-3. [ ] Static dump (edge/node 정적 표) export 확인
+2. [x] **Route 로그(committed path)** → `ML_ROUTE` 구현 완료 (v0.4.73)
+3. [ ] Static dump (edge/node 정적 표) export 확인 ← **다음 작업**
 4. [ ] 데이터 수집 리라우팅 빈도 1개 확정 (5 edge마다 권장)
 5. [ ] Python offline: raw → 슬라이딩 윈도우 → feature/label parquet 변환 스크립트
 6. [ ] stage 0: autocorrelation decay 측정 스크립트 + baseline 3개
