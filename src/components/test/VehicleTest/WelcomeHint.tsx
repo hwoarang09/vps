@@ -89,18 +89,18 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
         {/* X 닫기 버튼 */}
         <button
           onClick={dismiss}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-white/25 hover:text-white/60 transition-colors duration-150"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-white/45 hover:text-white/80 transition-colors duration-150"
         >
           <X size={14} />
         </button>
 
         {/* 헤더 */}
-        <p className="text-white/40 text-xs font-mono tracking-[0.3em] uppercase mb-7">
+        <p className="text-white/60 text-xs font-mono tracking-[0.3em] uppercase mb-7">
           Simulation Ready
         </p>
 
         {/* 시뮬레이션 규모 */}
-        <p className="text-white/55 text-sm font-mono mb-8">
+        <p className="text-white/80 text-sm font-mono mb-8">
           {fabCountX}×{fabCountY} fabs · {numVehicles.toLocaleString()} vehicles
         </p>
 
@@ -111,9 +111,9 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
         <div className="flex flex-col gap-3.5 mb-9">
           {CONTROLS.map(({ icon, key, desc }) => (
             <div key={key} className="flex items-center gap-4">
-              <span className="text-white/30 w-4 flex justify-center flex-shrink-0">{icon}</span>
-              <span className="text-white/55 text-sm font-mono w-16">{key}</span>
-              <span className="text-white/40 text-sm">{desc}</span>
+              <span className="text-white/50 w-4 flex justify-center flex-shrink-0">{icon}</span>
+              <span className="text-white/85 text-sm font-mono w-16">{key}</span>
+              <span className="text-white/65 text-sm">{desc}</span>
             </div>
           ))}
         </div>
@@ -145,7 +145,7 @@ const WelcomeHint: React.FC<WelcomeHintProps> = ({ isTestCreated, fabCountX, fab
               className="w-3.5 h-3.5 cursor-pointer"
               style={{ accentColor: "#67e8f9" }}
             />
-            <span className="text-white/30 text-xs font-mono">Don't show again</span>
+            <span className="text-white/55 text-xs font-mono">Don't show again</span>
           </label>
         </div>
       </div>
