@@ -191,8 +191,10 @@ const VehParamsPanel: React.FC = () => {
                   </button>
                 ))}
 
-                {/* 행들 */}
-                {Array.from({ length: fabCountY }, (_, r) => (
+                {/* 행들 — Three.js 와 동일하게 높은 R 이 위로 오도록 역순 렌더 */}
+                {Array.from({ length: fabCountY }, (_, i) => {
+                  const r = fabCountY - 1 - i;
+                  return (
                   <React.Fragment key={`row-${r}`}>
                     {/* 행 헤더 */}
                     <button
@@ -237,21 +239,23 @@ const VehParamsPanel: React.FC = () => {
                       );
                     })}
                   </React.Fragment>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* 선택 상태 + 일괄 설정 */}
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-gray-500">{selected.size} fabs 선택됨</span>
-              {selected.size > 0 && (
-                <button
-                  onClick={clearSelection}
-                  className="text-gray-500 hover:text-gray-300 border border-gray-600 px-1.5 py-0.5 rounded"
-                >
-                  선택 해제
-                </button>
-              )}
+            {/* 선택 상태 + 선택 해제 */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500">
+                {selected.size} fabs 선택됨
+              </span>
+              <button
+                onClick={clearSelection}
+                disabled={selected.size === 0}
+                className="text-[10px] font-bold px-2 py-1 rounded border border-accent-cyan/50 text-accent-cyan hover:bg-accent-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                선택 해제
+              </button>
             </div>
 
             {/* 일괄 값 slider + 입력 */}
