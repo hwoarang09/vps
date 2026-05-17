@@ -39,7 +39,7 @@ export const LOG_GROUPS: Record<string, LogGroup> = {
   dev: {
     label: "개발",
     desc: "디버그 전용 (무거움)",
-    events: ["vehState", "path", "lockDetail", "transfer", "edgeQueue", "checkpoint"],
+    events: ["path", "lockDetail", "transfer", "checkpoint"],
   },
   snapshot: {
     label: "Snapshot",
@@ -54,11 +54,9 @@ export const LOG_EVENT_LABELS: Record<LogEventKey, string> = {
   edgeTransit: "Edge Transit",
   lock: "Lock",
   replaySnapshot: "Replay Snapshot",
-  vehState: "Vehicle State",
   path: "Path",
   lockDetail: "Lock Detail",
   transfer: "Transfer",
-  edgeQueue: "Edge Queue",
   checkpoint: "Checkpoint",
 };
 
@@ -68,11 +66,9 @@ const DEFAULT_EVENTS: Required<LogEvents> = {
   edgeTransit: true,
   lock: true,
   replaySnapshot: false,
-  vehState: false,
   path: false,
   lockDetail: false,
   transfer: false,
-  edgeQueue: false,
   checkpoint: false,
 };
 

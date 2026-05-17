@@ -7,7 +7,6 @@ export {
   type LogTargets,
   type LogEvents,
   type LogOrderCompleteParams,
-  type LogVehStateParams,
   type LogReplaySnapshotParams,
   type LogCheckpointParams,
 } from './SimLogger';

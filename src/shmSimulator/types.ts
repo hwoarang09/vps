@@ -144,11 +144,9 @@ export interface SimulationConfig {
     lock?: boolean;             // ML_LOCK (기본: true)
     orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
     replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
-    vehState?: boolean;         // DEV_VEH_STATE (기본: false)
     path?: boolean;             // DEV_PATH (기본: true in dev)
     lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
     transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
-    edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
     checkpoint?: boolean;       // DEV_CHECKPOINT (기본: true — logger-setup 에서 force enable)
   };
 

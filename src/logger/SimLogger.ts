@@ -30,20 +30,6 @@ export interface LogOrderCompleteParams {
   dropCompleteTs: number; // 드롭완료시점 = 반송완료
 }
 
-export interface LogVehStateParams {
-  ts: number;
-  vehId: number;
-  x: number;
-  y: number;
-  z: number;
-  edge: number;
-  ratio: number;
-  speed: number;
-  movingStatus: number;
-  trafficState: number;
-  jobState: number;
-}
-
 export interface LogReplaySnapshotParams {
   ts: number;
   vehId: number;
@@ -73,11 +59,9 @@ export interface LogEvents {
   lock?: boolean;             // ML_LOCK (기본: true)
   orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
   replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
-  vehState?: boolean;         // DEV_VEH_STATE (기본: false)
   path?: boolean;             // DEV_PATH (기본: true in dev)
   lockDetail?: boolean;       // DEV_LOCK_DETAIL (기본: false)
   transfer?: boolean;         // DEV_TRANSFER (기본: true in dev)
-  edgeQueue?: boolean;        // DEV_EDGE_QUEUE (기본: false)
   checkpoint?: boolean;       // DEV_CHECKPOINT (기본: true)
 }
 
@@ -92,7 +76,6 @@ export interface SimLoggerConfig {
   workerId: number;
   fabId?: string;            // fab 식별자 (파일명에 포함, 예: "fab_0")
   mode: 'ml' | 'dev';       // ml = ML이벤트만, dev = ML+디버그 전체
-  vehStateHz?: 10 | 30 | 60; // dev mode veh_state 기록 빈도 (기본: 30)
   targets?: LogTargets;
   events?: LogEvents;        // 이벤트별 on/off (미지정 시 mode 기반 기본값)
 }
@@ -218,11 +201,9 @@ export class SimLogger {
     if (ev.lock !== false)                         enabled.add(EventType.ML_LOCK);
     if (ev.replaySnapshot !== false)               enabled.add(EventType.ML_REPLAY_SNAPSHOT);
     // DEV events (기본: dev 모드일 때만)
-    if (ev.vehState === true)                      enabled.add(EventType.DEV_VEH_STATE);
     if (ev.path !== false)                         enabled.add(EventType.DEV_PATH);      // 기본 on (ml 포함)
     if (ev.lockDetail === true)                    enabled.add(EventType.DEV_LOCK_DETAIL);
     if (ev.transfer !== false)                     enabled.add(EventType.DEV_TRANSFER);  // 기본 on (ml 포함)
-    if (ev.edgeQueue === true)                     enabled.add(EventType.DEV_EDGE_QUEUE);
     if (ev.checkpoint !== false)                   enabled.add(EventType.DEV_CHECKPOINT); // 기본 on
 
     return enabled;
@@ -302,24 +283,6 @@ export class SimLogger {
   // Dev 이벤트
   // ============================================================================
 
-  logVehState(p: LogVehStateParams): void {
-    const buf = this.eventBuffers.get(EventType.DEV_VEH_STATE);
-    if (!buf) return;
-    const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, p.ts, true);
-    buf.view.setUint32(off + 4, p.vehId, true);
-    buf.view.setFloat32(off + 8, p.x, true);
-    buf.view.setFloat32(off + 12, p.y, true);
-    buf.view.setFloat32(off + 16, p.z, true);
-    buf.view.setFloat32(off + 20, p.edge, true);
-    buf.view.setFloat32(off + 24, p.ratio, true);
-    buf.view.setFloat32(off + 28, p.speed, true);
-    buf.view.setFloat32(off + 32, p.movingStatus, true);
-    buf.view.setFloat32(off + 36, p.trafficState, true);
-    buf.view.setFloat32(off + 40, p.jobState, true);
-    this._increment(buf, EventType.DEV_VEH_STATE);
-  }
-
   logPath(ts: number, vehId: number, destEdge: number, pathLen: number): void {
     const buf = this.eventBuffers.get(EventType.DEV_PATH);
     if (!buf) return;
@@ -354,19 +317,6 @@ export class SimLogger {
     buf.view.setUint32(off + 8, fromEdge, true);
     buf.view.setUint32(off + 12, toEdge, true);
     this._increment(buf, EventType.DEV_TRANSFER);
-  }
-
-  logEdgeQueue(ts: number, edgeId: number, vehId: number, count: number, type: number): void {
-    const buf = this.eventBuffers.get(EventType.DEV_EDGE_QUEUE);
-    if (!buf) return;
-    const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, ts, true);
-    buf.view.setUint32(off + 4, edgeId, true);
-    buf.view.setUint32(off + 8, vehId, true);
-    buf.view.setUint16(off + 12, count, true);
-    buf.view.setUint8(off + 14, type);
-    buf.view.setUint8(off + 15, 0); // padding
-    this._increment(buf, EventType.DEV_EDGE_QUEUE);
   }
 
   /** checkpoint 이벤트 (24B): ts vehId cpEdge cpFlags action cpRatio currentEdge currentRatio */
@@ -417,14 +367,6 @@ export class SimLogger {
 
   isInitialized(): boolean {
     return this.initialized;
-  }
-
-  /** Hz 체크: frameCount 기반으로 veh_state 기록 여부 결정 */
-  shouldRecordVehState(currentFrameCount: number): boolean {
-    const hz = this.config.vehStateHz ?? 30;
-    const targetFps = 30; // default
-    const interval = Math.max(1, Math.round(targetFps / hz));
-    return currentFrameCount % interval === 0;
   }
 
   incrementFrameCount(): void {
