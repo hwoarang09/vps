@@ -6,6 +6,9 @@
     "collisionCheckInterval": -1,
     "curvePreBrakeCheckInterval": -1
   },
+  "vehicle_placement": {
+    "seed": null
+  },
   "log": {
     "devLogEnabled": true,
     "edgeTransitLogEnabled": true

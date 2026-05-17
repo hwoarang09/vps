@@ -20,6 +20,10 @@ interface SimulationConfigFile {
     collisionCheckInterval?: number;
     curvePreBrakeCheckInterval?: number;
   };
+  vehicle_placement: {
+    /** 차량 초기 배치 시드. null = 매번 랜덤, number = 고정 시드 */
+    seed: number | null;
+  };
   log: {
     /** DevLogger 활성화 여부 (개발용 텍스트 로그) */
     devLogEnabled: boolean;
@@ -100,6 +104,9 @@ const loadSimulationConfig = async (): Promise<SimulationConfigFile> => {
         collisionCheckInterval: 33,
         curvePreBrakeCheckInterval: 100,
       },
+      vehicle_placement: {
+        seed: null,
+      },
       log: {
         devLogEnabled: false,
         edgeTransitLogEnabled: false,
@@ -164,6 +171,9 @@ let simulationConfig: SimulationConfigFile = {
     maxDelta: 0.1,
     collisionCheckInterval: 33,
     curvePreBrakeCheckInterval: 100,
+  },
+  vehicle_placement: {
+    seed: null,
   },
   log: {
     devLogEnabled: true,
@@ -237,6 +247,9 @@ export const getSimulationConfig = (): SimulationConfig => {
     // Log
     devLogEnabled: simulationConfig.log.devLogEnabled,
     edgeTransitLogEnabled: simulationConfig.log.edgeTransitLogEnabled,
+
+    // Vehicle placement seed
+    vehiclePlacementSeed: simulationConfig.vehicle_placement.seed,
 
     // Vehicle
     bodyLength: simulationConfig.vehicle.body.length,

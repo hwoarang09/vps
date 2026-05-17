@@ -164,6 +164,10 @@ export interface SimulationConfig {
   /** 경로 재탐색 주기 (edge 수). 0=도착 시만, 1=매 edge, N=N edge마다 */
   routingRerouteInterval?: number;
 
+  // Vehicle placement
+  /** 차량 초기 배치 시드. null = 매번 랜덤, number = 고정 시드 (재현 가능) */
+  vehiclePlacementSeed?: number | null;
+
   // Sensor presets (fab별 오버라이드 가능)
   /** fab별 커스텀 센서 프리셋 (없으면 기본 DEFAULT_SENSOR_PRESETS 사용) */
   customSensorPresets?: SensorPreset[];

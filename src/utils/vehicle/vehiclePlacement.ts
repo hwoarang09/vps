@@ -131,15 +131,41 @@ export const createPlacementsFromVehicleConfigs = (
   return placements;
 };
 
+/** mulberry32 seeded PRNG — seed가 같으면 항상 같은 수열 */
+function mulberry32(seed: number) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Fisher-Yates in-place shuffle (PRNG 주입) */
+function shuffleArray<T>(arr: T[], rand: () => number): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 /**
- * Auto-place vehicles on straight edges
- * Uses round-robin distribution to evenly distribute vehicles across edges
+ * Auto-place vehicles on straight edges.
+ * @param seed null → 매번 랜덤, number → 고정 시드 (재현 가능)
  */
 export const calculateVehiclePlacements = (
   numVehicles: number,
-  allEdges: Edge[]
+  allEdges: Edge[],
+  seed?: number | null,
 ): VehiclePlacementResult => {
   const allSpots = calculateAllSpots(allEdges);
+
+  const rand = seed != null
+    ? mulberry32(seed)
+    : mulberry32(Date.now() ^ (Math.random() * 0xFFFFFFFF));
+  shuffleArray(allSpots, rand);
+
   const spotsToUse = allSpots.slice(0, numVehicles);
 
   const placements: VehiclePlacement[] = [];

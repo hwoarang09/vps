@@ -86,7 +86,7 @@ export function initializeVehicles(params: InitializeVehiclesParams): Initializa
 
 
   // Use shared placement calculation (same as arrayMode)
-  const placementResult = calculateVehiclePlacements(numVehicles, edges);
+  const placementResult = calculateVehiclePlacements(numVehicles, edges, config.vehiclePlacementSeed);
   const placements = placementResult.placements;
 
 
