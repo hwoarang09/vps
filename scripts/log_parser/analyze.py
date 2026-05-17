@@ -14,41 +14,17 @@ VPS 로그 통합 분석 스크립트
 """
 
 import argparse
-import struct
 import sys
 from typing import Optional
 from pathlib import Path
 from collections import defaultdict
 
-# ==============================================================================
-# 프로토콜 (protocol.ts 동기화)
-# ==============================================================================
+# 바이너리 파싱은 log_parser 에 일원화 (중복 제거 — 단일 파서)
+from log_parser import parse_file as lp_parse_file, FILE_SUFFIX_TO_TYPES
 
-EVENT_TYPES = {
-    1:  ('ML_ORDER_COMPLETE', 44, '<III8I',    ['order_id','veh_id','dest_edge','move_to_pickup_ts','pickup_arrive_ts','pickup_start_ts','pickup_done_ts','move_to_drop_ts','drop_arrive_ts','drop_start_ts','drop_done_ts']),
-    3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf',   ['ts','veh_id','edge_id','enter_ts','exit_ts','edge_len']),
-    4:  ('ML_LOCK',           16, '<IIHBBI',   ['ts','veh_id','node_idx','event_type','holder_hint','wait_ms']),
-    5:  ('ML_REPLAY_SNAPSHOT',36, '<IIfffIffI',['ts','veh_id','x','y','z','edge_idx','ratio','speed','status']),
-    10: ('DEV_VEH_STATE',     44, '<II9f',     ['ts','veh_id','x','y','z','edge','ratio','speed','moving_status','traffic_state','job_state']),
-    11: ('DEV_PATH',          16, '<IIII',     ['ts','veh_id','dest_edge','path_len']),
-    12: ('DEV_LOCK_DETAIL',   20, '<IIHBxII',  ['ts','veh_id','node_idx','type','holder_veh_id','wait_ms']),
-    13: ('DEV_TRANSFER',      16, '<IIII',     ['ts','veh_id','from_edge','to_edge']),
-    14: ('DEV_EDGE_QUEUE',    16, '<IIIHBx',   ['ts','edge_id','veh_id','count','type']),
-    15: ('DEV_CHECKPOINT',    24, '<IIHBBfIf', ['ts','veh_id','cp_edge','cp_flags','action','cp_ratio','current_edge','current_ratio']),
-}
-
-FILE_SUFFIX_MAP = {
-    'order':        1,
-    'edge_transit': 3,
-    'lock':         4,
-    'replay':       5,
-    'veh_state':    10,
-    'path':         11,
-    'lock_detail':  12,
-    'transfer':     13,
-    'edge_queue':   14,
-    'checkpoint':   15,
-}
+# ==============================================================================
+# 분석용 enum 매핑 (이벤트 타입/바이너리 포맷은 log_parser 가 관리)
+# ==============================================================================
 
 JOB_STATE_NAMES = {0:'INIT', 1:'IDLE', 2:'MOVE_TO_LOAD', 3:'LOADING', 4:'MOVE_TO_UNLOAD', 5:'UNLOADING'}
 LOCK_EVENT_NAMES = {0:'REQ', 1:'GRANT', 2:'RELEASE', 3:'WAIT'}
@@ -72,92 +48,17 @@ LOCK_DETAIL_NAMES = {
 }
 
 
-def parse_file(path: Path) -> tuple[str, list[dict]]:
-    """파일 하나 파싱. (suffix, records) 반환"""
-    stem = path.stem
-    suffix = None
-    etype = None
-    for suf, et in FILE_SUFFIX_MAP.items():
-        if stem.endswith(f'_{suf}'):
-            suffix = suf
-            etype = et
-            break
-    if etype is None:
-        return (stem, [])
-
-    _, rec_size, fmt, columns = EVENT_TYPES[etype]
-    raw = path.read_bytes()
-    n = len(raw) // rec_size
-    records = []
-    for i in range(n):
-        vals = struct.unpack_from(fmt, raw, i * rec_size)
-        records.append(dict(zip(columns, vals)))
-    return (suffix, records)
-
-
-SNAPSHOT_MAGIC = 0xCAFE
-
-
-def parse_snapshot_file(path: Path) -> list[dict]:
-    """snapshot.bin (가변 블록) 파싱. SnapshotLogger.ts 형식 참고.
-    Returns: [{ts, vehicles: [{vehId, currentEdge, ratio, velocity, stopReason}], activeEdges: [{edgeId, vehIds}]}]
-    """
-    raw = path.read_bytes()
-    blocks = []
-    off = 0
-    total = len(raw)
-    while off + 8 <= total:
-        magic = struct.unpack_from('<H', raw, off)[0]
-        if magic != SNAPSHOT_MAGIC:
-            nxt = raw.find(struct.pack('<H', SNAPSHOT_MAGIC), off + 1)
-            if nxt < 0:
-                break
-            off = nxt
-            continue
-        try:
-            ts = struct.unpack_from('<I', raw, off + 2)[0]
-            num_v = struct.unpack_from('<H', raw, off + 6)[0]
-            cur = off + 8
-            vehicles = []
-            for _ in range(num_v):
-                if cur + 14 > total: break
-                vid, edge = struct.unpack_from('<HH', raw, cur)
-                ratio, vel = struct.unpack_from('<ff', raw, cur + 4)
-                stop = struct.unpack_from('<H', raw, cur + 12)[0]
-                vehicles.append({'vehId': vid, 'currentEdge': edge, 'ratio': ratio, 'velocity': vel, 'stopReason': stop})
-                cur += 14
-            if cur + 2 > total: break
-            num_e = struct.unpack_from('<H', raw, cur)[0]
-            cur += 2
-            edges = []
-            for _ in range(num_e):
-                if cur + 4 > total: break
-                eid, cnt = struct.unpack_from('<HH', raw, cur)
-                cur += 4
-                if cur + 2 * cnt > total: break
-                vids = list(struct.unpack_from(f'<{cnt}H', raw, cur))
-                cur += 2 * cnt
-                edges.append({'edgeId': eid, 'vehIds': vids})
-            blocks.append({'ts': ts, 'vehicles': vehicles, 'activeEdges': edges})
-            off = cur
-        except struct.error:
-            break
-    return blocks
-
-
 def load_session(session_dir: Path) -> dict[str, list[dict]]:
     """세션 디렉토리의 모든 .bin 파일 로드. {suffix: [records]} 반환.
-    'snapshot' suffix 는 fixed-size 가 아니라 가변 블록 — 별도 처리.
+    바이너리 파싱은 log_parser 에 일원화 — snapshot/route 가변 블록도 lp_parse_file 가 처리.
     """
     result = {}
     for f in sorted(session_dir.glob('*.bin')):
-        if f.stem.endswith('_snapshot'):
-            blocks = parse_snapshot_file(f)
-            if blocks:
-                result['snapshot'] = blocks
-                print(f"  loaded {f.name}: {len(blocks):,} frames")
+        # 파일명 접미사로 suffix 판별 (예: ..._edge_transit.bin → 'edge_transit')
+        suffix = next((s for s in FILE_SUFFIX_TO_TYPES if f.stem.endswith(f'_{s}')), None)
+        if suffix is None:
             continue
-        suffix, records = parse_file(f)
+        records = lp_parse_file(f)
         if records:
             result[suffix] = records
             print(f"  loaded {f.name}: {len(records):,} records")

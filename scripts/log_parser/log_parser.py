@@ -40,6 +40,7 @@ EVENT_TYPES = {
     2:  ('ML_ROUTE',          12 + ROUTE_MAX_EDGES * 4, f'<III{ROUTE_MAX_EDGES}I'),  # ts vehId pathLen + edge(u32)x100 — parse_file 에서 특수처리
     3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf'),   # ts(u32) vehId(u32) edgeId(u32) enterTs(u32) exitTs(u32) edgeLen(f32)
     4:  ('ML_LOCK',           16, '<IIHBBI'),   # ts(u32) vehId(u32) nodeIdx(u16) eventType(u8) holderHint(u8) waitMs(u32)
+    5:  ('ML_REPLAY_SNAPSHOT',36, '<IIfffIffI'),# ts(u32) vehId(u32) x y z edgeIdx(u32) ratio speed status(u32)
     10: ('DEV_VEH_STATE',     44, '<II9f'),     # ts(u32) vehId(u32) x y z edge ratio speed movingStatus trafficState jobState
     11: ('DEV_PATH',          16, '<IIII'),     # ts(u32) vehId(u32) destEdge(u32) pathLen(u32)
     12: ('DEV_LOCK_DETAIL',   20, '<IIHBxII'), # ts(u32) vehId(u32) nodeIdx(u16) type(u8) pad(1) holderVehId(u32) waitMs(u32)
@@ -53,6 +54,7 @@ FILE_SUFFIX_TO_TYPES = {
     'route':        [2],
     'edge_transit': [3],
     'lock':         [4],
+    'replay':       [5],
     'veh_state':    [10],
     'path':         [11],
     'lock_detail':  [12],
@@ -76,6 +78,7 @@ COLUMNS = {
     2:  ['ts', 'veh_id', 'path_len', 'edges'],
     3:  ['ts', 'veh_id', 'edge_id', 'enter_ts', 'exit_ts', 'edge_len'],
     4:  ['ts', 'veh_id', 'node_idx', 'event_type', 'holder_hint', 'wait_ms'],
+    5:  ['ts', 'veh_id', 'x', 'y', 'z', 'edge_idx', 'ratio', 'speed', 'status'],
     10: ['ts', 'veh_id', 'x', 'y', 'z', 'edge', 'ratio', 'speed', 'moving_status', 'traffic_state', 'job_state'],
     11: ['ts', 'veh_id', 'dest_edge', 'path_len'],
     12: ['ts', 'veh_id', 'node_idx', 'type', 'holder_veh_id', 'wait_ms'],
