@@ -1,7 +1,7 @@
 // simLogUtils.ts
 // SimLogger OPFS 파일 관리 유틸리티 (Main Thread에서 호출)
 
-import { type SimLogFileInfo } from './protocol';
+import { type SimLogFileInfo, ALL_EVENT_TYPES, RECORD_SIZE, getFileSuffix } from './protocol';
 
 /**
  * OPFS 루트에서 SimLogger .bin 파일 목록 조회
@@ -103,18 +103,14 @@ export async function clearAllSimLogs(): Promise<{ deleted: string[]; failed: st
 // Internal
 // ============================================================================
 
+// suffix → recordSize. protocol.ts 에서 자동 생성한다 (하드코딩 금지 — 새 이벤트 누락/stale 방지)
 const SUFFIX_RECORD_SIZE: Record<string, number> = {
-  order: 44,
-  edge_transit: 24,
-  lock: 16,
-  veh_state: 44,
-  path: 16,
-  lock_detail: 20,
-  transfer: 16,
-  edge_queue: 16,
   // snapshot은 가변 크기 block 포맷 — recordCount는 의미 없으니 1로 (size를 그대로 표시)
   snapshot: 1,
 };
+for (const et of ALL_EVENT_TYPES) {
+  SUFFIX_RECORD_SIZE[getFileSuffix(et)] = RECORD_SIZE[et];
+}
 
 const KNOWN_SUFFIXES = Object.keys(SUFFIX_RECORD_SIZE);
 
