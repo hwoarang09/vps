@@ -20,15 +20,14 @@ import { DbShipper } from './DbShipper';
 export interface LogOrderCompleteParams {
   orderId: number;
   vehId: number;
-  destEdge: number;
-  moveToPickupTs: number;
-  pickupArriveTs: number;
-  pickupStartTs: number;
-  pickupDoneTs: number;
-  moveToDropTs: number;
-  dropArriveTs: number;
-  dropStartTs: number;
-  dropDoneTs: number;
+  srcStation: number;
+  destStation: number;
+  createTs: number;      // 반송명령생성시점 (현재는 assignTs와 동일)
+  assignTs: number;      // 반송할당시점
+  pickupStartTs: number; // 픽업도착시점
+  pickupCompleteTs: number; // 픽업완료시점
+  dropStartTs: number;   // 드롭도착시점
+  dropCompleteTs: number; // 드롭완료시점 = 반송완료
 }
 
 export interface LogVehStateParams {
@@ -237,17 +236,16 @@ export class SimLogger {
     const buf = this.eventBuffers.get(EventType.ML_ORDER_COMPLETE);
     if (!buf) return;
     const off = buf.count * buf.recordSize;
-    buf.view.setUint32(off + 0, p.orderId, true);
-    buf.view.setUint32(off + 4, p.vehId, true);
-    buf.view.setUint32(off + 8, p.destEdge, true);
-    buf.view.setUint32(off + 12, p.moveToPickupTs, true);
-    buf.view.setUint32(off + 16, p.pickupArriveTs, true);
-    buf.view.setUint32(off + 20, p.pickupStartTs, true);
-    buf.view.setUint32(off + 24, p.pickupDoneTs, true);
-    buf.view.setUint32(off + 28, p.moveToDropTs, true);
-    buf.view.setUint32(off + 32, p.dropArriveTs, true);
-    buf.view.setUint32(off + 36, p.dropStartTs, true);
-    buf.view.setUint32(off + 40, p.dropDoneTs, true);
+    buf.view.setUint32(off + 0,  p.orderId,          true);
+    buf.view.setUint32(off + 4,  p.vehId,            true);
+    buf.view.setUint32(off + 8,  p.srcStation,        true);
+    buf.view.setUint32(off + 12, p.destStation,       true);
+    buf.view.setUint32(off + 16, p.createTs,          true);
+    buf.view.setUint32(off + 20, p.assignTs,          true);
+    buf.view.setUint32(off + 24, p.pickupStartTs,     true);
+    buf.view.setUint32(off + 28, p.pickupCompleteTs,  true);
+    buf.view.setUint32(off + 32, p.dropStartTs,       true);
+    buf.view.setUint32(off + 36, p.dropCompleteTs,    true);
     this._increment(buf, EventType.ML_ORDER_COMPLETE);
   }
 

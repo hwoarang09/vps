@@ -25,7 +25,7 @@ export enum EventType {
 // ============================================================================
 
 /**
- * ML_ORDER_COMPLETE (44B): orderId(4) vehId(4) destEdge(4) moveToPickupTs(4) pickupArriveTs(4) pickupStartTs(4) pickupDoneTs(4) moveToDropTs(4) dropArriveTs(4) dropStartTs(4) dropDoneTs(4)
+ * ML_ORDER_COMPLETE (40B): orderId(4) vehId(4) srcStation(4) destStation(4) createTs(4) assignTs(4) pickupStartTs(4) pickupCompleteTs(4) dropStartTs(4) dropCompleteTs(4)
  * ML_EDGE_TRANSIT (24B): ts(4) vehId(4) edgeId(4) enterTs(4) exitTs(4) edgeLen(f32,4)
  * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) holderHint(1) waitMs(4)
  * ML_REPLAY_SNAPSHOT (36B): ts(4) vehId(4) x(f4) y(f4) z(f4) edgeIdx(4) ratio(f4) speed(f4) status(4)
@@ -37,7 +37,7 @@ export enum EventType {
  * DEV_CHECKPOINT (24B): ts(4) vehId(4) cpEdge(2) cpFlags(1) action(1) cpRatio(f4) currentEdge(4) currentRatio(f4)
  */
 export const RECORD_SIZE: Record<EventType, number> = {
-  [EventType.ML_ORDER_COMPLETE]: 44,
+  [EventType.ML_ORDER_COMPLETE]: 40,
   [EventType.ML_EDGE_TRANSIT]: 24,
   [EventType.ML_LOCK]: 16,
   [EventType.ML_REPLAY_SNAPSHOT]: 36,

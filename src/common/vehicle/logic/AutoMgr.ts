@@ -100,6 +100,8 @@ export class AutoMgr {
   dwellMs = 7000;
   /** Path 발견 콜백 (SimLogger 연결용) */
   onPathFound?: OnPathFoundCallback;
+  /** 오더 완료 콜백 (SimLogger 연결용) */
+  onOrderComplete?: (p: import("@/logger").LogOrderCompleteParams) => void;
   /** Per-fab routing context for BPR cost */
   routingContext?: RoutingContext;
 
@@ -279,10 +281,13 @@ export class AutoMgr {
       // --- UNLOADING complete: resume with existing loop pathBuffer ---
       else if (jobState === JobState.UNLOADING && now >= (this.dwellTimers.get(vehId) ?? Infinity)) {
         // Record timing 분포 + 4-stage 평균 before clearing order data
+        const orderId        = data[ptr + OrderData.ORDER_ID];
+        const srcStation     = data[ptr + OrderData.ORDER_SRC_STATION];
+        const destStation    = data[ptr + OrderData.ORDER_DEST_STATION];
         const moveToPickupTs = data[ptr + OrderData.MOVE_TO_PICKUP_TS];
         const pickupArriveTs = data[ptr + OrderData.PICKUP_ARRIVE_TS];
-        const pickupDoneTs = data[ptr + OrderData.PICKUP_DONE_TS];
-        const dropArriveTs = data[ptr + OrderData.DROP_ARRIVE_TS];
+        const pickupDoneTs   = data[ptr + OrderData.PICKUP_DONE_TS];
+        const dropArriveTs   = data[ptr + OrderData.DROP_ARRIVE_TS];
         data[ptr + OrderData.DROP_DONE_TS] = simulationTime;
         if (moveToPickupTs > 0) {
           this.orderStats.completed++;
@@ -299,6 +304,19 @@ export class AutoMgr {
             this.orderStats.unloadingSum += simulationTime - dropArriveTs;
             this.orderStats.stageCount++;
           }
+          // 오더 완료 로그 콜백
+          this.onOrderComplete?.({
+            orderId,
+            vehId,
+            srcStation,
+            destStation,
+            createTs:         moveToPickupTs, // 현재는 assign과 동일 (queuing 추가 시 분리)
+            assignTs:         moveToPickupTs,
+            pickupStartTs:    pickupArriveTs,
+            pickupCompleteTs: pickupDoneTs,
+            dropStartTs:      dropArriveTs,
+            dropCompleteTs:   simulationTime,
+          });
         }
 
         data[ptr + LogicData.JOB_STATE] = JobState.IDLE;

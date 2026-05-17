@@ -33,7 +33,7 @@ except ImportError:
 # ==============================================================================
 
 EVENT_TYPES = {
-    1:  ('ML_ORDER_COMPLETE', 44, '<III8I'),    # orderId(u32) vehId(u32) destEdge(u32) 8×timestamp(u32)
+    1:  ('ML_ORDER_COMPLETE', 40, '<IIIIIIIIII'),  # orderId vehId srcStation destStation createTs assignTs pickupStartTs pickupCompleteTs dropStartTs dropCompleteTs
     3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf'),   # ts(u32) vehId(u32) edgeId(u32) enterTs(u32) exitTs(u32) edgeLen(f32)
     4:  ('ML_LOCK',           16, '<IIHBBI'),   # ts(u32) vehId(u32) nodeIdx(u16) eventType(u8) holderHint(u8) waitMs(u32)
     10: ('DEV_VEH_STATE',     44, '<II9f'),     # ts(u32) vehId(u32) x y z edge ratio speed movingStatus trafficState jobState
@@ -67,7 +67,7 @@ FILE_SUFFIX_TO_TYPES = {
 SNAPSHOT_MAGIC = 0xCAFE
 
 COLUMNS = {
-    1:  ['order_id', 'veh_id', 'dest_edge', 'move_to_pickup_ts', 'pickup_arrive_ts', 'pickup_start_ts', 'pickup_done_ts', 'move_to_drop_ts', 'drop_arrive_ts', 'drop_start_ts', 'drop_done_ts'],
+    1:  ['order_id', 'veh_id', 'src_station', 'dest_station', 'create_ts', 'assign_ts', 'pickup_start_ts', 'pickup_complete_ts', 'drop_start_ts', 'drop_complete_ts'],
     3:  ['ts', 'veh_id', 'edge_id', 'enter_ts', 'exit_ts', 'edge_len'],
     4:  ['ts', 'veh_id', 'node_idx', 'event_type', 'holder_hint', 'wait_ms'],
     10: ['ts', 'veh_id', 'x', 'y', 'z', 'edge', 'ratio', 'speed', 'moving_status', 'traffic_state', 'job_state'],

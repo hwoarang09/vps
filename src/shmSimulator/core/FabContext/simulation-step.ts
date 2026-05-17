@@ -192,6 +192,7 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
       simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
     };
+    autoMgr.onOrderComplete = (p) => simLogger.logOrderComplete(p);
   }
   autoMgr.update({
     mode: store.transferMode,
