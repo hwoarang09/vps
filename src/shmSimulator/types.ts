@@ -367,7 +367,7 @@ export type WorkerMessage =
   | { type: "ADD_FAB"; fab: FabInitData; config: SimulationConfig }
   | { type: "REMOVE_FAB"; /** Unique identifier for the fab */ fabId: string }
   // Logger 설정
-  | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number }
+  | { type: "SET_LOGGER_PORT"; port: MessagePort; workerId: number; logEvents?: SimulationConfig["logEvents"] }
   // Lock 정보 요청
   | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string }
   // Routing config 동적 변경 (fabId 생략 시 전체 fab에 적용)

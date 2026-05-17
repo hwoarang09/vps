@@ -12,12 +12,14 @@ import {
   type LogEventKey,
   type GroupCheckState,
 } from "@/store/ui/logSettingsStore";
+import { useShmSimulatorStore } from "@/store/vehicle/shmMode/shmSimulatorStore";
 
 /** 3-state 체크박스 — all/some/none */
 const TriCheckbox: React.FC<{
   state: GroupCheckState | boolean;
   onChange: (next: boolean) => void;
-}> = ({ state, onChange }) => {
+  disabled?: boolean;
+}> = ({ state, onChange, disabled }) => {
   const ref = useRef<HTMLInputElement>(null);
   const checked = state === "all" || state === true;
   const indeterminate = state === "some";
@@ -31,13 +33,18 @@ const TriCheckbox: React.FC<{
       ref={ref}
       type="checkbox"
       checked={checked}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.checked)}
-      style={{ cursor: "pointer", width: 14, height: 14, accentColor: "#67e8f9", flexShrink: 0 }}
+      style={{
+        cursor: disabled ? "not-allowed" : "pointer",
+        width: 14, height: 14, accentColor: "#67e8f9", flexShrink: 0,
+        opacity: disabled ? 0.4 : 1,
+      }}
     />
   );
 };
 
-const GroupRow: React.FC<{ groupKey: string }> = ({ groupKey }) => {
+const GroupRow: React.FC<{ groupKey: string; locked: boolean }> = ({ groupKey, locked }) => {
   const group = LOG_GROUPS[groupKey];
   const logEvents = useLogSettingsStore((s) => s.logEvents);
   const setEvent = useLogSettingsStore((s) => s.setEvent);
@@ -58,7 +65,7 @@ const GroupRow: React.FC<{ groupKey: string }> = ({ groupKey }) => {
           padding: "8px 10px",
         }}
       >
-        <TriCheckbox state={groupState} onChange={(on) => setGroup(groupKey, on)} />
+        <TriCheckbox state={groupState} onChange={(on) => setGroup(groupKey, on)} disabled={locked} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: "#ddd", fontSize: 12, fontWeight: 700 }}>{group.label}</div>
           <div style={{ color: "#888", fontSize: 10 }}>{group.desc}</div>
@@ -101,8 +108,13 @@ const GroupRow: React.FC<{ groupKey: string }> = ({ groupKey }) => {
               <input
                 type="checkbox"
                 checked={!!logEvents[ev]}
+                disabled={locked}
                 onChange={(e) => setEvent(ev, e.target.checked)}
-                style={{ cursor: "pointer", width: 12, height: 12, accentColor: "#67e8f9" }}
+                style={{
+                  cursor: locked ? "not-allowed" : "pointer",
+                  width: 12, height: 12, accentColor: "#67e8f9",
+                  opacity: locked ? 0.4 : 1,
+                }}
               />
               {LOG_EVENT_LABELS[ev]}
             </label>
@@ -118,6 +130,10 @@ const LogSettingsPanel: React.FC = () => {
   const setSessionNote = useLogSettingsStore((s) => s.setSessionNote);
   const resetDefaults = useLogSettingsStore((s) => s.resetDefaults);
 
+  // 로그 세션이 시작되면(= Play 1회 이상) 설정 동결 — 차량 재생성 전까지 변경 불가
+  const currentSessionId = useShmSimulatorStore((s) => s.currentSessionId);
+  const locked = currentSessionId != null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       {/* 안내 */}
@@ -125,12 +141,14 @@ const LogSettingsPanel: React.FC = () => {
         style={{
           padding: "8px 10px",
           fontSize: 10,
-          color: "#e0a050",
-          background: "rgba(224,160,80,0.08)",
+          color: locked ? "#e06060" : "#e0a050",
+          background: locked ? "rgba(224,96,96,0.1)" : "rgba(224,160,80,0.08)",
           borderBottom: "1px solid #383838",
         }}
       >
-        ⚠ 런 시작 전 설정 — 시뮬 시작 후엔 반영되지 않음
+        {locked
+          ? "🔒 시뮬레이션 진행 중 — 로그 설정 변경 불가. 차량 재생성 시 다시 설정 가능"
+          : "Play 누르는 시점의 설정으로 로깅 시작 — 시작 후엔 변경 불가"}
       </div>
 
       {/* 세션 메모 */}
@@ -139,38 +157,42 @@ const LogSettingsPanel: React.FC = () => {
         <input
           type="text"
           value={logSessionNote}
+          disabled={locked}
           onChange={(e) => setSessionNote(e.target.value)}
           placeholder="예: ml_run1"
           style={{
             width: "100%",
             background: "#2a2a2a",
-            color: "#ddd",
+            color: locked ? "#777" : "#ddd",
             border: "1px solid #555",
             borderRadius: 4,
             padding: "4px 8px",
             fontSize: 11,
             boxSizing: "border-box",
+            cursor: locked ? "not-allowed" : "text",
           }}
         />
       </div>
 
       {/* 그룹들 */}
       {Object.keys(LOG_GROUPS).map((gk) => (
-        <GroupRow key={gk} groupKey={gk} />
+        <GroupRow key={gk} groupKey={gk} locked={locked} />
       ))}
 
       {/* 리셋 */}
       <div style={{ padding: "8px 10px" }}>
         <button
           onClick={resetDefaults}
+          disabled={locked}
           style={{
             background: "#3a3a3a",
             border: "1px solid #555",
             borderRadius: 3,
             color: "#bbb",
             fontSize: 10,
-            cursor: "pointer",
+            cursor: locked ? "not-allowed" : "pointer",
             padding: "4px 10px",
+            opacity: locked ? 0.4 : 1,
           }}
         >
           기본값으로 리셋

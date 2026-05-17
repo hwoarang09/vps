@@ -12,6 +12,7 @@ import { MQTT_WS_URL } from "@/config/logConfig";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useLoadingStore } from "@/store/ui/loadingStore";
+import { useLogSettingsStore } from "@/store/ui/logSettingsStore";
 
 type FabInitParams = MultiFabInitParams;
 
@@ -339,9 +340,10 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
     const { controller } = get();
     if (controller && get().isInitialized) {
       // SimLogger 초기화 (최초 resume 시 1회만)
+      // Play 시점의 최신 로그 설정을 전달 — SimLogger 생성 시점에 확정된다
       if (!controller.isLoggingEnabled()) {
         try {
-          await controller.enableLogging();
+          await controller.enableLogging(useLogSettingsStore.getState().logEvents);
         } catch (err) {
           console.error('[ShmSimulator] enableLogging failed:', err);
         }
@@ -371,6 +373,7 @@ export const useShmSimulatorStore = create<ShmSimulatorState>((set, get) => ({
       workerCV: 0,
       workerP99: 0,
       unusualMove: null,
+      currentSessionId: null,
     });
   },
 

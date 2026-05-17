@@ -934,15 +934,17 @@ export class MultiWorkerController {
    * Enable logging - Worker에 Logger Port 전달
    * SimLogger는 Worker 내부에서 OPFS에 직접 쓰기
    */
-  async enableLogging(): Promise<void> {
+  async enableLogging(logEvents?: SimulationConfig["logEvents"]): Promise<void> {
     console.log(`[MultiWorkerController] enableLogging called: ${this.workers.length} workers`);
     // 각 워커에게 Logger port 전달 (SimLogger 초기화 트리거)
+    // logEvents 는 Play 시점의 최신 로그 설정 — SimLogger 생성 시점에 확정된다
     for (const workerInfo of this.workers) {
       const { port1, port2 } = new MessageChannel();
       const message: WorkerMessage = {
         type: "SET_LOGGER_PORT",
         port: port1,
         workerId: workerInfo.workerIndex,
+        logEvents,
       };
       workerInfo.worker.postMessage(message, [port1]);
       port2.close();

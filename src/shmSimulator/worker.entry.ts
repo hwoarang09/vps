@@ -114,13 +114,17 @@ function handleSetRenderBuffer(
   engine.setRenderBuffers(vehicleRenderBuffer, sensorRenderBuffer, fabAssignments, totalVehicles);
 }
 
-async function handleSetLoggerPort(port: MessagePort, workerId: number): Promise<void> {
+async function handleSetLoggerPort(
+  port: MessagePort,
+  workerId: number,
+  logEvents?: SimulationConfig["logEvents"],
+): Promise<void> {
   console.log(`[worker.entry] SET_LOGGER_PORT received: workerId=${workerId}, engine=${!!engine}`);
   if (!engine) {
     console.log(`[worker.entry] SET_LOGGER_PORT SKIPPED: no engine`);
     return;
   }
-  await engine.setLoggerPort(port, workerId);
+  await engine.setLoggerPort(port, workerId, logEvents);
   console.log(`[worker.entry] SET_LOGGER_PORT done`);
 }
 
@@ -206,7 +210,7 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       handleSetRenderBuffer(message.vehicleRenderBuffer, message.sensorRenderBuffer, message.fabAssignments, message.totalVehicles);
       break;
     case "SET_LOGGER_PORT":
-      await handleSetLoggerPort(message.port, message.workerId);
+      await handleSetLoggerPort(message.port, message.workerId, message.logEvents);
       break;
     case "GET_LOCK_TABLE":
       handleGetLockTable(message.fabId, message.requestId);

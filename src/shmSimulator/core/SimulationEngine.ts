@@ -462,9 +462,13 @@ export class SimulationEngine {
    * @param port MessagePort connected to Logger Worker
    * @param workerId Worker ID (0~255) for logging
    */
-  async setLoggerPort(port: MessagePort, workerId: number = 0): Promise<void> {
+  async setLoggerPort(
+    port: MessagePort,
+    workerId: number = 0,
+    logEvents?: SimulationConfig["logEvents"],
+  ): Promise<void> {
     for (const context of this.fabContexts.values()) {
-      await context.setLoggerPort(port, workerId);
+      await context.setLoggerPort(port, workerId, logEvents);
     }
   }
 

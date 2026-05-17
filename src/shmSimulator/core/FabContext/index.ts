@@ -294,8 +294,16 @@ export class FabContext {
    * Logger Worker와 연결된 MessagePort 설정
    * 이후 edge transit 로그가 자동으로 전송됨
    */
-  async setLoggerPort(_port: MessagePort, workerId: number = 0): Promise<void> {
+  async setLoggerPort(
+    _port: MessagePort,
+    workerId: number = 0,
+    logEvents?: SimulationConfig["logEvents"],
+  ): Promise<void> {
     console.log(`[FabContext] setLoggerPort called: fabId=${this.fabId}, workerId=${workerId}`);
+    // Play 시점에 전달된 최신 로그 설정으로 덮어쓴다 (init 시점 값이 아닌 Play 시점 값이 authoritative)
+    if (logEvents) {
+      this.config.logEvents = logEvents;
+    }
     this.simLogger = await setupLoggerPort(
       this.fabId,
       this.config,
