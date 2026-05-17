@@ -198,12 +198,17 @@ edge 정적/동적/이웃/의도 feature  →  transit(t+10/30/60/120/180)
 
 **쌓을 raw 데이터 (최소 4종):**
 
-| 로그 | 내용 | 기록 시점 | 신규? |
+| 로그 | 내용 | 기록 시점 | 상태 |
 |---|---|---|---|
-| Transition | veh_id, edge_id, enter_ts, exit_ts | edge 진입/이탈 | 확인 필요 |
-| **Route** | veh_id, ts, committed path(edge 순서) | Dijkstra 새 경로 산출 시 | **신규 — 핵심** |
-| Lock | node/edge, event type, ts | lock 이벤트 | 있음 |
-| Static dump | edge/node 표(length, max_speed, is_curve, station수, merge, deadlock_zone) | 세션 시작 1회 | 부분 존재 |
+| Transition | veh_id, edge_id, enter_ts, exit_ts | edge 진입/이탈 | ✅ `ML_EDGE_TRANSIT` |
+| **Route** | ts, veh_id, committed path(edge 순서) | Dijkstra 새 경로 산출 시 | ✅ `ML_ROUTE` 구현 |
+| Lock | node/edge, event type, ts | lock 이벤트 | ✅ `ML_LOCK` |
+| Static dump | edge/node 표(length, max_speed, is_curve, station수, merge, deadlock_zone) | 세션 시작 1회 | △ 부분 존재 |
+
+**`ML_ROUTE` 포맷** (`logger/protocol.ts`): 고정 412B 레코드 — `ts(4) vehId(4) pathLen(4)` +
+`edge(u32) × 100`(`pathLen` 유효, 나머지 0 패딩). edge index 는 **1-based**, `edges[0]`=현재 edge.
+`AutoMgr.applyPathToVehicle` 에서 Dijkstra 경로 적용 시 `onPathFound` → `SimLogger.logRoute` 로 기록.
+파서는 `log_parser.py` 의 `parse_route_file` 가 `edges` 를 `pathLen` 만큼 잘라 리스트 컬럼으로 반환.
 
 raw 이벤트 스트림만으로 offline에서 임의 시각 t 상태 전부 복원 가능:
 - edge별 차량수 = Transition (진입−이탈) 누적

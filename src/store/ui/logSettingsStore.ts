@@ -34,7 +34,7 @@ export const LOG_GROUPS: Record<string, LogGroup> = {
   ml: {
     label: "ML",
     desc: "ML edge cost 학습 데이터",
-    events: ["edgeTransit", "lock"],
+    events: ["edgeTransit", "lock", "route"],
   },
   dev: {
     label: "개발",
@@ -53,6 +53,7 @@ export const LOG_EVENT_LABELS: Record<LogEventKey, string> = {
   orderComplete: "Order Complete",
   edgeTransit: "Edge Transit",
   lock: "Lock",
+  route: "Route",
   replaySnapshot: "Replay Snapshot",
   path: "Path",
   lockDetail: "Lock Detail",
@@ -65,6 +66,7 @@ const DEFAULT_EVENTS: Required<LogEvents> = {
   orderComplete: true,
   edgeTransit: true,
   lock: true,
+  route: true,
   replaySnapshot: false,
   path: false,
   lockDetail: false,

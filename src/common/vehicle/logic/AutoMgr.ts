@@ -40,12 +40,12 @@ interface ApplyPathContext {
  * Path 발견 이벤트 콜백
  * @param vehId - Vehicle ID
  * @param destEdge - 목적지 edge index
- * @param pathLen - 경로 길이
+ * @param pathIndices - committed path (1-based edge index 배열, [0]=현재 edge)
  */
 export type OnPathFoundCallback = (
   vehId: number,
   destEdge: number,
-  pathLen: number
+  pathIndices: number[]
 ) => void;
 
 /** AutoMgr.update() context */
@@ -806,7 +806,7 @@ export class AutoMgr {
     this.vehicleDestinations.set(vehId, candidate);
 
     // Path 발견 로그
-    this.onPathFound?.(vehId, candidate.edgeIndex, pathIndices.length);
+    this.onPathFound?.(vehId, candidate.edgeIndex, pathIndices);
 
     // Update Shared Memory for UI
     const ptr = vehId * VEHICLE_DATA_SIZE;

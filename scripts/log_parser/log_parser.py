@@ -32,8 +32,12 @@ except ImportError:
 # 프로토콜 정의 (protocol.ts와 동기화 필요)
 # ==============================================================================
 
+# ML_ROUTE 레코드의 최대 edge 수 (protocol.ts ROUTE_MAX_EDGES 와 동기화)
+ROUTE_MAX_EDGES = 100
+
 EVENT_TYPES = {
     1:  ('ML_ORDER_COMPLETE', 40, '<IIIIIIIIII'),  # orderId vehId srcStation destStation createTs assignTs pickupStartTs pickupCompleteTs dropStartTs dropCompleteTs
+    2:  ('ML_ROUTE',          12 + ROUTE_MAX_EDGES * 4, f'<III{ROUTE_MAX_EDGES}I'),  # ts vehId pathLen + edge(u32)x100 — parse_file 에서 특수처리
     3:  ('ML_EDGE_TRANSIT',   24, '<IIIIIf'),   # ts(u32) vehId(u32) edgeId(u32) enterTs(u32) exitTs(u32) edgeLen(f32)
     4:  ('ML_LOCK',           16, '<IIHBBI'),   # ts(u32) vehId(u32) nodeIdx(u16) eventType(u8) holderHint(u8) waitMs(u32)
     10: ('DEV_VEH_STATE',     44, '<II9f'),     # ts(u32) vehId(u32) x y z edge ratio speed movingStatus trafficState jobState
@@ -46,6 +50,7 @@ EVENT_TYPES = {
 
 FILE_SUFFIX_TO_TYPES = {
     'order':        [1],
+    'route':        [2],
     'edge_transit': [3],
     'lock':         [4],
     'veh_state':    [10],
@@ -68,6 +73,7 @@ SNAPSHOT_MAGIC = 0xCAFE
 
 COLUMNS = {
     1:  ['order_id', 'veh_id', 'src_station', 'dest_station', 'create_ts', 'assign_ts', 'pickup_start_ts', 'pickup_complete_ts', 'drop_start_ts', 'drop_complete_ts'],
+    2:  ['ts', 'veh_id', 'path_len', 'edges'],
     3:  ['ts', 'veh_id', 'edge_id', 'enter_ts', 'exit_ts', 'edge_len'],
     4:  ['ts', 'veh_id', 'node_idx', 'event_type', 'holder_hint', 'wait_ms'],
     10: ['ts', 'veh_id', 'x', 'y', 'z', 'edge', 'ratio', 'speed', 'moving_status', 'traffic_state', 'job_state'],
@@ -189,6 +195,30 @@ def parse_snapshot_file(filepath: str):
     return blocks
 
 
+def parse_route_file(filepath: str):
+    """
+    ML_ROUTE binary 파일 파싱 (고정 412B 레코드).
+    레코드: ts(u32) vehId(u32) pathLen(u32) + edge(u32) × ROUTE_MAX_EDGES
+    edges 는 pathLen 만큼만 잘라 리스트로 반환 (1-based edge index, [0]=현재 edge).
+    """
+    records = []
+    raw = Path(filepath).read_bytes()
+    record_size = 12 + ROUTE_MAX_EDGES * 4
+    if len(raw) == 0:
+        return []
+    if len(raw) % record_size != 0:
+        print(f"[WARN] route file {len(raw)} not aligned to {record_size}, "
+              f"truncating to {len(raw) // record_size} records", file=sys.stderr)
+    num_records = len(raw) // record_size
+    for i in range(num_records):
+        off = i * record_size
+        ts, veh_id, path_len = struct.unpack_from('<III', raw, off)
+        path_len = min(path_len, ROUTE_MAX_EDGES)
+        edges = list(struct.unpack_from(f'<{path_len}I', raw, off + 12)) if path_len else []
+        records.append({'ts': ts, 'veh_id': veh_id, 'path_len': path_len, 'edges': edges})
+    return records
+
+
 def parse_file(filepath: str, event_types=None):
     """
     바이너리 파일 파싱
@@ -214,6 +244,10 @@ def parse_file(filepath: str, event_types=None):
     # snapshot 은 가변 블록이라 별도 처리
     if event_types == ['snapshot']:
         return parse_snapshot_file(str(filepath))
+
+    # ML_ROUTE 는 고정 412B 레코드지만 edges 를 리스트 컬럼으로 풀어준다
+    if event_types == [2]:
+        return parse_route_file(str(filepath))
 
     records = []
     raw = filepath.read_bytes()

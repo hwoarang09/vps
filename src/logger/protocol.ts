@@ -8,6 +8,7 @@
 export enum EventType {
   // ML 이벤트 (통계용, 항상 기록)
   ML_ORDER_COMPLETE = 1,
+  ML_ROUTE = 2,
   ML_EDGE_TRANSIT = 3,
   ML_LOCK = 4,
   ML_REPLAY_SNAPSHOT = 5,
@@ -20,12 +21,20 @@ export enum EventType {
   DEV_CHECKPOINT = 15,
 }
 
+/**
+ * ML_ROUTE 레코드의 최대 edge 수.
+ * 경로는 가변 길이이지만 고정 레코드로 기록(pathLen 유효, 나머지 0 패딩).
+ * SHM path buffer 의 MAX_PATH_LENGTH(=100)와 일치시킨다.
+ */
+export const ROUTE_MAX_EDGES = 100;
+
 // ============================================================================
 // Record Sizes (bytes)
 // ============================================================================
 
 /**
  * ML_ORDER_COMPLETE (40B): orderId(4) vehId(4) srcStation(4) destStation(4) createTs(4) assignTs(4) pickupStartTs(4) pickupCompleteTs(4) dropStartTs(4) dropCompleteTs(4)
+ * ML_ROUTE (412B): ts(4) vehId(4) pathLen(4) edges(u32 × 100, pathLen 유효 나머지 0). committed path = 1-based edge index, [0]=현재 edge
  * ML_EDGE_TRANSIT (24B): ts(4) vehId(4) edgeId(4) enterTs(4) exitTs(4) edgeLen(f32,4)
  * ML_LOCK (16B): ts(4) vehId(4) nodeIdx(2) eventType(1) holderHint(1) waitMs(4)
  * ML_REPLAY_SNAPSHOT (36B): ts(4) vehId(4) x(f4) y(f4) z(f4) edgeIdx(4) ratio(f4) speed(f4) status(4)
@@ -38,6 +47,7 @@ export enum EventType {
  */
 export const RECORD_SIZE: Record<EventType, number> = {
   [EventType.ML_ORDER_COMPLETE]: 40,
+  [EventType.ML_ROUTE]: 12 + ROUTE_MAX_EDGES * 4,
   [EventType.ML_EDGE_TRANSIT]: 24,
   [EventType.ML_LOCK]: 16,
   [EventType.ML_REPLAY_SNAPSHOT]: 36,
@@ -59,6 +69,7 @@ export const FLUSH_THRESHOLD = 512;
 /** ML 이벤트 타입 목록 */
 export const ML_EVENT_TYPES: EventType[] = [
   EventType.ML_ORDER_COMPLETE,
+  EventType.ML_ROUTE,
   EventType.ML_EDGE_TRANSIT,
   EventType.ML_LOCK,
   EventType.ML_REPLAY_SNAPSHOT,
@@ -67,6 +78,7 @@ export const ML_EVENT_TYPES: EventType[] = [
 /** 전체 이벤트 타입 목록 (ML + Dev) */
 export const ALL_EVENT_TYPES: EventType[] = [
   EventType.ML_ORDER_COMPLETE,
+  EventType.ML_ROUTE,
   EventType.ML_EDGE_TRANSIT,
   EventType.ML_LOCK,
   EventType.ML_REPLAY_SNAPSHOT,
@@ -84,6 +96,7 @@ export const ALL_EVENT_TYPES: EventType[] = [
 
 const EVENT_FILE_SUFFIX: Record<EventType, string> = {
   [EventType.ML_ORDER_COMPLETE]: 'order',
+  [EventType.ML_ROUTE]: 'route',
   [EventType.ML_EDGE_TRANSIT]: 'edge_transit',
   [EventType.ML_LOCK]: 'lock',
   [EventType.ML_REPLAY_SNAPSHOT]: 'replay',

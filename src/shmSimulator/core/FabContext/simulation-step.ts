@@ -189,8 +189,9 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
 
   // 4. Auto Routing (edge 전환 후 새 경로 필요한 차량 처리)
   if (simLogger) {
-    autoMgr.onPathFound = (vehId, destEdge, pathLen) => {
-      simLogger.logPath(simulationTime, vehId, destEdge, pathLen);
+    autoMgr.onPathFound = (vehId, destEdge, pathIndices) => {
+      simLogger.logPath(simulationTime, vehId, destEdge, pathIndices.length);
+      simLogger.logRoute(simulationTime, vehId, pathIndices);
     };
     autoMgr.onOrderComplete = (p) => simLogger.logOrderComplete(p);
   }

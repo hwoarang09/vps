@@ -142,6 +142,7 @@ export interface SimulationConfig {
   logEvents?: {
     edgeTransit?: boolean;      // ML_EDGE_TRANSIT (기본: true)
     lock?: boolean;             // ML_LOCK (기본: true)
+    route?: boolean;            // ML_ROUTE (기본: true)
     orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
     replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
     path?: boolean;             // DEV_PATH (기본: true in dev)

@@ -8,6 +8,7 @@ declare const FileSystemSyncAccessHandle: any;
 import {
   EventType,
   RECORD_SIZE,
+  ROUTE_MAX_EDGES,
   FLUSH_THRESHOLD,
   getFileName,
 } from './protocol';
@@ -57,6 +58,7 @@ export interface LogCheckpointParams {
 export interface LogEvents {
   edgeTransit?: boolean;      // ML_EDGE_TRANSIT (기본: true)
   lock?: boolean;             // ML_LOCK (기본: true)
+  route?: boolean;            // ML_ROUTE (기본: true)
   orderComplete?: boolean;    // ML_ORDER_COMPLETE (기본: false)
   replaySnapshot?: boolean;   // ML_REPLAY_SNAPSHOT (기본: true)
   path?: boolean;             // DEV_PATH (기본: true in dev)
@@ -197,6 +199,7 @@ export class SimLogger {
 
     // ML events
     if (ev.orderComplete)                          enabled.add(EventType.ML_ORDER_COMPLETE);
+    if (ev.route !== false)                        enabled.add(EventType.ML_ROUTE);
     if (ev.edgeTransit !== false)                  enabled.add(EventType.ML_EDGE_TRANSIT);
     if (ev.lock !== false)                         enabled.add(EventType.ML_LOCK);
     if (ev.replaySnapshot !== false)               enabled.add(EventType.ML_REPLAY_SNAPSHOT);
@@ -228,6 +231,26 @@ export class SimLogger {
     buf.view.setUint32(off + 32, p.dropStartTs,       true);
     buf.view.setUint32(off + 36, p.dropCompleteTs,    true);
     this._increment(buf, EventType.ML_ORDER_COMPLETE);
+  }
+
+  /**
+   * committed path 기록 (Dijkstra 새 경로 산출 시).
+   * path = 1-based edge index 배열, [0]=현재 edge. ROUTE_MAX_EDGES 초과 시 truncate.
+   * 고정 412B 레코드: ts(4) vehId(4) pathLen(4) + edge(u32) × 100 (pathLen 유효, 나머지 0)
+   */
+  logRoute(ts: number, vehId: number, path: number[]): void {
+    const buf = this.eventBuffers.get(EventType.ML_ROUTE);
+    if (!buf) return;
+    const off = buf.count * buf.recordSize;
+    const len = Math.min(path.length, ROUTE_MAX_EDGES);
+    buf.view.setUint32(off + 0, ts, true);
+    buf.view.setUint32(off + 4, vehId, true);
+    buf.view.setUint32(off + 8, len, true);
+    for (let i = 0; i < ROUTE_MAX_EDGES; i++) {
+      // 버퍼 재사용 — 유효 구간 밖은 0으로 채워 이전 레코드 잔재 제거
+      buf.view.setUint32(off + 12 + i * 4, i < len ? path[i] : 0, true);
+    }
+    this._increment(buf, EventType.ML_ROUTE);
   }
 
   logEdgeTransit(ts: number, vehId: number, edgeId: number, enterTs: number, exitTs: number, edgeLen: number): void {
