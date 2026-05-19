@@ -15,15 +15,10 @@ const AppBranding: React.FC = () => {
 
   return (
     <>
-      {/* 상단 좌측 제목 + 버전 */}
+      {/* 상단 좌측 제목 */}
       <div className="fixed top-3 left-4 z-[1000] pointer-events-none select-none">
-        <div className="flex items-end gap-2">
-          <span className="text-white/80 text-base font-light tracking-[0.3em] leading-none">
-            VPS
-          </span>
-          <span className="text-white/30 text-[10px] font-mono tracking-wider leading-none">
-            v{__APP_VERSION__}
-          </span>
+        <div className="text-white/80 text-base font-light tracking-[0.3em] leading-none">
+          VPS
         </div>
         <div className="text-white/35 text-[9px] tracking-[0.15em] mt-1">
           VIRTUAL PHYSICS SIMULATOR
@@ -45,6 +40,10 @@ const AppBranding: React.FC = () => {
         </div>
       )}
 
+      {/* 우하단 버전 */}
+      <div className="fixed bottom-2 right-3 z-[1000] pointer-events-none select-none text-white/30 text-[10px] font-mono tracking-wider">
+        v{__APP_VERSION__}
+      </div>
     </>
   );
 };
