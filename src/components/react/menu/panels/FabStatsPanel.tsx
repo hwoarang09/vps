@@ -530,6 +530,12 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "trend", label: "Trend" },
 ];
 
+function formatElapsed(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
+}
+
 const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const controller = useShmSimulatorStore((s) => s.controller);
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
@@ -622,17 +628,26 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             ))}
           </div>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           {fabStatsList.length > 0 && (
-            <button
-              onClick={() => {
-                controller?.resetOrderStats();
-                useOrderStatsStore.getState().resetAll();
-              }}
-              className="px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
-            >
-              Reset KPI
-            </button>
+            <>
+              <span className="text-[11px] font-mono tabular-nums text-gray-400">
+                {formatElapsed(elapsed)}
+              </span>
+              <button
+                onClick={() => {
+                  controller?.resetOrderStats();
+                  useOrderStatsStore.getState().resetAll();
+                  startTimeRef.current = Date.now();
+                  setElapsed(0);
+                  // Clear trend history
+                  for (const [, arr] of historyRef.current) arr.length = 0;
+                }}
+                className="px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
+              >
+                Reset KPI
+              </button>
+            </>
           )}
           <button
             onClick={onClose}
