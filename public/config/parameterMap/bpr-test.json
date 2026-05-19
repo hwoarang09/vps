@@ -1,10 +1,10 @@
 {
-  "name": "BPR+EWMA 비교 실험 (10x21)",
-  "description": "Row0=DIST+EWMA, Row1-20=BPR c=[0, 0.1, 0.2, 0.3, 0.4] x a=[0.2, 0.5, 1, 2, 4, 6, 8, 10] x b=[2, 4, 6, 8, 10]",
+  "name": "BPR+EWMA 비교 실험 (5x22)",
+  "description": "Row0-1=DIST+EWMA, Row2-21=BPR c=[0, 0.1, 0.2, 0.3] x a=[0.5, 2, 4, 6, 8] x b=[2, 4, 6, 8, 10]. fab당 200대",
   "settingId": "Y_SHORT",
-  "numVehicles": 21000,
-  "fabCountX": 10,
-  "fabCountY": 21,
+  "numVehicles": 22000,
+  "fabCountX": 5,
+  "fabCountY": 22,
   "routing": {
     "strategy": "BPR",
     "bprAlpha": 4,
@@ -53,1203 +53,603 @@
     },
     "10": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 0.5,
       "bprBeta": 2,
       "bprGamma": 0
     },
     "11": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 0.5,
       "bprBeta": 4,
       "bprGamma": 0
     },
     "12": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 0.5,
       "bprBeta": 6,
       "bprGamma": 0
     },
     "13": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 0.5,
       "bprBeta": 8,
       "bprGamma": 0
     },
     "14": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 0.5,
       "bprBeta": 10,
       "bprGamma": 0
     },
     "15": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 2,
       "bprBeta": 2,
       "bprGamma": 0
     },
     "16": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 2,
       "bprBeta": 4,
       "bprGamma": 0
     },
     "17": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 2,
       "bprBeta": 6,
       "bprGamma": 0
     },
     "18": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 2,
       "bprBeta": 8,
       "bprGamma": 0
     },
     "19": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 2,
       "bprBeta": 10,
       "bprGamma": 0
     },
     "20": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 4,
       "bprBeta": 2,
       "bprGamma": 0
     },
     "21": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 4,
       "bprBeta": 4,
       "bprGamma": 0
     },
     "22": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 4,
       "bprBeta": 6,
       "bprGamma": 0
     },
     "23": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 4,
       "bprBeta": 8,
       "bprGamma": 0
     },
     "24": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 4,
       "bprBeta": 10,
       "bprGamma": 0
     },
     "25": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 6,
       "bprBeta": 2,
       "bprGamma": 0
     },
     "26": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 6,
       "bprBeta": 4,
       "bprGamma": 0
     },
     "27": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 6,
       "bprBeta": 6,
       "bprGamma": 0
     },
     "28": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 6,
       "bprBeta": 8,
       "bprGamma": 0
     },
     "29": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 6,
       "bprBeta": 10,
       "bprGamma": 0
     },
     "30": {
       "strategy": "BPR",
-      "bprAlpha": 4,
+      "bprAlpha": 8,
       "bprBeta": 2,
       "bprGamma": 0
     },
     "31": {
       "strategy": "BPR",
-      "bprAlpha": 4,
+      "bprAlpha": 8,
       "bprBeta": 4,
       "bprGamma": 0
     },
     "32": {
       "strategy": "BPR",
-      "bprAlpha": 4,
+      "bprAlpha": 8,
       "bprBeta": 6,
       "bprGamma": 0
     },
     "33": {
       "strategy": "BPR",
-      "bprAlpha": 4,
+      "bprAlpha": 8,
       "bprBeta": 8,
       "bprGamma": 0
     },
     "34": {
       "strategy": "BPR",
-      "bprAlpha": 4,
+      "bprAlpha": 8,
       "bprBeta": 10,
       "bprGamma": 0
     },
     "35": {
       "strategy": "BPR",
-      "bprAlpha": 6,
+      "bprAlpha": 0.5,
       "bprBeta": 2,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "36": {
       "strategy": "BPR",
-      "bprAlpha": 6,
+      "bprAlpha": 0.5,
       "bprBeta": 4,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "37": {
       "strategy": "BPR",
-      "bprAlpha": 6,
+      "bprAlpha": 0.5,
       "bprBeta": 6,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "38": {
       "strategy": "BPR",
-      "bprAlpha": 6,
+      "bprAlpha": 0.5,
       "bprBeta": 8,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "39": {
       "strategy": "BPR",
-      "bprAlpha": 6,
+      "bprAlpha": 0.5,
       "bprBeta": 10,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "40": {
       "strategy": "BPR",
-      "bprAlpha": 8,
+      "bprAlpha": 2,
       "bprBeta": 2,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "41": {
       "strategy": "BPR",
-      "bprAlpha": 8,
+      "bprAlpha": 2,
       "bprBeta": 4,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "42": {
       "strategy": "BPR",
-      "bprAlpha": 8,
+      "bprAlpha": 2,
       "bprBeta": 6,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "43": {
       "strategy": "BPR",
-      "bprAlpha": 8,
+      "bprAlpha": 2,
       "bprBeta": 8,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "44": {
       "strategy": "BPR",
-      "bprAlpha": 8,
+      "bprAlpha": 2,
       "bprBeta": 10,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "45": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 4,
       "bprBeta": 2,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "46": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 4,
       "bprBeta": 4,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "47": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 4,
       "bprBeta": 6,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "48": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 4,
       "bprBeta": 8,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "49": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 4,
       "bprBeta": 10,
-      "bprGamma": 0
+      "bprGamma": 0.1
     },
     "50": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 6,
       "bprBeta": 2,
       "bprGamma": 0.1
     },
     "51": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 6,
       "bprBeta": 4,
       "bprGamma": 0.1
     },
     "52": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 6,
       "bprBeta": 6,
       "bprGamma": 0.1
     },
     "53": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 6,
       "bprBeta": 8,
       "bprGamma": 0.1
     },
     "54": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 6,
       "bprBeta": 10,
       "bprGamma": 0.1
     },
     "55": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 8,
       "bprBeta": 2,
       "bprGamma": 0.1
     },
     "56": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 8,
       "bprBeta": 4,
       "bprGamma": 0.1
     },
     "57": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 8,
       "bprBeta": 6,
       "bprGamma": 0.1
     },
     "58": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 8,
       "bprBeta": 8,
       "bprGamma": 0.1
     },
     "59": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 8,
       "bprBeta": 10,
       "bprGamma": 0.1
     },
     "60": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 0.5,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "61": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 0.5,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "62": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 0.5,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "63": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 0.5,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "64": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 0.5,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "65": {
       "strategy": "BPR",
       "bprAlpha": 2,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "66": {
       "strategy": "BPR",
       "bprAlpha": 2,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "67": {
       "strategy": "BPR",
       "bprAlpha": 2,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "68": {
       "strategy": "BPR",
       "bprAlpha": 2,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "69": {
       "strategy": "BPR",
       "bprAlpha": 2,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "70": {
       "strategy": "BPR",
       "bprAlpha": 4,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "71": {
       "strategy": "BPR",
       "bprAlpha": 4,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "72": {
       "strategy": "BPR",
       "bprAlpha": 4,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "73": {
       "strategy": "BPR",
       "bprAlpha": 4,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "74": {
       "strategy": "BPR",
       "bprAlpha": 4,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "75": {
       "strategy": "BPR",
       "bprAlpha": 6,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "76": {
       "strategy": "BPR",
       "bprAlpha": 6,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "77": {
       "strategy": "BPR",
       "bprAlpha": 6,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "78": {
       "strategy": "BPR",
       "bprAlpha": 6,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "79": {
       "strategy": "BPR",
       "bprAlpha": 6,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "80": {
       "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "81": {
       "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "82": {
       "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "83": {
       "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "84": {
       "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.2
     },
     "85": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 0.5,
       "bprBeta": 2,
-      "bprGamma": 0.1
+      "bprGamma": 0.3
     },
     "86": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 0.5,
       "bprBeta": 4,
-      "bprGamma": 0.1
+      "bprGamma": 0.3
     },
     "87": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 0.5,
       "bprBeta": 6,
-      "bprGamma": 0.1
+      "bprGamma": 0.3
     },
     "88": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 0.5,
       "bprBeta": 8,
-      "bprGamma": 0.1
+      "bprGamma": 0.3
     },
     "89": {
       "strategy": "BPR",
-      "bprAlpha": 10,
+      "bprAlpha": 0.5,
       "bprBeta": 10,
-      "bprGamma": 0.1
+      "bprGamma": 0.3
     },
     "90": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 2,
       "bprBeta": 2,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "91": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 2,
       "bprBeta": 4,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "92": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 2,
       "bprBeta": 6,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "93": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 2,
       "bprBeta": 8,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "94": {
       "strategy": "BPR",
-      "bprAlpha": 0.2,
+      "bprAlpha": 2,
       "bprBeta": 10,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "95": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 4,
       "bprBeta": 2,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "96": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 4,
       "bprBeta": 4,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "97": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 4,
       "bprBeta": 6,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "98": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 4,
       "bprBeta": 8,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "99": {
       "strategy": "BPR",
-      "bprAlpha": 0.5,
+      "bprAlpha": 4,
       "bprBeta": 10,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "100": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 6,
       "bprBeta": 2,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "101": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 6,
       "bprBeta": 4,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "102": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 6,
       "bprBeta": 6,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "103": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 6,
       "bprBeta": 8,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "104": {
       "strategy": "BPR",
-      "bprAlpha": 1,
+      "bprAlpha": 6,
       "bprBeta": 10,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "105": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 8,
       "bprBeta": 2,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "106": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 8,
       "bprBeta": 4,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "107": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 8,
       "bprBeta": 6,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "108": {
       "strategy": "BPR",
-      "bprAlpha": 2,
+      "bprAlpha": 8,
       "bprBeta": 8,
-      "bprGamma": 0.2
+      "bprGamma": 0.3
     },
     "109": {
       "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 10,
-      "bprGamma": 0.2
-    },
-    "110": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 2,
-      "bprGamma": 0.2
-    },
-    "111": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 4,
-      "bprGamma": 0.2
-    },
-    "112": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 6,
-      "bprGamma": 0.2
-    },
-    "113": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 8,
-      "bprGamma": 0.2
-    },
-    "114": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 10,
-      "bprGamma": 0.2
-    },
-    "115": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 2,
-      "bprGamma": 0.2
-    },
-    "116": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 4,
-      "bprGamma": 0.2
-    },
-    "117": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 6,
-      "bprGamma": 0.2
-    },
-    "118": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 8,
-      "bprGamma": 0.2
-    },
-    "119": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 10,
-      "bprGamma": 0.2
-    },
-    "120": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 2,
-      "bprGamma": 0.2
-    },
-    "121": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 4,
-      "bprGamma": 0.2
-    },
-    "122": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 6,
-      "bprGamma": 0.2
-    },
-    "123": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 8,
-      "bprGamma": 0.2
-    },
-    "124": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 10,
-      "bprGamma": 0.2
-    },
-    "125": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 2,
-      "bprGamma": 0.2
-    },
-    "126": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 4,
-      "bprGamma": 0.2
-    },
-    "127": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 6,
-      "bprGamma": 0.2
-    },
-    "128": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 8,
-      "bprGamma": 0.2
-    },
-    "129": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 10,
-      "bprGamma": 0.2
-    },
-    "130": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "131": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "132": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "133": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "134": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "135": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "136": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "137": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "138": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "139": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "140": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "141": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "142": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "143": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "144": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "145": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "146": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "147": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "148": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "149": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "150": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "151": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "152": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "153": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "154": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "155": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "156": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "157": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "158": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "159": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "160": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "161": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "162": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "163": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "164": {
-      "strategy": "BPR",
       "bprAlpha": 8,
       "bprBeta": 10,
       "bprGamma": 0.3
-    },
-    "165": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 2,
-      "bprGamma": 0.3
-    },
-    "166": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 4,
-      "bprGamma": 0.3
-    },
-    "167": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 6,
-      "bprGamma": 0.3
-    },
-    "168": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 8,
-      "bprGamma": 0.3
-    },
-    "169": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 10,
-      "bprGamma": 0.3
-    },
-    "170": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "171": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "172": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "173": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "174": {
-      "strategy": "BPR",
-      "bprAlpha": 0.2,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "175": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "176": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "177": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "178": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "179": {
-      "strategy": "BPR",
-      "bprAlpha": 0.5,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "180": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "181": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "182": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "183": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "184": {
-      "strategy": "BPR",
-      "bprAlpha": 1,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "185": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "186": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "187": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "188": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "189": {
-      "strategy": "BPR",
-      "bprAlpha": 2,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "190": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "191": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "192": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "193": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "194": {
-      "strategy": "BPR",
-      "bprAlpha": 4,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "195": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "196": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "197": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "198": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "199": {
-      "strategy": "BPR",
-      "bprAlpha": 6,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "200": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "201": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "202": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "203": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "204": {
-      "strategy": "BPR",
-      "bprAlpha": 8,
-      "bprBeta": 10,
-      "bprGamma": 0.4
-    },
-    "205": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 2,
-      "bprGamma": 0.4
-    },
-    "206": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 4,
-      "bprGamma": 0.4
-    },
-    "207": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 6,
-      "bprGamma": 0.4
-    },
-    "208": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 8,
-      "bprGamma": 0.4
-    },
-    "209": {
-      "strategy": "BPR",
-      "bprAlpha": 10,
-      "bprBeta": 10,
-      "bprGamma": 0.4
     }
   },
   "groups": [
@@ -1300,7 +700,12 @@
         31,
         32,
         33,
-        34,
+        34
+      ]
+    },
+    {
+      "name": "BPR c=0.1",
+      "fabs": [
         35,
         36,
         37,
@@ -1315,12 +720,7 @@
         46,
         47,
         48,
-        49
-      ]
-    },
-    {
-      "name": "BPR c=0.1",
-      "fabs": [
+        49,
         50,
         51,
         52,
@@ -1330,7 +730,12 @@
         56,
         57,
         58,
-        59,
+        59
+      ]
+    },
+    {
+      "name": "BPR c=0.2",
+      "fabs": [
         60,
         61,
         62,
@@ -1355,17 +760,17 @@
         81,
         82,
         83,
-        84,
+        84
+      ]
+    },
+    {
+      "name": "BPR c=0.3",
+      "fabs": [
         85,
         86,
         87,
         88,
-        89
-      ]
-    },
-    {
-      "name": "BPR c=0.2",
-      "fabs": [
+        89,
         90,
         91,
         92,
@@ -1385,117 +790,7 @@
         106,
         107,
         108,
-        109,
-        110,
-        111,
-        112,
-        113,
-        114,
-        115,
-        116,
-        117,
-        118,
-        119,
-        120,
-        121,
-        122,
-        123,
-        124,
-        125,
-        126,
-        127,
-        128,
-        129
-      ]
-    },
-    {
-      "name": "BPR c=0.3",
-      "fabs": [
-        130,
-        131,
-        132,
-        133,
-        134,
-        135,
-        136,
-        137,
-        138,
-        139,
-        140,
-        141,
-        142,
-        143,
-        144,
-        145,
-        146,
-        147,
-        148,
-        149,
-        150,
-        151,
-        152,
-        153,
-        154,
-        155,
-        156,
-        157,
-        158,
-        159,
-        160,
-        161,
-        162,
-        163,
-        164,
-        165,
-        166,
-        167,
-        168,
-        169
-      ]
-    },
-    {
-      "name": "BPR c=0.4",
-      "fabs": [
-        170,
-        171,
-        172,
-        173,
-        174,
-        175,
-        176,
-        177,
-        178,
-        179,
-        180,
-        181,
-        182,
-        183,
-        184,
-        185,
-        186,
-        187,
-        188,
-        189,
-        190,
-        191,
-        192,
-        193,
-        194,
-        195,
-        196,
-        197,
-        198,
-        199,
-        200,
-        201,
-        202,
-        203,
-        204,
-        205,
-        206,
-        207,
-        208,
-        209
+        109
       ]
     }
   ]
