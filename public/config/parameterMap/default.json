@@ -1,0 +1,50 @@
+{
+  "name": "기본값",
+  "description": "현재 시스템 기본 파라미터 전체",
+  "settingId": "Y_SHORT",
+  "numVehicles": 200,
+  "fabCountX": 1,
+  "fabCountY": 1,
+  "movement": {
+    "linear": {
+      "maxSpeed": 5.0,
+      "acceleration": 2.0,
+      "deceleration": -3.0,
+      "preBrakeDeceleration": -3.0
+    },
+    "curve": {
+      "maxSpeed": 1.0,
+      "acceleration": 1.0
+    }
+  },
+  "lock": {
+    "waitDistanceFromMergingStr": 2.9,
+    "requestDistanceFromMergingStr": 5.1,
+    "waitDistanceFromMergingCurve": 0,
+    "requestDistanceFromMergingCurve": 1,
+    "grantStrategy": "BATCH"
+  },
+  "routing": {
+    "strategy": "BPR",
+    "bprAlpha": 4,
+    "bprBeta": 8,
+    "bprGamma": 0.2,
+    "rerouteInterval": 0,
+    "ewmaAlpha": 0.1
+  },
+  "transfer": {
+    "enabled": true,
+    "mode": { "idlePolicy": "RANDOM_WALK" },
+    "rate": {
+      "mode": "utilization",
+      "utilizationPercent": 50,
+      "throughputPerHour": 4000
+    }
+  },
+  "vehInit": {
+    "mode": "equal",
+    "perFabCounts": {},
+    "seedMode": "random",
+    "seed": 12345
+  }
+}

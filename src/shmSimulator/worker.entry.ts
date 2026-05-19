@@ -220,12 +220,12 @@ globalThis.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (message.fabId) {
           // Per-fab update
           engine.getFabContext(message.fabId)?.updateRoutingConfig(
-            message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha
+            message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha, message.bprGamma
           );
         } else {
           // Broadcast to all fabs
           engine.forEachFab((ctx) => {
-            ctx.updateRoutingConfig(message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha);
+            ctx.updateRoutingConfig(message.strategy, message.bprAlpha, message.bprBeta, message.rerouteInterval, message.ewmaAlpha, message.bprGamma);
           });
         }
       }

@@ -5,7 +5,8 @@ import KeyboardShortcutHandler from "@components/react/system/KeyboardShortcutHa
 import UnusualMoveModal from "@components/three/overlays/UnusualMoveModal";
 import LoadingScreen from "@components/react/LoadingScreen";
 import IconWarmCache from "@components/react/IconWarmCache";
-import { initConfigFromDb } from "@/config/persistedConfig";
+import { initConfig } from "@/config/persistedConfig";
+import { initPresetFromDb } from "@/config/react/parameterPreset";
 import { useLoadingStore } from "@store/ui/loadingStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
 import { useCameraStore } from "@store/ui/cameraStore";
@@ -35,7 +36,7 @@ const App: React.FC = () => {
   const isShmInitialized = useShmSimulatorStore((s) => s.isInitialized);
 
   useEffect(() => {
-    initConfigFromDb().then(() => {
+    initConfig().then(() => initPresetFromDb()).then(() => {
       setConfigReady(true);
       useLoadingStore.getState().setConfigReady();
     });

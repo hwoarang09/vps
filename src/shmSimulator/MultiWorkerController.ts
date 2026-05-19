@@ -643,15 +643,15 @@ export class MultiWorkerController {
     }
   }
 
-  setRoutingConfig(strategy: 'DISTANCE' | 'BPR' | 'EWMA', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number, ewmaAlpha?: number): void {
+  setRoutingConfig(strategy: 'DISTANCE' | 'BPR' | 'EWMA', bprAlpha?: number, bprBeta?: number, fabId?: string, rerouteInterval?: number, ewmaAlpha?: number, bprGamma?: number): void {
     if (fabId) {
       const workerIndex = this.fabToWorkerMap.get(fabId);
       if (workerIndex !== undefined && this.workers[workerIndex]) {
-        const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, rerouteInterval, ewmaAlpha };
+        const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", fabId, strategy, bprAlpha, bprBeta, bprGamma, rerouteInterval, ewmaAlpha };
         this.workers[workerIndex].worker.postMessage(message);
       }
     } else {
-      const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", strategy, bprAlpha, bprBeta, rerouteInterval, ewmaAlpha };
+      const message: WorkerMessage = { type: "SET_ROUTING_CONFIG", strategy, bprAlpha, bprBeta, bprGamma, rerouteInterval, ewmaAlpha };
       for (const workerInfo of this.workers) {
         workerInfo.worker.postMessage(message);
       }

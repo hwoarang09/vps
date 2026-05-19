@@ -158,6 +158,8 @@ export interface SimulationConfig {
   routingBprAlpha?: number;
   /** BPR beta 파라미터 (기본 4.0) */
   routingBprBeta?: number;
+  /** BPR gamma — ratio offset (기본 0.2) */
+  routingBprGamma?: number;
   /** EWMA smoothing factor (0.0~1.0, 기본 0.1) */
   routingEwmaAlpha?: number;
   /** 경로 재탐색 주기 (edge 수). 0=도착 시만, 1=매 edge, N=N edge마다 */
@@ -370,7 +372,7 @@ export type WorkerMessage =
   // Lock 정보 요청
   | { type: "GET_LOCK_TABLE"; fabId: string; requestId: string }
   // Routing config 동적 변경 (fabId 생략 시 전체 fab에 적용)
-  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR' | 'EWMA'; bprAlpha?: number; bprBeta?: number; rerouteInterval?: number; ewmaAlpha?: number }
+  | { type: "SET_ROUTING_CONFIG"; fabId?: string; strategy: 'DISTANCE' | 'BPR' | 'EWMA'; bprAlpha?: number; bprBeta?: number; bprGamma?: number; rerouteInterval?: number; ewmaAlpha?: number }
   // Movement config 동적 변경 (fabId 생략 시 전체 fab에 적용)
   | { type: "SET_MOVEMENT_CONFIG"; fabId?: string; linearMaxSpeed?: number; linearAcceleration?: number; linearDeceleration?: number; preBrakeDeceleration?: number; curveMaxSpeed?: number; curveAcceleration?: number }
   // Order stats reset (fabId 생략 시 전체 fab)

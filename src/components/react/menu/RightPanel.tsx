@@ -19,6 +19,7 @@ import LockParamsPanel from "./panels/params/LockParamsPanel";
 import RoutingParamsPanel from "./panels/params/RoutingParamsPanel";
 import ModeParamsPanel from "./panels/params/ModeParamsPanel";
 import VehParamsPanel from "./panels/params/VehParamsPanel";
+import PresetPanel from "./panels/PresetPanel";
 import {
   panelContainerVariants,
   panelHeaderVariants,
@@ -105,6 +106,9 @@ const RightPanel: React.FC = () => {
     if (activeThirdMenu === "params-mode") return <ModeParamsPanel />;
     if (activeThirdMenu === "params-veh") return <VehParamsPanel />;
 
+    // Parameter Preset Panel
+    if (activeSubMenu === "operation-preset") return <PresetPanel />;
+
     // Operation Map/CFG Panel
     if (activeSubMenu === "operation-menu-6") {
       return <OperationMapPanel />;
@@ -165,6 +169,7 @@ const RightPanel: React.FC = () => {
       "operation-menu-5": "Operation Logs",
       "operation-menu-6": "Layout Load",
       "operation-menu-7": "Transfer Mode",
+      "operation-preset": "Preset",
       "operation-menu-8": "Sim Parameters",
       // MapBuilder
       "map-menu-1": "Straight Rails",

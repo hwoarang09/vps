@@ -11,7 +11,7 @@ import { OrderLifecycleBar } from "./OrderLifecycleBar";
 import { ParametersTab } from "./ParametersTab";
 import { VEHICLE_JOB_STATE_COLORS, MOVEMENT_STATUS_COLORS } from "@/config/colors";
 
-const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
+import { fabRoutingText } from "./routingLabel";
 
 const DETAIL_TABS: { key: DetailTabKey; label: string }[] = [
   { key: "distribution", label: "Distribution" },
@@ -195,13 +195,7 @@ export const RankingDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
 
   const { fab, fabIndex } = selected;
   const ovr = fabOverrides[fabIndex];
-  const strategy = ovr?.routing?.strategy ?? globalRouting.strategy;
-  const bprAlpha = ovr?.routing?.bprAlpha ?? globalRouting.bprAlpha;
-  const bprBeta = ovr?.routing?.bprBeta ?? globalRouting.bprBeta;
-  const ewmaAlpha = ovr?.routing?.ewmaAlpha ?? globalRouting.ewmaAlpha;
-  let strategyText = ROUTING_LABEL[strategy] ?? strategy;
-  if (strategy === "BPR") strategyText = `BPR α=${bprAlpha} β=${bprBeta}`;
-  else if (strategy === "EWMA") strategyText = `EWMA α=${ewmaAlpha}`;
+  const strategyText = fabRoutingText(globalRouting, ovr?.routing);
 
   return (
     <div className="h-full min-h-0 flex flex-col p-2 gap-2 overflow-hidden">

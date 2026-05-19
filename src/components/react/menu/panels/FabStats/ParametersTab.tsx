@@ -2,7 +2,7 @@ import React from "react";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { panelCardVariants } from "../../shared/panelStyles";
 
-const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
+import { ROUTING_LABEL } from "./routingLabel";
 const IDLE_POLICY_LABEL: Record<string, string> = {
   RANDOM_WALK: "Random Walk",
   ARRIVAL_BAY_LOOP: "Bay Loop",
@@ -62,6 +62,7 @@ export const ParametersTab: React.FC<{ fabIndex: number }> = ({ fabIndex }) => {
   const routingStrategy = ovr?.routing?.strategy ?? globalRouting.strategy;
   const bprAlpha = ovr?.routing?.bprAlpha ?? globalRouting.bprAlpha;
   const bprBeta = ovr?.routing?.bprBeta ?? globalRouting.bprBeta;
+  const bprGamma = ovr?.routing?.bprGamma ?? globalRouting.bprGamma;
   const ewmaAlpha = ovr?.routing?.ewmaAlpha ?? globalRouting.ewmaAlpha;
   const rerouteInterval = ovr?.routing?.rerouteInterval ?? globalRouting.rerouteInterval;
 
@@ -102,6 +103,7 @@ export const ParametersTab: React.FC<{ fabIndex: number }> = ({ fabIndex }) => {
             <>
               <ParamRow label="BPR α" value={bprAlpha} overridden={ovr?.routing?.bprAlpha !== undefined} base={globalRouting.bprAlpha} />
               <ParamRow label="BPR β" value={bprBeta} overridden={ovr?.routing?.bprBeta !== undefined} base={globalRouting.bprBeta} />
+              <ParamRow label="BPR γ" value={bprGamma} overridden={ovr?.routing?.bprGamma !== undefined} base={globalRouting.bprGamma} />
             </>
           )}
           {routingStrategy === "EWMA" && (

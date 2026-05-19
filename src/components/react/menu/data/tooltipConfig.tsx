@@ -37,6 +37,7 @@ export const tooltipsByLevel: {
     "operation-menu-4": "알림 관리",
     "operation-menu-5": "운영 로그",
     "operation-menu-6": "레이아웃 불러오기",
+    "operation-preset": "파라미터 프리셋 불러오기",
     "operation-menu-8": "시뮬레이션 파라미터",
 
     "mqtt-connection": "MQTT 브로커 연결 관리",

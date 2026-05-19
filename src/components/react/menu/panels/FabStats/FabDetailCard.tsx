@@ -11,7 +11,7 @@ import {
   MOVEMENT_STATUS_COLORS,
 } from "@/config/colors";
 
-const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
+import { fabRoutingText } from "./routingLabel";
 const IDLE_POLICY_LABEL: Record<string, string> = {
   RANDOM_WALK: "Random Walk",
   ARRIVAL_BAY_LOOP: "Bay Loop",
@@ -148,13 +148,8 @@ export const FabDetailCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ f
   const baseLinearMaxSpeed = useFabConfigStore((s) => s.baseConfig.movement.linear.maxSpeed);
 
   const ovr = fabOverrides[fabIndex];
-  const routingConfig = {
-    strategy: ovr?.routing?.strategy ?? globalRouting.strategy,
-    bprAlpha: ovr?.routing?.bprAlpha ?? globalRouting.bprAlpha,
-    bprBeta: ovr?.routing?.bprBeta ?? globalRouting.bprBeta,
-    ewmaAlpha: ovr?.routing?.ewmaAlpha ?? globalRouting.ewmaAlpha,
-    rerouteInterval: ovr?.routing?.rerouteInterval ?? globalRouting.rerouteInterval,
-  };
+  const strategyText = fabRoutingText(globalRouting, ovr?.routing);
+  const rerouteInterval = ovr?.routing?.rerouteInterval ?? globalRouting.rerouteInterval;
   const transferModeConfig = ovr?.transferMode ?? globalMode;
   const transferRateConfig = {
     mode: ovr?.transferRateConfig?.mode ?? globalRate.mode,
@@ -164,13 +159,6 @@ export const FabDetailCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ f
 
   // Nominal max: fab override → base config 의 직선 최대 속도
   const nominalMaxSpeed = ovr?.movement?.linear?.maxSpeed ?? baseLinearMaxSpeed;
-
-  let strategyText = ROUTING_LABEL[routingConfig.strategy] ?? routingConfig.strategy;
-  if (routingConfig.strategy === "BPR") {
-    strategyText = `BPR α=${routingConfig.bprAlpha} β=${routingConfig.bprBeta}`;
-  } else if (routingConfig.strategy === "EWMA") {
-    strategyText = `EWMA α=${routingConfig.ewmaAlpha}`;
-  }
 
   const n = fab.vehicleCount;
   const movingPct = n > 0 ? ((fab.movingCount / n) * 100).toFixed(0) : "0";
@@ -250,7 +238,7 @@ export const FabDetailCard: React.FC<{ fab: FabStats; fabIndex: number }> = ({ f
             : `${transferRateConfig.throughputPerHour}/hr`
         } color="text-cyan-300" />
         <Stat label="Reroute"
-          value={routingConfig.rerouteInterval > 0 ? `${routingConfig.rerouteInterval} edges` : "off"}
+          value={rerouteInterval > 0 ? `${rerouteInterval} edges` : "off"}
           color="text-gray-400" />
       </div>
 

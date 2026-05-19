@@ -163,6 +163,7 @@ export class FabContext {
         ...(this.config.routingStrategy && { strategy: this.config.routingStrategy }),
         ...(this.config.routingBprAlpha !== undefined && { bprAlpha: this.config.routingBprAlpha }),
         ...(this.config.routingBprBeta !== undefined && { bprBeta: this.config.routingBprBeta }),
+        ...(this.config.routingBprGamma !== undefined && { bprGamma: this.config.routingBprGamma }),
         ...(this.config.routingEwmaAlpha !== undefined && { ewmaAlpha: this.config.routingEwmaAlpha }),
       },
       edgeVehicleQueue: this.edgeVehicleQueue,
@@ -274,12 +275,13 @@ export class FabContext {
     }
   }
 
-  updateRoutingConfig(strategy: RoutingStrategy, bprAlpha?: number, bprBeta?: number, rerouteInterval?: number, ewmaAlpha?: number): void {
+  updateRoutingConfig(strategy: RoutingStrategy, bprAlpha?: number, bprBeta?: number, rerouteInterval?: number, ewmaAlpha?: number, bprGamma?: number): void {
     this.routingContext.config = {
       ...this.routingContext.config,
       strategy,
       ...(bprAlpha !== undefined && { bprAlpha }),
       ...(bprBeta !== undefined && { bprBeta }),
+      ...(bprGamma !== undefined && { bprGamma }),
       ...(ewmaAlpha !== undefined && { ewmaAlpha }),
     };
     if (ewmaAlpha !== undefined) {

@@ -115,6 +115,9 @@ const VehicleTest: React.FC = () => {
         vehicleCreateTimeoutRef.current = setTimeout(() => {
           // Persisted config에 multi-fab이면 자동 적용
           const cfg = getPersistedConfig();
+          // UI state도 동기화
+          setFabCountX(cfg.fabCountX);
+          setFabCountY(cfg.fabCountY);
           const totalFabs = cfg.fabCountX * cfg.fabCountY;
           if (totalFabs > 1) {
             applyFabGrid(cfg.fabCountX, cfg.fabCountY);

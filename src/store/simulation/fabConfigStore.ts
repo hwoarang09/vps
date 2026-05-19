@@ -95,6 +95,8 @@ export interface RoutingConfig {
   strategy: RoutingStrategy;
   bprAlpha: number;
   bprBeta: number;
+  /** BPR gamma — ratio offset. (V/C + gamma)^beta */
+  bprGamma: number;
   /** 경로 재탐색 주기 (edge 수). 0=도착 시만 */
   rerouteInterval: number;
   /** EWMA smoothing factor (0.0~1.0) */
@@ -283,6 +285,7 @@ export const useFabConfigStore = create<FabConfigStore>((set, get) => ({
     strategy: 'BPR',
     bprAlpha: 4,
     bprBeta: 8,
+    bprGamma: 0.2,
     rerouteInterval: 0,
     ewmaAlpha: 0.1,
   },

@@ -34,6 +34,8 @@ export interface RoutingConfig {
   bprAlpha: number;
   /** BPR beta parameter */
   bprBeta: number;
+  /** BPR gamma — ratio offset (ratio + gamma)^beta. ratio가 1 이하일 때 beta 효과 보정 */
+  bprGamma: number;
   /** Minimum capacity per edge (prevents division by zero) */
   bprMinCapacity: number;
   /** EWMA smoothing factor (0.0~1.0) */
@@ -59,6 +61,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   strategy: "DISTANCE",
   bprAlpha: 4,
   bprBeta: 8,
+  bprGamma: 0.2,
   bprMinCapacity: 1,
   ewmaAlpha: 0.1,
 };
@@ -79,7 +82,7 @@ function freeFlowTime(edge: Edge, ctx: RoutingContext): number {
  * Unified edge cost function (unit: simulation-seconds).
  *
  * DISTANCE: free-flow time (static)
- * BPR:      t0 * (1 + α * (volume/capacity)^β)  — 학술 표준 BPR
+ * BPR:      t0 * (1 + α * (volume/capacity + γ)^β)  — 학술 BPR + ratio offset
  * EWMA:     관측된 EWMA transit time (cold → free-flow time fallback)
  */
 function edgeCost(edge: Edge, edgeIndex1Based: number): number {
@@ -93,10 +96,10 @@ function edgeCost(edge: Edge, edgeIndex1Based: number): number {
       return t0;
 
     case "BPR": {
-      const { bprAlpha, bprBeta, bprMinCapacity } = ctx.config;
+      const { bprAlpha, bprBeta, bprGamma, bprMinCapacity } = ctx.config;
       const volume = ctx.edgeVehicleQueue.getCount(edgeIndex1Based);
       const capacity = Math.max(bprMinCapacity, Math.floor(edge.distance / ctx.vehicleSpacing));
-      const ratio = volume / capacity;
+      const ratio = volume / capacity + bprGamma;
       return t0 * (1 + bprAlpha * Math.pow(ratio, bprBeta));
     }
 

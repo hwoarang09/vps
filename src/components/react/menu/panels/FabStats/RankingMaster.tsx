@@ -5,7 +5,7 @@ import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
 import { useFabStatsUIStore, RANKING_METRICS, type RankingMetricKey } from "./store";
 import type { FabStats } from "../FabStatsPanel";
 
-const ROUTING_LABEL: Record<string, string> = { DISTANCE: "Distance", BPR: "BPR", EWMA: "EWMA" };
+import { fabRoutingText } from "./routingLabel";
 const RANK_BADGE = ["🥇", "🥈", "🥉"];
 
 interface RankedEntry {
@@ -75,12 +75,7 @@ export const RankingMaster: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
         const value = getMetricValue(fab, sortBy, throughput, leadP50, leadP95, completed);
 
         const ovr = fabOverrides[fabIndex];
-        const strategy = ovr?.routing?.strategy ?? globalRouting.strategy;
-        const bprAlpha = ovr?.routing?.bprAlpha ?? globalRouting.bprAlpha;
-        const ewmaAlpha = ovr?.routing?.ewmaAlpha ?? globalRouting.ewmaAlpha;
-        let strategyText = ROUTING_LABEL[strategy] ?? strategy;
-        if (strategy === "BPR") strategyText = `BPR α${bprAlpha}`;
-        else if (strategy === "EWMA") strategyText = `EWMA α${ewmaAlpha}`;
+        const strategyText = fabRoutingText(globalRouting, ovr?.routing);
 
         return { fab, fabIndex, value, strategyText };
       })

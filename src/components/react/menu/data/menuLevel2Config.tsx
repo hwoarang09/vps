@@ -61,6 +61,12 @@ export const menuLevel2Config: Record<string, MenuLevel2Item[]> = {
       iconFn: () => pngIcon(imgDevToolsGear),
     },
     {
+      id: "operation-preset",
+      label: "Preset",
+      shortcutLabel: "r",
+      iconFn: () => pngIcon(imgStationIn),
+    },
+    {
       id: "operation-menu-2",
       label: "Schedule",
       iconFn: (isActive: boolean) => (

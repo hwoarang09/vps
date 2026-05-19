@@ -58,7 +58,7 @@ const StrategyToggle: React.FC<{
           : "bg-panel-bg-solid text-gray-500 border-panel-border hover:text-gray-300"
       }`}>
       BPR
-      <span className="block text-[10px] font-normal mt-0.5 opacity-70">t0*(1+a*(V/C)^b)</span>
+      <span className="block text-[10px] font-normal mt-0.5 opacity-70">t0*(1+a*(V/C+c)^b)</span>
     </button>
     <button onClick={() => onChange("EWMA")}
       className={`flex-1 px-3 py-2 rounded-r text-xs font-bold border transition-all ${
@@ -73,14 +73,17 @@ const StrategyToggle: React.FC<{
 );
 
 const BprParams: React.FC<{
-  alpha: number; beta: number; onAlpha: (v: number) => void; onBeta: (v: number) => void; enabled: boolean;
-}> = ({ alpha, beta, onAlpha, onBeta, enabled }) => (
+  alpha: number; beta: number; gamma: number;
+  onAlpha: (v: number) => void; onBeta: (v: number) => void; onGamma: (v: number) => void;
+  enabled: boolean;
+}> = ({ alpha, beta, gamma, onAlpha, onBeta, onGamma, enabled }) => (
   <div className={`mt-2 transition-opacity ${enabled ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
     <div className="mb-2 text-[10px] text-gray-500 font-mono">
-      cost = t0 * (1 + <span className="text-accent-cyan">a</span> * (V/C)<sup className="text-accent-cyan">b</sup>)
+      cost = t0 * (1 + <span className="text-accent-cyan">a</span> * (V/C + <span className="text-accent-cyan">c</span>)<sup className="text-accent-cyan">b</sup>)
     </div>
     <BprParamInput label="a (alpha)" value={alpha} onChange={onAlpha} description="혼잡 가중치" />
     <BprParamInput label="b (beta)" value={beta} onChange={onBeta} description="혼잡 민감도" />
+    <BprParamInput label="c (gamma)" value={gamma} onChange={onGamma} description="ratio 오프셋" />
     <div className="text-[10px] text-gray-600">V = edge 위 차량 수, C = edge길이 / 차량간격</div>
   </div>
 );
@@ -150,7 +153,7 @@ const RerouteSelector: React.FC<{
 
 // ─── Main Panel ───
 
-type FullRouting = { strategy: RoutingStrategy; bprAlpha: number; bprBeta: number; rerouteInterval: number; ewmaAlpha: number };
+type FullRouting = { strategy: RoutingStrategy; bprAlpha: number; bprBeta: number; bprGamma: number; rerouteInterval: number; ewmaAlpha: number };
 const GLOBAL = "global";
 
 const RoutingParamsPanel: React.FC = () => {
@@ -161,7 +164,7 @@ const RoutingParamsPanel: React.FC = () => {
 
   const pushToWorker = (fabId: string | undefined, cfg: FullRouting) => {
     if (!controller) return;
-    controller.setRoutingConfig(cfg.strategy, cfg.bprAlpha, cfg.bprBeta, fabId, cfg.rerouteInterval, cfg.ewmaAlpha);
+    controller.setRoutingConfig(cfg.strategy, cfg.bprAlpha, cfg.bprBeta, fabId, cfg.rerouteInterval, cfg.ewmaAlpha, cfg.bprGamma);
   };
 
   // === Global ===
@@ -177,6 +180,7 @@ const RoutingParamsPanel: React.FC = () => {
       strategy: (r?.strategy ?? routingConfig.strategy) as RoutingStrategy,
       bprAlpha: r?.bprAlpha ?? routingConfig.bprAlpha,
       bprBeta: r?.bprBeta ?? routingConfig.bprBeta,
+      bprGamma: r?.bprGamma ?? routingConfig.bprGamma,
       rerouteInterval: r?.rerouteInterval ?? routingConfig.rerouteInterval,
       ewmaAlpha: r?.ewmaAlpha ?? routingConfig.ewmaAlpha,
     };
@@ -235,8 +239,8 @@ const RoutingParamsPanel: React.FC = () => {
             <StrategyToggle strategy={routingConfig.strategy} onChange={(s) => updateGlobal({ strategy: s })} />
           </div>
           <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
-            <BprParams alpha={routingConfig.bprAlpha} beta={routingConfig.bprBeta}
-              onAlpha={(v) => updateGlobal({ bprAlpha: v })} onBeta={(v) => updateGlobal({ bprBeta: v })}
+            <BprParams alpha={routingConfig.bprAlpha} beta={routingConfig.bprBeta} gamma={routingConfig.bprGamma}
+              onAlpha={(v) => updateGlobal({ bprAlpha: v })} onBeta={(v) => updateGlobal({ bprBeta: v })} onGamma={(v) => updateGlobal({ bprGamma: v })}
               enabled={routingConfig.strategy === "BPR"} />
           </div>
           <div className={`${panelCardVariants({ variant: "default", padding: "sm" })}`}>
@@ -268,9 +272,10 @@ const RoutingParamsPanel: React.FC = () => {
               onChange={(s) => updateFab(selectedFabIndex, { strategy: s })} />
           </div>
           <div className={`${panelCardVariants({ variant: hasOverride ? "highlight" : "default", padding: "sm" })}`}>
-            <BprParams alpha={selectedEff.bprAlpha} beta={selectedEff.bprBeta}
+            <BprParams alpha={selectedEff.bprAlpha} beta={selectedEff.bprBeta} gamma={selectedEff.bprGamma}
               onAlpha={(v) => updateFab(selectedFabIndex, { bprAlpha: v })}
               onBeta={(v) => updateFab(selectedFabIndex, { bprBeta: v })}
+              onGamma={(v) => updateFab(selectedFabIndex, { bprGamma: v })}
               enabled={selectedEff.strategy === "BPR"} />
           </div>
           <div className={`${panelCardVariants({ variant: hasOverride ? "highlight" : "default", padding: "sm" })}`}>
@@ -299,7 +304,7 @@ const RoutingParamsPanel: React.FC = () => {
                   <span className="text-accent-orange">Fab {fab.fabIndex}</span>
                   <span className="text-gray-400 font-mono">
                     {eff.strategy} rr={eff.rerouteInterval}
-                    {eff.strategy === "BPR" ? ` a=${eff.bprAlpha} b=${eff.bprBeta}` : ""}
+                    {eff.strategy === "BPR" ? ` a=${eff.bprAlpha} b=${eff.bprBeta} c=${eff.bprGamma}` : ""}
                     {eff.strategy === "EWMA" ? ` a=${eff.ewmaAlpha}` : ""}
                   </span>
                 </div>
