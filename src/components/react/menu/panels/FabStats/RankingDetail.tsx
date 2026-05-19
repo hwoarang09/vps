@@ -1,4 +1,12 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  createColumnHelper,
+  type SortingState,
+} from "@tanstack/react-table";
 import { useFabStatsUIStore, type DetailTabKey } from "./store";
 import type { FabStats } from "../FabStatsPanel";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
@@ -167,6 +175,137 @@ const DistributionTab: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab })
 };
 
 // ============================================================================
+// Group Member Table — TanStack Table (a, b, c 개별 컬럼 + 성능 지표, 정렬 가능)
+// ============================================================================
+
+interface MemberRow {
+  fabIndex: number;
+  strategy: string;
+  alpha: number;
+  beta: number;
+  gamma: number;
+  ewmaAlpha: number;
+  reroute: number;
+  veh: number;
+  throughput: number;
+  avgSpeed: number;
+  movingPct: number;
+}
+
+const memberColHelper = createColumnHelper<MemberRow>();
+
+const MEMBER_COLUMNS = [
+  memberColHelper.accessor("fabIndex", { header: "Fab", size: 40 }),
+  memberColHelper.accessor("strategy", { header: "Str", size: 50 }),
+  memberColHelper.accessor("alpha", { header: "α", size: 40 }),
+  memberColHelper.accessor("beta", { header: "β", size: 40 }),
+  memberColHelper.accessor("gamma", { header: "γ", size: 40 }),
+  memberColHelper.accessor("ewmaAlpha", { header: "Eα", size: 40 }),
+  memberColHelper.accessor("reroute", { header: "rr", size: 35 }),
+  memberColHelper.accessor("veh", { header: "Veh", size: 40 }),
+  memberColHelper.accessor("throughput", {
+    header: "Thru/hr",
+    cell: (info) => <span className="text-accent-green">{info.getValue().toFixed(0)}</span>,
+    size: 60,
+  }),
+  memberColHelper.accessor("avgSpeed", {
+    header: "Spd",
+    cell: (info) => info.getValue().toFixed(2),
+    size: 50,
+  }),
+  memberColHelper.accessor("movingPct", {
+    header: "Mov%",
+    cell: (info) => `${info.getValue().toFixed(0)}%`,
+    size: 45,
+  }),
+];
+
+const GroupMemberTable: React.FC<{
+  members: { fab: FabStats; fabIndex: number }[];
+  orderStatsMap: ReturnType<typeof useOrderStatsStore.getState>["fabStats"];
+  globalRouting: ReturnType<typeof useFabConfigStore.getState>["routingConfig"];
+  fabOverrides: ReturnType<typeof useFabConfigStore.getState>["fabOverrides"];
+}> = ({ members, orderStatsMap, globalRouting, fabOverrides }) => {
+  const [sorting, setSorting] = useState<SortingState>([]);
+
+  const data: MemberRow[] = useMemo(() =>
+    members.map((m) => {
+      const ovr = fabOverrides[m.fabIndex]?.routing;
+      const os = orderStatsMap[m.fab.fabId];
+      return {
+        fabIndex: m.fabIndex,
+        strategy: (ovr?.strategy ?? globalRouting.strategy) as string,
+        alpha: ovr?.bprAlpha ?? globalRouting.bprAlpha,
+        beta: ovr?.bprBeta ?? globalRouting.bprBeta,
+        gamma: ovr?.bprGamma ?? globalRouting.bprGamma,
+        ewmaAlpha: ovr?.ewmaAlpha ?? globalRouting.ewmaAlpha,
+        reroute: ovr?.rerouteInterval ?? globalRouting.rerouteInterval,
+        veh: m.fab.vehicleCount,
+        throughput: os?.throughputPerHour ?? 0,
+        avgSpeed: m.fab.avgSpeed,
+        movingPct: m.fab.vehicleCount > 0 ? (m.fab.movingCount / m.fab.vehicleCount) * 100 : 0,
+      };
+    }),
+  [members, orderStatsMap, globalRouting, fabOverrides]);
+
+  // Auto-hide uniform columns
+  const visibleColumns = useMemo(() => {
+    if (data.length <= 1) return MEMBER_COLUMNS;
+    return MEMBER_COLUMNS.filter((col) => {
+      const id = (col as { accessorKey?: string }).accessorKey;
+      if (!id) return true;
+      // Always show: fabIndex + performance metrics
+      if (["fabIndex", "veh", "throughput", "avgSpeed", "movingPct"].includes(id)) return true;
+      const first = data[0]?.[id as keyof MemberRow];
+      return data.some((r) => r[id as keyof MemberRow] !== first);
+    });
+  }, [data]);
+
+  const table = useReactTable({
+    data,
+    columns: visibleColumns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto vps-scrollbar">
+      <table className="w-full text-[11px]">
+        <thead className="sticky top-0 bg-gray-900 text-gray-400 border-b border-gray-700">
+          {table.getHeaderGroups().map((hg) => (
+            <tr key={hg.id}>
+              {hg.headers.map((header) => (
+                <th
+                  key={header.id}
+                  onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                  className="px-1.5 py-1 text-left cursor-pointer hover:text-accent-cyan select-none whitespace-nowrap font-mono"
+                >
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map((row) => (
+            <tr key={row.id} className="border-b border-gray-800/50 hover:bg-gray-800/40">
+              {row.getVisibleCells().map((cell) => (
+                <td key={cell.id} className="px-1.5 py-0.5 font-mono text-gray-300">
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ============================================================================
 // Group Detail — 그룹 선택 시 집계 KPI + 멤버 리스트
 // ============================================================================
 
@@ -224,39 +363,8 @@ const GroupDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) =
         ))}
       </div>
 
-      {/* Member list */}
-      <div className="flex-1 min-h-0 overflow-auto vps-scrollbar">
-        <table className="w-full text-[11px]">
-          <thead className="sticky top-0 bg-gray-900 text-gray-400 border-b border-gray-700">
-            <tr>
-              <th className="px-2 py-1 text-left">Fab</th>
-              <th className="px-2 py-1 text-left">Routing</th>
-              <th className="px-2 py-1 text-right">Veh</th>
-              <th className="px-2 py-1 text-right">Throughput</th>
-              <th className="px-2 py-1 text-right">Avg Speed</th>
-              <th className="px-2 py-1 text-right">Moving%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((m) => {
-              const os = orderStatsMap[m.fab.fabId];
-              const ovr = fabOverrides[m.fabIndex];
-              return (
-                <tr key={m.fabIndex} className="border-b border-gray-800/50 hover:bg-gray-800/40">
-                  <td className="px-2 py-1 font-mono text-gray-200">{m.fabIndex}</td>
-                  <td className="px-2 py-1 text-purple-300/80">{fabRoutingText(globalRouting, ovr?.routing)}</td>
-                  <td className="px-2 py-1 text-right text-gray-400">{m.fab.vehicleCount}</td>
-                  <td className="px-2 py-1 text-right font-mono text-accent-green">{(os?.throughputPerHour ?? 0).toFixed(0)}/hr</td>
-                  <td className="px-2 py-1 text-right font-mono text-gray-300">{m.fab.avgSpeed.toFixed(2)}</td>
-                  <td className="px-2 py-1 text-right font-mono text-gray-300">
-                    {m.fab.vehicleCount > 0 ? ((m.fab.movingCount / m.fab.vehicleCount) * 100).toFixed(0) : 0}%
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* Member table — TanStack Table */}
+      <GroupMemberTable members={members} orderStatsMap={orderStatsMap} globalRouting={globalRouting} fabOverrides={fabOverrides} />
     </div>
   );
 };

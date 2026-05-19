@@ -1,16 +1,24 @@
-// FabStats/GroupEditor.tsx — 데이터 드리븐 파라미터 테이블 + 그룹 생성
+// FabStats/GroupEditor.tsx — TanStack Table 기반 파라미터 테이블 + 그룹 생성
 // 새 파라미터 추가 = PARAM_COLUMNS 배열에 한 줄 추가. fab간 값이 동일한 컬럼은 자동 숨김.
 import React, { useMemo, useState } from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  createColumnHelper,
+  type SortingState,
+  type RowSelectionState,
+} from "@tanstack/react-table";
 import { useFabConfigStore, type FabConfigOverride } from "@/store/simulation/fabConfigStore";
 import { useFabStatsUIStore, type FabGroup } from "./store";
 import type { FabStats } from "../FabStatsPanel";
 
 // ─── 파라미터 컬럼 정의 (여기만 수정하면 테이블에 반영) ───
 
-interface ParamColumn {
+interface ParamDef {
   key: string;
   label: string;
-  /** fab의 effective 값 추출. store 전체를 받아서 자유롭게 계산 */
   getValue: (fabIndex: number, ctx: ParamContext) => string | number;
 }
 
@@ -25,33 +33,33 @@ interface ParamContext {
   fabStats: FabStats[];
 }
 
-const PARAM_COLUMNS: ParamColumn[] = [
-  // Routing
+const PARAM_COLUMNS: ParamDef[] = [
   { key: "strategy",  label: "Strategy",   getValue: (fi, c) => c.fabOverrides[fi]?.routing?.strategy ?? c.routingConfig.strategy },
   { key: "bprAlpha",  label: "BPR α",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprAlpha ?? c.routingConfig.bprAlpha },
   { key: "bprBeta",   label: "BPR β",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprBeta ?? c.routingConfig.bprBeta },
   { key: "bprGamma",  label: "BPR γ",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprGamma ?? c.routingConfig.bprGamma },
   { key: "ewmaAlpha", label: "EWMA α",     getValue: (fi, c) => c.fabOverrides[fi]?.routing?.ewmaAlpha ?? c.routingConfig.ewmaAlpha },
   { key: "reroute",   label: "Reroute",    getValue: (fi, c) => c.fabOverrides[fi]?.routing?.rerouteInterval ?? c.routingConfig.rerouteInterval },
-
-  // Transfer
-  { key: "txEnabled",  label: "Transfer",  getValue: (fi, c) => (c.fabOverrides[fi]?.transferEnabled ?? c.transferEnabled) ? "ON" : "OFF" },
-  { key: "txMode",     label: "Idle",      getValue: (fi, c) => (c.fabOverrides[fi]?.transferMode?.idlePolicy ?? c.transferModeConfig.idlePolicy) },
-  { key: "txUtilPct",  label: "Util%",     getValue: (fi, c) => c.fabOverrides[fi]?.transferRateConfig?.utilizationPercent ?? c.transferRateConfig.utilizationPercent },
-
-  // Movement
-  { key: "linSpeed",   label: "MaxSpd",    getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.maxSpeed ?? c.baseConfig.movement.linear.maxSpeed },
-  { key: "linAcc",     label: "Accel",     getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.acceleration ?? c.baseConfig.movement.linear.acceleration },
-  { key: "curveSpd",   label: "CurveSpd",  getValue: (fi, c) => c.fabOverrides[fi]?.movement?.curve?.maxSpeed ?? c.baseConfig.movement.curve.maxSpeed },
-
-  // Lock
-  { key: "lockGrant",  label: "Lock",      getValue: (fi, c) => c.fabOverrides[fi]?.lock?.grantStrategy ?? c.baseConfig.lock.grantStrategy },
-
-  // Vehicle count (실제 배치된 수)
-  { key: "vehCount",   label: "Veh",       getValue: (fi, c) => c.fabStats[fi]?.vehicleCount ?? 0 },
+  { key: "txEnabled", label: "Transfer",   getValue: (fi, c) => (c.fabOverrides[fi]?.transferEnabled ?? c.transferEnabled) ? "ON" : "OFF" },
+  { key: "txMode",    label: "Idle",       getValue: (fi, c) => (c.fabOverrides[fi]?.transferMode?.idlePolicy ?? c.transferModeConfig.idlePolicy) },
+  { key: "txUtilPct", label: "Util%",      getValue: (fi, c) => c.fabOverrides[fi]?.transferRateConfig?.utilizationPercent ?? c.transferRateConfig.utilizationPercent },
+  { key: "linSpeed",  label: "MaxSpd",     getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.maxSpeed ?? c.baseConfig.movement.linear.maxSpeed },
+  { key: "linAcc",    label: "Accel",      getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.acceleration ?? c.baseConfig.movement.linear.acceleration },
+  { key: "curveSpd",  label: "CurveSpd",   getValue: (fi, c) => c.fabOverrides[fi]?.movement?.curve?.maxSpeed ?? c.baseConfig.movement.curve.maxSpeed },
+  { key: "lockGrant", label: "Lock",       getValue: (fi, c) => c.fabOverrides[fi]?.lock?.grantStrategy ?? c.baseConfig.lock.grantStrategy },
+  { key: "vehCount",  label: "Veh",        getValue: (fi, c) => c.fabStats[fi]?.vehicleCount ?? 0 },
 ];
 
+// ─── Row type ───
+
+interface FabRow {
+  fabIndex: number;
+  [key: string]: string | number;
+}
+
 // ─── Component ───
+
+const columnHelper = createColumnHelper<FabRow>();
 
 export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) => {
   const routingConfig = useFabConfigStore((s) => s.routingConfig);
@@ -63,9 +71,8 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
   const vehInit = useFabConfigStore((s) => s.vehInit);
   const { fabGroups, addFabGroup, removeFabGroup } = useFabStatsUIStore();
 
-  const [sortCol, setSortCol] = useState("fab");
-  const [sortAsc, setSortAsc] = useState(true);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [groupName, setGroupName] = useState("");
 
   const ctx: ParamContext = useMemo(() => ({
@@ -73,73 +80,100 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
     transferRateConfig, transferModeConfig, vehInit, fabStats: fabStatsList,
   }), [routingConfig, baseConfig, fabOverrides, transferEnabled, transferRateConfig, transferModeConfig, vehInit, fabStatsList]);
 
-  // group lookup
+  // Group lookup
   const groupMap = useMemo(() => {
     const m = new Map<number, FabGroup>();
     for (const g of fabGroups) for (const fi of g.fabIndices) m.set(fi, g);
     return m;
   }, [fabGroups]);
 
-  // Build row data: fabIndex + each param value
-  const rows = useMemo(() => {
+  // Build row data
+  const data: FabRow[] = useMemo(() => {
     return fabStatsList.map((_, fabIndex) => {
-      const values: Record<string, string | number> = {};
+      const row: FabRow = { fabIndex };
       for (const col of PARAM_COLUMNS) {
-        values[col.key] = col.getValue(fabIndex, ctx);
+        row[col.key] = col.getValue(fabIndex, ctx);
       }
-      return { fabIndex, values };
+      return row;
     });
   }, [fabStatsList, ctx]);
 
-  // Auto-detect columns with variation (값이 다른 컬럼만 표시)
-  const visibleCols = useMemo(() => {
-    if (rows.length <= 1) return PARAM_COLUMNS;
+  // Auto-detect visible columns (값이 다른 것만)
+  const visibleParams = useMemo(() => {
+    if (data.length <= 1) return PARAM_COLUMNS;
     return PARAM_COLUMNS.filter((col) => {
-      const first = rows[0]?.values[col.key];
-      return rows.some((r) => r.values[col.key] !== first);
+      const first = data[0]?.[col.key];
+      return data.some((r) => r[col.key] !== first);
     });
-  }, [rows]);
+  }, [data]);
 
-  // Sort
-  const sorted = useMemo(() => {
-    const arr = [...rows];
-    const dir = sortAsc ? 1 : -1;
-    arr.sort((a, b) => {
-      if (sortCol === "fab") return (a.fabIndex - b.fabIndex) * dir;
-      const va = a.values[sortCol];
-      const vb = b.values[sortCol];
-      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
-      return String(va).localeCompare(String(vb)) * dir;
-    });
-    return arr;
-  }, [rows, sortCol, sortAsc]);
+  // TanStack columns
+  const columns = useMemo(() => [
+    columnHelper.display({
+      id: "select",
+      header: ({ table }) => (
+        <input type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+          className="accent-accent-cyan" />
+      ),
+      cell: ({ row }) => (
+        <input type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          className="accent-accent-cyan" />
+      ),
+      size: 30,
+    }),
+    columnHelper.accessor("fabIndex", {
+      header: "Fab",
+      cell: (info) => <span className="font-mono text-gray-200">{info.getValue()}</span>,
+      size: 40,
+    }),
+    ...visibleParams.map((p) =>
+      columnHelper.accessor(p.key, {
+        header: p.label,
+        cell: (info) => <span className="font-mono text-gray-300">{info.getValue()}</span>,
+        sortingFn: (a, b, colId) => {
+          const va = a.getValue(colId);
+          const vb = b.getValue(colId);
+          if (typeof va === "number" && typeof vb === "number") return va - vb;
+          return String(va).localeCompare(String(vb));
+        },
+      }),
+    ),
+    columnHelper.display({
+      id: "group",
+      header: "Grp",
+      cell: ({ row }) => {
+        const g = groupMap.get(row.original.fabIndex);
+        return g ? <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} /> : null;
+      },
+      size: 35,
+    }),
+  ], [visibleParams, groupMap]);
 
-  const handleSort = (col: string) => {
-    if (sortCol === col) setSortAsc((v) => !v);
-    else { setSortCol(col); setSortAsc(true); }
-  };
+  const table = useReactTable({
+    data,
+    columns,
+    state: { sorting, rowSelection },
+    onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getRowId: (row) => String(row.fabIndex),
+    enableRowSelection: true,
+  });
 
-  const toggleSelect = (fabIndex: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(fabIndex)) next.delete(fabIndex); else next.add(fabIndex);
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    if (selected.size === sorted.length) setSelected(new Set());
-    else setSelected(new Set(sorted.map((r) => r.fabIndex)));
-  };
+  const selectedCount = Object.keys(rowSelection).filter((k) => rowSelection[k]).length;
 
   const handleCreateGroup = () => {
-    if (selected.size === 0 || !groupName.trim()) return;
-    addFabGroup(groupName.trim(), [...selected]);
-    setSelected(new Set());
+    if (selectedCount === 0 || !groupName.trim()) return;
+    const fabIndices = Object.keys(rowSelection).filter((k) => rowSelection[k]).map(Number);
+    addFabGroup(groupName.trim(), fabIndices);
+    setRowSelection({});
     setGroupName("");
   };
-
-  const thClass = "px-1.5 py-1 text-left cursor-pointer hover:text-accent-cyan select-none whitespace-nowrap";
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -147,57 +181,45 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
       <div className="flex-1 min-h-0 overflow-auto vps-scrollbar">
         <table className="w-full text-[11px]">
           <thead className="sticky top-0 bg-gray-900 text-gray-400 border-b border-gray-700">
-            <tr>
-              <th className="px-1.5 py-1 w-6">
-                <input type="checkbox" checked={selected.size === sorted.length && sorted.length > 0}
-                  onChange={selectAll} className="accent-accent-cyan" />
-              </th>
-              <th className={thClass} onClick={() => handleSort("fab")}>
-                Fab{sortCol === "fab" && <span className="ml-0.5">{sortAsc ? "▲" : "▼"}</span>}
-              </th>
-              {visibleCols.map((col) => (
-                <th key={col.key} className={thClass} onClick={() => handleSort(col.key)}>
-                  {col.label}
-                  {sortCol === col.key && <span className="ml-0.5">{sortAsc ? "▲" : "▼"}</span>}
-                </th>
-              ))}
-              <th className="px-1.5 py-1 text-left">Grp</th>
-            </tr>
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id}>
+                {hg.headers.map((header) => (
+                  <th
+                    key={header.id}
+                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                    className="px-1.5 py-1 text-left cursor-pointer hover:text-accent-cyan select-none whitespace-nowrap"
+                    style={{ width: header.getSize() }}
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {{ asc: " ▲", desc: " ▼" }[header.column.getIsSorted() as string] ?? ""}
+                  </th>
+                ))}
+              </tr>
+            ))}
           </thead>
           <tbody>
-            {sorted.map((row) => {
-              const isChecked = selected.has(row.fabIndex);
-              const g = groupMap.get(row.fabIndex);
-              return (
-                <tr
-                  key={row.fabIndex}
-                  onClick={() => toggleSelect(row.fabIndex)}
-                  className={`cursor-pointer border-b border-gray-800/50 transition-colors ${
-                    isChecked ? "bg-accent-cyan/10" : "hover:bg-gray-800/40"
-                  }`}
-                >
-                  <td className="px-1.5 py-0.5 text-center">
-                    <input type="checkbox" checked={isChecked} readOnly className="accent-accent-cyan pointer-events-none" />
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                onClick={row.getToggleSelectedHandler()}
+                className={`cursor-pointer border-b border-gray-800/50 transition-colors ${
+                  row.getIsSelected() ? "bg-accent-cyan/10" : "hover:bg-gray-800/40"
+                }`}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="px-1.5 py-0.5">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
-                  <td className="px-1.5 py-0.5 font-mono text-gray-200">{row.fabIndex}</td>
-                  {visibleCols.map((col) => (
-                    <td key={col.key} className="px-1.5 py-0.5 font-mono text-gray-300">
-                      {row.values[col.key]}
-                    </td>
-                  ))}
-                  <td className="px-1.5 py-0.5">
-                    {g && <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />}
-                  </td>
-                </tr>
-              );
-            })}
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
       {/* Create group bar */}
       <div className="shrink-0 p-2 border-t border-gray-700/50 flex items-center gap-2">
-        <span className="text-[10px] text-gray-500">{selected.size}개 선택</span>
+        <span className="text-[10px] text-gray-500">{selectedCount}개 선택</span>
         <input
           type="text"
           value={groupName}
@@ -208,7 +230,7 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
         />
         <button
           onClick={handleCreateGroup}
-          disabled={selected.size === 0 || !groupName.trim()}
+          disabled={selectedCount === 0 || !groupName.trim()}
           className="px-2 py-1 rounded text-[11px] font-bold bg-accent-cyan text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent-cyan/80"
         >
           + 그룹 생성
