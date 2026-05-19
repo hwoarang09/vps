@@ -14,7 +14,6 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line,
 } from "recharts";
-import FloatingPanel from "../shared/FloatingPanel";
 import { panelCardVariants, panelTextVariants } from "../shared/panelStyles";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
 import { useFabConfigStore } from "@/store/simulation/fabConfigStore";
@@ -531,18 +530,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "trend", label: "Trend" },
 ];
 
-// 상단 testSetting / 하단 MenuLevel1 안 가리게 위아래 reserve.
-// 가로는 화면의 40%.
-function getCenterDefaults() {
-  const TOP_RESERVE = 75;     // 상단 testSetting (TopControlBar) + 여유
-  const BOTTOM_RESERVE = 105; // 하단 MenuLevel1+2
-  const x = 0;
-  const y = TOP_RESERVE;
-  const w = Math.max(500, Math.round(window.innerWidth * 0.55));
-  const h = Math.max(400, window.innerHeight - TOP_RESERVE - BOTTOM_RESERVE);
-  return { x, y, w, h };
-}
-
 const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const controller = useShmSimulatorStore((s) => s.controller);
   const isRunning = useShmSimulatorStore((s) => s.isRunning);
@@ -550,7 +537,6 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const baseLinearMaxSpeed = useFabConfigStore((s) => s.baseConfig.movement.linear.maxSpeed);
   const [fabStatsList, setFabStatsList] = useState<FabStats[]>([]);
   const [tab, setTab] = useState<TabKey>("ranking");
-  const [defaults] = useState(getCenterDefaults);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   const [elapsed, setElapsed] = useState(0);
@@ -617,19 +603,12 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, [controller, isRunning, pushHistory, baseLinearMaxSpeed]);
 
   return (
-    <FloatingPanel
-      title="Fab Stats"
-      onClose={onClose}
-      zIndex={1100}
-      dragResizeOpts={{
-        defaultX: defaults.x, defaultY: defaults.y,
-        defaultW: defaults.w, defaultH: defaults.h,
-        minW: 500, minH: 300,
-      }}
-      bgClass="bg-gray-900/80"
-      headerExtra={
-        fabStatsList.length > 0 ? (
-          <div className="flex items-center gap-1 ml-2">
+    <div className="fixed inset-0 z-[2000] flex flex-col bg-gray-900">
+      {/* Header */}
+      <div className="shrink-0 flex items-center px-4 py-2 border-b border-gray-700/50 bg-gray-900/95">
+        <h2 className="text-sm font-bold text-white mr-4">Fab Stats</h2>
+        {fabStatsList.length > 0 && (
+          <div className="flex items-center gap-1">
             {TABS.map(t => (
               <button
                 key={t.key}
@@ -641,55 +620,67 @@ const FabStatsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 }`}
               >{t.label}</button>
             ))}
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          {fabStatsList.length > 0 && (
             <button
               onClick={() => {
                 controller?.resetOrderStats();
                 useOrderStatsStore.getState().resetAll();
               }}
-              className="ml-auto px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
+              className="px-2 py-0.5 rounded text-[10px] text-gray-400 border border-gray-600 hover:text-white hover:border-gray-400 transition-colors"
             >
               Reset KPI
             </button>
-          </div>
-        ) : undefined
-      }
-    >
-      {fabStatsList.length === 0 ? (
-        <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
-          No simulation running.
-        </div>
-      ) : (
-        <>
-          {tab === "ranking" && <RankingTab fabStatsList={fabStatsList} />}
-          {tab === "cards" && (() => {
-            // throughput 내림차순 정렬 — 1등이 위, 꼴등이 아래. fabIndex(원본)는 보존.
-            const ranked = fabStatsList
-              .map((fab, fabIndex) => ({
-                fab,
-                fabIndex,
-                throughput: orderStatsMap[fab.fabId]?.throughputPerHour ?? 0,
-              }))
-              .sort((a, b) => b.throughput - a.throughput);
-            return (
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-                {ranked.map((entry, rank) => (
-                  <FabCard
-                    key={entry.fab.fabId}
-                    fab={entry.fab}
-                    fabIndex={entry.fabIndex}
-                    rank={rank}
-                  />
-                ))}
-              </div>
-            );
-          })()}
-          {tab === "compare" && <CompareTab fabStatsList={fabStatsList} />}
-          {tab === "trend" && (
-            <TrendTab fabStatsList={fabStatsList} history={historyRef} elapsed={elapsed} />
           )}
-        </>
-      )}
-    </FloatingPanel>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-lg transition-colors leading-none px-1"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-h-0 overflow-auto p-2">
+        {fabStatsList.length === 0 ? (
+          <div className={panelTextVariants({ variant: "muted", size: "sm" })}>
+            No simulation running.
+          </div>
+        ) : (
+          <div className="h-full">
+            {tab === "ranking" && <RankingTab fabStatsList={fabStatsList} />}
+            {tab === "cards" && (() => {
+              const ranked = fabStatsList
+                .map((fab, fabIndex) => ({
+                  fab,
+                  fabIndex,
+                  throughput: orderStatsMap[fab.fabId]?.throughputPerHour ?? 0,
+                }))
+                .sort((a, b) => b.throughput - a.throughput);
+              return (
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                  {ranked.map((entry, rank) => (
+                    <FabCard
+                      key={entry.fab.fabId}
+                      fab={entry.fab}
+                      fabIndex={entry.fabIndex}
+                      rank={rank}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+            {tab === "compare" && <CompareTab fabStatsList={fabStatsList} />}
+            {tab === "trend" && (
+              <TrendTab fabStatsList={fabStatsList} history={historyRef} elapsed={elapsed} />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
