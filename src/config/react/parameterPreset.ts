@@ -3,6 +3,7 @@ import { useFabConfigStore, type RoutingConfig, type TransferRateConfig, type Ve
 import { useVehicleTestStore } from "@/store/vehicle/vehicleTestStore";
 import { updatePersistedConfig } from "@/config/persistedConfig";
 import { TransferMode } from "@/common/vehicle/initialize/constants";
+import { useFabStatsUIStore } from "@/components/react/menu/panels/FabStats/store";
 import {
   getLinearMaxSpeed,
   getLinearAcceleration,
@@ -57,6 +58,9 @@ export interface ParameterPreset {
     rate?: Partial<TransferRateConfig>;
   };
   vehInit?: Partial<VehInitConfig>;
+
+  // ─── 통계 그룹 ───
+  groups?: { name: string; fabs: number[] }[];
 }
 
 const BASE_PATH = "/config/parameterMap";
@@ -216,7 +220,20 @@ export function applyPreset(preset: ParameterPreset): void {
     }
   }
 
-  // 7) 레이아웃 변경 — persistedConfig 업데이트 후 기존 플로우 트리거
+  // 7) 통계 그룹
+  if (preset.groups) {
+    const colors = ["#4ecdc4", "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e", "#3b82f6", "#ec4899", "#14b8a6", "#f97316", "#6366f1"];
+    useFabStatsUIStore.getState().setFabGroups(
+      preset.groups.map((g, i) => ({
+        id: `preset-${i}`,
+        name: g.name,
+        fabIndices: g.fabs,
+        color: colors[i % colors.length],
+      })),
+    );
+  }
+
+  // 8) 레이아웃 변경 — persistedConfig 업데이트 후 기존 플로우 트리거
   if (preset.settingId) {
     if (preset.fabCountX !== undefined) updatePersistedConfig({ fabCountX: preset.fabCountX });
     if (preset.fabCountY !== undefined) updatePersistedConfig({ fabCountY: preset.fabCountY });

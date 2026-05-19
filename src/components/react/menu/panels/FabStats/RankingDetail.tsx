@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useFabStatsUIStore, type DetailTabKey } from "./store";
 import type { FabStats } from "../FabStatsPanel";
 import { useOrderStatsStore } from "@/store/simulation/orderStatsStore";
@@ -167,10 +167,106 @@ const DistributionTab: React.FC<{ fab: FabStats; fabIndex: number }> = ({ fab })
 };
 
 // ============================================================================
-// Main: RankingDetail
+// Group Detail — 그룹 선택 시 집계 KPI + 멤버 리스트
+// ============================================================================
+
+const GroupDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) => {
+  const selectedGroupId = useFabStatsUIStore((s) => s.selectedGroupId);
+  const fabGroups = useFabStatsUIStore((s) => s.fabGroups);
+  const orderStatsMap = useOrderStatsStore((s) => s.fabStats);
+  const globalRouting = useFabConfigStore((s) => s.routingConfig);
+  const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
+
+  const group = fabGroups.find((g) => g.id === selectedGroupId);
+  if (!group) {
+    return (
+      <div className="h-full flex items-center justify-center text-[12px] text-gray-500">
+        Select a group from the list.
+      </div>
+    );
+  }
+
+  const members = group.fabIndices
+    .filter((fi) => fi < fabStatsList.length)
+    .map((fi) => ({ fab: fabStatsList[fi], fabIndex: fi }))
+    .filter((m) => m.fab.vehicleCount > 0);
+
+  const n = members.length || 1;
+  const totalVeh = members.reduce((s, m) => s + m.fab.vehicleCount, 0);
+  const avgSpeed = members.reduce((s, m) => s + m.fab.avgSpeed, 0) / n;
+  const avgThroughput = members.reduce((s, m) => s + (orderStatsMap[m.fab.fabId]?.throughputPerHour ?? 0), 0) / n;
+  const avgCompleted = members.reduce((s, m) => s + (orderStatsMap[m.fab.fabId]?.completed ?? 0), 0) / n;
+  const avgMovingRate = totalVeh > 0
+    ? (members.reduce((s, m) => s + m.fab.movingCount, 0) / totalVeh) * 100 : 0;
+
+  return (
+    <div className="h-full min-h-0 flex flex-col p-2 gap-2 overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 flex items-center gap-2 px-1 pb-1 border-b border-gray-700/50">
+        <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: group.color }} />
+        <span className="text-base font-bold text-white">{group.name}</span>
+        <span className="text-[10px] text-gray-500 ml-auto">{members.length} fabs / {totalVeh} veh</span>
+      </div>
+
+      {/* KPI grid */}
+      <div className="shrink-0 grid grid-cols-4 gap-2">
+        {[
+          { label: "Throughput", value: `${avgThroughput.toFixed(0)}/hr`, sub: "fab 평균" },
+          { label: "Completed", value: avgCompleted.toFixed(0), sub: "fab 평균" },
+          { label: "Avg Speed", value: `${avgSpeed.toFixed(2)} m/s`, sub: "fab 평균" },
+          { label: "Moving %", value: `${avgMovingRate.toFixed(0)}%`, sub: "fab 평균" },
+        ].map((kpi) => (
+          <div key={kpi.label} className={panelCardVariants({ variant: "default", padding: "sm" })}>
+            <div className="text-[9px] text-gray-500 uppercase">{kpi.label}</div>
+            <div className="text-lg font-bold text-accent-green tabular-nums leading-tight">{kpi.value}</div>
+            <div className="text-[9px] text-gray-600">{kpi.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Member list */}
+      <div className="flex-1 min-h-0 overflow-auto vps-scrollbar">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 bg-gray-900 text-gray-400 border-b border-gray-700">
+            <tr>
+              <th className="px-2 py-1 text-left">Fab</th>
+              <th className="px-2 py-1 text-left">Routing</th>
+              <th className="px-2 py-1 text-right">Veh</th>
+              <th className="px-2 py-1 text-right">Throughput</th>
+              <th className="px-2 py-1 text-right">Avg Speed</th>
+              <th className="px-2 py-1 text-right">Moving%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((m) => {
+              const os = orderStatsMap[m.fab.fabId];
+              const ovr = fabOverrides[m.fabIndex];
+              return (
+                <tr key={m.fabIndex} className="border-b border-gray-800/50 hover:bg-gray-800/40">
+                  <td className="px-2 py-1 font-mono text-gray-200">{m.fabIndex}</td>
+                  <td className="px-2 py-1 text-purple-300/80">{fabRoutingText(globalRouting, ovr?.routing)}</td>
+                  <td className="px-2 py-1 text-right text-gray-400">{m.fab.vehicleCount}</td>
+                  <td className="px-2 py-1 text-right font-mono text-accent-green">{(os?.throughputPerHour ?? 0).toFixed(0)}/hr</td>
+                  <td className="px-2 py-1 text-right font-mono text-gray-300">{m.fab.avgSpeed.toFixed(2)}</td>
+                  <td className="px-2 py-1 text-right font-mono text-gray-300">
+                    {m.fab.vehicleCount > 0 ? ((m.fab.movingCount / m.fab.vehicleCount) * 100).toFixed(0) : 0}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Main: RankingDetail — viewMode에 따라 개별/그룹 분기
 // ============================================================================
 
 export const RankingDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) => {
+  const viewMode = useFabStatsUIStore((s) => s.viewMode);
   const selectedFabId = useFabStatsUIStore((s) => s.selectedFabId);
   const detailTab = useFabStatsUIStore((s) => s.detailTab);
   const setDetailTab = useFabStatsUIStore((s) => s.setDetailTab);
@@ -178,12 +274,18 @@ export const RankingDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
   const globalRouting = useFabConfigStore((s) => s.routingConfig);
   const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
 
-  const selected = useMemo(() => {
+  // Group mode
+  if (viewMode === "group") {
+    return <GroupDetail fabStatsList={fabStatsList} />;
+  }
+
+  // Individual mode
+  const selected = (() => {
     if (!selectedFabId) return null;
     const idx = fabStatsList.findIndex((f) => f.fabId === selectedFabId);
     if (idx < 0) return null;
     return { fab: fabStatsList[idx], fabIndex: idx };
-  }, [fabStatsList, selectedFabId]);
+  })();
 
   if (!selected) {
     return (
@@ -223,7 +325,7 @@ export const RankingDetail: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStats
         ))}
       </div>
 
-      {/* Tab content — 각 탭이 독립 스크롤 */}
+      {/* Tab content */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {detailTab === "distribution" && <DistributionTab fab={fab} fabIndex={fabIndex} />}
         {detailTab === "parameters" && <ParametersTab fabIndex={fabIndex} />}
