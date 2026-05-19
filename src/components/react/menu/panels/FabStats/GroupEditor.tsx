@@ -1,80 +1,120 @@
-// FabStats/GroupEditor.tsx — 테이블에서 fab 파라미터 보고 그룹 생성
+// FabStats/GroupEditor.tsx — 데이터 드리븐 파라미터 테이블 + 그룹 생성
+// 새 파라미터 추가 = PARAM_COLUMNS 배열에 한 줄 추가. fab간 값이 동일한 컬럼은 자동 숨김.
 import React, { useMemo, useState } from "react";
-import { useFabConfigStore, type RoutingStrategy } from "@/store/simulation/fabConfigStore";
+import { useFabConfigStore, type FabConfigOverride } from "@/store/simulation/fabConfigStore";
 import { useFabStatsUIStore, type FabGroup } from "./store";
 import type { FabStats } from "../FabStatsPanel";
 
-type SortCol = "fab" | "strategy" | "alpha" | "beta" | "gamma" | "reroute";
+// ─── 파라미터 컬럼 정의 (여기만 수정하면 테이블에 반영) ───
 
-interface FabRow {
-  fabIndex: number;
-  fabId: string;
-  strategy: RoutingStrategy | string;
-  alpha: number;
-  beta: number;
-  gamma: number;
-  reroute: number;
-  ewmaAlpha: number;
-  groupId: string | null;
-  groupColor: string | null;
+interface ParamColumn {
+  key: string;
+  label: string;
+  /** fab의 effective 값 추출. store 전체를 받아서 자유롭게 계산 */
+  getValue: (fabIndex: number, ctx: ParamContext) => string | number;
 }
 
+interface ParamContext {
+  routingConfig: ReturnType<typeof useFabConfigStore.getState>["routingConfig"];
+  baseConfig: ReturnType<typeof useFabConfigStore.getState>["baseConfig"];
+  transferEnabled: boolean;
+  transferRateConfig: ReturnType<typeof useFabConfigStore.getState>["transferRateConfig"];
+  transferModeConfig: ReturnType<typeof useFabConfigStore.getState>["transferModeConfig"];
+  vehInit: ReturnType<typeof useFabConfigStore.getState>["vehInit"];
+  fabOverrides: Record<number, FabConfigOverride>;
+  fabStats: FabStats[];
+}
+
+const PARAM_COLUMNS: ParamColumn[] = [
+  // Routing
+  { key: "strategy",  label: "Strategy",   getValue: (fi, c) => c.fabOverrides[fi]?.routing?.strategy ?? c.routingConfig.strategy },
+  { key: "bprAlpha",  label: "BPR α",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprAlpha ?? c.routingConfig.bprAlpha },
+  { key: "bprBeta",   label: "BPR β",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprBeta ?? c.routingConfig.bprBeta },
+  { key: "bprGamma",  label: "BPR γ",      getValue: (fi, c) => c.fabOverrides[fi]?.routing?.bprGamma ?? c.routingConfig.bprGamma },
+  { key: "ewmaAlpha", label: "EWMA α",     getValue: (fi, c) => c.fabOverrides[fi]?.routing?.ewmaAlpha ?? c.routingConfig.ewmaAlpha },
+  { key: "reroute",   label: "Reroute",    getValue: (fi, c) => c.fabOverrides[fi]?.routing?.rerouteInterval ?? c.routingConfig.rerouteInterval },
+
+  // Transfer
+  { key: "txEnabled",  label: "Transfer",  getValue: (fi, c) => (c.fabOverrides[fi]?.transferEnabled ?? c.transferEnabled) ? "ON" : "OFF" },
+  { key: "txMode",     label: "Idle",      getValue: (fi, c) => (c.fabOverrides[fi]?.transferMode?.idlePolicy ?? c.transferModeConfig.idlePolicy) },
+  { key: "txUtilPct",  label: "Util%",     getValue: (fi, c) => c.fabOverrides[fi]?.transferRateConfig?.utilizationPercent ?? c.transferRateConfig.utilizationPercent },
+
+  // Movement
+  { key: "linSpeed",   label: "MaxSpd",    getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.maxSpeed ?? c.baseConfig.movement.linear.maxSpeed },
+  { key: "linAcc",     label: "Accel",     getValue: (fi, c) => c.fabOverrides[fi]?.movement?.linear?.acceleration ?? c.baseConfig.movement.linear.acceleration },
+  { key: "curveSpd",   label: "CurveSpd",  getValue: (fi, c) => c.fabOverrides[fi]?.movement?.curve?.maxSpeed ?? c.baseConfig.movement.curve.maxSpeed },
+
+  // Lock
+  { key: "lockGrant",  label: "Lock",      getValue: (fi, c) => c.fabOverrides[fi]?.lock?.grantStrategy ?? c.baseConfig.lock.grantStrategy },
+
+  // Vehicle count (실제 배치된 수)
+  { key: "vehCount",   label: "Veh",       getValue: (fi, c) => c.fabStats[fi]?.vehicleCount ?? 0 },
+];
+
+// ─── Component ───
+
 export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsList }) => {
-  const globalRouting = useFabConfigStore((s) => s.routingConfig);
+  const routingConfig = useFabConfigStore((s) => s.routingConfig);
+  const baseConfig = useFabConfigStore((s) => s.baseConfig);
   const fabOverrides = useFabConfigStore((s) => s.fabOverrides);
+  const transferEnabled = useFabConfigStore((s) => s.transferEnabled);
+  const transferRateConfig = useFabConfigStore((s) => s.transferRateConfig);
+  const transferModeConfig = useFabConfigStore((s) => s.transferModeConfig);
+  const vehInit = useFabConfigStore((s) => s.vehInit);
   const { fabGroups, addFabGroup, removeFabGroup } = useFabStatsUIStore();
 
-  const [sortCol, setSortCol] = useState<SortCol>("fab");
+  const [sortCol, setSortCol] = useState("fab");
   const [sortAsc, setSortAsc] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [groupName, setGroupName] = useState("");
 
-  // Build rows
-  const rows: FabRow[] = useMemo(() => {
-    // group lookup: fabIndex → group
-    const groupMap = new Map<number, FabGroup>();
-    for (const g of fabGroups) {
-      for (const fi of g.fabIndices) groupMap.set(fi, g);
-    }
+  const ctx: ParamContext = useMemo(() => ({
+    routingConfig, baseConfig, fabOverrides, transferEnabled,
+    transferRateConfig, transferModeConfig, vehInit, fabStats: fabStatsList,
+  }), [routingConfig, baseConfig, fabOverrides, transferEnabled, transferRateConfig, transferModeConfig, vehInit, fabStatsList]);
 
-    return fabStatsList.map((fab, fabIndex) => {
-      const ovr = fabOverrides[fabIndex]?.routing;
-      const g = groupMap.get(fabIndex);
-      return {
-        fabIndex,
-        fabId: fab.fabId,
-        strategy: ovr?.strategy ?? globalRouting.strategy,
-        alpha: ovr?.bprAlpha ?? globalRouting.bprAlpha,
-        beta: ovr?.bprBeta ?? globalRouting.bprBeta,
-        gamma: ovr?.bprGamma ?? globalRouting.bprGamma,
-        reroute: ovr?.rerouteInterval ?? globalRouting.rerouteInterval,
-        ewmaAlpha: ovr?.ewmaAlpha ?? globalRouting.ewmaAlpha,
-        groupId: g?.id ?? null,
-        groupColor: g?.color ?? null,
-      };
+  // group lookup
+  const groupMap = useMemo(() => {
+    const m = new Map<number, FabGroup>();
+    for (const g of fabGroups) for (const fi of g.fabIndices) m.set(fi, g);
+    return m;
+  }, [fabGroups]);
+
+  // Build row data: fabIndex + each param value
+  const rows = useMemo(() => {
+    return fabStatsList.map((_, fabIndex) => {
+      const values: Record<string, string | number> = {};
+      for (const col of PARAM_COLUMNS) {
+        values[col.key] = col.getValue(fabIndex, ctx);
+      }
+      return { fabIndex, values };
     });
-  }, [fabStatsList, fabOverrides, globalRouting, fabGroups]);
+  }, [fabStatsList, ctx]);
+
+  // Auto-detect columns with variation (값이 다른 컬럼만 표시)
+  const visibleCols = useMemo(() => {
+    if (rows.length <= 1) return PARAM_COLUMNS;
+    return PARAM_COLUMNS.filter((col) => {
+      const first = rows[0]?.values[col.key];
+      return rows.some((r) => r.values[col.key] !== first);
+    });
+  }, [rows]);
 
   // Sort
   const sorted = useMemo(() => {
     const arr = [...rows];
     const dir = sortAsc ? 1 : -1;
     arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortCol) {
-        case "fab": cmp = a.fabIndex - b.fabIndex; break;
-        case "strategy": cmp = a.strategy.localeCompare(b.strategy); break;
-        case "alpha": cmp = a.alpha - b.alpha; break;
-        case "beta": cmp = a.beta - b.beta; break;
-        case "gamma": cmp = a.gamma - b.gamma; break;
-        case "reroute": cmp = a.reroute - b.reroute; break;
-      }
-      return cmp * dir;
+      if (sortCol === "fab") return (a.fabIndex - b.fabIndex) * dir;
+      const va = a.values[sortCol];
+      const vb = b.values[sortCol];
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
     });
     return arr;
   }, [rows, sortCol, sortAsc]);
 
-  const handleSort = (col: SortCol) => {
+  const handleSort = (col: string) => {
     if (sortCol === col) setSortAsc((v) => !v);
     else { setSortCol(col); setSortAsc(true); }
   };
@@ -82,8 +122,7 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
   const toggleSelect = (fabIndex: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(fabIndex)) next.delete(fabIndex);
-      else next.add(fabIndex);
+      if (next.has(fabIndex)) next.delete(fabIndex); else next.add(fabIndex);
       return next;
     });
   };
@@ -100,15 +139,7 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
     setGroupName("");
   };
 
-  const colHeader = (label: string, col: SortCol) => (
-    <th
-      onClick={() => handleSort(col)}
-      className="px-1.5 py-1 text-left cursor-pointer hover:text-accent-cyan select-none whitespace-nowrap"
-    >
-      {label}
-      {sortCol === col && <span className="ml-0.5">{sortAsc ? "▲" : "▼"}</span>}
-    </th>
-  );
+  const thClass = "px-1.5 py-1 text-left cursor-pointer hover:text-accent-cyan select-none whitespace-nowrap";
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -121,18 +152,22 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
                 <input type="checkbox" checked={selected.size === sorted.length && sorted.length > 0}
                   onChange={selectAll} className="accent-accent-cyan" />
               </th>
-              {colHeader("Fab", "fab")}
-              {colHeader("Strategy", "strategy")}
-              {colHeader("α", "alpha")}
-              {colHeader("β", "beta")}
-              {colHeader("γ", "gamma")}
-              {colHeader("rr", "reroute")}
-              <th className="px-1.5 py-1 text-left">Group</th>
+              <th className={thClass} onClick={() => handleSort("fab")}>
+                Fab{sortCol === "fab" && <span className="ml-0.5">{sortAsc ? "▲" : "▼"}</span>}
+              </th>
+              {visibleCols.map((col) => (
+                <th key={col.key} className={thClass} onClick={() => handleSort(col.key)}>
+                  {col.label}
+                  {sortCol === col.key && <span className="ml-0.5">{sortAsc ? "▲" : "▼"}</span>}
+                </th>
+              ))}
+              <th className="px-1.5 py-1 text-left">Grp</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((row) => {
               const isChecked = selected.has(row.fabIndex);
+              const g = groupMap.get(row.fabIndex);
               return (
                 <tr
                   key={row.fabIndex}
@@ -145,26 +180,13 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
                     <input type="checkbox" checked={isChecked} readOnly className="accent-accent-cyan pointer-events-none" />
                   </td>
                   <td className="px-1.5 py-0.5 font-mono text-gray-200">{row.fabIndex}</td>
+                  {visibleCols.map((col) => (
+                    <td key={col.key} className="px-1.5 py-0.5 font-mono text-gray-300">
+                      {row.values[col.key]}
+                    </td>
+                  ))}
                   <td className="px-1.5 py-0.5">
-                    <span className={`font-bold ${
-                      row.strategy === "BPR" ? "text-amber-400" :
-                      row.strategy === "EWMA" ? "text-green-400" : "text-blue-400"
-                    }`}>{row.strategy}</span>
-                  </td>
-                  <td className="px-1.5 py-0.5 font-mono text-gray-300">
-                    {row.strategy === "BPR" ? row.alpha : "-"}
-                  </td>
-                  <td className="px-1.5 py-0.5 font-mono text-gray-300">
-                    {row.strategy === "BPR" ? row.beta : "-"}
-                  </td>
-                  <td className="px-1.5 py-0.5 font-mono text-gray-300">
-                    {row.strategy === "BPR" ? row.gamma : "-"}
-                  </td>
-                  <td className="px-1.5 py-0.5 font-mono text-gray-300">{row.reroute}</td>
-                  <td className="px-1.5 py-0.5">
-                    {row.groupColor && (
-                      <span className="inline-block w-2.5 h-2.5 rounded-full mr-1" style={{ backgroundColor: row.groupColor }} />
-                    )}
+                    {g && <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: g.color }} />}
                   </td>
                 </tr>
               );
@@ -202,7 +224,7 @@ export const GroupEditor: React.FC<{ fabStatsList: FabStats[] }> = ({ fabStatsLi
               <span className="text-white font-medium truncate flex-1">{g.name}</span>
               <span className="text-gray-500">{g.fabIndices.length}개</span>
               <button
-                onClick={() => removeFabGroup(g.id)}
+                onClick={(e) => { e.stopPropagation(); removeFabGroup(g.id); }}
                 className="text-gray-600 hover:text-red-400 text-[13px] leading-none"
               >×</button>
             </div>
