@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Architecture — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="section-label">Overview</div>
+      <a href="index.html">Home</a>
+      <a href="architecture.html" class="active">System Architecture</a>
+      <div class="section-label">Simulation</div>
+      <a href="simulation.html">Simulation Engine</a>
+      <a href="routing.html">Routing (BPR / EWMA)</a>
+      <div class="section-label">Interface</div>
+      <a href="ui-guide.html">UI &amp; Menu System</a>
+      <a href="preset-system.html">Parameter Preset</a>
+      <div class="section-label">Infrastructure</div>
+      <a href="logging.html">Logging &amp; Data Pipeline</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>System Architecture<span class="subtitle">스레드 분리, 메모리 레이아웃, Multi-Fab Grid</span></h1>
+
+    <h2>Thread Model</h2>
+    <p>VPS는 <strong>Main Thread</strong>(렌더링+UI)와 <strong>Worker Thread(s)</strong>(시뮬레이션)를 엄격히 분리합니다.</p>
+
+    <table>
+      <tr><th>Thread</th><th>Responsibilities</th><th>Constraints</th></tr>
+      <tr>
+        <td><span class="badge badge-cyan">Main</span></td>
+        <td>React UI, Three.js 렌더링, 사용자 입력, 카메라 제어</td>
+        <td>물리 계산 금지, SharedArrayBuffer 읽기만</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-green">Worker</span></td>
+        <td>물리, 충돌, Dijkstra, Lock, Transfer, 로깅</td>
+        <td>DOM/Three.js 접근 금지, SharedArrayBuffer 쓰기</td>
+      </tr>
+    </table>
+
+    <h2>SharedArrayBuffer Memory Layout</h2>
+    <p>고빈도 데이터(차량 위치 등)는 <code>postMessage</code> 대신 <code>SharedArrayBuffer</code>로 zero-copy 통신합니다.</p>
+
+    <h3>Buffer Types</h3>
+    <table>
+      <tr><th>Buffer</th><th>Type</th><th>Per-Vehicle</th><th>Purpose</th></tr>
+      <tr><td>Vehicle</td><td>Float32Array</td><td>41 fields (164B)</td><td>위치, 속도, 상태, 경로, 주문</td></tr>
+      <tr><td>Sensor</td><td>Float32Array</td><td>36 floats</td><td>3존 × 6 센서포인트 좌표</td></tr>
+      <tr><td>Path</td><td>Int32Array</td><td>101 ints</td><td>pathLen + 100 edge IDs</td></tr>
+      <tr><td>Checkpoint</td><td>Float32Array</td><td>variable</td><td>경유지 체크포인트</td></tr>
+      <tr><td>Render (Vehicle)</td><td>Float32Array</td><td>4 floats</td><td>x, y, z, rotation (GPU용)</td></tr>
+      <tr><td>Render (Sensor)</td><td>Float32Array</td><td>28 floats</td><td>7 섹션 × 4 (디버그 시각화)</td></tr>
+    </table>
+
+    <h3>Vehicle Data Fields (41 fields, 164 bytes)</h3>
+    <table>
+      <tr><th>Section</th><th>Fields</th><th>Offset</th></tr>
+      <tr><td>Movement</td><td>X, Y, Z, Rotation, Velocity, Accel, Decel, EdgeRatio, MovingStatus, CurrentEdge, NextEdge[5], NextEdgeState</td><td>0–17</td></tr>
+      <tr><td>Sensor</td><td>PresetIdx, HitZone, CollisionTarget</td><td>18–20</td></tr>
+      <tr><td>Logic</td><td>TrafficState, StopReason, JobState, DestEdge, PathRemaining, CheckpointHead, CP fields</td><td>21–30</td></tr>
+      <tr><td>Order</td><td>OrderId, SrcStation, DestStation, DestEdge, Pickup/Drop 타임스탬프 ×8</td><td>31–42</td></tr>
+    </table>
+
+    <h2>Multi-Worker Architecture</h2>
+    <div class="flow"><span class="highlight">MultiWorkerController</span> (Main Thread)
+  │
+  ├─ calculateMemoryLayout()  → SharedArrayBuffer 할당
+  ├─ distributeToWorkers()    → Fab → Worker 분배
+  │
+  ├─ <span class="green">Worker 0</span>: SimulationEngine
+  │   ├─ FabContext[0]  (200 vehicles)
+  │   └─ FabContext[1]  (200 vehicles)
+  │
+  ├─ <span class="green">Worker 1</span>: SimulationEngine
+  │   ├─ FabContext[2]  (200 vehicles)
+  │   └─ FabContext[3]  (200 vehicles)
+  │
+  └─ <span class="orange">Render Buffer</span> (연속 레이아웃)
+      [Fab0 render | Fab1 render | Fab2 render | Fab3 render]
+       ↑ Main Thread의 useFrame에서 직접 읽기</div>
+
+    <h3>Worker Distribution</h3>
+    <p>Fab들은 라운드 로빈으로 Worker에 분배됩니다. 예: 110 Fabs, 4 Workers → Worker당 ~28 Fabs.</p>
+
+    <h2>Multi-Fab Grid System</h2>
+    <p>하나의 맵을 M×N 격자로 복제하여 동시에 다양한 파라미터 조합을 테스트합니다.</p>
+
+    <h3>Grid Creation Flow</h3>
+    <div class="card">
+      <ol>
+        <li><code>loadCFGFiles(mapName)</code> — 원본 맵 로드 (nodes.cfg, edges.cfg)</li>
+        <li><code>getNodeBounds(nodes)</code> — 맵 경계 계산</li>
+        <li><code>createFabInfos(countX, countY, bounds)</code> — Grid 정보 생성 (10% 간격)</li>
+        <li>각 Fab에 독립 노드/엣지 복제 (ID offset = fabIndex × 1000)</li>
+        <li>Worker에 <code>sharedMapData</code>로 원본 맵 전달 → Fab별 offset 적용</li>
+      </ol>
+    </div>
+
+    <p class="file">Key files: <code>src/utils/fab/fabUtils.ts</code>, <code>src/store/map/fabStore.ts</code></p>
+
+    <h2>Render Slot System</h2>
+    <p>카메라에서 가까운 Fab만 렌더링하는 LOD 시스템. 25개 고정 슬롯(5×5)에 가장 가까운 Fab을 동적 할당합니다.</p>
+
+    <table>
+      <tr><th>Config</th><th>Value</th><th>Description</th></tr>
+      <tr><td><code>maxVisibleFabs</code></td><td>16</td><td>동시 표시 최대 Fab 수</td></tr>
+      <tr><td>Slot count</td><td>25 (5×5)</td><td>렌더 슬롯 수</td></tr>
+      <tr><td>Update trigger</td><td>Camera move</td><td>카메라 이동 시 가까운 Fab 재할당</td></tr>
+    </table>
+
+    <h2>Directory Structure</h2>
+    <pre><code>src/
+├── shmSimulator/          # Worker 시뮬레이션 엔진
+│   ├── core/              # SimulationEngine, FabContext
+│   ├── managers/          # Dispatch, Transfer 등
+│   ├── MultiWorkerController.ts
+│   ├── MemoryLayoutManager.ts
+│   └── worker.entry.ts
+├── common/vehicle/        # 공유 로직 (Main+Worker 양쪽 사용)
+│   ├── logic/             # Dijkstra, LockMgr
+│   ├── collision/         # 센서 충돌 (SAT)
+│   ├── movement/          # 이동 물리
+│   ├── memory/            # SharedArrayBuffer 래퍼
+│   └── initialize/        # 상수, 타입
+├── components/
+│   ├── three/             # Three.js 렌더링
+│   └── react/             # UI 컴포넌트
+├── store/                 # Zustand 상태 관리
+├── config/                # 설정 (simulationConfig, presets)
+└── logger/                # OPFS/MQTT 로깅</code></pre>
+
+    <h2>Key Configuration Files</h2>
+    <table>
+      <tr><th>File</th><th>Location</th><th>Content</th></tr>
+      <tr><td>simulationConfig.json</td><td><code>public/config/</code></td><td>물리 파라미터, Lock 거리, 차량 크기</td></tr>
+      <tr><td>testSettingConfig.json</td><td><code>public/config/</code></td><td>레이아웃 프리셋 (맵 + 차량 수 + 카메라)</td></tr>
+      <tr><td>parameterMap/*.json</td><td><code>public/config/</code></td><td>파라미터 프리셋 (라우팅, 이동, Lock, Transfer)</td></tr>
+      <tr><td>workerConfig.json</td><td><code>public/config/</code></td><td>Worker 수, 로그 설정</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

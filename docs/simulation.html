@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulation Engine — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="section-label">Overview</div>
+      <a href="index.html">Home</a>
+      <a href="architecture.html">System Architecture</a>
+      <div class="section-label">Simulation</div>
+      <a href="simulation.html" class="active">Simulation Engine</a>
+      <a href="routing.html">Routing (BPR / EWMA)</a>
+      <div class="section-label">Interface</div>
+      <a href="ui-guide.html">UI &amp; Menu System</a>
+      <a href="preset-system.html">Parameter Preset</a>
+      <div class="section-label">Infrastructure</div>
+      <a href="logging.html">Logging &amp; Data Pipeline</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Simulation Engine<span class="subtitle">SimulationEngine, FabContext, 시뮬레이션 루프</span></h1>
+
+    <h2>Overview</h2>
+    <p>시뮬레이션 엔진은 Worker 스레드에서 실행되며, 각 Fab(공장)별로 독립된 <code>FabContext</code>가 물리, 충돌, Lock, 라우팅을 처리합니다.</p>
+
+    <h2>Simulation Step Pipeline</h2>
+    <p>매 프레임(60fps) 실행되는 5단계 파이프라인:</p>
+    <div class="flow"><span class="highlight">Step 1: Collision Check</span>
+  └─ SAT 알고리즘으로 센서 영역 충돌 검출
+     hitZone: -1(없음) | 0(접근) | 1(감속) | 2(정지)
+
+<span class="orange">Step 2: Lock Management</span>
+  └─ 합류점(merge node) 접근 제어
+     FIFO or BATCH 전략으로 Lock 승인/해제
+
+<span class="green">Step 3: Movement Update</span>
+  └─ 물리 계산 → 엣지 전환 → 위치 보간
+     속도/가속도 → ratio 계산 → x,y,z 좌표
+
+<span class="purple">Step 4: Auto Routing</span>
+  └─ 경로 재탐색 (Dijkstra)
+     rerouteInterval에 따라 주기적 또는 도착 시
+
+Step 5: Render Buffer Write
+  └─ 차량 위치를 Render Buffer에 복사 (Main Thread 읽기용)</div>
+
+    <p class="file">File: <code>src/shmSimulator/core/FabContext/simulation-step.ts</code></p>
+
+    <h2>Collision Detection (SAT)</h2>
+    <p>3단계 센서 존으로 단계적 감속:</p>
+    <table>
+      <tr><th>Zone</th><th>HitZone</th><th>Action</th><th>Target Speed</th></tr>
+      <tr><td>Approach</td><td>0</td><td>접근 감속</td><td>2 m/s</td></tr>
+      <tr><td>Brake</td><td>1</td><td>제동</td><td>1.2 m/s</td></tr>
+      <tr><td>Stop</td><td>2</td><td>긴급 정지</td><td>0 m/s</td></tr>
+    </table>
+
+    <h3>Sensor Layout (per vehicle)</h3>
+    <pre><code>          FL    FR
+        /          \
+       /            \
+      SL            SR    ← 센서 팁 (검출 경계)
+       \            /
+        \          /
+          BL    BR
+
+3개 존 × 6개 포인트 × 2 (x,y) = 36 floats/vehicle</code></pre>
+    <p>알고리즘: <strong>SAT (Separating Axis Theorem)</strong> — 두 사각형이 겹치는지 O(1)로 판정. GC 없음.</p>
+    <p class="file">File: <code>src/common/vehicle/collision/sensorCollision.ts</code></p>
+
+    <h2>Lock Management</h2>
+    <div class="card">
+      <h4>Merge Node Lock</h4>
+      <p>여러 엣지가 합류하는 노드에서 한 번에 하나의 차량만 진입 허용.</p>
+      <ul>
+        <li><strong>Request Distance</strong>: 합류점 5.1m 전에 Lock 요청</li>
+        <li><strong>Wait Distance</strong>: 합류점 2.9m 전에 대기</li>
+        <li><strong>Grant Strategy</strong>: FIFO (선착순) 또는 BATCH</li>
+        <li><strong>Auto Release</strong>: 차량이 합류점을 지나면 자동 해제</li>
+      </ul>
+    </div>
+
+    <h3>Lock Event Types</h3>
+    <table>
+      <tr><th>Type</th><th>Value</th><th>Description</th></tr>
+      <tr><td>REQUEST</td><td>0</td><td>Lock 요청</td></tr>
+      <tr><td>GRANT</td><td>1</td><td>Lock 승인</td></tr>
+      <tr><td>RELEASE</td><td>2</td><td>Lock 해제</td></tr>
+      <tr><td>WAIT</td><td>3</td><td>대기 중</td></tr>
+    </table>
+
+    <h3>Deadlock Zone</h3>
+    <p>순환 대기 가능 영역을 자동 탐지하여 특별 처리. <code>BRANCH_FIFO</code> 또는 <code>ZONE_YIELD</code> 전략 사용.</p>
+    <p class="file">Files: <code>src/common/vehicle/logic/LockMgr/index.ts</code>, <code>deadlock-zone.ts</code></p>
+
+    <h2>Movement Physics</h2>
+    <h3>4-Phase Pipeline</h3>
+    <div class="card">
+      <ol>
+        <li><strong>calculateVehiclePhysics</strong> — hitZone에 따라 목표 속도 결정, 가속도 계산, 새 속도/ratio 산출</li>
+        <li><strong>processVehicleTransition</strong> — ratio > 1.0이면 다음 엣지로 전환, EdgeVehicleQueue 업데이트</li>
+        <li><strong>updateVehiclePosition</strong> — 엣지 위 ratio → 월드 좌표(x,y,z) 보간, 센서 포인트 업데이트</li>
+        <li><strong>commitVehicleState</strong> — 계산된 값을 vehicleDataArray에 기록</li>
+      </ol>
+    </div>
+
+    <h3>Physics Parameters</h3>
+    <table>
+      <tr><th>Parameter</th><th>Default</th><th>Unit</th></tr>
+      <tr><td>Linear Max Speed</td><td>5.0</td><td>m/s</td></tr>
+      <tr><td>Linear Acceleration</td><td>2.0</td><td>m/s&sup2;</td></tr>
+      <tr><td>Linear Deceleration</td><td>-3.0</td><td>m/s&sup2;</td></tr>
+      <tr><td>Pre-Brake Deceleration</td><td>-3.0</td><td>m/s&sup2;</td></tr>
+      <tr><td>Curve Max Speed</td><td>1.0</td><td>m/s</td></tr>
+      <tr><td>Curve Acceleration</td><td>1.0</td><td>m/s&sup2;</td></tr>
+      <tr><td>Body Length</td><td>0.8</td><td>m</td></tr>
+      <tr><td>Vehicle Spacing</td><td>0.6</td><td>m</td></tr>
+    </table>
+    <p class="file">Files: <code>src/common/vehicle/movement/movementUpdate.ts</code>, <code>vehiclePhysics.ts</code></p>
+
+    <h2>Transfer / Order System</h2>
+    <h3>Order Lifecycle</h3>
+    <div class="flow">Dispatch → <span class="highlight">MOVE_TO_LOAD</span> → Arrive → <span class="orange">LOADING</span>
+  → <span class="green">MOVE_TO_UNLOAD</span> → Arrive → <span class="purple">UNLOADING</span> → Complete
+
+각 단계 타임스탬프 기록 (8개):
+  moveToPickup → pickupArrive → pickupStart → pickupDone
+  moveToDrop → dropArrive → dropStart → dropDone</div>
+
+    <h3>Idle Policy</h3>
+    <table>
+      <tr><th>Policy</th><th>Description</th></tr>
+      <tr><td><code>RANDOM_WALK</code></td><td>랜덤 스테이션으로 이동 (기본)</td></tr>
+      <tr><td><code>ARRIVAL_BAY_LOOP</code></td><td>도착 Bay에서 왕복 (edge1 ↔ edge2)</td></tr>
+      <tr><td><code>BALANCED_BAY_LOOP</code></td><td>Bay 간 균형 분배 (TODO)</td></tr>
+    </table>
+
+    <h2>Performance Optimization</h2>
+    <div class="card">
+      <h4>Zero-GC Design</h4>
+      <ul>
+        <li>Dijkstra MinHeap: 단일 <code>number[]</code>에 인덱스 연산 (오브젝트 생성 없음)</li>
+        <li>Physics scratchpad: <code>SCRATCH_PHYSICS</code> 사전 할당 재사용</li>
+        <li>Collision: SAT O(1), 메모리 할당 없음</li>
+        <li>Typed Array만 사용 (hot path에서 오브젝트 할당 금지)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Performance Metrics (5초마다 리포트)</h4>
+      <ul>
+        <li>avgStepMs, minStepMs, maxStepMs, p50/p95/p99</li>
+        <li>Dijkstra count/avgTime</li>
+        <li>Fab별 차량 수</li>
+      </ul>
+    </div>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

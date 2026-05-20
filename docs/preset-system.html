@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parameter Preset — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="section-label">Overview</div>
+      <a href="index.html">Home</a>
+      <a href="architecture.html">System Architecture</a>
+      <div class="section-label">Simulation</div>
+      <a href="simulation.html">Simulation Engine</a>
+      <a href="routing.html">Routing (BPR / EWMA)</a>
+      <div class="section-label">Interface</div>
+      <a href="ui-guide.html">UI &amp; Menu System</a>
+      <a href="preset-system.html" class="active">Parameter Preset</a>
+      <div class="section-label">Infrastructure</div>
+      <a href="logging.html">Logging &amp; Data Pipeline</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Parameter Preset System<span class="subtitle">JSON 프리셋으로 실험 환경 일괄 설정</span></h1>
+
+    <h2>Overview</h2>
+    <p><code>public/config/parameterMap/</code>에 JSON 파일로 프리셋을 정의하면, UI에서 클릭 한 번으로 맵 + Fab Grid + 차량 + 라우팅/이동/Lock/Transfer 파라미터를 일괄 적용합니다.</p>
+
+    <h2>Application Flow</h2>
+    <div class="flow">PresetPanel에서 클릭
+  ↓
+<span class="highlight">applyPreset(preset)</span>
+  ├─ 1) fabConfigStore에 파라미터 세팅
+  │    (movement, lock, routing, transfer, vehInit)
+  ├─ 2) Per-fab routing overrides 적용
+  ├─ 3) Fab 그룹 세팅 (useFabStatsUIStore)
+  ├─ 4) persistedConfig 업데이트 (fabCountX/Y, numVehicles)
+  └─ 5) <span class="orange">requestSettingChange(settingId)</span>
+           ↓
+     <span class="green">기존 VehicleTest 플로우 자동 실행</span>
+       ├─ disposeShmSimulator()     — 기존 시뮬 정리
+       ├─ loadCFGFiles(mapName)     — 맵 로드
+       ├─ applyFabGrid(X, Y)       — Fab Grid 생성
+       └─ setIsTestCreated(true)    — 차량 생성 + 렌더링</div>
+
+    <h2>Preset JSON Schema</h2>
+    <p>모든 필드는 <strong>optional</strong>. 없는 필드는 기본값 사용.</p>
+    <pre><code>{
+  "name": "BPR+EWMA 비교 실험",
+  "description": "설명...",
+
+  // 레이아웃 (맵/fab/차량)
+  "settingId": "Y_SHORT",       // testSettingConfig의 ID (맵 결정)
+  "numVehicles": 22000,         // 총 차량 수
+  "fabCountX": 5,               // Fab Grid 열
+  "fabCountY": 22,              // Fab Grid 행
+
+  // 시뮬레이션 파라미터 (Global)
+  "movement": {
+    "linear": { "maxSpeed": 5.0, "acceleration": 2.0, ... },
+    "curve": { "maxSpeed": 1.0, "acceleration": 1.0 }
+  },
+  "lock": {
+    "waitDistanceFromMergingStr": 2.9,
+    "requestDistanceFromMergingStr": 5.1,
+    "grantStrategy": "BATCH"
+  },
+  "routing": {
+    "strategy": "BPR",
+    "bprAlpha": 4, "bprBeta": 8, "bprGamma": 0.2
+  },
+  "transfer": {
+    "enabled": true,
+    "mode": { "idlePolicy": "RANDOM_WALK" },
+    "rate": { "mode": "utilization", "utilizationPercent": 50 }
+  },
+  "vehInit": {
+    "mode": "equal", "seedMode": "random", "seed": 12345
+  },
+
+  // Per-Fab Routing Overrides
+  "fabRoutingOverrides": {
+    "0": { "strategy": "DISTANCE" },
+    "1": { "strategy": "EWMA", "ewmaAlpha": 0.05 },
+    "10": { "strategy": "BPR", "bprAlpha": 0.5, "bprBeta": 2, "bprGamma": 0 }
+  },
+
+  // 통계 그룹 (FabStats에서 사용)
+  "groups": [
+    { "name": "DISTANCE", "fabs": [0] },
+    { "name": "EWMA", "fabs": [1,2,3,4,5,6,7,8,9] },
+    { "name": "BPR c=0", "fabs": [10,11,...,34] }
+  ]
+}</code></pre>
+
+    <h2>Persistence (IndexedDB)</h2>
+    <div class="card">
+      <table>
+        <tr><th>DB</th><th>Store</th><th>Key</th><th>Value</th></tr>
+        <tr><td><code>vps-preset</code></td><td><code>meta</code></td><td><code>activePresetFile</code></td><td>프리셋 파일명 (예: <code>bpr-test.json</code>)</td></tr>
+      </table>
+      <p>앱 시작 시 <code>initPresetFromDb()</code>가 마지막 선택 프리셋을 자동 복원.</p>
+      <p><strong>파라미터 메뉴에서 수동 변경</strong>하면 IndexedDB는 안 건드림 → 프리셋 선택 상태 유지.</p>
+    </div>
+
+    <h2>File Structure</h2>
+    <pre><code>public/config/parameterMap/
+├── index.json          ← 프리셋 파일 목록 ["default.json", "bpr-test.json"]
+├── default.json        ← 기본값 프리셋
+└── bpr-test.json       ← BPR+EWMA 비교 실험 (5×22=110 fabs)</code></pre>
+
+    <h2>Adding a New Preset</h2>
+    <ol>
+      <li><code>public/config/parameterMap/</code>에 JSON 파일 생성</li>
+      <li><code>index.json</code> 배열에 파일명 추가</li>
+      <li>끝. UI에서 Operation → Preset 클릭하면 바로 보임.</li>
+    </ol>
+
+    <h2>Preset → Worker Sync</h2>
+    <p>프리셋은 Zustand store만 업데이트합니다. Worker에 적용되는 시점:</p>
+    <div class="card">
+      <ul>
+        <li><strong>settingId 있을 때</strong>: <code>requestSettingChange()</code> → VehicleTest가 시뮬 재생성 → Worker init 시 store 값 반영</li>
+        <li><strong>settingId 없을 때</strong>: store 값만 변경. 이미 돌고 있는 시뮬에는 UI Params 패널에서 "실시간 반영" 해야 함.</li>
+      </ul>
+    </div>
+
+    <h2>Key Files</h2>
+    <table>
+      <tr><th>File</th><th>Content</th></tr>
+      <tr><td><code>src/config/react/parameterPreset.ts</code></td><td>ParameterPreset 타입, loadParameterPresets, applyPreset, IndexedDB</td></tr>
+      <tr><td><code>src/components/react/menu/panels/PresetPanel.tsx</code></td><td>프리셋 목록 UI (Operation → Preset)</td></tr>
+      <tr><td><code>src/config/persistedConfig.ts</code></td><td>getPersistedConfig, updatePersistedConfig</td></tr>
+      <tr><td><code>public/config/parameterMap/index.json</code></td><td>프리셋 파일 목록</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

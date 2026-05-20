@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI &amp; Menu System — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="section-label">Overview</div>
+      <a href="index.html">Home</a>
+      <a href="architecture.html">System Architecture</a>
+      <div class="section-label">Simulation</div>
+      <a href="simulation.html">Simulation Engine</a>
+      <a href="routing.html">Routing (BPR / EWMA)</a>
+      <div class="section-label">Interface</div>
+      <a href="ui-guide.html" class="active">UI &amp; Menu System</a>
+      <a href="preset-system.html">Parameter Preset</a>
+      <div class="section-label">Infrastructure</div>
+      <a href="logging.html">Logging &amp; Data Pipeline</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>UI &amp; Menu System<span class="subtitle">React 메뉴 구조, 실시간 통계, Fab Group</span></h1>
+
+    <h2>Menu Hierarchy (3-Level)</h2>
+    <div class="flow"><span class="highlight">Level 1 (Bottom Bar)</span> — 메인 카테고리
+  Operation (o) | Statistics (s) | Search (f) | Visualization | DevTools (t)
+         │
+         ↓ 클릭
+<span class="orange">Level 2 (Context Menu)</span> — 서브 메뉴
+  예: Operation → Layout | Params | Preset | Schedule
+         │
+         ↓ 클릭 (일부만)
+<span class="purple">Level 3 (Tertiary)</span> — 상세 메뉴
+  예: Params → Move | Lock | Routing | Mode | Veh
+         │
+         ↓
+<span class="green">RightPanel</span> — 설정/내용 패널</div>
+
+    <h3>Menu Configuration Files</h3>
+    <table>
+      <tr><th>File</th><th>Content</th></tr>
+      <tr><td><code>data/MenuLevel1Config.tsx</code></td><td>LV1 항목 (id, label, icon, shortcut)</td></tr>
+      <tr><td><code>data/menuLevel2Config.tsx</code></td><td>LV2 항목 (LV1별 서브메뉴 배열)</td></tr>
+      <tr><td><code>data/menuLevel3Config.tsx</code></td><td>LV3 항목 (LV2별 상세메뉴)</td></tr>
+      <tr><td><code>data/tooltipConfig.tsx</code></td><td>레벨별 한국어 툴팁</td></tr>
+    </table>
+
+    <h3>Menu State (menuStore)</h3>
+    <table>
+      <tr><th>State</th><th>Type</th><th>Description</th></tr>
+      <tr><td><code>activeMainMenu</code></td><td>MainMenuType | null</td><td>선택된 LV1</td></tr>
+      <tr><td><code>activeSubMenu</code></td><td>string | null</td><td>선택된 LV2</td></tr>
+      <tr><td><code>activeThirdMenu</code></td><td>string | null</td><td>선택된 LV3</td></tr>
+      <tr><td><code>lastSubMenuByMainMenu</code></td><td>Record</td><td>LV1별 마지막 LV2 기억</td></tr>
+    </table>
+
+    <h2>Operation Menu</h2>
+    <table>
+      <tr><th>LV2 Item</th><th>Panel</th><th>Description</th></tr>
+      <tr><td>Layout (l)</td><td>OperationMapPanel</td><td>맵 + 차량 레이아웃 선택</td></tr>
+      <tr><td>Params (p)</td><td>LV3 → Move/Lock/Routing/Mode/Veh</td><td>시뮬레이션 파라미터 설정</td></tr>
+      <tr><td>Preset (r)</td><td>PresetPanel</td><td>파라미터 프리셋 불러오기</td></tr>
+      <tr><td>Schedule</td><td>(planned)</td><td>스케줄 관리</td></tr>
+    </table>
+
+    <h2>Real-time Statistics (FabStatsPanel)</h2>
+    <p><strong>풀스크린</strong> (z-index 2000) 패널. Statistics → Fab Stats 클릭으로 열림.</p>
+
+    <h3>4 Tabs</h3>
+    <table>
+      <tr><th>Tab</th><th>Content</th></tr>
+      <tr><td><span class="badge badge-cyan">Ranking</span></td><td>Fab별 정렬 리스트 (좌) + 상세 KPI (우). 8개 metric으로 정렬.</td></tr>
+      <tr><td>Cards</td><td>Fab별 카드 그리드 (throughput 순위)</td></tr>
+      <tr><td>Compare</td><td>단일 metric 바 차트 비교</td></tr>
+      <tr><td>Trend</td><td>시간별 metric 추이 (20분 윈도우, 10초 간격)</td></tr>
+    </table>
+
+    <h3>Ranking Metrics</h3>
+    <table>
+      <tr><th>Metric</th><th>Unit</th><th>Default Sort</th></tr>
+      <tr><td>Throughput</td><td>/hr</td><td>DESC</td></tr>
+      <tr><td>Lead p50</td><td>s</td><td>ASC</td></tr>
+      <tr><td>Lead p95</td><td>s</td><td>ASC</td></tr>
+      <tr><td>Avg Speed</td><td>m/s</td><td>DESC</td></tr>
+      <tr><td>Moving %</td><td>%</td><td>DESC</td></tr>
+      <tr><td>Stopped %</td><td>%</td><td>ASC</td></tr>
+      <tr><td>Collision</td><td>count</td><td>ASC</td></tr>
+      <tr><td>Completed</td><td>count</td><td>DESC</td></tr>
+    </table>
+
+    <h2>Fab Group System</h2>
+    <p>Fab들을 수동으로 그룹핑하여 그룹별 평균 통계를 비교하는 기능.</p>
+
+    <h3>3 View Modes</h3>
+    <div class="card">
+      <ul>
+        <li><span class="badge badge-cyan">Individual</span> — 기존 Fab별 리스트 (기본)</li>
+        <li><span class="badge badge-purple">Group</span> — 그룹별 집계 (평균 throughput, speed 등)</li>
+        <li><span class="badge badge-orange">Editor (⚙)</span> — 그룹 생성/편집 (TanStack Table)</li>
+      </ul>
+    </div>
+
+    <h3>Group Editor</h3>
+    <p>TanStack Table 기반. <strong>데이터 드리븐</strong> — 파라미터 추가 시 <code>PARAM_COLUMNS</code> 배열에 한 줄만 추가.</p>
+    <div class="card">
+      <h4>사용 흐름</h4>
+      <ol>
+        <li>⚙ 버튼 클릭 → Editor 모드 진입</li>
+        <li>컬럼 헤더 클릭 → 해당 파라미터로 정렬 (같은 값끼리 모임)</li>
+        <li>행 체크박스로 fab 선택</li>
+        <li>그룹 이름 입력 → "그룹 생성" 클릭</li>
+        <li>Group 모드로 전환 → 그룹별 평균 통계 비교</li>
+      </ol>
+    </div>
+
+    <h3>Auto-hide Columns</h3>
+    <p>Fab간 값이 동일한 컬럼은 자동 숨김. 예: BPR c=0 그룹 안에서는 γ 컬럼 안 보임.</p>
+
+    <h3>Available Columns (PARAM_COLUMNS)</h3>
+    <table>
+      <tr><th>Category</th><th>Columns</th></tr>
+      <tr><td>Routing</td><td>Strategy, BPR α, BPR β, BPR γ, EWMA α, Reroute</td></tr>
+      <tr><td>Transfer</td><td>Transfer ON/OFF, Idle Policy, Util%</td></tr>
+      <tr><td>Movement</td><td>MaxSpd, Accel, CurveSpd</td></tr>
+      <tr><td>Lock</td><td>Grant Strategy</td></tr>
+      <tr><td>Vehicle</td><td>Veh count</td></tr>
+    </table>
+
+    <h2>Styling System</h2>
+    <p><strong>class-variance-authority (CVA)</strong>로 variant 기반 스타일링:</p>
+    <table>
+      <tr><th>Utility</th><th>Variants</th></tr>
+      <tr><td><code>panelCardVariants</code></td><td>default, interactive, highlight, glow-cyan/orange/blue/green/purple</td></tr>
+      <tr><td><code>panelButtonVariants</code></td><td>primary, success, danger, warning, purple, ghost</td></tr>
+      <tr><td><code>panelTextVariants</code></td><td>body, muted, accent, white × xs/sm/md/lg</td></tr>
+    </table>
+    <p class="file">File: <code>src/components/react/menu/shared/panelStyles.ts</code></p>
+
+    <h2>Key Files</h2>
+    <table>
+      <tr><th>File</th><th>Content</th></tr>
+      <tr><td><code>menu/MenuLevel1.tsx</code></td><td>LV1 렌더링</td></tr>
+      <tr><td><code>menu/MenuLevel2.tsx</code></td><td>LV2 렌더링 (위치 계산, 토글 처리)</td></tr>
+      <tr><td><code>menu/RightPanel.tsx</code></td><td>우측 패널 라우팅</td></tr>
+      <tr><td><code>panels/FabStatsPanel.tsx</code></td><td>실시간 통계 메인 (풀스크린)</td></tr>
+      <tr><td><code>panels/FabStats/store.ts</code></td><td>통계 UI 상태 + FabGroup 관리</td></tr>
+      <tr><td><code>panels/FabStats/GroupEditor.tsx</code></td><td>TanStack Table 그룹 에디터</td></tr>
+      <tr><td><code>panels/FabStats/RankingMaster.tsx</code></td><td>Individual/Group 뷰 전환</td></tr>
+      <tr><td><code>panels/FabStats/RankingDetail.tsx</code></td><td>개별/그룹 상세 (KPI + 멤버 테이블)</td></tr>
+      <tr><td><code>panels/FabStats/routingLabel.ts</code></td><td>라우팅 텍스트 생성 (통합)</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

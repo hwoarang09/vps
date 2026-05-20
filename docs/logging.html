@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logging &amp; Data Pipeline — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="section-label">Overview</div>
+      <a href="index.html">Home</a>
+      <a href="architecture.html">System Architecture</a>
+      <div class="section-label">Simulation</div>
+      <a href="simulation.html">Simulation Engine</a>
+      <a href="routing.html">Routing (BPR / EWMA)</a>
+      <div class="section-label">Interface</div>
+      <a href="ui-guide.html">UI &amp; Menu System</a>
+      <a href="preset-system.html">Parameter Preset</a>
+      <div class="section-label">Infrastructure</div>
+      <a href="logging.html" class="active">Logging &amp; Data Pipeline</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Logging &amp; Data Pipeline<span class="subtitle">OPFS 바이너리 로그, MQTT, Python 분석</span></h1>
+
+    <h2>Architecture</h2>
+    <div class="flow"><span class="green">SimulationEngine.step()</span>
+  ├─ lockMgr     → onLockEvent     → <span class="highlight">logLock()</span>
+  ├─ movement    → onEdgeTransit   → logEdgeTransit()
+  ├─ autoMgr     → onPathFound     → logRoute()
+  ├─ orderMgr    → complete        → logOrderComplete()
+  └─ every frame → isReplay?       → logReplaySnapshot()
+         │
+         ↓
+    SimLogger.logXXX()
+         │
+         ↓
+    <span class="orange">EventBuffer</span> (ArrayBuffer, count/view/handle)
+         │
+         ↓ count ≥ 512 OR 10s periodic
+    flush() {
+      OPFS: handle.write(slice, {at: offset})  ← <span class="green">sync write</span>
+      MQTT: DbShipper.push()                   ← optional
+    }</div>
+
+    <h2>Why OPFS?</h2>
+    <div class="card highlight">
+      <ul>
+        <li><strong>Worker에서 동기 쓰기</strong> — IndexedDB/FS Access API는 비동기. OPFS는 <code>createSyncAccessHandle()</code>로 즉시 쓰기.</li>
+        <li><strong>대용량</strong> — localStorage 5MB 한계 없음. GB 단위 가능.</li>
+        <li><strong>고속 바이트 쓰기</strong> — 직렬화/트랜잭션 오버헤드 없음.</li>
+        <li><strong>권한 불필요</strong> — 브라우저 격리 파일시스템, 사용자 프롬프트 없음.</li>
+      </ul>
+    </div>
+
+    <h2>Event Types</h2>
+
+    <h3>ML Events (Production)</h3>
+    <table>
+      <tr><th>Event</th><th>Size</th><th>Content</th></tr>
+      <tr><td><code>ML_ORDER_COMPLETE</code></td><td>40B</td><td>orderId, vehId, srcStation, destStation, 7 timestamps</td></tr>
+      <tr><td><code>ML_ROUTE</code></td><td>412B</td><td>ts, vehId, pathLen, edges[100]</td></tr>
+      <tr><td><code>ML_EDGE_TRANSIT</code></td><td>24B</td><td>ts, vehId, edgeId, enterTs, exitTs, edgeLen</td></tr>
+      <tr><td><code>ML_LOCK</code></td><td>16B</td><td>ts, vehId, nodeIdx, eventType, holderHint, waitMs</td></tr>
+      <tr><td><code>ML_REPLAY_SNAPSHOT</code></td><td>36B</td><td>ts, vehId, x, y, z, edgeIdx, ratio, speed, status</td></tr>
+    </table>
+
+    <h3>Dev Events (Debug)</h3>
+    <table>
+      <tr><th>Event</th><th>Size</th><th>Content</th></tr>
+      <tr><td><code>DEV_VEH_STATE</code></td><td>44B</td><td>차량 전체 상태 (위치, 엣지, 속도, job/traffic)</td></tr>
+      <tr><td><code>DEV_PATH</code></td><td>16B</td><td>경로 요청 (destEdge, pathLen)</td></tr>
+      <tr><td><code>DEV_LOCK_DETAIL</code></td><td>20B</td><td>Lock 상세 (nodeIdx, holder, waitMs)</td></tr>
+      <tr><td><code>DEV_TRANSFER</code></td><td>16B</td><td>엣지 전환 (fromEdge, toEdge)</td></tr>
+      <tr><td><code>DEV_EDGE_QUEUE</code></td><td>16B</td><td>큐 변경 (edgeId, count, type)</td></tr>
+      <tr><td><code>DEV_CHECKPOINT</code></td><td>24B</td><td>체크포인트 이벤트</td></tr>
+    </table>
+
+    <h3>Binary Format</h3>
+    <div class="card">
+      <p><strong>Little-endian, 고정 크기 레코드</strong>. <code>DataView</code>로 직접 쓰기. JSON/직렬화 없음.</p>
+      <pre><code>// 예: ML_EDGE_TRANSIT (24 bytes)
+view.setFloat32(offset + 0, ts, true);       // timestamp
+view.setUint16(offset + 4, vehId, true);     // vehicle ID
+view.setUint16(offset + 6, edgeId, true);    // edge ID
+view.setFloat32(offset + 8, enterTs, true);  // enter time
+view.setFloat32(offset + 12, exitTs, true);  // exit time
+view.setFloat32(offset + 16, edgeLen, true); // edge length
+// padding to 24B</code></pre>
+    </div>
+
+    <h2>Buffer Management</h2>
+    <table>
+      <tr><th>Config</th><th>Value</th><th>Description</th></tr>
+      <tr><td>FLUSH_THRESHOLD</td><td>512 records</td><td>이 수를 넘으면 flush</td></tr>
+      <tr><td>PERIODIC_FLUSH</td><td>10s</td><td>주기적 flush (데이터 유실 방지)</td></tr>
+      <tr><td>Buffer size</td><td>512 × recordSize</td><td>EventType별 독립 버퍼</td></tr>
+    </table>
+
+    <h2>SnapshotLogger</h2>
+    <p>가변 크기 블록 포맷으로 전체 차량 상태 스냅샷 저장 (10초마다).</p>
+    <pre><code>[MAGIC=0xCAFE (2B)][ts (4B)][numVehicles (2B)]
+  [vehId (2B)][edge (2B)][ratio (f4)][velocity (f4)][stopReason (2B)] × N
+[numActiveEdges (2B)]
+  [edgeId (2B)][vehCount (2B)][vehId (2B) × count] × M</code></pre>
+
+    <h2>MQTT Path (DbShipper)</h2>
+    <div class="card">
+      <table>
+        <tr><th>Config</th><th>Value</th></tr>
+        <tr><td>Protocol</td><td>WebSocket (<code>ws://localhost:9003</code>)</td></tr>
+        <tr><td>Topic</td><td><code>VPS/logs/{sessionId}[/{fabId}]/{eventType}</code></td></tr>
+        <tr><td>Payload</td><td>Binary (OPFS와 동일 포맷)</td></tr>
+        <tr><td>Flush</td><td>5초 또는 2000 records</td></tr>
+        <tr><td>Retry</td><td>3회 연속 실패 → disable</td></tr>
+      </table>
+      <p>세션 등록: <code>VPS/logs/session</code> (JSON: session_id, fab_id, mode, vehicle_count, map_name)</p>
+    </div>
+
+    <h2>File Naming</h2>
+    <pre><code>OPFS 파일 경로:
+  {sessionId}_{fabId}_{eventType}.bin     ← 고정 크기 이벤트
+  {sessionId}_{fabId}_snapshot.bin        ← 가변 크기 스냅샷
+
+예: 1716100800000_fab_0_0_edgeTransit.bin</code></pre>
+
+    <h2>Python Analysis Pipeline</h2>
+    <div class="flow">OPFS .bin 파일 → 브라우저에서 다운로드
+         ↓
+<span class="highlight">log_parser.py</span>
+  ├─ iter_file(path, suffix)  — streaming 파서 (O(1) 메모리)
+  └─ 고정 크기 레코드를 yield
+         ↓
+<span class="orange">analyze.py</span>
+  ├─ cmd_summary     — 파일별 통계
+  ├─ cmd_lock_node   — 노드별 Lock 분석
+  └─ cmd_checkpoint  — 체크포인트 분석</div>
+
+    <h2>Key Files</h2>
+    <table>
+      <tr><th>File</th><th>Content</th></tr>
+      <tr><td><code>src/logger/SimLogger.ts</code></td><td>이벤트 버퍼링 + OPFS 쓰기 (Worker)</td></tr>
+      <tr><td><code>src/logger/SnapshotLogger.ts</code></td><td>가변 크기 스냅샷</td></tr>
+      <tr><td><code>src/logger/DbShipper.ts</code></td><td>MQTT 전송 (optional)</td></tr>
+      <tr><td><code>src/logger/protocol.ts</code></td><td>이벤트 enum, 레코드 사이즈, 파일 네이밍</td></tr>
+      <tr><td><code>src/logger/simLogUtils.ts</code></td><td>Main thread 파일 ops (다운로드, 목록)</td></tr>
+      <tr><td><code>scripts/log_parser/log_parser.py</code></td><td>바이너리 파서 (streaming)</td></tr>
+      <tr><td><code>scripts/log_parser/analyze.py</code></td><td>분석 명령 (summary, lock, checkpoint)</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>
