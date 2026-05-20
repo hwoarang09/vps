@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPS Documentation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+        <nav>
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon cyan">&#9670;</span>
+          <span class="nav-group-label">Overview</span>
+        </div>
+        <a href="index.html" class="active" >Home</a>
+        <a href="architecture.html" >System Architecture</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon green">&#9654;</span>
+          <span class="nav-group-label">Simulation</span>
+        </div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon purple">&#9632;</span>
+          <span class="nav-group-label">Interface</span>
+        </div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon orange">&#9881;</span>
+          <span class="nav-group-label">Infrastructure</span>
+        </div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>VPS Documentation<span class="subtitle">AI-generated from codebase analysis &mdash; May 2026</span></h1>
+
+    <p>VPS (Virtual Physics Simulator)는 <strong>100,000대 이상의 차량</strong>을 실시간으로 시뮬레이션하는 고성능 AMHS(Automated Material Handling System) 시뮬레이터입니다.</p>
+
+    <h2>Tech Stack</h2>
+    <table>
+      <tr><th>Layer</th><th>Technology</th><th>Role</th></tr>
+      <tr><td>Rendering</td><td>Three.js + React Three Fiber</td><td>3D 시각화, InstancedMesh로 대량 차량 렌더링</td></tr>
+      <tr><td>UI</td><td>React 19 + Tailwind CSS</td><td>메뉴, 통계 패널, 파라미터 설정</td></tr>
+      <tr><td>State</td><td>Zustand 5</td><td>UI/시뮬레이션 상태 관리</td></tr>
+      <tr><td>Simulation</td><td>Web Workers + SharedArrayBuffer</td><td>물리 엔진, 경로 탐색, 충돌 검출</td></tr>
+      <tr><td>Logging</td><td>OPFS + MQTT</td><td>고빈도 바이너리 로그, DB 적재</td></tr>
+      <tr><td>Charts</td><td>Recharts + TanStack Table</td><td>실시간 통계 시각화</td></tr>
+      <tr><td>Build</td><td>Vite 6</td><td>번들링, Worker 자동 분리, HMR</td></tr>
+    </table>
+
+    <h2>Core Architecture</h2>
+    <div class="flow"><span class="highlight">Main Thread (React + Three.js)</span>
+  ├─ UI 렌더링, 사용자 입력
+  ├─ Three.js InstancedMesh (vehicle 위치 읽기)
+  └─ SharedArrayBuffer <span class="orange">READ ONLY</span>
+         │
+         │ zero-copy (Float32Array views)
+         │
+<span class="green">Worker Thread(s) (Simulation Engine)</span>
+  ├─ 물리 계산, 충돌 검출, 경로 탐색
+  ├─ Lock 관리, Transfer 주문 처리
+  └─ SharedArrayBuffer <span class="orange">WRITE</span>
+         │
+         │ OPFS sync write (binary)
+         │
+<span class="purple">OPFS / MQTT</span>
+  └─ 고빈도 로그 저장 → Python 분석</div>
+
+    <h2>Key Design Principles</h2>
+    <ul>
+      <li><strong>Thread Separation</strong> &mdash; 시뮬레이션(Worker)은 DOM/Three.js에 접근하지 않음. 렌더링(Main)은 물리 계산을 하지 않음.</li>
+      <li><strong>Zero-Copy Communication</strong> &mdash; 차량 위치 데이터는 <code>SharedArrayBuffer</code>를 통해 전달. <code>postMessage</code> 없이 직접 메모리 읽기.</li>
+      <li><strong>Per-Fab Isolation</strong> &mdash; 각 Fab(공장)은 독립된 시뮬레이션 컨텍스트. 서로 직접 상호작용하지 않음.</li>
+      <li><strong>Zero-GC Hot Path</strong> &mdash; 충돌/이동/Dijkstra 등 매 프레임 실행 코드는 사전 할당된 버퍼만 사용.</li>
+      <li><strong>Data-Driven Config</strong> &mdash; 모든 물리/라우팅/Lock 파라미터를 런타임에 Fab별로 변경 가능.</li>
+    </ul>
+
+    <h2>Documents</h2>
+    <div class="doc-grid">
+      <div class="card highlight">
+        <h4><a href="architecture.html">System Architecture</a></h4>
+        <p>전체 시스템 구조, 스레드 분리, 메모리 레이아웃, Multi-Fab Grid</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="simulation.html">Simulation Engine</a></h4>
+        <p>SimulationEngine, FabContext, 시뮬레이션 루프, 충돌 검출, Lock 관리, 이동 물리</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="routing.html">Routing (BPR / EWMA)</a></h4>
+        <p>Dijkstra 알고리즘, BPR 혼잡 모델, EWMA 실측 기반 라우팅</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="ui-guide.html">UI &amp; Menu System</a></h4>
+        <p>React 메뉴 구조, 실시간 통계, Fab Group 시스템</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="preset-system.html">Parameter Preset</a></h4>
+        <p>JSON 기반 파라미터 프리셋, 맵+Fab+차량 일괄 로드</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="logging.html">Logging &amp; Data Pipeline</a></h4>
+        <p>OPFS 바이너리 로그, 이벤트 타입, MQTT 전송</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="lock-system.html">Lock System</a></h4>
+        <p>Checkpoint 기반 Lock 라이프사이클, Deadlock Zone, Priority Swap, Pre-Lock</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="movement.html">Movement Physics</a></h4>
+        <p>차량 물리 엔진, 가속/감속 모델, Edge Ratio 기반 이동, 속도 제어</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="collision.html">Collision Detection</a></h4>
+        <p>센서 기반 충돌 감지, Edge 내 거리 비교, 감속/정지 로직, 안전 거리</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="fab-system.html">FAB &amp; Statistics</a></h4>
+        <p>FabContext, SimulationEngine, Multi-Worker, 실시간 통계 파이프라인, 성능 모니터링</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="shared-memory.html">Shared Memory Layout</a></h4>
+        <p>VehicleDataArray 43필드 구조, Checkpoint/Path/Sensor 버퍼, MemoryLayoutManager</p>
+      </div>
+      <div class="card highlight">
+        <h4><a href="renderer.html">Three.js Renderer</a></h4>
+        <p>InstancedMesh, Vertex Shader, LOD, JobState 색상 매핑, Worker→GPU 데이터 흐름</p>
+      </div>
+    </div>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

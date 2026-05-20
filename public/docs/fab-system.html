@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAB &amp; Statistics — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+        <nav>
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon cyan">&#9670;</span>
+          <span class="nav-group-label">Overview</span>
+        </div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon green">&#9654;</span>
+          <span class="nav-group-label">Simulation</span>
+        </div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html" class="active">FAB &amp; Statistics</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon purple">&#9632;</span>
+          <span class="nav-group-label">Interface</span>
+        </div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon orange">&#9881;</span>
+          <span class="nav-group-label">Infrastructure</span>
+        </div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>FAB System &amp; Real-time Statistics<span class="subtitle">FabContext, SimulationEngine, OrderStats, Performance Monitoring</span></h1>
+
+    <!-- ===== PART 1: FAB SYSTEM ===== -->
+    <h2>Part 1 &mdash; FAB System</h2>
+
+    <h3>1.1 FabContext (Fab별 컨테이너)</h3>
+    <p>Fab 1개 = <code>FabContext</code> 1개. 각 Fab은 완전히 독립된 시뮬레이션 컨테이너입니다.</p>
+    <div class="card">
+      <h4>관리 데이터 구조</h4>
+      <ul>
+        <li><code>VehicleDataArray</code> &mdash; 차량 상태 (위치, 속도, 엣지, ratio 등)</li>
+        <li><code>SensorPointArray</code> &mdash; 센서 충돌 검출용 좌표</li>
+        <li><code>EdgeVehicleQueue</code> &mdash; 엣지별 차량 대기열</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>매니저</h4>
+      <ul>
+        <li><code>LockMgr</code> &mdash; 합류점 Lock 관리</li>
+        <li><code>TransferMgr</code> &mdash; 반송 명령 / 오더 관리</li>
+        <li><code>AutoMgr</code> &mdash; 자동 라우팅 / 스테이션 배차</li>
+        <li><code>EdgeStatsTracker</code> &mdash; EWMA 엣지 통계 수집</li>
+      </ul>
+    </div>
+
+    <h4>초기화 흐름</h4>
+    <div class="flow"><span class="highlight">setSharedBuffer</span>
+  └─ SharedArrayBuffer 바인딩 (VehicleDataArray, SensorPointArray)
+
+<span class="orange">initializeVehicles</span>
+  └─ 차량 초기 배치 (edge/ratio/speed 설정)
+
+<span class="green">buildBayLoopMap</span>
+  └─ Bay 루프 맵 구축 (Idle 정책용)
+
+<span class="purple">lockMgr.init</span>
+  └─ merge node 탐지, Lock 테이블 초기화
+
+preLockMergeNodes
+  └─ 사전 Lock 가능 노드 등록
+
+autoMgr.initStations
+  └─ 스테이션 목록 로드 + 배차 가능 지점 설정</div>
+
+    <h3>1.2 Simulation Step Pipeline (5단계)</h3>
+    <p>매 프레임 실행되는 핵심 파이프라인:</p>
+    <div class="flow"><span class="highlight">Step 1: Collision Check</span>
+  └─ markStop() &mdash; SAT 기반 센서 충돌 → 정지 명령
+
+<span class="orange">Step 2: Lock Management</span>
+  └─ lockMgr.updateAll() &mdash; 합류점 진입 제어 (FIFO/BATCH)
+
+<span class="green">Step 3: Movement Update</span>
+  └─ position/edge transition + EWMA tracker 갱신
+     가속→감속→정지→재출발 물리 사이클
+
+<span class="purple">Step 4: Auto Routing</span>
+  └─ autoMgr.update() + lockMgr.processPathChange()
+     Dijkstra 재탐색, 경로 변경 시 Lock 재조정
+
+Step 5: Render Buffer Write
+  └─ worker→render copy &mdash; Main Thread 읽기용 버퍼에 기록</div>
+
+    <h3>1.3 SimulationEngine (Master Controller)</h3>
+    <div class="card">
+      <h4>구조</h4>
+      <ul>
+        <li><code>fabContexts: Map&lt;fabId, FabContext&gt;</code> &mdash; 모든 Fab 인스턴스 보유</li>
+        <li>Main loop: <code>setInterval</code> &rarr; <code>step(delta)</code> &rarr; <code>for each fab: fab.step()</code></li>
+        <li><code>simulationTime</code> 누적 (ms 단위, 시뮬레이션 경과 시간)</li>
+        <li>Performance reporting: 5초마다 step 통계 수집 및 리포트</li>
+      </ul>
+    </div>
+
+    <h3>1.4 MultiWorkerController</h3>
+    <table>
+      <tr><th>항목</th><th>설명</th></tr>
+      <tr><td>Worker 분배</td><td>Round-robin 방식으로 Fab을 Worker에 할당</td></tr>
+      <tr><td>Memory Layout</td><td><code>MemoryLayoutManager</code>가 사전에 오프셋 계산</td></tr>
+      <tr><td>Message Protocol</td><td><code>INIT</code>, <code>START/STOP</code>, <code>SET_*_CONFIG</code>, <code>PERF_STATS</code>, <code>ORDER_STATS</code></td></tr>
+    </table>
+    <p>Worker는 SharedArrayBuffer 오프셋만으로 각 Fab 데이터에 접근하므로, 런타임 메모리 복사가 없습니다.</p>
+
+    <h3>1.5 Fab Grid System</h3>
+    <div class="card">
+      <h4>createFabGrid(nodes, edges, gridX, gridY)</h4>
+      <ul>
+        <li><strong>ID offset</strong>: <code>fabIndex &times; 1000</code> (N0001 &rarr; N1001, N2001, ...)</li>
+        <li><strong>Spatial offset</strong>: 1.1&times; bounds (10% gap between fabs)</li>
+        <li><strong>SharedMapRef</strong>: grid mode에서 edge/node 데이터를 공유하여 메모리 절약</li>
+      </ul>
+    </div>
+    <pre><code>Fab Grid Layout (3x2 예시):
+
+  Fab0    Fab1    Fab2
+  N0xxx   N1xxx   N2xxx
+  ┌───┐   ┌───┐   ┌───┐
+  │   │   │   │   │   │
+  └───┘   └───┘   └───┘
+     10% gap  10% gap
+
+  Fab3    Fab4    Fab5
+  N3xxx   N4xxx   N5xxx
+  ┌───┐   ┌───┐   ┌───┐
+  │   │   │   │   │   │
+  └───┘   └───┘   └───┘</code></pre>
+
+    <h3>1.6 Per-Fab Configuration</h3>
+    <p>Global default &rarr; Fab override (partial patch) 방식으로 Fab별 독립 설정을 지원합니다.</p>
+    <div class="card">
+      <h4>fabConfigStore</h4>
+      <ul>
+        <li><strong>lock</strong> &mdash; Lock 전략, request/wait distance</li>
+        <li><strong>movement</strong> &mdash; 가감속, 최대속도, curve speed</li>
+        <li><strong>sensor</strong> &mdash; 센서 존 크기, hitZone 임계값</li>
+        <li><strong>routing</strong> &mdash; Dijkstra 주기, BPR 파라미터</li>
+        <li><strong>transfer</strong> &mdash; 오더 배차, idle policy</li>
+      </ul>
+    </div>
+    <p>Runtime update: Worker message (<code>SET_ROUTING_CONFIG</code>, <code>SET_LOCK_CONFIG</code> 등)로 즉시 반영.</p>
+
+    <!-- ===== PART 2: REAL-TIME STATISTICS ===== -->
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <h2>Part 2 &mdash; Real-time Statistics</h2>
+
+    <h3>2.1 Order Statistics Pipeline</h3>
+    <p>Worker &rarr; <code>FabContext.flushOrderStats()</code> every <strong>2000ms</strong>.</p>
+    <div class="card">
+      <h4>OrderStatsData 구조</h4>
+      <ul>
+        <li><strong>completed</strong> &mdash; 누적 완료 오더 수</li>
+        <li><strong>throughputPerHour</strong> &mdash; 시간당 처리량</li>
+        <li><strong>leadTime / waitingTime / deliveryTime</strong> &mdash; p50, p95, mean + histogram</li>
+      </ul>
+    </div>
+
+    <h4>4-Stage Order Lifecycle</h4>
+    <div class="flow"><span class="highlight">pickupApproach</span> &mdash; 픽업 지점까지 이동
+  └─ moveToPickup &rarr; pickupArrive
+
+<span class="orange">loading</span> &mdash; 적재 (대기 + 실행)
+  └─ pickupStart &rarr; pickupDone
+
+<span class="green">dropApproach</span> &mdash; 하차 지점까지 이동
+  └─ moveToDrop &rarr; dropArrive
+
+<span class="purple">unloading</span> &mdash; 하차 (대기 + 실행)
+  └─ dropStart &rarr; dropDone
+
+각 단계별 평균 시간 산출 (mean)</div>
+
+    <h4>Histogram</h4>
+    <table>
+      <tr><th>Metric</th><th>Buckets</th><th>Interval</th></tr>
+      <tr><td>leadTime</td><td>37 buckets</td><td>10s 간격</td></tr>
+      <tr><td>waitingTime</td><td>37 buckets</td><td>5s 간격</td></tr>
+      <tr><td>deliveryTime</td><td>37 buckets</td><td>5s 간격</td></tr>
+    </table>
+
+    <h3>2.2 Order Stats Store (Throttling)</h3>
+    <div class="card">
+      <ul>
+        <li><strong>Flush interval</strong>: 5초 (leading-edge + trailing-edge)</li>
+        <li><code>fabStats: Record&lt;fabId, OrderStatsData&gt;</code></li>
+        <li>Main thread re-render 방지 &mdash; 배치 업데이트로 React 리렌더 최소화</li>
+      </ul>
+    </div>
+
+    <h3>2.3 FabStats Panel (실시간 스냅샷)</h3>
+    <p><code>computeFabStats()</code>: <strong>10초</strong> 간격, SharedArrayBuffer 직접 스캔.</p>
+
+    <h4>Speed Distribution</h4>
+    <table>
+      <tr><th>항목</th><th>설명</th></tr>
+      <tr><td>avg / max / min</td><td>전체 차량 속도 통계</td></tr>
+      <tr><td>Histogram</td><td>10-bucket (0.5 m/s 간격)</td></tr>
+    </table>
+
+    <h4>Job State Distribution (7종)</h4>
+    <table>
+      <tr><th>State</th><th>Description</th></tr>
+      <tr><td>IDLE</td><td>대기 중 (미배차)</td></tr>
+      <tr><td>MOVE_TO_LOAD</td><td>픽업 지점 이동 중</td></tr>
+      <tr><td>LOADING</td><td>적재 중</td></tr>
+      <tr><td>MOVE_TO_UNLOAD</td><td>하차 지점 이동 중</td></tr>
+      <tr><td>UNLOADING</td><td>하차 중</td></tr>
+      <tr><td>COMPLETE</td><td>완료</td></tr>
+      <tr><td>ERROR</td><td>오류</td></tr>
+    </table>
+
+    <h4>Traffic State</h4>
+    <table>
+      <tr><th>State</th><th>Description</th></tr>
+      <tr><td>FREE</td><td>자유 주행 중</td></tr>
+      <tr><td>WAITING</td><td>Lock 대기 또는 센서 정지</td></tr>
+      <tr><td>ACQUIRED</td><td>Lock 획득 후 통과 중</td></tr>
+    </table>
+
+    <h4>Stop Reason (Bitmask 기반 6종)</h4>
+    <pre><code>Bit 0: SENSOR_COLLISION   &mdash; 센서 충돌로 정지
+Bit 1: LOCK_WAIT          &mdash; 합류점 Lock 대기
+Bit 2: LOADING             &mdash; 적재 중 정지
+Bit 3: UNLOADING           &mdash; 하차 중 정지
+Bit 4: PRE_BRAKE           &mdash; 사전 감속 정지
+Bit 5: PATH_BLOCKED        &mdash; 경로 차단됨
+
++ sensor collision count, path remaining 추가 집계</code></pre>
+
+    <h3>2.4 Ranking System</h3>
+    <div class="card">
+      <h4>8 Metrics</h4>
+      <ul>
+        <li><strong>throughput</strong> &mdash; 시간당 처리량</li>
+        <li><strong>leadTimeP50 / leadTimeP95</strong> &mdash; 리드타임 백분위</li>
+        <li><strong>avgSpeed</strong> &mdash; 평균 속도</li>
+        <li><strong>movingRate</strong> &mdash; 이동 중 비율</li>
+        <li><strong>stoppedRate</strong> &mdash; 정지 비율</li>
+        <li><strong>collisionCount</strong> &mdash; 충돌 횟수</li>
+        <li><strong>completed</strong> &mdash; 완료 오더 수</li>
+      </ul>
+    </div>
+    <p>Sort toggle: 각 metric별 ascending/descending 전환 가능.</p>
+    <p><strong>Fab Group</strong>: named groups with color coding &mdash; 그룹별 비교 시각화.</p>
+
+    <h3>2.5 Performance Monitoring (RollingPerformanceStats)</h3>
+    <div class="card">
+      <h4>Rolling Window</h4>
+      <ul>
+        <li><strong>Window</strong>: 5초, ~300 samples</li>
+        <li><strong>Metrics</strong>: mean, min, max, variance, stdDev, CV, p50, p95, p99</li>
+        <li><strong>GC spike detection</strong>: CV &gt; 0.5 = unstable (GC 압력 경고)</li>
+      </ul>
+    </div>
+    <table>
+      <tr><th>Metric</th><th>Source</th><th>Description</th></tr>
+      <tr><td>Worker step time</td><td>SimulationEngine</td><td>한 프레임 step() 소요 시간</td></tr>
+      <tr><td>Dijkstra perf</td><td>Routing module</td><td>경로 탐색 횟수 + 평균 소요 시간</td></tr>
+      <tr><td>Fab vehicle counts</td><td>FabContext</td><td>Fab별 활성 차량 수</td></tr>
+    </table>
+
+    <!-- ===== SUMMARY TABLE ===== -->
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <h2>Summary &mdash; Update Intervals</h2>
+    <table>
+      <tr><th>Aspect</th><th>Update Interval</th><th>Source</th></tr>
+      <tr><td>Vehicle Position</td><td>Per frame (~5ms)</td><td>Render buffer</td></tr>
+      <tr><td>Order Stats</td><td>2000ms</td><td>FabContext</td></tr>
+      <tr><td>Fab Stats</td><td>10000ms</td><td>Panel compute</td></tr>
+      <tr><td>Performance</td><td>5000ms</td><td>SimulationEngine</td></tr>
+      <tr><td>Lock Table</td><td>On-demand</td><td>FabContext</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

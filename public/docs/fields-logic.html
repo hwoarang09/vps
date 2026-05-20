@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LogicData Fields (21~30) — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub active">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <p><a href="shared-memory.html">&larr; Shared Memory Layout</a></p>
+    <h1>LogicData 필드별 상세<span class="subtitle">Offset 21 ~ 30 &mdash; Lock / Traffic / Job / Checkpoint 상태</span></h1>
+
+    <div class="card highlight">
+      <p><strong>LogicData</strong>는 차량의 <strong>교통 제어, 정차 사유, 작업 상태, 경로 정보, 체크포인트</strong>를 담는 10개 필드입니다.
+      Worker 스레드에서 LockMgr, AutoMgr, checkpoint-processor 등이 기록하며, Main 스레드의 FabStatsPanel이 실시간 분포 차트로 읽습니다.</p>
+    </div>
+
+    <h3>소스 파일 맵</h3>
+    <table>
+      <tr><th>File</th><th>Role</th></tr>
+      <tr><td><code>constants.ts</code></td><td>LogicData 오프셋, TrafficState / StopReason / JobState / CheckpointFlags enum 정의</td></tr>
+      <tr><td><code>lock-handlers.ts</code></td><td>TRAFFIC_STATE, STOP_REASON 기록 (LOCKED 비트 set/clear)</td></tr>
+      <tr><td><code>checkpoint-processor.ts</code></td><td>CHECKPOINT_HEAD 전진, CURRENT_CP_* 로드/소비</td></tr>
+      <tr><td><code>checkpoint-loader.ts</code></td><td>checkpointArray &rarr; CURRENT_CP_* 필드 복사, head 증가</td></tr>
+      <tr><td><code>AutoMgr.ts</code></td><td>JOB_STATE 전이, DESTINATION_EDGE / PATH_REMAINING 기록</td></tr>
+      <tr><td><code>FabStatsPanel.tsx</code></td><td>LogicData 전 필드 읽어 분포 차트 생성 (Reader)</td></tr>
+    </table>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 1: TRAFFIC_STATE -->
+    <!-- ================================================================ -->
+    <h2 id="traffic-state">1. TRAFFIC_STATE <span class="badge badge-purple">Offset 21</span></h2>
+
+    <h3>용도</h3>
+    <p>차량의 <strong>교통 제어 상태</strong>(Intersection / Merge 제어)를 추적합니다. 현재 코드에서는 Lock 기반 merge 제어의 보조 상태로 사용되며, FabStatsPanel에서 <strong>trafficFree / trafficWaiting / trafficAcquired</strong> 분포를 집계합니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>LockMgr (lock-handlers.ts)</code></td><td>Lock 요청/획득/해제 시 간접적으로 반영. 현재 직접 TRAFFIC_STATE를 변경하는 명시적 코드는 lock-handlers 내 STOP_REASON 비트 조작에 연동.</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>FabStatsPanel.tsx</code> &mdash; <code>computeFabStats()</code></td><td>TrafficState 값별 차량 수 집계 &rarr; trafficFree / trafficWaiting / trafficAcquired</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; TrafficState enum</h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>FREE</code></td><td>자유 주행 &mdash; lock 미요청 상태</td></tr>
+      <tr><td>1</td><td><code>WAITING</code></td><td>merge node 앞에서 lock 대기 중</td></tr>
+      <tr><td>2</td><td><code>ACQUIRED</code></td><td>merge lock 획득 &mdash; merge 구간 통과 중</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; 상태 전이</h3>
+    <div class="flow">  <span class="green">FREE (0)</span>
+    │
+    ├─ LOCK_REQUEST CP 도달 + lock 미보유 ──&rarr; <span class="orange">WAITING (1)</span>
+    │                                              │
+    │                                              ├─ lock granted ──&rarr; <span class="purple">ACQUIRED (2)</span>
+    │                                              │                        │
+    │                                              └─ (대기 지속)            ├─ LOCK_RELEASE CP 도달 ──&rarr; <span class="green">FREE (0)</span>
+    │                                                                       └─ merge 통과 + auto-release ──&rarr; <span class="green">FREE (0)</span>
+    │
+    └─ LOCK_REQUEST CP 도달 + 즉시 grant ──&rarr; <span class="purple">ACQUIRED (2)</span></div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 2: STOP_REASON -->
+    <!-- ================================================================ -->
+    <h2 id="stop-reason">2. STOP_REASON <span class="badge badge-red">Offset 22 &mdash; Bitmask</span></h2>
+
+    <h3>용도</h3>
+    <p>차량이 정지한 <strong>모든 사유</strong>를 비트마스크로 동시 표현합니다. 복수 사유가 동시에 존재할 수 있습니다(예: <code>LOCKED | SENSORED = 0x408</code>).</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th><th>Operation</th></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>handleLockWait()</code></td><td>Lock 대기 시</td><td><code>STOP_REASON |= StopReason.LOCKED</code></td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>handleLockWait()</code></td><td>Lock 획득 / 통과 시</td><td><code>STOP_REASON &amp;= ~StopReason.LOCKED</code></td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>checkAutoRelease()</code></td><td>auto-release 체크 시 LOCKED 상태 확인</td><td>읽기 전용 (판단에 사용)</td></tr>
+      <tr><td><code>SensorCollision</code> 모듈</td><td>센서 감지 정차</td><td><code>STOP_REASON |= StopReason.OBS_LIDAR</code> 등</td></tr>
+      <tr><td><code>AutoMgr.ts</code></td><td>목적지 도달, idle 진입 등</td><td>해당 비트 set/clear</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>FabStatsPanel.tsx</code> &mdash; <code>computeFabStats()</code></td><td>비트별 카운트: stopLocked, stopSensored, stopIdle, stopPathBlocked, stopDestReached, stopLoadOnOff</td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>checkAutoRelease()</code></td><td>LOCKED 비트 확인하여 cancel 판단 보류</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; StopReason Bitmask (12 flags)</h3>
+    <table>
+      <tr><th>Bit</th><th>Hex</th><th>Decimal</th><th>Name</th><th>Description</th></tr>
+      <tr><td>&mdash;</td><td><code>0x000</code></td><td>0</td><td><code>NONE</code></td><td>정지 사유 없음 (주행 중)</td></tr>
+      <tr><td>0</td><td><code>0x001</code></td><td>1</td><td><code>OBS_LIDAR</code></td><td>LiDAR 장애물 감지 정차</td></tr>
+      <tr><td>1</td><td><code>0x002</code></td><td>2</td><td><code>OBS_CAMERA</code></td><td>카메라 장애물 감지 정차</td></tr>
+      <tr><td>2</td><td><code>0x004</code></td><td>4</td><td><code>E_STOP</code></td><td>비상 정지</td></tr>
+      <tr><td>3</td><td><code>0x008</code></td><td>8</td><td><code>LOCKED</code></td><td>Merge lock 대기 정차</td></tr>
+      <tr><td>4</td><td><code>0x010</code></td><td>16</td><td><code>DESTINATION_REACHED</code></td><td>목적지 도달 정차</td></tr>
+      <tr><td>5</td><td><code>0x020</code></td><td>32</td><td><code>PATH_BLOCKED</code></td><td>경로 차단 (진행 불가)</td></tr>
+      <tr><td>6</td><td><code>0x040</code></td><td>64</td><td><code>LOAD_ON</code></td><td>적재(Loading) 작업 중</td></tr>
+      <tr><td>7</td><td><code>0x080</code></td><td>128</td><td><code>LOAD_OFF</code></td><td>하역(Unloading) 작업 중</td></tr>
+      <tr><td>8</td><td><code>0x100</code></td><td>256</td><td><code>NOT_INITIALIZED</code></td><td>초기화 미완료</td></tr>
+      <tr><td>9</td><td><code>0x200</code></td><td>512</td><td><code>INDIVIDUAL_CONTROL</code></td><td>개별 수동 제어 모드</td></tr>
+      <tr><td>10</td><td><code>0x400</code></td><td>1024</td><td><code>SENSORED</code></td><td>센서 감지 정차 (통합)</td></tr>
+      <tr><td>11</td><td><code>0x800</code></td><td>2048</td><td><code>IDLE</code></td><td>Idle 상태 (작업 없음)</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; 비트 조합 예시</h3>
+    <div class="card">
+      <p>Bitmask이므로 복수 사유가 동시에 존재할 수 있습니다.</p>
+      <table>
+        <tr><th>Scenario</th><th>Bits</th><th>Hex</th></tr>
+        <tr><td>Lock 대기 + 센서 감지</td><td><code>LOCKED | SENSORED</code></td><td><code>0x408</code></td></tr>
+        <tr><td>적재 중 + Idle</td><td><code>LOAD_ON | IDLE</code></td><td><code>0x840</code></td></tr>
+        <tr><td>비상 정지 + 경로 차단</td><td><code>E_STOP | PATH_BLOCKED</code></td><td><code>0x024</code></td></tr>
+      </table>
+      <pre><code>// lock-handlers.ts: LOCKED 비트 제어
+// 대기 진입
+data[ptr + LogicData.STOP_REASON] |= StopReason.LOCKED;    // set bit 3
+data[ptr + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+
+// 대기 해제
+data[ptr + LogicData.STOP_REASON] &amp;= ~StopReason.LOCKED;   // clear bit 3
+data[ptr + MovementData.MOVING_STATUS] = MovingStatus.MOVING;</code></pre>
+    </div>
+
+    <div class="card highlight">
+      <p><strong>FabStatsPanel 읽기 패턴:</strong></p>
+      <pre><code>const sr = fullData[ptr + LogicData.STOP_REASON];
+if (sr &amp; StopReason.LOCKED)    stats.stopLocked++;
+if (sr &amp; StopReason.SENSORED)  stats.stopSensored++;
+if (sr &amp; StopReason.IDLE)      stats.stopIdle++;
+if (sr &amp; StopReason.PATH_BLOCKED)       stats.stopPathBlocked++;
+if (sr &amp; StopReason.DESTINATION_REACHED) stats.stopDestReached++;
+if ((sr &amp; StopReason.LOAD_ON) || (sr &amp; StopReason.LOAD_OFF))
+    stats.stopLoadOnOff++;</code></pre>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 3: JOB_STATE -->
+    <!-- ================================================================ -->
+    <h2 id="job-state">3. JOB_STATE <span class="badge badge-purple">Offset 23</span></h2>
+
+    <h3>용도</h3>
+    <p>차량의 <strong>고수준 작업(Mission) 상태</strong>를 추적합니다. Transfer(반송) 시스템의 핵심 상태 머신으로, AutoMgr가 관리합니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th><th>Value</th></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; transfer assign</td><td>반송 주문 배정 시</td><td><code>JobState.MOVE_TO_LOAD</code> (2)</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; MOVE_TO_LOAD 완료</td><td>pickup station 도착 + 정차</td><td><code>JobState.LOADING</code> (3)</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; LOADING 완료</td><td>dwell 타이머 만료</td><td><code>JobState.MOVE_TO_UNLOAD</code> (4)</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; MOVE_TO_UNLOAD 완료</td><td>drop station 도착 + 정차</td><td><code>JobState.UNLOADING</code> (5)</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; UNLOADING 완료</td><td>dwell 타이머 만료</td><td><code>JobState.IDLE</code> (1)</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>FabStatsPanel.tsx</code> &mdash; <code>computeFabStats()</code></td><td>Job 상태별 차량 수 집계 &rarr; jobIdle, jobMoveToLoad, jobLoading 등 DistributionBar</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; <code>update()</code></td><td>현재 상태 읽어 다음 전이 판단 (state machine tick)</td></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; <code>checkReroutes()</code></td><td>LOADING / UNLOADING 상태면 reroute 스킵</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; JobState enum</h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>INITIALIZING</code></td><td>초기화 중 (시뮬레이션 시작 직후)</td></tr>
+      <tr><td>1</td><td><code>IDLE</code></td><td>대기 &mdash; 주문 없음, loop/random 이동 가능</td></tr>
+      <tr><td>2</td><td><code>MOVE_TO_LOAD</code></td><td>pickup station으로 이동 중</td></tr>
+      <tr><td>3</td><td><code>LOADING</code></td><td>적재 중 (dwell 타이머 대기)</td></tr>
+      <tr><td>4</td><td><code>MOVE_TO_UNLOAD</code></td><td>drop station으로 이동 중</td></tr>
+      <tr><td>5</td><td><code>UNLOADING</code></td><td>하역 중 (dwell 타이머 대기)</td></tr>
+      <tr><td>6</td><td><code>ERROR</code></td><td>에러 상태</td></tr>
+    </table>
+
+    <h3>상태 머신 다이어그램</h3>
+    <div class="flow"><span class="green">INITIALIZING (0)</span>
+    │
+    └─ 시뮬레이션 시작 ──&rarr; <span class="green">IDLE (1)</span>
+                                │
+          ┌─────────────────────┘
+          │  반송 주문 배정
+          ↓
+    <span class="highlight">MOVE_TO_LOAD (2)</span>
+          │
+          ├─ src station edge 진입 &rarr; preloadNextPath() 호출
+          │  (dest path를 pathBuffer에 미리 적재)
+          │
+          ├─ src station ratio 도달 + 정차
+          ↓
+    <span class="purple">LOADING (3)</span>
+          │
+          ├─ dwell 타이머 (기본 7초) 대기
+          │
+          ├─ 타이머 만료 &rarr; TARGET_RATIO=1, MOVING 재개
+          ↓
+    <span class="orange">MOVE_TO_UNLOAD (4)</span>
+          │
+          ├─ dest station edge 진입 &rarr; preloadLoopPath() 호출
+          │  (loop path를 pathBuffer에 미리 적재)
+          │
+          ├─ dest station ratio 도달 + 정차
+          ↓
+    <span class="highlight">UNLOADING (5)</span>
+          │
+          ├─ dwell 타이머 (기본 7초) 대기
+          │
+          ├─ 타이머 만료 &rarr; orderStats 기록, ORDER_* 초기화
+          ↓
+    <span class="green">IDLE (1)</span>  (순환)</div>
+
+    <div class="card warning">
+      <p><strong>Reroute 보호:</strong> <code>checkReroutes()</code>에서 LOADING/UNLOADING 상태의 차량은 reroute를 스킵합니다. Station edge에서 pre-load된 path가 덮어씌워지는 것을 방지하기 위함입니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 4: DESTINATION_EDGE -->
+    <!-- ================================================================ -->
+    <h2 id="destination-edge">4. DESTINATION_EDGE <span class="badge badge-purple">Offset 24</span></h2>
+
+    <h3>용도</h3>
+    <p>차량의 <strong>현재 목적지 edge index</strong>(1-based)를 저장합니다. 경로 탐색(pathfinding) 결과로 설정되며, UI에서 차량의 목적지를 확인하는 데 사용됩니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; <code>applyPathToVehicle()</code></td><td>경로 탐색 성공 후 목적지 edge 기록: <code>data[ptr + LogicData.DESTINATION_EDGE] = candidate.edgeIndex</code></td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td>Main Thread UI (디버그 오버레이)</td><td>차량의 현재 목적지 시각화</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>목적지 없음 (초기 상태 또는 도착 완료)</td></tr>
+      <tr><td><code>1 ~ N</code></td><td>목적지 edge index (1-based, edgeArray 인덱스 + 1)</td></tr>
+    </table>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 5: PATH_REMAINING -->
+    <!-- ================================================================ -->
+    <h2 id="path-remaining">5. PATH_REMAINING <span class="badge badge-purple">Offset 25</span></h2>
+
+    <h3>용도</h3>
+    <p>차량의 <strong>남은 경로 길이</strong>(pathCommand의 edge 수)를 저장합니다. 경로가 할당될 때 설정되며, FabStatsPanel에서 평균/최대 경로 길이 통계에 사용됩니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>AutoMgr.ts</code> &mdash; <code>applyPathToVehicle()</code></td><td>경로 적용 시: <code>data[ptr + LogicData.PATH_REMAINING] = pathCommand.length</code></td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>FabStatsPanel.tsx</code> &mdash; <code>computeFabStats()</code></td><td>avgPathRemaining, maxPathRemaining 집계</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>경로 없음 (도착 완료 또는 미할당)</td></tr>
+      <tr><td><code>1 ~ 100</code></td><td>남은 edge 수 (MAX_PATH_LENGTH = 100 제한)</td></tr>
+    </table>
+
+    <div class="card">
+      <p><strong>주의:</strong> PATH_REMAINING은 경로 할당 시점의 <strong>초기 edge 수</strong>를 기록합니다. 차량이 edge를 소비하며 이동할 때 이 값이 실시간으로 감소하지는 않습니다. 경로 재할당(reroute)이 발생하면 새 경로 길이로 갱신됩니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 6: CHECKPOINT_HEAD -->
+    <!-- ================================================================ -->
+    <h2 id="checkpoint-head">6. CHECKPOINT_HEAD <span class="badge badge-purple">Offset 26</span></h2>
+
+    <h3>용도</h3>
+    <p>차량의 <strong>체크포인트 큐에서 다음에 처리할 인덱스</strong>(0-based)를 추적합니다. checkpoint-loader가 이 값을 읽어 checkpointArray에서 다음 CP를 로드하고, 로드 후 +1 증가시킵니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>다음 CP 로드 시 <code>data[ptr + LogicData.CHECKPOINT_HEAD] = head + 1</code></td></tr>
+      <tr><td><code>TransferMgr</code> (경로 할당 시)</td><td>새 경로의 checkpoint 배열 설정 시 head를 0으로 리셋</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>현재 head 읽어 다음 CP 오프셋 계산. <code>head &ge; count</code>이면 더 이상 CP 없음</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>첫 번째 CP부터 처리 (초기 상태 또는 경로 재할당 직후)</td></tr>
+      <tr><td><code>0 ~ 199</code></td><td>다음에 로드할 CP 인덱스 (MAX_CHECKPOINTS_PER_VEHICLE = 200)</td></tr>
+      <tr><td><code>&ge; count</code></td><td>모든 CP 처리 완료 (count = checkpointArray 내 실제 CP 수)</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; Checkpoint 큐 진행</h3>
+    <div class="flow">경로 할당 (TransferMgr)
+    │
+    ├─ checkpointArray[vehicleOffset] = count    ← CP 총 개수
+    ├─ checkpointArray[vehicleOffset + 1..N]     ← CP 데이터 (edge, ratio, flags, target)
+    └─ CHECKPOINT_HEAD = 0                       ← 큐 시작
+
+processCheckpoint() 매 프레임 호출
+    │
+    ├─ ensureCheckpointLoaded()
+    │     └─ CURRENT_CP_EDGE == 0?
+    │         YES → loadNextCheckpoint()
+    │               ├─ head = CHECKPOINT_HEAD
+    │               ├─ head &ge; count? → return null (CP 소진)
+    │               ├─ cpOffset = vehicleOffset + 1 + head * 4
+    │               ├─ CURRENT_CP_EDGE   = checkpointArray[cpOffset + 0]
+    │               ├─ CURRENT_CP_RATIO  = checkpointArray[cpOffset + 1]
+    │               ├─ CURRENT_CP_FLAGS  = checkpointArray[cpOffset + 2]
+    │               ├─ CURRENT_CP_TARGET = checkpointArray[cpOffset + 3]
+    │               └─ <span class="highlight">CHECKPOINT_HEAD = head + 1</span>   ← head 전진!
+    │
+    ├─ checkCheckpointReached()
+    │     ├─ edge 일치 + ratio 도달 → HIT
+    │     ├─ edge 불일치 + isCpEdgeBehind → MISSED
+    │     └─ 아직 도달 안 함 → WAITING
+    │
+    ├─ HIT/MISSED → processCheckpointFlags() → flag별 핸들러 실행
+    │
+    └─ flags == 0 → loadNextCheckpoint() → 다음 CP 로드</div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 7: CURRENT_CP_EDGE -->
+    <!-- ================================================================ -->
+    <h2 id="current-cp-edge">7. CURRENT_CP_EDGE <span class="badge badge-purple">Offset 27</span></h2>
+
+    <h3>용도</h3>
+    <p>현재 처리 중인 체크포인트가 위치한 <strong>edge index</strong>(1-based)입니다. checkpoint-loader가 checkpointArray에서 로드하여 기록하고, checkpoint-processor가 현재 차량 위치와 비교하여 도달 여부를 판단합니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>CP 로드 시: <code>data[ptr + LogicData.CURRENT_CP_EDGE] = cpEdge</code></td></tr>
+      <tr><td><code>checkpoint-processor.ts</code></td><td>CP 처리 완료(flags=0) 후 <code>loadNextCheckpoint()</code> 호출로 다음 CP 로드</td></tr>
+      <tr><td><code>checkpoint-loader.ts</code></td><td>CP 소진 시 0으로 초기화: <code>CURRENT_CP_EDGE = 0</code></td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>ensureCheckpointLoaded()</code></td><td><code>cpEdge === 0</code>이면 다음 CP 로드 필요 판단</td></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>checkCheckpointReached()</code></td><td><code>currentEdge === cpEdge</code>로 도달 판단</td></tr>
+      <tr><td><code>checkpoint-processor.ts</code></td><td>이벤트 emit 시 CP edge 전달</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>현재 로드된 CP 없음 (소진 또는 미로드)</td></tr>
+      <tr><td><code>1 ~ N</code></td><td>현재 CP가 위치한 edge index (1-based)</td></tr>
+    </table>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 8: CURRENT_CP_RATIO -->
+    <!-- ================================================================ -->
+    <h2 id="current-cp-ratio">8. CURRENT_CP_RATIO <span class="badge badge-purple">Offset 28</span></h2>
+
+    <h3>용도</h3>
+    <p>현재 처리 중인 체크포인트의 <strong>edge 위 위치</strong>(0.0 ~ 1.0)입니다. 차량의 <code>EDGE_RATIO</code>가 이 값 이상이면 CP에 도달한 것으로 판정합니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>CP 로드 시: <code>data[ptr + LogicData.CURRENT_CP_RATIO] = cpRatio</code></td></tr>
+      <tr><td><code>checkpoint-loader.ts</code></td><td>CP 소진 시 0으로 초기화</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>checkCheckpointReached()</code></td><td><code>currentRatio &ge; cpRatio</code>이면 도달로 판정</td></tr>
+      <tr><td><code>checkpoint-processor.ts</code></td><td>이벤트 emit 시 cpRatio 전달</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0.0</code></td><td>edge 시작점 (또는 CP 미로드)</td></tr>
+      <tr><td><code>0.0 ~ 1.0</code></td><td>edge 위 정규화 위치 (0=시작, 1=끝)</td></tr>
+    </table>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 9: CURRENT_CP_FLAGS -->
+    <!-- ================================================================ -->
+    <h2 id="current-cp-flags">9. CURRENT_CP_FLAGS <span class="badge badge-red">Offset 29 &mdash; Bitmask</span></h2>
+
+    <h3>용도</h3>
+    <p>현재 처리 중인 체크포인트의 <strong>동작 플래그</strong>(bitmask)입니다. CP 도달 시 각 flag에 해당하는 핸들러가 순서대로 실행되며, 처리 완료된 flag는 <strong>비트 클리어</strong>됩니다. 모든 flag가 0이 되면 다음 CP를 로드합니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>CP 로드 시 flags 복사</td></tr>
+      <tr><td><code>checkpoint-processor.ts</code> &mdash; <code>processCheckpointFlags()</code></td><td>각 flag 처리 완료 후 해당 비트 클리어: <code>cpFlags &amp;= ~flag</code></td></tr>
+      <tr><td><code>checkpoint-processor.ts</code></td><td>MISSED CP에서 flags=0으로 강제 리셋</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>checkpoint-processor.ts</code> &mdash; <code>shouldLoadNextCheckpoint()</code></td><td><code>cpFlags === 0</code>이면 다음 CP 로드</td></tr>
+      <tr><td><code>checkpoint-processor.ts</code> &mdash; <code>processCheckpointFlags()</code></td><td>각 비트 확인하여 해당 핸들러 호출</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; CheckpointFlags Bitmask (5 flags)</h3>
+    <table>
+      <tr><th>Bit</th><th>Hex</th><th>Decimal</th><th>Name</th><th>Description</th></tr>
+      <tr><td>&mdash;</td><td><code>0x00</code></td><td>0</td><td><code>NONE</code></td><td>플래그 없음 (CP 처리 완료)</td></tr>
+      <tr><td>0</td><td><code>0x01</code></td><td>1</td><td><code>LOCK_REQUEST</code></td><td>merge point에서 lock 요청</td></tr>
+      <tr><td>1</td><td><code>0x02</code></td><td>2</td><td><code>LOCK_WAIT</code></td><td>lock grant 대기 (미획득 시 정차)</td></tr>
+      <tr><td>2</td><td><code>0x04</code></td><td>4</td><td><code>LOCK_RELEASE</code></td><td>merge 통과 후 lock 해제</td></tr>
+      <tr><td>3</td><td><code>0x08</code></td><td>8</td><td><code>MOVE_PREPARE</code></td><td>다음 edge 준비 (curve 등에서 NEXT_EDGE 채우기)</td></tr>
+      <tr><td>4</td><td><code>0x10</code></td><td>16</td><td><code>MOVE_SLOW</code></td><td>감속 구간 (deceleration zone)</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; Flag 처리 순서</h3>
+    <div class="card highlight">
+      <p><strong>processCheckpointFlags()의 처리 순서</strong>는 교착 방지를 위해 엄격히 지정됩니다:</p>
+      <ol>
+        <li><strong>MOVE_PREPARE (0x08)</strong> &mdash; NEXT_EDGE 배열 채우기 (가장 먼저, edge 준비 필수)</li>
+        <li><strong>LOCK_RELEASE (0x04)</strong> &mdash; 이전 merge의 lock 해제 (다음 차량 grant)</li>
+        <li><strong>LOCK_REQUEST (0x01)</strong> &mdash; 새 merge의 lock 요청</li>
+        <li><strong>LOCK_WAIT (0x02)</strong> &mdash; lock 획득 대기 (미획득 시 flag 유지, 정차)</li>
+      </ol>
+    </div>
+
+    <pre><code>// checkpoint-processor.ts: flag 순서대로 처리
+if (cpFlags &amp; CheckpointFlags.MOVE_PREPARE) {
+    handleMovePrepare(vehicleId, state);           // NEXT_EDGE 채우기
+    cpFlags &amp;= ~CheckpointFlags.MOVE_PREPARE;      // 비트 클리어
+}
+if (cpFlags &amp; CheckpointFlags.LOCK_RELEASE) {
+    handleLockRelease(vehicleId, state, eName);    // lock 해제
+    cpFlags &amp;= ~CheckpointFlags.LOCK_RELEASE;
+}
+if (cpFlags &amp; CheckpointFlags.LOCK_REQUEST) {
+    handleLockRequest(vehicleId, state);           // lock 요청
+    cpFlags &amp;= ~CheckpointFlags.LOCK_REQUEST;      // 요청 후 즉시 클리어
+}
+if (cpFlags &amp; CheckpointFlags.LOCK_WAIT) {
+    const granted = handleLockWait(vehicleId, state);
+    if (granted) {
+        cpFlags &amp;= ~CheckpointFlags.LOCK_WAIT;     // 획득 시만 클리어
+    }
+    // 미획득 시 flag 유지 → 다음 프레임에서 재시도
+}</code></pre>
+
+    <div class="card warning">
+      <p><strong>LOCK_WAIT 특수 동작:</strong> 다른 flag와 달리 LOCK_WAIT는 lock을 획득해야만 비트가 클리어됩니다. 미획득 시 flag가 유지되어 다음 프레임에서 재시도하며, 차량은 STOPPED 상태로 정차합니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- FIELD 10: CURRENT_CP_TARGET -->
+    <!-- ================================================================ -->
+    <h2 id="current-cp-target">10. CURRENT_CP_TARGET <span class="badge badge-purple">Offset 30</span></h2>
+
+    <h3>용도</h3>
+    <p>현재 CP의 <strong>target edge index</strong>(1-based)를 저장합니다. 주로 LOCK_REQUEST/LOCK_WAIT에서 merge node를 식별하는 데 사용되며, MOVE_PREPARE에서 NEXT_EDGE를 targetEdge까지만 채우는 경계로 사용됩니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>Module</th><th>When</th></tr>
+      <tr><td><code>checkpoint-loader.ts</code> &mdash; <code>loadNextCheckpoint()</code></td><td>CP 로드 시: <code>data[ptr + LogicData.CURRENT_CP_TARGET] = cpTargetEdge</code></td></tr>
+      <tr><td><code>checkpoint-loader.ts</code></td><td>CP 소진 시 0으로 초기화</td></tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>Module</th><th>Purpose</th></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>handleLockRequest()</code></td><td>targetEdge의 from_node으로 merge node 식별 &rarr; lock 요청</td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>handleLockWait()</code></td><td>targetEdge의 from_node으로 merge node 식별 &rarr; lock holder 확인</td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>handleMovePrepare()</code></td><td>pathBuffer에서 targetEdge까지만 NEXT_EDGE 채우기</td></tr>
+      <tr><td><code>lock-handlers.ts</code> &mdash; <code>checkAutoRelease()</code></td><td>LOCKED 상태에서 cancel 판단 시 targetEdge의 from_node 비교</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>Value</th><th>Meaning</th></tr>
+      <tr><td><code>0</code></td><td>target 없음 (CP에 LOCK/PREP flag 없음)</td></tr>
+      <tr><td><code>1 ~ N</code></td><td>target edge index (1-based) &mdash; merge node에서 나가는 edge</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; targetEdge의 역할</h3>
+    <div class="card highlight">
+      <p><code>CURRENT_CP_TARGET</code>은 checkpoint builder가 경로 생성 시 미리 계산하여 저장합니다. merge node에서의 lock 제어와 edge 준비 모두 이 값을 통해 수행됩니다.</p>
+    </div>
+
+    <div class="flow"><strong>LOCK_REQUEST/WAIT 시나리오:</strong>
+
+  targetEdge = CURRENT_CP_TARGET
+  targetEdge의 from_node = merge node name
+          │
+          ├─ handleLockRequest()
+          │    └─ merge node에 대해 requestLockInternal()
+          │    └─ pendingReleases에 {nodeName, releaseEdgeIdx=targetEdge} 등록
+          │
+          └─ handleLockWait()
+               └─ merge node의 lock holder 확인
+               └─ blocked → VELOCITY=0, STOPPED, STOP_REASON |= LOCKED
+               └─ granted → STOP_REASON &amp;= ~LOCKED, MOVING
+
+<strong>MOVE_PREPARE 시나리오:</strong>
+
+  targetEdge = CURRENT_CP_TARGET
+          │
+          └─ handleMovePrepare()
+               └─ pathBuffer에서 순회
+               └─ NEXT_EDGE_0~4에 edge 채우기
+               └─ targetEdge 발견 시 그 이후 슬롯은 0으로 채움 (경계)
+               └─ NEXT_EDGE_STATE = firstNext &gt; 0 ? READY : EMPTY</div>
+
+    <!-- ================================================================ -->
+    <!-- SUMMARY: FabStatsPanel Reader -->
+    <!-- ================================================================ -->
+    <h2 id="fab-stats-reader">FabStatsPanel의 LogicData 읽기 패턴</h2>
+
+    <div class="card highlight">
+      <p><code>FabStatsPanel.tsx</code>의 <code>computeFabStats()</code> 함수는 10초 간격으로 전체 차량의 LogicData를 순회하며 실시간 분포 통계를 집계합니다.</p>
+    </div>
+
+    <table>
+      <tr><th>Field</th><th>읽기 방법</th><th>집계 결과</th><th>UI 표시</th></tr>
+      <tr><td><code>JOB_STATE</code></td><td>값 비교 (<code>=== JobState.IDLE</code> 등)</td><td>jobIdle, jobMoveToLoad, jobLoading, jobMoveToUnload, jobUnloading, jobError, jobInitializing</td><td>Job State DistributionBar</td></tr>
+      <tr><td><code>TRAFFIC_STATE</code></td><td>값 비교 (<code>=== TrafficState.FREE</code> 등)</td><td>trafficFree, trafficWaiting, trafficAcquired</td><td>Trend 탭 waitingRate 라인 차트</td></tr>
+      <tr><td><code>STOP_REASON</code></td><td>비트 AND (<code>&amp; StopReason.LOCKED</code> 등)</td><td>stopLocked, stopSensored, stopIdle, stopPathBlocked, stopDestReached, stopLoadOnOff</td><td>Stopped 상세 분류 (조건부 표시)</td></tr>
+      <tr><td><code>PATH_REMAINING</code></td><td>합산 + 최대값</td><td>avgPathRemaining, maxPathRemaining</td><td>Avg Path (m) 수치</td></tr>
+    </table>
+
+    <pre><code>// FabStatsPanel.tsx - computeFabStats() 핵심 루프
+for (let i = 0; i &lt; vehicleCount; i++) {
+    const ptr = (startIdx + i) * VEHICLE_DATA_SIZE;
+
+    // JOB_STATE: 값 비교로 분류
+    const js = fullData[ptr + LogicData.JOB_STATE];
+    if (js === JobState.IDLE) stats.jobIdle++;
+    else if (js === JobState.MOVE_TO_LOAD) stats.jobMoveToLoad++;
+    // ... (7개 상태 전수 분류)
+
+    // TRAFFIC_STATE: 값 비교로 분류
+    const ts = fullData[ptr + LogicData.TRAFFIC_STATE];
+    if (ts === TrafficState.FREE) stats.trafficFree++;
+    // ...
+
+    // STOP_REASON: 비트마스크 AND로 복수 사유 동시 카운트
+    const sr = fullData[ptr + LogicData.STOP_REASON];
+    if (sr &amp; StopReason.LOCKED) stats.stopLocked++;
+    if (sr &amp; StopReason.SENSORED) stats.stopSensored++;
+    // ...
+
+    // PATH_REMAINING: 합산 및 최대값
+    const pathRem = fullData[ptr + LogicData.PATH_REMAINING];
+    totalPath += pathRem;
+    if (pathRem &gt; stats.maxPathRemaining) stats.maxPathRemaining = pathRem;
+}</code></pre>
+
+    <!-- ================================================================ -->
+    <!-- Checkpoint Lifecycle Summary -->
+    <!-- ================================================================ -->
+    <h2 id="checkpoint-lifecycle">Checkpoint 필드 라이프사이클 요약</h2>
+
+    <div class="card highlight">
+      <p>4개의 CP 필드(<code>CURRENT_CP_EDGE</code>, <code>CURRENT_CP_RATIO</code>, <code>CURRENT_CP_FLAGS</code>, <code>CURRENT_CP_TARGET</code>)는 하나의 단위로 동작합니다.</p>
+    </div>
+
+    <div class="flow"><strong>Phase 1: 경로 할당</strong>
+  TransferMgr.assignCommand()
+    └─ checkpointArray에 CP 배열 기록
+    └─ CHECKPOINT_HEAD = 0
+    └─ CURRENT_CP_EDGE = 0 (로드 트리거)
+
+<strong>Phase 2: CP 로드</strong>  (ensureCheckpointLoaded)
+  CURRENT_CP_EDGE === 0?
+    YES → loadNextCheckpoint()
+          ├─ checkpointArray[head] → CURRENT_CP_EDGE / RATIO / FLAGS / TARGET
+          └─ CHECKPOINT_HEAD++
+
+<strong>Phase 3: 도달 대기</strong>  (checkCheckpointReached)
+  매 프레임:
+    ├─ currentEdge === CP_EDGE &amp;&amp; currentRatio &ge; CP_RATIO → <span class="green">HIT</span>
+    ├─ currentEdge !== CP_EDGE &amp;&amp; isCpEdgeBehind() → <span class="orange">MISSED</span>
+    └─ otherwise → <span class="highlight">WAITING</span>
+
+<strong>Phase 4: Flag 처리</strong>  (processCheckpointFlags)
+  HIT 시:
+    MOVE_PREPARE → LOCK_RELEASE → LOCK_REQUEST → LOCK_WAIT
+    각 flag 처리 후 비트 클리어
+    (LOCK_WAIT 미획득 시 flag 유지 → 재시도)
+
+  MISSED 시:
+    handleMissedCheckpoint() → 동일 핸들러 호출 (WAIT 미획득 시 CP 유지)
+    flags = 0 강제 클리어 → 다음 CP 로드
+
+<strong>Phase 5: 다음 CP 로드</strong>
+  flags === 0 → loadNextCheckpoint()
+    ├─ head &lt; count → Phase 2 반복
+    └─ head &ge; count → CP 소진 (CURRENT_CP_EDGE = 0)
+
+<strong>Catch-up:</strong>  짧은 edge를 한 프레임에 통과 시 최대 10개 CP 연속 처리</div>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

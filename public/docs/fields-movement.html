@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MovementData Fields — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .field-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; background: var(--card-bg, #1a1a2e); }
+  .field-card h3 { margin-top: 0; display: flex; align-items: center; gap: 10px; }
+  .field-card h3 code { font-size: 1.1em; }
+  .field-offset { font-size: 0.8em; padding: 2px 8px; border-radius: 4px; background: var(--green, #4ade80); color: #000; font-weight: 600; }
+  .field-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .field-table th { text-align: left; width: 130px; padding: 6px 10px; vertical-align: top; color: var(--muted, #888); font-weight: 500; white-space: nowrap; }
+  .field-table td { padding: 6px 10px; }
+  .field-table tr { border-bottom: 1px solid var(--border); }
+  .field-table tr:last-child { border-bottom: none; }
+  .breadcrumb { margin-bottom: 16px; font-size: 0.9em; }
+  .breadcrumb a { color: var(--cyan, #67e8f9); text-decoration: none; }
+  .breadcrumb a:hover { text-decoration: underline; }
+  .section-divider { border: none; border-top: 1px solid var(--border); margin: 40px 0 32px; }
+  .field-group-header { font-size: 1.2em; margin: 32px 0 16px; padding-bottom: 6px; border-bottom: 2px solid var(--green, #4ade80); display: inline-block; }
+  .doc-link { color: var(--cyan, #67e8f9); text-decoration: none; }
+  .doc-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub active">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <div class="breadcrumb">&larr; <a href="shared-memory.html">Shared Memory Layout</a></div>
+
+    <h1>MovementData Fields<span class="subtitle">Offset 0 ~ 17 &mdash; 차량 운동 상태의 18개 필드 상세</span></h1>
+
+    <div class="card highlight">
+      <p><code>MovementData</code>는 Vehicle Data Array의 처음 18개 필드(offset 0~17)로, 차량의 <strong>물리 위치, 속도, 경로 진행 상태</strong>를 나타냅니다.
+      Worker 스레드의 <code>updateMovement()</code> 4단계 파이프라인이 매 프레임 갱신하고, Main Thread의 렌더러가 읽어 GPU에 전달합니다.</p>
+    </div>
+
+    <h2>4단계 파이프라인 개요</h2>
+    <div class="flow"><span class="green">Phase 1</span>  vehiclePhysics.ts      가속도/충돌/속도 계산 &rarr; newVelocity, rawNewRatio
+<span class="green">Phase 2</span>  vehicleTransition.ts   Edge 전환 판정 &rarr; finalEdgeIndex, finalRatio
+<span class="green">Phase 3</span>  vehiclePosition.ts     좌표 보간 &rarr; finalX, finalY, finalZ, finalRotation
+<span class="green">Phase 4</span>  vehicleState.ts        Float32Array 기록 &rarr; X, Y, Z, ROTATION, VELOCITY, EDGE_RATIO, CURRENT_EDGE</div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <div class="field-group-header">위치 / 자세 (Offset 0 ~ 3)</div>
+
+    <!-- X -->
+    <div class="field-card">
+      <h3><span class="field-offset">0</span> <code>X</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 월드 좌표계 <strong>X 위치</strong>. Edge 위의 ratio를 from_node/to_node 좌표로 보간하여 산출된 값이다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 매 프레임 기록.<br>
+          <code>vehiclePosition.ts &mdash; updateVehiclePosition()</code>이 <code>interpolatePositionTo()</code>로 계산한 결과를 전달.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>FabContext/render.ts &mdash; writeToRenderRegion()</code> &mdash; 렌더 버퍼에 fabOffset 적용 후 복사.<br>
+          <code>collisionCommon.ts</code> &mdash; 센서 충돌 검사 시 차량 위치 참조.<br>
+          <code>edgeTransition.ts &mdash; checkAndReportUnusualMove()</code> &mdash; UnusualMove 이벤트에 좌표 포함.
+        </td></tr>
+        <tr><th>값 범위</th><td>맵 좌표 범위 (실수, 단위: m). Edge의 from_node.x ~ to_node.x 보간값.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="renderer.html">Three.js Renderer</a> &mdash; GPU InstancedMesh 업데이트</td></tr>
+      </table>
+    </div>
+
+    <!-- Y -->
+    <div class="field-card">
+      <h3><span class="field-offset">1</span> <code>Y</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 월드 좌표계 <strong>Y 위치</strong>. Three.js 좌표계에서 수평면의 다른 축(Z-up 맵에서는 depth)에 해당한다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td><code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 매 프레임 기록.</td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>FabContext/render.ts</code> &mdash; 렌더 버퍼 복사 (fabOffsetY 적용).<br>
+          <code>collisionCommon.ts</code> &mdash; 센서 충돌 검사.
+        </td></tr>
+        <tr><th>값 범위</th><td>맵 좌표 범위 (실수, 단위: m).</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="renderer.html">Three.js Renderer</a></td></tr>
+      </table>
+    </div>
+
+    <!-- Z -->
+    <div class="field-card">
+      <h3><span class="field-offset">2</span> <code>Z</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 월드 좌표계 <strong>Z 위치</strong>(고도). Edge 보간값에 <code>vehicleZOffset</code>을 더하여 차량이 레일 위에 떠 있도록 조정한다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td><code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 기록. <code>interpolatePositionTo()</code>가 <code>config.vehicleZOffset</code>을 합산.</td></tr>
+        <tr><th>Reader (읽기)</th><td><code>FabContext/render.ts</code> &mdash; 렌더 버퍼 복사 (Z는 fabOffset 미적용).</td></tr>
+        <tr><th>값 범위</th><td>맵 좌표 + vehicleZOffset (실수, 단위: m). 일반적으로 0에 가까운 값.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="renderer.html">Three.js Renderer</a></td></tr>
+      </table>
+    </div>
+
+    <!-- ROTATION -->
+    <div class="field-card">
+      <h3><span class="field-offset">3</span> <code>ROTATION</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 <strong>Y축 회전각</strong>(radians). Edge의 from_node에서 to_node를 바라보는 방향을 <code>atan2</code>로 계산한다. 곡선 Edge에서는 ratio에 따라 연속 보간된다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td><code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 기록. <code>positionInterpolator.ts &mdash; interpolatePositionTo()</code>가 계산.</td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>FabContext/render.ts</code> &mdash; 렌더 버퍼 복사, InstancedMesh 회전에 사용.<br>
+          <code>sensorPoints.ts &mdash; updateSensorPoints()</code> &mdash; 센서 영역을 차량 회전에 맞춰 변환.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>-PI ~ +PI</code> (radians). constants.ts 주석에는 "radians"로 명시.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="renderer.html">Three.js Renderer</a> &mdash; InstancedMesh 회전 적용</td></tr>
+      </table>
+    </div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <div class="field-group-header">속도 / 가감속 (Offset 4 ~ 6)</div>
+
+    <!-- VELOCITY -->
+    <div class="field-card">
+      <h3><span class="field-offset">4</span> <code>VELOCITY</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 <strong>현재 속도</strong>(m/s). 매 프레임 물리 계산 결과로 갱신되며, Edge 위 이동 거리(ratio 증분) 산출의 핵심 입력이다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 최종 속도 기록.<br>
+          <code>vehiclePhysics.ts &mdash; processEmergencyStop()</code> &mdash; hitZone=STOP일 때 즉시 0으로 기록.<br>
+          <code>movementUpdate.ts &mdash; shouldSkipUpdate()</code> &mdash; STOPPED/PAUSED 시 0으로 초기화.<br>
+          <code>lock-handlers.ts &mdash; handleLockWait()</code> &mdash; Lock 대기 시 0으로 강제 설정.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts &mdash; calculateVehiclePhysics()</code> &mdash; 다음 프레임 속도 계산의 입력.<br>
+          <code>IndividualControlPanel.tsx</code> &mdash; UI 패널에서 차량 현재 속도 표시.<br>
+          <code>KpiHud.tsx</code> &mdash; KPI 대시보드 속도 통계.<br>
+          <code>lock-handlers.ts</code> &mdash; merge braking 잔여 거리 계산.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0.0 ~ linearMaxSpeed</code> (m/s). 곡선에서는 <code>curveMaxSpeed</code>가 상한. 음수 없음.</td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> &mdash; 물리 루프 |
+          <a class="doc-link" href="lock-system.html">Lock System</a> &mdash; WAIT 시 강제 정지
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- ACCELERATION -->
+    <div class="field-card">
+      <h3><span class="field-offset">5</span> <code>ACCELERATION</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 <strong>가속도</strong>(m/s2). 양수 값으로, 차량이 목표 속도에 도달할 때까지 적용되는 기본 가속률이다. 감속이 활성화되면 가속은 0으로 대체된다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>VehicleDataArrayBase.ts</code> &mdash; 차량 초기화 시 프리셋 가속도 값으로 설정.<br>
+          <code>IndividualControlPanel.tsx</code> &mdash; UI에서 수동 제어 시 직접 기록.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts &mdash; calculateVehiclePhysics()</code> &mdash; 매 프레임 읽어 <code>calculateNextSpeed()</code>에 전달.<br>
+          <code>speedCalculator.ts &mdash; calculateNextSpeed()</code> &mdash; <code>v_next = v + a * dt</code> 계산.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>>= 0</code> (m/s2, 양수). 일반적으로 0.5 ~ 3.0 범위.</td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> |
+          <a class="doc-link" href="preset-system.html">Parameter Preset</a> &mdash; 가속도 프리셋 관리
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- DECELERATION -->
+    <div class="field-card">
+      <h3><span class="field-offset">6</span> <code>DECELERATION</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 <strong>감속도</strong>(m/s2). 센서 충돌 감지, 곡선 사전 감속, merge 사전 감속 시 음수 값으로 설정된다. <code>-Infinity</code>는 즉시 정지(hard stop)를 의미한다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>VehicleDataArrayBase.ts</code> &mdash; 차량 초기화 시 기본 감속도 설정.<br>
+          <code>vehiclePhysics.ts &mdash; processEmergencyStop()</code> &mdash; 긴급 정지 시 0으로 리셋.<br>
+          <code>sensorCollision</code> 모듈 &mdash; HitZone 판정에 따라 감속도 기록.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts &mdash; calculateVehiclePhysics()</code> &mdash; 충돌 감속, 곡선 감속, merge 감속 중 최대값 선택.<br>
+          <code>speedCalculator.ts &mdash; calculateNextSpeed()</code> &mdash; <code>-Infinity</code> 체크 후 속도 계산.
+        </td></tr>
+        <tr><th>값 범위</th><td><code><= 0</code> (m/s2, 음수 또는 0). 특수값: <code>-Infinity</code> = hard stop.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="simulation.html">Simulation Engine</a> &mdash; 3가지 감속 요소 통합 로직</td></tr>
+      </table>
+    </div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <div class="field-group-header">Edge 진행 상태 (Offset 7 ~ 9)</div>
+
+    <!-- EDGE_RATIO -->
+    <div class="field-card">
+      <h3><span class="field-offset">7</span> <code>EDGE_RATIO</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>현재 Edge 위에서의 <strong>진행률</strong>. 0.0은 Edge 시작점(from_node), 1.0은 끝점(to_node)이다. 좌표 보간과 Edge 전환 판정의 핵심 값.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 최종 ratio 기록.<br>
+          <code>edgeTransition.ts &mdash; handleEdgeTransition()</code> &mdash; Edge 전환 시 overflow를 다음 Edge의 ratio로 변환하여 <code>store.moveVehicleToEdge()</code>에 전달.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts</code> &mdash; <code>rawNewRatio = edgeRatio + (v * dt) / distance</code> 계산.<br>
+          <code>checkpoint-processor.ts</code> &mdash; 현재 ratio와 checkpoint ratio 비교하여 도달 판정.<br>
+          <code>lock-handlers.ts &mdash; calcRemainingDistToMerge()</code> &mdash; merge까지 잔여 거리 계산.<br>
+          <code>curveBraking.ts / mergeBraking.ts</code> &mdash; 사전 감속 거리 계산.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0.0 ~ 1.0</code>. Phase 1에서 <code>rawNewRatio > 1.0</code>이 될 수 있으나, Edge 전환 후 새 Edge 기준으로 재계산되어 최종 기록값은 0~1 범위.</td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> &mdash; ratio 기반 이동 모델 |
+          <a class="doc-link" href="lock-system.html">Lock System</a> &mdash; checkpoint 도달 판정
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- MOVING_STATUS -->
+    <div class="field-card">
+      <h3><span class="field-offset">8</span> <code>MOVING_STATUS</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량의 <strong>이동 상태</strong>를 나타내는 enum 값. 파이프라인 진입 여부를 결정하는 게이트 역할을 한다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleTransition.ts &mdash; processSameEdgeLogic()</code> &mdash; target ratio 도달 시 <code>STOPPED</code>로 전환.<br>
+          <code>lock-handlers.ts &mdash; handleLockWait()</code> &mdash; Lock blocked 시 <code>STOPPED</code>, grant 시 <code>MOVING</code>으로 전환.<br>
+          <code>TransferMgr</code> &mdash; 새 경로 할당 시 <code>MOVING</code>으로 설정.<br>
+          <code>IndividualControlPanel.tsx</code> &mdash; UI에서 수동 제어 시 직접 변경.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>movementUpdate.ts &mdash; shouldSkipUpdate()</code> &mdash; STOPPED/PAUSED이면 파이프라인 스킵.<br>
+          <code>checkpoint-processor.ts</code> &mdash; 차량 상태 확인.<br>
+          <code>EdgeVehicleQueue.ts</code> &mdash; Edge 위 차량 상태 조회.
+        </td></tr>
+        <tr><th>값 범위</th><td>
+          <code>enum MovingStatus</code>:<br>
+          <code>0 = STOPPED</code> &mdash; 정지 (velocity 강제 0)<br>
+          <code>1 = MOVING</code> &mdash; 이동 중 (파이프라인 실행)<br>
+          <code>2 = PAUSED</code> &mdash; 일시정지 (파이프라인 스킵, velocity 유지)
+        </td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> |
+          <a class="doc-link" href="lock-system.html">Lock System</a> &mdash; WAIT/GRANT 상태 전환
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- CURRENT_EDGE -->
+    <div class="field-card">
+      <h3><span class="field-offset">9</span> <code>CURRENT_EDGE</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>차량이 현재 위치한 <strong>Edge의 인덱스</strong>(1-based). Edge 배열 접근 시 <code>edgeArray[CURRENT_EDGE - 1]</code>로 사용한다. 0은 무효 sentinel 값.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleState.ts &mdash; commitVehicleState()</code> &mdash; Phase 4에서 finalEdgeIndex 기록.<br>
+          <code>edgeTransition.ts &mdash; store.moveVehicleToEdge()</code> &mdash; Edge 전환 시 내부적으로 갱신.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts</code> &mdash; 현재 Edge 참조하여 distance, rail_type 확인.<br>
+          <code>lock-handlers.ts</code> &mdash; 현재 Edge의 to_node로 merge node 판별, auto-release 체크.<br>
+          <code>checkpoint-processor.ts / checkpoint-loader.ts</code> &mdash; 현재 Edge 기준 checkpoint 탐색.<br>
+          <code>TransferMgr</code> &mdash; 경로 계산의 시작점으로 사용.<br>
+          <code>collisionCommon.ts</code> &mdash; 동일 Edge 위 차량 간 거리 계산.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0 ~ edgeArray.length</code> (정수, 1-based). <code>0 = 무효</code>(차량 미배치).</td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> |
+          <a class="doc-link" href="lock-system.html">Lock System</a> |
+          <a class="doc-link" href="routing.html">Routing</a>
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <div class="field-group-header">Next Edge 큐 (Offset 10 ~ 15)</div>
+
+    <div class="card">
+      <p><code>NEXT_EDGE_0~4</code>는 5칸짜리 <strong>선입선출(FIFO) 큐</strong>로, 차량이 다음에 진입할 Edge들을 미리 저장한다.
+      Edge 전환 시 <code>NEXT_EDGE_0</code>이 소비되고 나머지가 한 칸씩 shift된다. Checkpoint의 <code>MOVE_PREPARE</code> 플래그가 pathBuffer에서 큐를 채운다.</p>
+    </div>
+
+    <!-- NEXT_EDGE_0 -->
+    <div class="field-card">
+      <h3><span class="field-offset">10</span> <code>NEXT_EDGE_0</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td><strong>바로 다음에 진입할 Edge</strong>의 인덱스(1-based). Edge 전환 시 이 값이 소비되어 <code>CURRENT_EDGE</code>가 된다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>lock-handlers.ts &mdash; handleMovePrepare()</code> &mdash; Checkpoint MOVE_PREPARE 시 pathBuffer에서 Edge를 읽어 채움.<br>
+          <code>edgeTransition.ts &mdash; shiftNextEdges()</code> &mdash; Edge 전환 후 NEXT_EDGE_1 값으로 교체.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>edgeTransition.ts &mdash; handleEdgeTransition()</code> &mdash; 다음 Edge 존재 여부 및 전환 가능성 판정.<br>
+          <code>vehicleTransition.ts &mdash; checkAndTriggerTransfer()</code> &mdash; EMPTY 상태에서 Transfer 큐 트리거.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0 ~ edgeArray.length</code> (정수, 1-based). <code>0 = 비어 있음</code>.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="lock-system.html">Lock System</a> &mdash; MOVE_PREPARE checkpoint</td></tr>
+      </table>
+    </div>
+
+    <!-- NEXT_EDGE_1 ~ 4 -->
+    <div class="field-card">
+      <h3>
+        <span class="field-offset">11</span> <code>NEXT_EDGE_1</code> &nbsp;
+        <span class="field-offset">12</span> <code>NEXT_EDGE_2</code> &nbsp;
+        <span class="field-offset">13</span> <code>NEXT_EDGE_3</code> &nbsp;
+        <span class="field-offset">14</span> <code>NEXT_EDGE_4</code>
+        <span class="badge badge-green">Float32 &times; 4</span>
+      </h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>예약된 다음 Edge 큐의 <strong>2~5번째 슬롯</strong>. 곡선 사전 감속(<code>curveBraking</code>)에서 전방 Edge들의 rail_type을 미리 확인하는 데 사용된다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>lock-handlers.ts &mdash; handleMovePrepare()</code> &mdash; pathBuffer에서 최대 5개까지 채움 (targetEdge까지만).<br>
+          <code>edgeTransition.ts &mdash; shiftNextEdges()</code> &mdash; 전환 시 한 칸씩 앞으로 shift, 마지막(<code>NEXT_EDGE_4</code>)은 0으로 비움.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>curveBraking.ts</code> &mdash; 전방 곡선 Edge 탐지 시 순회.<br>
+          <code>mergeBraking.ts</code> &mdash; 전방 merge 노드 탐지.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0 ~ edgeArray.length</code> (정수, 1-based). <code>0 = 비어 있음</code>.</td></tr>
+        <tr><th>관련 문서</th><td>
+          <a class="doc-link" href="simulation.html">Simulation Engine</a> &mdash; 곡선 사전 감속 |
+          <a class="doc-link" href="lock-system.html">Lock System</a> &mdash; checkpoint 기반 Edge 준비
+        </td></tr>
+      </table>
+    </div>
+
+    <!-- NEXT_EDGE_STATE -->
+    <div class="field-card">
+      <h3><span class="field-offset">15</span> <code>NEXT_EDGE_STATE</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td><code>NEXT_EDGE_0</code>의 <strong>준비 상태</strong>를 나타내는 enum. Edge 전환은 이 값이 <code>READY</code>일 때만 가능하다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>vehicleTransition.ts &mdash; checkAndTriggerTransfer()</code> &mdash; ratio >= 0이고 EMPTY일 때 <code>PENDING</code>으로 설정하고 Transfer 큐에 등록.<br>
+          <code>lock-handlers.ts &mdash; handleMovePrepare()</code> &mdash; NEXT_EDGE_0이 채워지면 <code>READY</code>로, 비어 있으면 <code>EMPTY</code>로 설정.<br>
+          <code>edgeTransition.ts &mdash; shiftNextEdges()</code> &mdash; shift 후 NEXT_EDGE_0이 0이면 <code>EMPTY</code>로 리셋.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>edgeTransition.ts &mdash; checkCanTransitionToNextEdge()</code> &mdash; READY가 아니면 전환 불가.<br>
+          <code>vehicleTransition.ts &mdash; processEdgeTransitionLogic()</code> &mdash; 전환 조건에 READY 체크 포함.
+        </td></tr>
+        <tr><th>값 범위</th><td>
+          <code>enum NextEdgeState</code>:<br>
+          <code>0 = EMPTY</code> &mdash; 다음 Edge 없음 (Transfer 필요)<br>
+          <code>1 = PENDING</code> &mdash; Transfer 큐에 등록됨, 경로 계산 대기<br>
+          <code>2 = READY</code> &mdash; 다음 Edge 준비 완료, 전환 가능
+        </td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="lock-system.html">Lock System</a> &mdash; checkpoint MOVE_PREPARE 처리</td></tr>
+      </table>
+    </div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <div class="field-group-header">보조 파라미터 (Offset 16 ~ 17)</div>
+
+    <!-- TARGET_RATIO -->
+    <div class="field-card">
+      <h3><span class="field-offset">16</span> <code>TARGET_RATIO</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>현재 Edge 위에서의 <strong>목표 정차 위치</strong>(ratio). 차량은 이 ratio에 도달하면 정지(<code>STOPPED</code>)한다. 일반적으로 1.0(Edge 끝까지 이동)이며, 스테이션 정차 등에서 중간값이 설정된다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>edgeTransition.ts &mdash; handleEdgeTransition()</code> &mdash; Edge 전환 시 새 Edge의 TARGET_RATIO를 1.0 또는 <code>nextTargetRatio</code>(경로 예약값)로 설정.<br>
+          <code>TransferMgr</code> &mdash; 경로 할당 시 최종 Edge의 정차 ratio 설정.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>vehiclePhysics.ts &mdash; calculateVehiclePhysics()</code> &mdash; <code>clampTargetRatio()</code>로 0~1 범위 보정 후 전달.<br>
+          <code>vehicleTransition.ts &mdash; processEdgeTransitionLogic()</code> &mdash; <code>rawNewRatio >= 1 && targetRatio === 1</code>일 때 Edge 전환 트리거.<br>
+          <code>vehicleTransition.ts &mdash; checkTargetReached()</code> &mdash; 동일 Edge에서 target 도달 시 정차.
+        </td></tr>
+        <tr><th>값 범위</th><td><code>0.0 ~ 1.0</code>. 내부에서 <code>clampTargetRatio()</code>로 범위 보정됨.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="simulation.html">Simulation Engine</a> &mdash; 정차 로직</td></tr>
+      </table>
+    </div>
+
+    <!-- OFFSET -->
+    <div class="field-card">
+      <h3><span class="field-offset">17</span> <code>OFFSET</code> <span class="badge badge-green">Float32</span></h3>
+      <table class="field-table">
+        <tr><th>용도</th><td>레일 중심선으로부터의 <strong>횡방향 편차</strong>(lane offset). 다중 차선이나 추월 시나리오에서 차량이 레일 중심에서 벗어난 거리를 나타낸다.</td></tr>
+        <tr><th>Writer (쓰기)</th><td>
+          <code>VehicleDataArrayBase.ts</code> &mdash; 차량 초기화 시 기본값(보통 0) 설정.
+        </td></tr>
+        <tr><th>Reader (읽기)</th><td>
+          <code>verifyMergeCollision.ts</code> &mdash; merge 충돌 검사 시 차량의 횡방향 위치 보정에 사용.<br>
+          <code>VehicleDataArrayBase.ts &mdash; getOffset() / setOffset()</code> &mdash; getter/setter 인터페이스 제공.
+        </td></tr>
+        <tr><th>값 범위</th><td>실수 (단위: m). 일반적으로 <code>0.0</code>. 양수 = 우측, 음수 = 좌측 편차.</td></tr>
+        <tr><th>관련 문서</th><td><a class="doc-link" href="simulation.html">Simulation Engine</a></td></tr>
+      </table>
+    </div>
+
+    <!-- ================================================================ -->
+    <hr class="section-divider">
+    <h2>Quick Reference Table</h2>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>값 범위</th><th>Primary Writer</th></tr>
+      <tr><td>0</td><td><code>X</code></td><td>Float32</td><td>맵 좌표 (m)</td><td>commitVehicleState</td></tr>
+      <tr><td>1</td><td><code>Y</code></td><td>Float32</td><td>맵 좌표 (m)</td><td>commitVehicleState</td></tr>
+      <tr><td>2</td><td><code>Z</code></td><td>Float32</td><td>맵 좌표 + zOffset (m)</td><td>commitVehicleState</td></tr>
+      <tr><td>3</td><td><code>ROTATION</code></td><td>Float32</td><td>-PI ~ +PI (rad)</td><td>commitVehicleState</td></tr>
+      <tr><td>4</td><td><code>VELOCITY</code></td><td>Float32</td><td>0 ~ maxSpeed (m/s)</td><td>commitVehicleState, LockMgr</td></tr>
+      <tr><td>5</td><td><code>ACCELERATION</code></td><td>Float32</td><td>>= 0 (m/s2)</td><td>초기화 시 설정</td></tr>
+      <tr><td>6</td><td><code>DECELERATION</code></td><td>Float32</td><td><= 0 (m/s2)</td><td>sensorCollision, Physics</td></tr>
+      <tr><td>7</td><td><code>EDGE_RATIO</code></td><td>Float32</td><td>0.0 ~ 1.0</td><td>commitVehicleState</td></tr>
+      <tr><td>8</td><td><code>MOVING_STATUS</code></td><td>Float32</td><td>0, 1, 2 (enum)</td><td>Transition, LockMgr</td></tr>
+      <tr><td>9</td><td><code>CURRENT_EDGE</code></td><td>Float32</td><td>0 ~ N (1-based)</td><td>commitVehicleState</td></tr>
+      <tr><td>10~14</td><td><code>NEXT_EDGE_0~4</code></td><td>Float32</td><td>0 ~ N (1-based)</td><td>handleMovePrepare, shiftNextEdges</td></tr>
+      <tr><td>15</td><td><code>NEXT_EDGE_STATE</code></td><td>Float32</td><td>0, 1, 2 (enum)</td><td>Transition, handleMovePrepare</td></tr>
+      <tr><td>16</td><td><code>TARGET_RATIO</code></td><td>Float32</td><td>0.0 ~ 1.0</td><td>handleEdgeTransition, TransferMgr</td></tr>
+      <tr><td>17</td><td><code>OFFSET</code></td><td>Float32</td><td>실수 (m)</td><td>초기화 시 설정</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">
+      Source: <code>src/common/vehicle/initialize/constants.ts</code> &mdash;
+      Pipeline: <code>src/common/vehicle/movement/*.ts</code>
+    </p>
+  </main>
+</div>
+</body>
+</html>

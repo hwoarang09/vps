@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movement Physics — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+        <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html" class="active">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Movement Physics<span class="subtitle">4-Phase Pipeline, Edge Transition, Position Interpolation, Zero-GC</span></h1>
+
+    <!-- ================================================================ -->
+    <!-- 1. 개요 -->
+    <!-- ================================================================ -->
+    <h2>1. 개요</h2>
+    <p>VPS Movement 시스템은 매 시뮬레이션 프레임마다 <strong>4단계 파이프라인</strong>을 실행하여 차량의 물리 상태를 업데이트합니다.
+       모든 단계는 <strong>Zero-GC Scratchpad 패턴</strong>을 사용하여 GC 압력 없이 동작합니다.</p>
+
+    <div class="flow"><span class="cyan">Phase 1: calculateVehiclePhysics</span>
+  충돌(hitZone) 반영 / 커브 사전 감속 / Merge 사전 감속
+  최종 가감속 결정 → calculateNextSpeed
+
+<span class="orange">Phase 2: processVehicleTransition</span>
+  rawNewRatio >= 1 → Edge 전환 (overflow distance 기반)
+  Multi-hop while loop / NEXT_EDGE shift pipeline
+  TARGET_RATIO 정차 위치 / merge lock 해제
+
+<span class="green">Phase 3: updateVehiclePosition</span>
+  LINEAR: 시작점→끝점 선형 보간
+  CURVE: renderingPoints[] 세그먼트 보간
+  calculateStableVector: 최소 거리 임계값 look-ahead/back
+
+<span class="purple">Phase 4: commitVehicleState</span>
+  SharedArrayBuffer에 최종 값 기록
+  updateSensorPoints() → 다음 프레임 충돌 검출용</div>
+
+    <p class="file">Entry: <code>src/common/vehicle/movement/movementUpdate.ts</code> &mdash; <code>updateMovement()</code></p>
+
+    <div class="card highlight">
+      <h4>파이프라인 진입 조건</h4>
+      <p><code>shouldSkipUpdate()</code>가 <code>MovingStatus</code>를 확인합니다. <code>PAUSED</code>이면 즉시 스킵, <code>STOPPED</code>이면 velocity를 0으로 설정 후 스킵합니다.
+         오직 <code>MOVING</code> 상태의 차량만 4-phase 파이프라인을 통과합니다.</p>
+    </div>
+
+    <h3>파이프라인 호출 순서</h3>
+    <pre><code>for (let i = 0; i &lt; actualNumVehicles; i++) {
+  const ptr = i * VEHICLE_DATA_SIZE;
+  if (shouldSkipUpdate(data, ptr)) continue;
+
+  // Phase 1: 물리 계산
+  calculateVehiclePhysics(ctx, i, data, ptr, SCRATCH_PHYSICS);
+  if (SCRATCH_PHYSICS.shouldSkip) continue;
+
+  // Phase 2: Edge 전환
+  processVehicleTransition(ctx, i, data, ptr,
+    SCRATCH_PHYSICS, SCRATCH_VEHICLE_TRANSITION);
+
+  // Phase 3: 위치 보간
+  updateVehiclePosition(ctx, i, data, ptr,
+    SCRATCH_VEHICLE_TRANSITION, SCRATCH_VEHICLE_POSITION);
+
+  // Phase 4: 최종 기록
+  commitVehicleState(ctx, i, data, ptr,
+    SCRATCH_VEHICLE_TRANSITION.finalEdgeIndex,
+    SCRATCH_VEHICLE_POSITION);
+}</code></pre>
+
+    <!-- ================================================================ -->
+    <!-- 2. Phase 1 -->
+    <!-- ================================================================ -->
+    <h2>2. Phase 1: 물리 계산 (calculateVehiclePhysics)</h2>
+    <p>차량의 가속도, 충돌 감지 결과, 사전 감속 여부를 종합하여 <strong>새 속도(newVelocity)</strong>와 <strong>새 Edge 비율(rawNewRatio)</strong>을 계산합니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/vehiclePhysics.ts</code></p>
+
+    <h3>2.1 처리 순서</h3>
+    <div class="flow"><span class="white">1. calculateHitZone</span>
+  hitZone 2 → processEmergencyStop → velocity=0, shouldSkip=true
+  hitZone 0/1 → 접근/제동 감속으로 변환
+
+<span class="cyan">2. checkCurvePreBraking</span>
+  직선 Edge에서 전방 곡선까지 거리 계산
+  brakeDistance = (v² - vTarget²) / (2|a|)
+  checkpoint 통과 시 감속 시작
+
+<span class="orange">3. checkMergePreBraking</span>
+  LOCK_WAIT checkpoint 까지 잔여 거리 계산
+  requiredDecel = -(v² - vTarget²) / (2s)
+
+<span class="green">4. decideFinalAcceleration</span>
+  sensorDecel / curveDecel / mergeDecel 중 최대 선택
+  maxDecel > 0 → accel=0, decel=-maxDecel
+
+<span class="purple">5. calculateNextSpeed</span>
+  v_next = v + a * dt (maxSpeed clamp)</div>
+
+    <h3>2.2 충돌 hitZone 반영</h3>
+    <table>
+      <tr><th>hitZone</th><th>의미</th><th>동작</th></tr>
+      <tr><td><code>-1</code></td><td>충돌 없음</td><td>정상 가속</td></tr>
+      <tr><td><code>0</code></td><td>Approach zone</td><td>접근 감속 (deceleration 값 사용)</td></tr>
+      <tr><td><code>1</code></td><td>Brake zone</td><td>제동 감속 (deceleration 값 사용)</td></tr>
+      <tr><td><code>2</code></td><td>Stop zone</td><td>긴급 정지 &mdash; velocity=0, SENSORED flag, <strong>이후 Phase 스킵</strong></td></tr>
+    </table>
+
+    <div class="card warning">
+      <h4>긴급 정지 (hitZone === 2)</h4>
+      <p><code>processEmergencyStop()</code>은 즉시 <code>VELOCITY=0</code>, <code>DECELERATION=0</code>으로 설정하고
+         <code>StopReason.SENSORED</code> 비트를 켭니다. <code>shouldSkip=true</code>를 반환하여 Phase 2~4를 건너뜁니다.</p>
+    </div>
+
+    <h3>2.3 커브 사전 감속 (Curve Pre-Braking)</h3>
+    <p>직선 Edge 위의 차량이 전방 곡선에 진입하기 전에 <code>curveMaxSpeed</code>까지 속도를 줄이는 메커니즘입니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/curveBraking.ts</code></p>
+
+    <div class="card highlight">
+      <h4>Checkpoint 기반 감속 판단</h4>
+      <ol>
+        <li><code>transferMgr.findDistanceToNextCurve()</code>로 전방 곡선까지 거리(<code>distanceToCurve</code>) 계산</li>
+        <li><code>brakeDistance = (v&sup2; - curveMaxSpeed&sup2;) / (2|preBrakeDecel|)</code> 계산</li>
+        <li><code>checkpointDistance = distanceToCurve - brakeDistance</code></li>
+        <li><code>checkpointDistance &lt;= 0</code>이면 감속 시작 &mdash; <code>transferMgr.startCurveBraking()</code></li>
+      </ol>
+    </div>
+
+    <table>
+      <tr><th>파라미터</th><th>기본값</th><th>설명</th></tr>
+      <tr><td><code>linearPreBrakeDeceleration</code></td><td><code>-2</code> m/s&sup2;</td><td>직선 구간에서 적용할 감속도</td></tr>
+      <tr><td><code>curvePreBrakeCheckInterval</code></td><td><code>100</code> ms</td><td>체크 주기 (-1이면 매 프레임)</td></tr>
+      <tr><td><code>curveMaxSpeed</code></td><td>config 설정</td><td>곡선 구간 목표 속도</td></tr>
+    </table>
+
+    <h4>상태 머신</h4>
+    <div class="flow"><span class="green">IDLE</span> ─── checkpointDistance &lt;= 0 ──→ <span class="orange">BRAKING</span>
+                                              │
+                      v &lt;= curveMaxSpeed ───→ <span class="cyan">clearCurveBrakeState</span> → <span class="green">IDLE</span>
+                                              │
+                      곡선 Edge 진입 ────────→ <span class="cyan">clearCurveBrakeState</span> → <span class="green">IDLE</span></div>
+
+    <h3>2.4 Merge 사전 감속 (Merge Pre-Braking)</h3>
+    <p>합류점(merge node) 앞 <code>LOCK_WAIT</code> checkpoint에 다가가는 차량이 정지할 수 있도록 감속합니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/mergeBraking.ts</code></p>
+
+    <div class="card highlight">
+      <h4>감속 조건</h4>
+      <ol>
+        <li><code>CURRENT_CP_FLAGS</code>에 <code>LOCK_WAIT</code> 비트가 설정됨</li>
+        <li>Deadlock zone merge가 아님 (gate가 별도 stop 처리)</li>
+        <li>WAIT CP까지 잔여 거리 &gt; 0</li>
+        <li><code>requiredDecel &lt;= preBrakeDecel</code> (여유 없음)</li>
+      </ol>
+    </div>
+
+    <h4>거리 계산 (distanceToCp)</h4>
+    <pre><code>// Same edge
+dist = (cpRatio - currentRatio) * currentEdge.distance
+
+// Multi-edge (NEXT_EDGE_0~4 traversal)
+dist = (1 - currentRatio) * currentEdge.distance
+     + sum(중간 edge.distance)
+     + cpRatio * cpEdge.distance</code></pre>
+
+    <h4>필요 감속도 공식</h4>
+    <pre><code>// holder 아닌 경우: vTarget = 0 (정지)
+// holder인 경우: vTarget = curveMaxSpeed (느리게 통과)
+requiredDecel = -(v&sup2; - vTarget&sup2;) / (2 * distToWait)</code></pre>
+
+    <h3>2.5 최종 가감속 결정 (decideFinalAcceleration)</h3>
+    <p>세 가지 감속 요소를 비교하여 <strong>가장 큰 감속도(max deceleration wins)</strong>를 선택합니다.</p>
+
+    <table>
+      <tr><th>감속 요소</th><th>소스</th><th>트리거</th></tr>
+      <tr><td><code>sensorDecel</code></td><td>hitZone &gt;= 0</td><td>충돌 센서 감지</td></tr>
+      <tr><td><code>curveDecel</code></td><td>curveBrakeResult</td><td>전방 곡선 checkpoint 통과</td></tr>
+      <tr><td><code>mergeDecel</code></td><td>mergeBrakeResult</td><td>LOCK_WAIT CP 접근</td></tr>
+    </table>
+
+    <pre><code>const maxDecel = Math.max(sensorDecel, curveDecel, mergeDecel);
+// maxDecel > 0 → accel = 0, decel = -maxDecel (감속 적용)
+// maxDecel = 0 → accel = baseAcceleration, decel = 0 (가속 적용)</code></pre>
+
+    <div class="card">
+      <h4>곡선 가속도 분리</h4>
+      <p>곡선 Edge에서는 <code>baseAcceleration</code> 대신 <code>config.curveAcceleration</code>을 사용합니다.
+         직선과 곡선의 가속 특성을 독립 설정할 수 있습니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 3. Phase 2 -->
+    <!-- ================================================================ -->
+    <h2>3. Phase 2: Edge Transition (processVehicleTransition)</h2>
+    <p>Phase 1에서 계산된 <code>rawNewRatio</code>가 1 이상이면 현재 Edge를 벗어난 것이므로 다음 Edge로 전환합니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/vehicleTransition.ts</code>, <code>edgeTransition.ts</code></p>
+
+    <h3>3.1 전환 조건</h3>
+    <pre><code>const shouldTransition =
+  rawNewRatio >= 1 &amp;&amp;
+  (targetRatio === 1 || nextEdgeState === NextEdgeState.READY);</code></pre>
+
+    <div class="card">
+      <h4>Transfer 큐 트리거</h4>
+      <p><code>ratio >= 0</code>이고 <code>NEXT_EDGE_STATE === EMPTY</code>이면
+         상태를 <code>PENDING</code>으로 변경하고 <code>transferMgr.enqueueVehicleTransfer()</code>를 호출합니다.
+         이것이 다음 Edge 결정의 시작점입니다.</p>
+    </div>
+
+    <h3>3.2 Overflow Distance 계산</h3>
+    <p>Edge를 넘어간 거리(overflow)를 다음 Edge의 ratio로 변환합니다.</p>
+    <pre><code>overflowDist = (currentRatio - 1) * currentEdge.distance
+nextRatio    = overflowDist / nextEdge.distance</code></pre>
+
+    <h3>3.3 Multi-hop While Loop</h3>
+    <p>높은 속도에서 한 프레임에 여러 짧은 Edge를 연속 통과할 수 있습니다. <code>handleEdgeTransition</code>은 <code>while (currentRatio >= 1)</code> 루프로 이를 처리합니다.</p>
+
+    <div class="flow"><span class="cyan">handleEdgeTransition</span>
+  while (currentRatio >= 1) {
+    overflowDist = (ratio - 1) * edge.distance
+    canTransition? → NEXT_EDGE_STATE === READY &amp;&amp; nextEdgeIndex > 0
+    ├─ No  → ratio = 1, break (Edge 끝에서 정지)
+    └─ Yes → store.moveVehicleToEdge(vehIdx, nextEdgeIdx, newRatio)
+             updateSensorPresetForEdge()   // STRAIGHT/CURVE_LEFT/RIGHT/U_TURN
+             shiftNextEdges()              // NEXT_EDGE_0~4 shift
+             currentEdge = nextEdge
+             currentRatio = overflowDist / nextEdge.distance
+  }</div>
+
+    <h3>3.4 NEXT_EDGE Shift Pipeline</h3>
+    <p>Edge 전환 시 <code>NEXT_EDGE_0~4</code> 배열이 한 칸씩 shift됩니다. 마지막 슬롯은 0(빈 값)으로 채워집니다.</p>
+
+    <pre><code>NEXT_EDGE_0 ← NEXT_EDGE_1
+NEXT_EDGE_1 ← NEXT_EDGE_2
+NEXT_EDGE_2 ← NEXT_EDGE_3
+NEXT_EDGE_3 ← NEXT_EDGE_4
+NEXT_EDGE_4 ← 0  // 마지막은 비움
+
+// NEXT_EDGE_0 === 0 이면 STATE = EMPTY (refill 트리거)</code></pre>
+
+    <div class="card highlight">
+      <h4>PathBuffer 동기화</h4>
+      <p><code>pathBufferFromAutoMgr</code> (Int32Array)도 동일하게 shift합니다.
+         Refill은 checkpoint에서 관리되며, transition 시점에서는 shift만 수행합니다.</p>
+    </div>
+
+    <h3>3.5 NextEdgeState Machine</h3>
+    <table>
+      <tr><th>상태</th><th>값</th><th>의미</th><th>전이</th></tr>
+      <tr><td><code>EMPTY</code></td><td>초기/비움</td><td>다음 Edge 미결정</td><td>ratio &gt;= 0 시 <code>PENDING</code>으로</td></tr>
+      <tr><td><code>PENDING</code></td><td>대기중</td><td>TransferMgr가 처리 중</td><td>경로 결정 완료 시 <code>READY</code>로</td></tr>
+      <tr><td><code>READY</code></td><td>준비됨</td><td>다음 Edge 확정</td><td>전환 완료 후 shift → <code>EMPTY</code> 가능</td></tr>
+    </table>
+
+    <h3>3.6 TARGET_RATIO: 정차 위치</h3>
+    <p>Edge 내 특정 비율에서 정차해야 하는 경우 (station 도착, lock 대기 등) <code>TARGET_RATIO</code>를 사용합니다.</p>
+
+    <div class="card">
+      <h4>동일 Edge Target 도달</h4>
+      <p>Edge 전환이 발생하지 않고 <code>rawNewRatio >= targetRatio</code>이면:</p>
+      <ul>
+        <li><code>finalRatio = targetRatio</code> (초과분 무시)</li>
+        <li><code>finalVelocity = 0</code></li>
+        <li><code>MovingStatus = STOPPED</code></li>
+      </ul>
+      <p>Edge 전환이 발생하면 momentum은 유지됩니다 (target limit 미적용).</p>
+    </div>
+
+    <h3>3.7 Merge Lock 해제</h3>
+    <pre><code>// Edge 전환 발생 시 (finalEdgeIndex !== currentEdgeIndex)
+if (lockMgr.isMergeNode(prevToNode)) {
+  lockMgr.releaseLock(prevToNode, vehId);
+}</code></pre>
+    <p>이전 Edge의 <code>to_node</code>가 merge node이면, 해당 노드의 Lock을 해제합니다.</p>
+
+    <h3>3.8 UnusualMove 감지</h3>
+    <p>Edge 전환 시 <code>currentEdge.to_node !== nextEdge.from_node</code>이면
+       연결되지 않은 Edge로의 이동(워프)이 감지되어 <code>onUnusualMove</code> 콜백이 호출됩니다.</p>
+
+    <!-- ================================================================ -->
+    <!-- 4. Phase 3 -->
+    <!-- ================================================================ -->
+    <h2>4. Phase 3: Position Interpolation (updateVehiclePosition)</h2>
+    <p>Edge ratio를 실제 월드 좌표(x, y, z)와 rotation으로 변환합니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/vehiclePosition.ts</code>, <code>positionInterpolator.ts</code></p>
+
+    <h3>4.1 LINEAR 보간</h3>
+    <p>시작점과 끝점 사이를 ratio로 선형 보간합니다.</p>
+    <pre><code>x = pStart.x + (pEnd.x - pStart.x) * ratio
+y = pStart.y + (pEnd.y - pStart.y) * ratio
+z = vehicleZOffset  (기본 0.15m)</code></pre>
+
+    <h4>Rotation (4방향)</h4>
+    <p>LINEAR Edge는 주축 기반 4방향 회전을 사용합니다.</p>
+    <table>
+      <tr><th>조건</th><th>rotation</th></tr>
+      <tr><td><code>|dx| >= |dy|</code> &amp;&amp; <code>dx >= 0</code></td><td>0&deg; (오른쪽)</td></tr>
+      <tr><td><code>|dx| >= |dy|</code> &amp;&amp; <code>dx < 0</code></td><td>180&deg; (왼쪽)</td></tr>
+      <tr><td><code>|dx| < |dy|</code> &amp;&amp; <code>dy >= 0</code></td><td>90&deg; (위)</td></tr>
+      <tr><td><code>|dx| < |dy|</code> &amp;&amp; <code>dy < 0</code></td><td>-90&deg; (아래)</td></tr>
+    </table>
+
+    <h3>4.2 CURVE 보간</h3>
+    <p>곡선 Edge는 <code>renderingPoints[]</code> 배열의 세그먼트 사이를 보간합니다.</p>
+    <pre><code>safeRatio  = clamp(ratio, 0, 1)
+floatIndex = safeRatio * (points.length - 1)
+index      = floor(floatIndex)
+segRatio   = floatIndex - index
+
+x = p1.x + (p2.x - p1.x) * segRatio
+y = p1.y + (p2.y - p1.y) * segRatio</code></pre>
+
+    <h3>4.3 calculateStableVector</h3>
+    <p>곡선의 rotation 계산은 <strong>인접 포인트 간 거리가 너무 짧으면 불안정</strong>해질 수 있습니다.
+       <code>calculateStableVector</code>는 최소 거리 임계값 <code>MIN_DIST_SQ = 0.01</code> (0.1m&sup2;)을 적용합니다.</p>
+
+    <div class="flow"><span class="cyan">calculateStableVector</span>
+  dx = p2.x - p1.x, dy = p2.y - p1.y
+  distSq = dx*dx + dy*dy
+
+  if (distSq &lt; 0.01) {
+    <span class="orange">Look-ahead</span>: index+2, +3, ... → maxIndex 까지 탐색
+    if (여전히 짧음) {
+      <span class="green">Look-back</span>: index-1, -2, ... → 0 까지 역방향 탐색
+    }
+  }
+
+  rotation = atan2(dy, dx) * (180/PI)
+  rotation = ((rotation % 360) + 360) % 360</div>
+
+    <div class="card">
+      <h4>Fallback</h4>
+      <p><code>renderingPoints</code>가 비어있으면 <code>x=0, y=0, z=defaultZ</code>로 설정하고
+         <code>edge.axis</code>를 rotation으로 사용합니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 5. Phase 4 -->
+    <!-- ================================================================ -->
+    <h2>5. Phase 4: Commit (commitVehicleState)</h2>
+    <p>계산된 최종 값을 <code>SharedArrayBuffer</code> 기반 <code>Float32Array</code>에 기록합니다.</p>
+    <p class="file">File: <code>src/common/vehicle/movement/vehicleState.ts</code></p>
+
+    <h3>기록 항목</h3>
+    <table>
+      <tr><th>필드</th><th>값</th></tr>
+      <tr><td><code>VELOCITY</code></td><td>finalVelocity (m/s)</td></tr>
+      <tr><td><code>EDGE_RATIO</code></td><td>finalRatio (0~1)</td></tr>
+      <tr><td><code>CURRENT_EDGE</code></td><td>finalEdgeIndex (1-based)</td></tr>
+      <tr><td><code>X, Y, Z</code></td><td>월드 좌표</td></tr>
+      <tr><td><code>ROTATION</code></td><td>회전값 (degree)</td></tr>
+    </table>
+
+    <h3>Sensor Points 업데이트</h3>
+    <pre><code>const presetIdx = Math.trunc(data[ptr + SensorData.PRESET_IDX]);
+updateSensorPoints(
+  sensorPointArray, vehicleIndex,
+  finalX, finalY, finalRotation,
+  presetIdx, config
+);</code></pre>
+    <p>다음 프레임의 <strong>Phase 1 충돌 검출</strong>에서 사용될 센서 포인트를 미리 계산합니다.
+       <code>PRESET_IDX</code>는 Edge 전환 시 <code>updateSensorPresetForEdge()</code>에서 설정됩니다.</p>
+
+    <table>
+      <tr><th>PresetIndex</th><th>Edge 타입</th></tr>
+      <tr><td><code>STRAIGHT</code></td><td>LINEAR, 기타</td></tr>
+      <tr><td><code>CURVE_LEFT</code></td><td>LEFT_CURVE, curve_direction="left"</td></tr>
+      <tr><td><code>CURVE_RIGHT</code></td><td>RIGHT_CURVE, curve_direction="right"</td></tr>
+      <tr><td><code>U_TURN</code></td><td>CURVE_180</td></tr>
+    </table>
+
+    <h3>위치 로그</h3>
+    <p>Edge 변경 또는 0.5초(<code>POSITION_LOG_INTERVAL_MS</code>) 경과 시
+       <code>vehicleLastPositionLog</code> Map에 기록합니다 (디버깅/통계용).</p>
+
+    <!-- ================================================================ -->
+    <!-- 6. 속도 계산 상세 -->
+    <!-- ================================================================ -->
+    <h2>6. 속도 계산 상세 (speedCalculator)</h2>
+    <p class="file">File: <code>src/common/vehicle/physics/speedCalculator.ts</code></p>
+
+    <h3>6.1 calculateNextSpeed</h3>
+    <pre><code>// deceleration이 -Infinity이면 즉시 정지
+if (deceleration === -Infinity) return 0;
+
+// 가속 또는 감속 중 하나만 적용 (동시 X)
+const appliedAccel = deceleration &lt; 0 ? deceleration : acceleration;
+let nextVelocity = currentVelocity + appliedAccel * delta;
+
+// maxSpeed clamp (LINEAR vs CURVE)
+const maxSpeed = isCurve ? config.curveMaxSpeed : config.linearMaxSpeed;
+if (nextVelocity > maxSpeed) nextVelocity = maxSpeed;
+if (nextVelocity &lt; 0) nextVelocity = 0;</code></pre>
+
+    <h3>6.2 Max Speed 분리</h3>
+    <table>
+      <tr><th>Edge 타입</th><th>Max Speed 소스</th></tr>
+      <tr><td>LINEAR</td><td><code>config.linearMaxSpeed</code></td></tr>
+      <tr><td>CURVE (모든 곡선)</td><td><code>config.curveMaxSpeed</code></td></tr>
+    </table>
+
+    <h3>6.3 감속 우선순위</h3>
+    <div class="flow"><span class="red">1. Sensor (hitZone)</span>     → 충돌 감지에 의한 감속
+<span class="orange">2. Curve Pre-Brake</span>     → 전방 곡선 진입 대비
+<span class="green">3. Merge Pre-Brake</span>     → 합류점 LOCK_WAIT 대비
+
+→ <span class="white">Math.max(|sensorDecel|, |curveDecel|, |mergeDecel|)</span>
+→ 가장 강한 감속이 최종 적용</div>
+
+    <h3>6.4 Brake Distance 공식</h3>
+    <div class="card highlight">
+      <h4>calculateBrakeDistance</h4>
+      <pre><code>d = (v0&sup2; - v1&sup2;) / (2 * |a|)
+
+v0: 현재 속도 (m/s)
+v1: 목표 속도 (m/s)
+a:  감속도 (음수, m/s&sup2;)</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>calculateMaxSpeedForDistance</h4>
+      <pre><code>v = sqrt(vTarget&sup2; + 2 * |a| * d)
+
+주어진 거리에서 도달할 수 있는 최대 속도
+감속이 가능한 범위 내에서의 상한선</code></pre>
+    </div>
+
+    <h3>6.5 Delta Time Clamping</h3>
+    <p>프레임 간 시간 차이(<code>delta</code>)는 <code>MovementUpdateContext.clampedDelta</code>로 전달됩니다.
+       시뮬레이션 엔진에서 최대 0.1초로 clamping하여 큰 프레임 드랍 시 물리 계산이 발산하는 것을 방지합니다.</p>
+
+    <!-- ================================================================ -->
+    <!-- 7. Edge Ratio 의미 -->
+    <!-- ================================================================ -->
+    <h2>7. Edge Ratio 의미</h2>
+
+    <div class="flow">Edge (distance = D)
+<span class="cyan">ratio=0</span> ════════════════════════════════ <span class="orange">ratio=1</span>
+  from_node                                    to_node
+        ├── ratio 0.5 → 중간점
+        └── ratio > 1 → <span class="red">overflow (다음 Edge로 전환 필요)</span></div>
+
+    <h3>ratio 계산</h3>
+    <pre><code>rawNewRatio = currentRatio + (velocity * delta) / edge.distance</code></pre>
+
+    <h3>ratio → World Position 변환 흐름</h3>
+    <div class="flow"><span class="white">rawNewRatio</span>
+  │
+  ├─ &lt; 1.0 → 동일 Edge 내 이동
+  │           targetRatio 체크 → 도달 시 ratio=targetRatio, v=0
+  │
+  └─ >= 1.0 → <span class="orange">Edge Transition</span>
+               overflowDist = (ratio - 1) * edge.distance
+               nextRatio = overflowDist / nextEdge.distance
+               (Multi-hop: while nextRatio >= 1)
+  │
+  <span class="green">finalRatio</span> (0~1 범위, 최종 Edge 기준)
+  │
+  └─ <span class="cyan">interpolatePositionTo(edge, ratio)</span>
+       LINEAR: 직선 보간 → x, y
+       CURVE:  renderingPoints 세그먼트 보간 → x, y, rotation
+  │
+  <span class="purple">commitVehicleState</span> → SharedArrayBuffer 기록</div>
+
+    <div class="card">
+      <h4>1-based Edge Index</h4>
+      <p><code>CURRENT_EDGE</code> 및 <code>NEXT_EDGE_0~4</code>는 <strong>1-based</strong> 인덱스입니다.
+         0은 invalid sentinel 값입니다. 배열 접근 시 <code>edgeArray[edgeIndex - 1]</code>을 사용합니다.</p>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- 8. Zero-GC 최적화 -->
+    <!-- ================================================================ -->
+    <h2>8. Zero-GC 최적화</h2>
+    <p>Movement 시스템은 <strong>모듈 레벨 Scratchpad 객체</strong>를 재사용하여 프레임마다 새 객체를 생성하지 않습니다.
+       10만대 이상의 차량을 60fps로 처리할 때 GC pause를 방지하는 핵심 패턴입니다.</p>
+
+    <h3>Scratchpad 목록</h3>
+    <table>
+      <tr><th>Scratchpad</th><th>파일</th><th>용도</th></tr>
+      <tr><td><code>SCRATCH_PHYSICS</code></td><td>vehiclePhysics.ts</td><td>Phase 1 결과 (velocity, ratio, edge, shouldSkip)</td></tr>
+      <tr><td><code>SCRATCH_VEHICLE_TRANSITION</code></td><td>vehicleTransition.ts</td><td>Phase 2 결과 (finalEdgeIndex, finalRatio, activeEdge, finalVelocity)</td></tr>
+      <tr><td><code>SCRATCH_TRANSITION</code></td><td>vehicleTransition.ts</td><td>내부 Edge 전환 결과 (handleEdgeTransition 출력)</td></tr>
+      <tr><td><code>SCRATCH_TARGET_CHECK</code></td><td>vehicleTransition.ts</td><td>동일 Edge target 도달 체크</td></tr>
+      <tr><td><code>SCRATCH_VEHICLE_POSITION</code></td><td>vehiclePosition.ts</td><td>Phase 3 결과 (x, y, z, rotation, ratio, velocity)</td></tr>
+      <tr><td><code>SCRATCH_POS</code></td><td>vehiclePosition.ts</td><td>내부 보간 결과 (interpolatePositionTo 출력)</td></tr>
+    </table>
+
+    <h3>패턴</h3>
+    <pre><code>// 모듈 최상위에 한 번만 생성
+export const SCRATCH_PHYSICS: VehiclePhysicsResult = {
+  newVelocity: 0,
+  rawNewRatio: 0,
+  targetRatio: 0,
+  currentEdgeIndex: 0,
+  currentEdge: null as unknown as Edge,
+  shouldSkip: false,
+};
+
+// 매 차량 루프에서 재사용 (new 없음)
+calculateVehiclePhysics(ctx, i, data, ptr, SCRATCH_PHYSICS);
+// SCRATCH_PHYSICS.newVelocity, .rawNewRatio 등 직접 읽기</code></pre>
+
+    <div class="card warning">
+      <h4>주의사항</h4>
+      <ul>
+        <li>Scratchpad는 <strong>단일 스레드(Worker)</strong> 내에서만 사용 &mdash; 동시성 문제 없음</li>
+        <li>다음 차량 루프 시작 시 이전 값이 <strong>자동으로 덮어쓰기</strong>됨</li>
+        <li><code>activeEdge</code> 같은 참조 타입 필드는 Edge 배열의 요소를 가리킴 (복사 아님)</li>
+        <li>함수가 <code>out</code> 파라미터로 scratchpad를 받아 결과를 직접 기록 &mdash; return 값은 같은 참조</li>
+      </ul>
+    </div>
+
+    <h3>메모리 흐름 요약</h3>
+    <div class="flow">updateMovement()
+  for (each vehicle) {
+    <span class="cyan">SCRATCH_PHYSICS</span>       ← Phase 1 결과 기록
+    <span class="orange">SCRATCH_VEHICLE_TRANSITION</span> ← Phase 2 결과 기록 (SCRATCH_PHYSICS 참조)
+    <span class="green">SCRATCH_VEHICLE_POSITION</span>   ← Phase 3 결과 기록 (TRANSITION 참조)
+    <span class="purple">commitVehicleState</span>         ← Float32Array에 최종 기록
+  }
+  // 루프 끝: scratchpad 내용은 마지막 차량 값 (사용 안 함)</div>
+
+  </main>
+</div>
+</body>
+</html>

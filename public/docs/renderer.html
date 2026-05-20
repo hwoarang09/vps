@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three.js Renderer — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon cyan">&#9670;</span>
+          <span class="nav-group-label">Overview</span>
+        </div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon green">&#9654;</span>
+          <span class="nav-group-label">Simulation</span>
+        </div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon purple">&#9632;</span>
+          <span class="nav-group-label">Interface</span>
+        </div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-header">
+          <span class="nav-group-icon orange">&#9881;</span>
+          <span class="nav-group-label">Infrastructure</span>
+        </div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html" class="active">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Three.js Renderer<span class="subtitle">React Three Fiber + InstancedMesh 기반 대규모 실시간 렌더링</span></h1>
+
+    <!-- 1. 개요 -->
+    <h2>1. 개요</h2>
+    <div class="card highlight">
+      <ul>
+        <li><strong>React Three Fiber + Three.js InstancedMesh</strong> &mdash; 선언적 React 구조 위에서 GPU-instanced 렌더링</li>
+        <li><strong>100k+ 차량 실시간 렌더링</strong> &mdash; draw call 1회로 전체 fleet 렌더</li>
+        <li><strong>SharedArrayBuffer &rarr; GPU 직접 전달</strong> &mdash; Worker가 쓴 위치 데이터를 Main Thread가 읽어 GPU로 업로드</li>
+      </ul>
+    </div>
+
+    <h3>스레드 분리 원칙</h3>
+    <p>VPS는 <strong>시뮬레이션 계산(Worker Thread)</strong>과 <strong>렌더링(Main Thread)</strong>을 완전히 분리합니다. Main Thread는 물리 계산, 충돌, 경로탐색을 <strong>일절 하지 않으며</strong>, Worker Thread는 DOM이나 Three.js에 <strong>접근하지 않습니다</strong>.</p>
+
+    <div class="flow"><span class="green">Worker Thread (SimulationEngine)</span>
+  물리 계산, 충돌 검출, 경로 탐색, Lock 관리
+  매 프레임 차량 위치를 계산하여 SharedArrayBuffer에 기록
+         |
+         | <span class="white">SharedArrayBuffer (zero-copy)</span>
+         | Float32Array views &mdash; postMessage 없음, 복사 없음
+         |
+         v
+<span class="cyan">Main Thread (React + Three.js)</span>
+  useFrame(60fps) 루프에서 SharedArrayBuffer를 직접 읽음
+         |
+         | <span class="white">InstancedBufferAttribute (vec4: x,y,z,rotation)</span>
+         | dataArr.set(renderBuffer) &mdash; render 전용 버퍼에 복사
+         |
+         v
+<span class="purple">GPU (WebGL)</span>
+  InstancedMesh가 vec4 attribute를 vertex shader에서 읽어
+  100k+ 차량을 draw call 1회로 렌더링</div>
+
+    <div class="card warning">
+      <h4>핵심 데이터 흐름</h4>
+      <ol>
+        <li><strong>Worker</strong>가 매 프레임 차량의 (x, y, z, rotation)을 계산하여 <code>SharedArrayBuffer</code>에 직접 write</li>
+        <li><strong>Main Thread</strong>의 <code>useFrame</code>이 SharedArrayBuffer를 read &rarr; GPU 업로드용 <code>InstancedBufferAttribute</code>에 <code>.set()</code>으로 복사</li>
+        <li><strong>GPU</strong>가 vertex shader에서 vec4를 읽어 position + rotation 적용 후 렌더링</li>
+      </ol>
+      <p><code>postMessage</code>는 사용하지 않습니다. 양쪽 스레드가 같은 메모리를 직접 참조합니다 (Worker=WRITE, Main=READ ONLY). 전체 파이프라인에서 JS 객체 할당은 0건(Zero-GC)입니다.</p>
+    </div>
+
+    <!-- 2. Vehicle Renderer -->
+    <h2>2. Vehicle Renderer (VehicleArrayRenderer)</h2>
+
+    <h3>InstancedBufferAttribute 구조</h3>
+    <table>
+      <tr><th>Component</th><th>Type</th><th>Description</th></tr>
+      <tr><td><code>x</code></td><td>Float32</td><td>차량 X 좌표 (world space)</td></tr>
+      <tr><td><code>y</code></td><td>Float32</td><td>차량 Y 좌표 (world space)</td></tr>
+      <tr><td><code>z</code></td><td>Float32</td><td>차량 Z 좌표 (world space)</td></tr>
+      <tr><td><code>rotation_deg</code></td><td>Float32</td><td>Z축 회전각 (degrees)</td></tr>
+    </table>
+    <p>instance당 <strong>vec4 (16 bytes)</strong> &mdash; 기존 Matrix4 (64 bytes) 대비 <strong>4배 절약</strong>.</p>
+
+    <h3>Buffer 설정</h3>
+    <pre><code>const attr = new THREE.InstancedBufferAttribute(float32Array, 4);
+attr.setUsage(THREE.DynamicDrawUsage);  // per-frame 갱신 힌트
+instancedMesh.geometry.setAttribute('instanceData', attr);</code></pre>
+
+    <h3>useFrame 루프</h3>
+    <pre><code>useFrame(() => {
+  // 1. SharedArrayBuffer(render buffer)에서 Float32Array 읽기
+  const src = renderBufferView;  // Worker가 매 step 기록
+
+  // 2. InstancedBufferAttribute로 복사
+  attr.array.set(src);
+
+  // 3. GPU 업로드 플래그
+  attr.needsUpdate = true;
+});</code></pre>
+
+    <!-- 3. Vertex Shader -->
+    <h2>3. Vertex Shader</h2>
+    <p>표준 <code>modelViewMatrix</code> 대신 custom vertex shader에서 instance 변환을 직접 수행합니다.</p>
+
+    <pre><code>// vertex shader (GLSL)
+attribute vec4 instanceData;   // (x, y, z, rotation_deg)
+uniform float uVehicleScale;   // LOD scale factor
+
+void main() {
+  // deg → rad 변환
+  float rot = instanceData.w * 0.017453292519943295;
+
+  // Z축 회전 행렬 구성
+  float c = cos(rot);
+  float s = sin(rot);
+  mat3 rotateZ = mat3(
+     c, -s, 0.0,
+     s,  c, 0.0,
+    0.0, 0.0, 1.0
+  );
+
+  // 최종 위치 = 회전 * (position * LOD_scale) + offset
+  vec3 transformed = rotateZ * (position * uVehicleScale)
+                   + instanceData.xyz;
+
+  gl_Position = projectionMatrix * modelViewMatrix
+              * vec4(transformed, 1.0);
+}</code></pre>
+
+    <div class="card warning">
+      <p><strong>deg &rarr; rad 상수</strong>: <code>0.017453292519943295</code> = <code>PI / 180</code>. Worker가 degree 단위로 기록하므로 shader에서 변환합니다.</p>
+    </div>
+
+    <!-- 4. 색상 매핑 -->
+    <h2>4. 색상 매핑 (JobState &rarr; Color)</h2>
+
+    <table>
+      <tr><th>JobState</th><th>Color</th><th>Hex</th></tr>
+      <tr><td><code>IDLE</code></td><td><span class="badge badge-cyan">Cyan</span></td><td><code>#4ecdc4</code></td></tr>
+      <tr><td><code>MOVE_TO_LOAD</code></td><td><span class="badge badge-green">Green</span></td><td><code>#22c55e</code></td></tr>
+      <tr><td><code>LOADING</code></td><td><span class="badge badge-orange">Orange</span></td><td><code>#f59e0b</code></td></tr>
+      <tr><td><code>MOVE_TO_UNLOAD</code></td><td><span class="badge badge-purple">Purple</span></td><td><code>#8b5cf6</code></td></tr>
+      <tr><td><code>UNLOADING</code></td><td><span class="badge badge-purple">Blue</span></td><td><code>#3b82f6</code></td></tr>
+      <tr><td><code>ERROR</code></td><td><span class="badge badge-red">Red</span></td><td><code>#ef4444</code></td></tr>
+    </table>
+
+    <h3>Pulse Effect (LOADING / UNLOADING + STOPPED)</h3>
+    <p>적재/하역 중 정차 상태이면 sine wave 기반 pulse로 white와 lerp합니다.</p>
+    <pre><code>// pulse 효과 (per frame)
+if ((state === LOADING || state === UNLOADING) && isStopped) {
+  const t = Math.sin(elapsedTime * 3.0) * 0.5 + 0.5;  // 0~1 oscillation
+  color.lerp(WHITE, t * 0.6);  // 최대 60%까지 white blend
+}
+
+mesh.setColorAt(i, color);
+// ... 전체 루프 완료 후
+mesh.instanceColor.needsUpdate = true;</code></pre>
+
+    <!-- 5. LOD -->
+    <h2>5. LOD (Level of Detail)</h2>
+    <div class="card highlight">
+      <p><strong>Camera Z 기반 동적 스케일링</strong> &mdash; 시각적 효과만, 물리/센서에 영향 없음</p>
+    </div>
+
+    <pre><code>// LOD 계산 (Main Thread, useFrame)
+const camZ = camera.position.z;
+const lod = Math.max(1.0, Math.min(3.5, 1.0 + (camZ - 50) / 200));
+
+// Uniform으로 shader에 전달
+material.uniforms.uVehicleScale.value = lod;</code></pre>
+
+    <table>
+      <tr><th>Camera Z</th><th>LOD Scale</th><th>설명</th></tr>
+      <tr><td>&le; 50</td><td>1.0</td><td>최소 스케일 (가까이서 볼 때)</td></tr>
+      <tr><td>150</td><td>1.5</td><td>중간 거리</td></tr>
+      <tr><td>250</td><td>2.0</td><td>먼 거리</td></tr>
+      <tr><td>&ge; 550</td><td>3.5</td><td>최대 스케일 (전체 FAB 조감)</td></tr>
+    </table>
+    <p>줌 아웃 시 차량이 너무 작아져 보이지 않는 문제를 해결합니다. <code>frustumCulled=false</code>와 함께 사용하여 항상 모든 차량이 렌더링됩니다.</p>
+
+    <!-- 6. Glow Effect -->
+    <h2>6. 선택 차량 Glow Effect</h2>
+    <p>사용자가 차량을 클릭하면 15-layer additive blending glow가 표시됩니다.</p>
+
+    <h3>Glow 구성</h3>
+    <table>
+      <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
+      <tr><td>Layers</td><td>15</td><td>겹쳐서 렌더링하는 반투명 레이어 수</td></tr>
+      <tr><td>Blending</td><td><code>AdditiveBlending</code></td><td>빛이 합산되는 효과</td></tr>
+      <tr><td>Opacity curve</td><td><code>0.5 * (1 - t)^2</code></td><td>Quadratic fade (안쪽 밝고 바깥쪽 어두움)</td></tr>
+      <tr><td>Color gradient</td><td>Cyan &rarr; Purple</td><td><code>#4ecdc4</code> &rarr; <code>#8b5cf6</code></td></tr>
+      <tr><td>Near spread</td><td>0.12</td><td>카메라 가까울 때 glow 범위</td></tr>
+      <tr><td>Far spread</td><td>2.5</td><td>카메라 멀 때 glow 범위</td></tr>
+    </table>
+
+    <pre><code>// Glow layer 생성 (conceptual)
+for (let i = 0; i < 15; i++) {
+  const t = i / 14;                           // 0 ~ 1
+  const opacity = 0.5 * Math.pow(1 - t, 2);  // quadratic fade
+  const color = cyan.clone().lerp(purple, t); // gradient
+  const spread = lerp(nearSpread, farSpread, distanceFactor);
+  const scale = 1.0 + t * spread;
+
+  // additive blending mesh at scale
+  renderGlowLayer(position, scale, color, opacity);
+}</code></pre>
+
+    <div class="card">
+      <p><strong>Distance-adaptive spread</strong>: 카메라가 가까우면 glow가 작고 선명하게(<code>0.12</code>), 멀면 크고 부드럽게(<code>2.5</code>) 퍼집니다. 어떤 줌 레벨에서도 자연스러운 시각 피드백을 제공합니다.</p>
+    </div>
+
+    <!-- 7. Worker → GPU 데이터 흐름 -->
+    <h2>7. Worker &rarr; GPU 데이터 흐름</h2>
+
+    <div class="flow"><span class="green">Worker Thread</span>
+  SimulationEngine.step()
+  ├─ 차량 위치/회전 계산
+  └─ Float32Array.set() → <span class="highlight">SharedArrayBuffer</span> (render buffer)
+         │
+         │  zero-copy (같은 메모리 주소)
+         ↓
+<span class="orange">Main Thread</span>
+  useFrame() 루프
+  ├─ renderBufferView 읽기 (Float32Array view)
+  ├─ InstancedBufferAttribute.array.set(src)
+  └─ attr.needsUpdate = true
+         │
+         ↓
+<span class="purple">GPU Upload</span>
+  WebGL bufferSubData()
+  ├─ attribute buffer → GPU memory
+  └─ vertex shader에서 instanceData로 접근
+         │
+         ↓
+<span class="highlight">WebGL Render</span>
+  drawArraysInstanced()
+  └─ 1 draw call로 100k+ 차량 렌더링</div>
+
+    <div class="card highlight">
+      <p><strong>핵심</strong>: Worker &rarr; SharedArrayBuffer &rarr; Main Thread useFrame &rarr; InstancedBufferAttribute &rarr; GPU Upload &rarr; WebGL Render. 전체 경로에서 JS 객체 할당 0건, <code>postMessage</code> 0회.</p>
+    </div>
+
+    <!-- 8. 기타 렌더러 -->
+    <h2>8. 기타 렌더러</h2>
+
+    <h3>Edge Renderer</h3>
+    <div class="card">
+      <p>레일(엣지) 렌더링. 타입별로 분리된 InstancedMesh 사용.</p>
+      <table>
+        <tr><th>Type</th><th>Geometry</th><th>Description</th></tr>
+        <tr><td><code>LINEAR</code></td><td>Box (길이 stretch)</td><td>직선 구간</td></tr>
+        <tr><td><code>CURVE</code></td><td>TubeGeometry</td><td>곡선 구간</td></tr>
+      </table>
+    </div>
+
+    <h3>Node Renderer</h3>
+    <div class="card">
+      <p>교차점/분기점 렌더링. <strong>Slot 기반 multi-fab</strong> 지원 &mdash; fab별로 독립 슬롯에 노드를 배치하여 다중 FAB 동시 표시 가능.</p>
+    </div>
+
+    <h3>Station Renderer</h3>
+    <div class="card">
+      <p>스테이션 타입별 독립 InstancedMesh 사용.</p>
+      <table>
+        <tr><th>Type</th><th>Visual</th><th>Description</th></tr>
+        <tr><td><code>OHB</code></td><td>Overhead Buffer</td><td>임시 보관 버퍼</td></tr>
+        <tr><td><code>STK</code></td><td>Stocker</td><td>스토커 (대규모 보관)</td></tr>
+        <tr><td><code>EQ</code></td><td>Equipment</td><td>장비 (로드/언로드 지점)</td></tr>
+        <tr><td><code>OTHER</code></td><td>Generic</td><td>기타 스테이션</td></tr>
+      </table>
+    </div>
+
+    <!-- 9. 최적화 기법 -->
+    <h2>9. 최적화 기법</h2>
+
+    <h3>Zero-GC (Garbage Collection 회피)</h3>
+    <div class="card highlight">
+      <p><code>useMemo</code>로 <code>Matrix4</code>, <code>Vector3</code>, <code>Quaternion</code>, <code>Color</code> 등을 컴포넌트 마운트 시 한 번만 생성하고 매 프레임 재사용합니다. <code>useFrame</code> 내에서 <code>new</code> 호출 0건.</p>
+    </div>
+    <pre><code>// 마운트 시 1회 생성
+const tmpMatrix = useMemo(() => new THREE.Matrix4(), []);
+const tmpVec    = useMemo(() => new THREE.Vector3(), []);
+const tmpQuat   = useMemo(() => new THREE.Quaternion(), []);
+const tmpColor  = useMemo(() => new THREE.Color(), []);
+
+useFrame(() => {
+  // tmpMatrix, tmpVec 등을 재사용 — GC 트리거 없음
+});</code></pre>
+
+    <h3>Batch Update</h3>
+    <p>전체 instance 갱신 루프를 완료한 후 <strong>한 번만</strong> <code>needsUpdate = true</code>를 설정합니다. 중간에 설정하면 불필요한 GPU 업로드가 발생할 수 있습니다.</p>
+
+    <h3>Frustum Culling 비활성화</h3>
+    <div class="card warning">
+      <p><code>frustumCulled = false</code> &mdash; 100k+ instance에서 CPU-side frustum check 오버헤드가 GPU 렌더링 비용보다 큽니다. 전체를 항상 렌더링하는 것이 더 빠릅니다.</p>
+    </div>
+
+    <h3>Render Buffer Compact Format</h3>
+    <table>
+      <tr><th>Format</th><th>Per Instance</th><th>100k Vehicles</th></tr>
+      <tr><td>Matrix4 (standard)</td><td>64 bytes (16 floats)</td><td>6.4 MB</td></tr>
+      <tr><td><strong>vec4 (compact)</strong></td><td><strong>16 bytes (4 floats)</strong></td><td><strong>1.6 MB</strong></td></tr>
+    </table>
+    <p><strong>4x 메모리 절약</strong>. 회전이 Z축 단일이므로 full matrix 불필요. Shader에서 deg &rarr; rotateZ 행렬을 직접 구성합니다.</p>
+
+    <!-- ============================================================ -->
+    <h2>Text Rendering (Atlas 기법)</h2>
+    <p>100k+ 차량 라벨, 노드/엣지/스테이션/베이 이름을 실시간으로 렌더링하기 위한 <strong>커스텀 Atlas-like 텍스트 시스템</strong>입니다. Troika/SDF 대신 <strong>Canvas 2D 글리프 캐싱 + 39개 InstancedMesh</strong> 조합으로 구현되어 있습니다.</p>
+
+    <h3>Glyph Atlas 생성</h3>
+    <div class="card highlight">
+      <h4>useDigitMaterials.ts &mdash; 문자당 1개 Canvas Texture</h4>
+      <p><strong>39 characters</strong>: <code>0-9, A-Z, _, -, .</code> &mdash; 각 문자를 256&times;256 Canvas에 1회 렌더링 후 <code>THREE.Texture</code>로 변환. 마운트 시 1회 생성, 언마운트 시 dispose.</p>
+    </div>
+    <pre><code>const canvas = document.createElement("canvas");
+canvas.width = canvas.height = 256;
+const ctx = canvas.getContext("2d");
+ctx.font = "bold 96px system-ui, Roboto, Arial";
+ctx.fillText(char, 128, 128, 230);  // 중앙 정렬
+// &rarr; THREE.CanvasTexture(canvas)
+//    mipmaps: true
+//    anisotropy: 8  (사선 뷰 선명도)
+//    minFilter: LinearMipmapLinearFilter (trilinear)</code></pre>
+
+    <h3>39 InstancedMesh 구조</h3>
+    <p>문자 종류별로 <strong>독립된 InstancedMesh</strong>를 생성합니다. 각 mesh는 <code>PlaneGeometry(1,1)</code> + 해당 문자의 Canvas texture를 사용합니다.</p>
+
+    <div class="flow"><span class="cyan">BaseInstancedText</span>
+  |
+  +-- InstancedMesh[0]  "0" texture   count=N0
+  +-- InstancedMesh[1]  "1" texture   count=N1
+  +-- ...
+  +-- InstancedMesh[9]  "9" texture   count=N9
+  +-- InstancedMesh[10] "A" texture   count=NA
+  +-- ...
+  +-- InstancedMesh[38] "." texture   count=N.
+
+<span class="orange">비가시 처리</span>: scale=(0,0,0) matrix 적용 (count 변경보다 효율적)</div>
+
+    <h3>SlotData 구조 (문자 배치 데이터)</h3>
+    <table>
+      <tr><th>Field</th><th>Type</th><th>설명</th></tr>
+      <tr><td><code>totalCharacters</code></td><td>number</td><td>전체 문자 수</td></tr>
+      <tr><td><code>counts[]</code></td><td>number[39]</td><td>문자별 instance 개수</td></tr>
+      <tr><td><code>slotIndex</code></td><td>Int32Array</td><td>문자별 mesh 내 slot 인덱스</td></tr>
+      <tr><td><code>slotDigit</code></td><td>Int8Array</td><td>문자 타입 (0~38)</td></tr>
+      <tr><td><code>slotGroup</code></td><td>Int32Array</td><td>텍스트 그룹 인덱스 (NODE_A1 등)</td></tr>
+      <tr><td><code>slotVehicle</code></td><td>Int32Array</td><td>차량 인덱스 (VEH00000)</td></tr>
+      <tr><td><code>slotPosition</code></td><td>Int32Array</td><td>텍스트 내 문자 위치 (0~7)</td></tr>
+    </table>
+
+    <h3>2-Phase Vehicle Text 최적화</h3>
+    <p>100k+ 차량의 8자 라벨(VEH00000)을 매 프레임 갱신하는 핵심 기법입니다.</p>
+
+    <div class="card highlight">
+      <h4>Phase 1: Vehicle-Level LOD (경량 체크)</h4>
+      <ul>
+        <li>전체 차량 순회 &mdash; 카메라 거리만 체크 (<code>LOD_DIST_SQ = 20&sup2;</code>)</li>
+        <li>Early exit: 축별 거리 먼저 비교 (full distance calc 회피)</li>
+        <li><code>Uint8Array</code>로 hidden 상태 추적 &mdash; 이미 숨긴 차량 skip</li>
+        <li>가시 차량만 compact <code>Int32Array</code>에 수집 (100k &rarr; ~1k)</li>
+      </ul>
+    </div>
+    <div class="card highlight">
+      <h4>Phase 2: Character-Level Update (가시 차량만)</h4>
+      <ul>
+        <li>~1k 차량 &times; 8 chars = ~8k 문자만 transform 갱신</li>
+        <li>Billboard quaternion 계산 (카메라 방향으로 회전)</li>
+        <li><code>dirtyMeshSet</code>: 변경된 InstancedMesh만 <code>needsUpdate = true</code></li>
+      </ul>
+    </div>
+
+    <div class="flow"><span class="cyan">100,000 vehicles &times; 8 chars = 800,000 characters</span>
+         |
+         | Phase 1: Vehicle LOD (distance check)
+         v
+<span class="green">~1,000 visible vehicles</span> (99% culled)
+         |
+         | Phase 2: Character transform
+         v
+<span class="orange">~8,000 character matrices updated</span>
+         |
+         | Selective GPU upload (dirty meshes only)
+         v
+<span class="purple">39 InstancedMesh.needsUpdate</span> (변경된 것만)</div>
+
+    <h3>추가 Culling 전략</h3>
+    <table>
+      <tr><th>전략</th><th>조건</th><th>효과</th></tr>
+      <tr><td><strong>Altitude Culling</strong></td><td><code>camera.z &gt; 50</code></td><td>모든 텍스트 일괄 숨김</td></tr>
+      <tr><td><strong>Spatial Grid</strong></td><td>맵 텍스트 (node/edge/station)</td><td>Grid cell 기반 가시 그룹만 렌더</td></tr>
+      <tr><td><strong>Distance LOD</strong></td><td><code>dist &gt; 20 units</code></td><td>차량 라벨 숨김</td></tr>
+      <tr><td><strong>Billboard / Flat</strong></td><td>차량: billboard, Bay/Fab: flat</td><td>맵 요소는 XY 평면 고정</td></tr>
+    </table>
+
+    <h3>텍스트 종류</h3>
+    <table>
+      <tr><th>종류</th><th>포맷</th><th>렌더 모드</th><th>Source</th></tr>
+      <tr><td>Vehicle 라벨</td><td><code>VEH00000</code> (8자)</td><td>Billboard</td><td>차량 인덱스 (fab별 리셋)</td></tr>
+      <tr><td>Node 이름</td><td><code>N0001</code> 등</td><td>Billboard</td><td><code>textStore</code></td></tr>
+      <tr><td>Edge 이름</td><td><code>E_001</code> 등</td><td>Billboard</td><td><code>textStore</code></td></tr>
+      <tr><td>Station 이름</td><td>station_name</td><td>Billboard</td><td><code>textStore</code></td></tr>
+      <tr><td>Bay 라벨</td><td>bay_name</td><td>Flat (XY)</td><td>edge centroid 계산</td></tr>
+      <tr><td>Fab 라벨</td><td><code>FAB0</code> / <code>C0-R0</code></td><td>Flat (XY)</td><td>fab grid 위치</td></tr>
+    </table>
+
+    <h3>Hit Area (인터랙션)</h3>
+    <p>Edge 이름 호버 감지를 위한 <strong>투명 InstancedMesh</strong> 레이어. 문자가 아닌 <strong>텍스트 그룹 단위</strong>로 PlaneGeometry를 배치하여 레이캐스팅 비용을 O(groups)로 최소화합니다.</p>
+
+    <h3>Zero-GC 최적화</h3>
+    <pre><code>// 모듈 레벨 재사용 풀 (프레임당 0 GC 할당)
+const _tempMatrix = new THREE.Matrix4();
+const _tempPos    = new THREE.Vector3();
+const _tempOffset = new THREE.Vector3();
+const _tempScale  = new THREE.Vector3();
+const _tempQuat   = new THREE.Quaternion();
+// + _vehicleHiddenState (Uint8Array)
+// + _visibleVehicles    (Int32Array)
+// + _dirtyMeshSet       (Set&lt;number&gt;)</code></pre>
+
+    <h3>성능 요약</h3>
+    <table>
+      <tr><th>Metric</th><th>Value</th><th>비고</th></tr>
+      <tr><td>문자당 텍스처</td><td>256&times;256 Canvas</td><td>Mipmap + Anisotropy 8x</td></tr>
+      <tr><td>InstancedMesh 수</td><td>39개</td><td>문자 종류당 1개</td></tr>
+      <tr><td>차량당 문자 수</td><td>8</td><td>VEH00000 고정 포맷</td></tr>
+      <tr><td>LOD 거리</td><td>20 units</td><td>Early exit 축별 체크</td></tr>
+      <tr><td>Altitude cutoff</td><td>50 units</td><td>일괄 숨김</td></tr>
+      <tr><td>프레임당 GC</td><td>0</td><td>모듈 레벨 재사용 풀</td></tr>
+      <tr><td>GPU 업데이트</td><td>dirty mesh만</td><td>39개 중 변경분만</td></tr>
+    </table>
+
+    <h3>컴포넌트 계층 구조</h3>
+    <div class="flow"><span class="cyan">TextRenderer</span> (entry point)
+  |
+  +-- <span class="green">MapTextRenderer</span>
+  |     +-- InstancedText (node labels)
+  |     +-- InstancedText (edge labels)
+  |     |     +-- TextHitAreas (투명 hover 감지)
+  |     +-- InstancedText (station labels)
+  |     +-- InstancedText (bay labels, flat)
+  |
+  +-- <span class="orange">VehicleTextRenderer</span>
+  |     +-- BaseInstancedText (39 InstancedMesh)
+  |
+  +-- <span class="purple">FabLabelRenderer</span>
+        +-- InstancedText (FAB 메인 라벨, flat)
+        +-- InstancedText (FAB 서브 라벨, flat)</div>
+
+    <!-- ============================================================ -->
+    <h2>Key Files</h2>
+    <table>
+      <tr><th>File</th><th>Content</th></tr>
+      <tr><td><code>src/components/three/entities/vehicle/</code></td><td>VehicleArrayRenderer, SharedArrayBuffer 기반 렌더링</td></tr>
+      <tr><td><code>src/components/three/entities/edge/</code></td><td>Edge Renderer (LINEAR/CURVE InstancedMesh)</td></tr>
+      <tr><td><code>src/components/three/entities/node/</code></td><td>Node Renderer (slot 기반 multi-fab)</td></tr>
+      <tr><td><code>src/components/three/entities/station/</code></td><td>Station Renderer (type별 InstancedMesh)</td></tr>
+      <tr><td><code>src/components/three/entities/text/instanced/</code></td><td>Text Atlas 시스템 (useDigitMaterials, instancedTextUtils, BaseInstancedText)</td></tr>
+      <tr><td><code>src/components/three/entities/text/instanced/VehicleTextRenderer.tsx</code></td><td>차량 라벨 렌더링 (2-Phase LOD)</td></tr>
+      <tr><td><code>src/components/three/entities/text/instanced/MapTextRenderer.tsx</code></td><td>맵 텍스트 (Spatial Grid LOD)</td></tr>
+      <tr><td><code>src/store/map/textStore.ts</code></td><td>텍스트 데이터 (Zustand)</td></tr>
+      <tr><td><code>src/shmSimulator/core/SimulationEngine.ts</code></td><td>Worker에서 render buffer에 위치 기록</td></tr>
+      <tr><td><code>src/shmSimulator/MemoryLayoutManager.ts</code></td><td>SharedArrayBuffer 레이아웃 정의</td></tr>
+    </table>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

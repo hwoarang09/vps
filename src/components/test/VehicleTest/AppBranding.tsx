@@ -41,8 +41,10 @@ const AppBranding: React.FC = () => {
       )}
 
       {/* 우하단 버전 */}
-      <div className="fixed bottom-2 right-3 z-[1000] pointer-events-none select-none text-white/30 text-[10px] font-mono tracking-wider">
-        v{__APP_VERSION__}
+      <div className="fixed bottom-2 right-3 z-[1000] select-none pointer-events-none">
+        <span className="text-white/30 text-[10px] font-mono tracking-wider">
+          v{__APP_VERSION__}
+        </span>
       </div>
     </>
   );

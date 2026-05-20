@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared Memory Layout — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html" class="active">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Shared Memory Layout<span class="subtitle">SharedArrayBuffer 기반 zero-copy 차량 데이터 통신</span></h1>
+
+    <!-- ============================================================ -->
+    <h2>1. 개요</h2>
+    <div class="card highlight">
+      <p>VPS는 <strong>SharedArrayBuffer</strong>를 사용하여 Worker(시뮬레이션)와 Main Thread(렌더링) 사이에 <strong>zero-copy</strong>로 데이터를 교환합니다. <code>postMessage</code> 직렬화 없이, 양쪽 스레드가 동일한 메모리 버퍼를 직접 읽고 씁니다.</p>
+    </div>
+    <ul>
+      <li><strong>Worker(WRITE)</strong> &rarr; <strong>Main Thread(READ ONLY)</strong> 단방향 패턴</li>
+      <li>차량 위치, 상태, 경로, 센서 등 <strong>모든 고빈도 데이터</strong>는 공유 메모리를 통해 전달</li>
+      <li><code>Atomics.store</code> / <code>Atomics.load</code>로 동기화 플래그 관리</li>
+    </ul>
+
+    <h3>핵심 파일</h3>
+    <table>
+      <tr><th>File</th><th>Role</th></tr>
+      <tr><td><code>src/common/vehicle/constants.ts</code></td><td>필드 오프셋, enum, 버퍼 크기 상수 정의</td></tr>
+      <tr><td><code>src/shmSimulator/MemoryLayoutManager.ts</code></td><td>Fab별 메모리 할당 및 region 관리</td></tr>
+    </table>
+
+    <h3>데이터 흐름</h3>
+    <div class="flow"><span class="green">Worker (SimulationEngine)</span>
+  │
+  ├─ movement.step()     → <span class="highlight">vehicleDataArray[offset + X]</span> = newX
+  ├─ collision.step()    → vehicleDataArray[offset + HIT_ZONE] = zone
+  ├─ routing.step()      → <span class="orange">pathBuffer[vehIdx]</span> = [len, e0, e1, ...]
+  └─ checkpoint.update() → <span class="purple">checkpointBuffer[vehIdx]</span> = [count, ...]
+         │
+         ↓  SharedArrayBuffer (zero-copy)
+         │
+<span class="green">Main Thread (useFrame loop)</span>
+  │
+  ├─ VehicleRenderer   → reads vehicleDataArray → InstancedMesh.setMatrixAt()
+  ├─ SensorRenderer    → reads sensorPointBuffer → line geometry
+  └─ PathOverlay       → reads pathBuffer → debug visualization</div>
+
+    <!-- ============================================================ -->
+    <h2>2. Vehicle Data Array</h2>
+    <p>차량 1대당 <strong>43 fields</strong>, 각 필드 <code>Float32</code>(4 bytes) = <strong>172 bytes/vehicle</strong>.<br>
+    전체 배열은 <code>Float32Array</code> 뷰로 접근하며, 오프셋은 <code>vehicleIndex * VEHICLE_DATA_SIZE + fieldOffset</code>으로 계산합니다.</p>
+
+    <h3>MovementData <span class="badge badge-green">Offset 0 ~ 17</span></h3>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>X</code></td><td>Float32</td><td>World X 좌표</td></tr>
+      <tr><td>1</td><td><code>Y</code></td><td>Float32</td><td>World Y 좌표</td></tr>
+      <tr><td>2</td><td><code>Z</code></td><td>Float32</td><td>World Z 좌표 (고도)</td></tr>
+      <tr><td>3</td><td><code>ROTATION</code></td><td>Float32</td><td>차량 회전각 (degrees)</td></tr>
+      <tr><td>4</td><td><code>VELOCITY</code></td><td>Float32</td><td>현재 속도 (m/s)</td></tr>
+      <tr><td>5</td><td><code>ACCELERATION</code></td><td>Float32</td><td>가속도 (m/s&sup2;)</td></tr>
+      <tr><td>6</td><td><code>DECELERATION</code></td><td>Float32</td><td>감속도 (m/s&sup2;)</td></tr>
+      <tr><td>7</td><td><code>EDGE_RATIO</code></td><td>Float32</td><td>현재 엣지 위 진행률 (0.0 ~ 1.0)</td></tr>
+      <tr><td>8</td><td><code>MOVING_STATUS</code></td><td>Float32</td><td>이동 상태 (enum MovingStatus)</td></tr>
+      <tr><td>9</td><td><code>CURRENT_EDGE</code></td><td>Float32</td><td>현재 위치한 edge index</td></tr>
+      <tr><td>10</td><td><code>NEXT_EDGE_0</code></td><td>Float32</td><td>다음 엣지 #0</td></tr>
+      <tr><td>11</td><td><code>NEXT_EDGE_1</code></td><td>Float32</td><td>다음 엣지 #1</td></tr>
+      <tr><td>12</td><td><code>NEXT_EDGE_2</code></td><td>Float32</td><td>다음 엣지 #2</td></tr>
+      <tr><td>13</td><td><code>NEXT_EDGE_3</code></td><td>Float32</td><td>다음 엣지 #3</td></tr>
+      <tr><td>14</td><td><code>NEXT_EDGE_4</code></td><td>Float32</td><td>다음 엣지 #4</td></tr>
+      <tr><td>15</td><td><code>NEXT_EDGE_STATE</code></td><td>Float32</td><td>다음 엣지 상태 (enum NextEdgeState)</td></tr>
+      <tr><td>16</td><td><code>TARGET_RATIO</code></td><td>Float32</td><td>목표 ratio (정차 위치)</td></tr>
+      <tr><td>17</td><td><code>OFFSET</code></td><td>Float32</td><td>레일 오프셋 (횡방향 편차)</td></tr>
+    </table>
+    <p><a href="fields-movement.html"><strong>MovementData 필드별 상세 &rarr;</strong></a> 각 필드의 Writer/Reader, 사용 로직, 값 범위 설명</p>
+
+    <h3>SensorData <span class="badge badge-cyan">Offset 18 ~ 20</span></h3>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td>18</td><td><code>PRESET_IDX</code></td><td>Float32</td><td>적용 중인 센서 프리셋 인덱스</td></tr>
+      <tr><td>19</td><td><code>HIT_ZONE</code></td><td>Float32</td><td>충돌 감지 영역 (enum HitZone)</td></tr>
+      <tr><td>20</td><td><code>COLLISION_TARGET</code></td><td>Float32</td><td>충돌 대상 차량 ID (-1 = none)</td></tr>
+    </table>
+    <p><a href="fields-sensor.html"><strong>SensorData 필드별 상세 &rarr;</strong></a> 센서 프리셋, HitZone 판정, 충돌 검출 흐름</p>
+
+    <h3>LogicData <span class="badge badge-purple">Offset 21 ~ 30</span></h3>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td>21</td><td><code>TRAFFIC_STATE</code></td><td>Float32</td><td>교통 상태 (enum TrafficState)</td></tr>
+      <tr><td>22</td><td><code>STOP_REASON</code></td><td>Float32</td><td>정차 사유 (bitmask StopReason)</td></tr>
+      <tr><td>23</td><td><code>JOB_STATE</code></td><td>Float32</td><td>작업 상태 (enum JobState)</td></tr>
+      <tr><td>24</td><td><code>DESTINATION_EDGE</code></td><td>Float32</td><td>목적지 edge index</td></tr>
+      <tr><td>25</td><td><code>PATH_REMAINING</code></td><td>Float32</td><td>남은 경로 엣지 수</td></tr>
+      <tr><td>26</td><td><code>CHECKPOINT_HEAD</code></td><td>Float32</td><td>체크포인트 큐 head 인덱스</td></tr>
+      <tr><td>27</td><td><code>CURRENT_CP_EDGE</code></td><td>Float32</td><td>현재 체크포인트 edge</td></tr>
+      <tr><td>28</td><td><code>CURRENT_CP_RATIO</code></td><td>Float32</td><td>현재 체크포인트 ratio</td></tr>
+      <tr><td>29</td><td><code>CURRENT_CP_FLAGS</code></td><td>Float32</td><td>현재 체크포인트 flags (bitmask)</td></tr>
+      <tr><td>30</td><td><code>CURRENT_CP_TARGET</code></td><td>Float32</td><td>현재 체크포인트 target</td></tr>
+    </table>
+    <p><a href="fields-logic.html"><strong>LogicData 필드별 상세 &rarr;</strong></a> Lock/Traffic/Job 상태 머신, Checkpoint 처리 흐름</p>
+
+    <h3>OrderData <span class="badge badge-orange">Offset 31 ~ 42</span></h3>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td>31</td><td><code>ORDER_ID</code></td><td>Float32</td><td>현재 주문 ID</td></tr>
+      <tr><td>32</td><td><code>ORDER_SRC_STATION</code></td><td>Float32</td><td>출발 스테이션</td></tr>
+      <tr><td>33</td><td><code>ORDER_DEST_STATION</code></td><td>Float32</td><td>도착 스테이션</td></tr>
+      <tr><td>34</td><td><code>ORDER_DEST_EDGE</code></td><td>Float32</td><td>주문 목적지 edge</td></tr>
+      <tr><td>35</td><td><code>TS_ORDER_CREATED</code></td><td>Float32</td><td>주문 생성 시각</td></tr>
+      <tr><td>36</td><td><code>TS_ORDER_ASSIGNED</code></td><td>Float32</td><td>차량 배정 시각</td></tr>
+      <tr><td>37</td><td><code>TS_PICKUP_START</code></td><td>Float32</td><td>픽업 이동 시작</td></tr>
+      <tr><td>38</td><td><code>TS_PICKUP_ARRIVE</code></td><td>Float32</td><td>픽업 위치 도착</td></tr>
+      <tr><td>39</td><td><code>TS_LOADING_DONE</code></td><td>Float32</td><td>적재 완료</td></tr>
+      <tr><td>40</td><td><code>TS_DELIVERY_START</code></td><td>Float32</td><td>배송 이동 시작</td></tr>
+      <tr><td>41</td><td><code>TS_DELIVERY_ARRIVE</code></td><td>Float32</td><td>배송 위치 도착</td></tr>
+      <tr><td>42</td><td><code>TS_UNLOADING_DONE</code></td><td>Float32</td><td>하역 완료</td></tr>
+    </table>
+    <p><a href="fields-order.html"><strong>OrderData 필드별 상세 &rarr;</strong></a> Transfer 상태 머신, Timestamp 기록 시점, KPI 산출</p>
+
+    <div class="card warning">
+      <p><strong>VEHICLE_DATA_SIZE = 43</strong> &mdash; 모든 필드가 Float32이므로 차량 <em>i</em>의 필드 <em>f</em> 접근:<br>
+      <code>float32View[i * 43 + f]</code></p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. Enum &amp; Flag 상수</h2>
+
+    <h3>MovingStatus <span class="badge badge-green">0 ~ 2</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>STOPPED</code></td><td>정지 상태</td></tr>
+      <tr><td>1</td><td><code>ACCELERATING</code></td><td>가속 중</td></tr>
+      <tr><td>2</td><td><code>DECELERATING</code></td><td>감속 중</td></tr>
+    </table>
+
+    <h3>TrafficState <span class="badge badge-green">0 ~ 2</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>FREE</code></td><td>자유 주행</td></tr>
+      <tr><td>1</td><td><code>FOLLOWING</code></td><td>선행 차량 추종</td></tr>
+      <tr><td>2</td><td><code>BLOCKED</code></td><td>완전 차단</td></tr>
+    </table>
+
+    <h3>JobState <span class="badge badge-purple">0 ~ 6</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>IDLE</code></td><td>대기 (주문 없음)</td></tr>
+      <tr><td>1</td><td><code>TO_PICKUP</code></td><td>픽업 위치로 이동</td></tr>
+      <tr><td>2</td><td><code>LOADING</code></td><td>적재 중</td></tr>
+      <tr><td>3</td><td><code>TO_DELIVERY</code></td><td>배송 위치로 이동</td></tr>
+      <tr><td>4</td><td><code>UNLOADING</code></td><td>하역 중</td></tr>
+      <tr><td>5</td><td><code>RETURNING</code></td><td>대기 장소로 복귀</td></tr>
+      <tr><td>6</td><td><code>PARKING</code></td><td>주차 이동 중</td></tr>
+    </table>
+
+    <h3>StopReason <span class="badge badge-red">Bitmask &mdash; 12 flags</span></h3>
+    <table>
+      <tr><th>Bit</th><th>Hex</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>0x001</code></td><td><code>NONE</code></td><td>정지 사유 없음 (주행 중)</td></tr>
+      <tr><td>1</td><td><code>0x002</code></td><td><code>SENSOR_STOP</code></td><td>센서 감지 정차</td></tr>
+      <tr><td>2</td><td><code>0x004</code></td><td><code>LOCK_WAIT</code></td><td>Lock 대기</td></tr>
+      <tr><td>3</td><td><code>0x008</code></td><td><code>PATH_END</code></td><td>경로 끝 도달</td></tr>
+      <tr><td>4</td><td><code>0x010</code></td><td><code>CHECKPOINT</code></td><td>체크포인트 정차</td></tr>
+      <tr><td>5</td><td><code>0x020</code></td><td><code>LOADING</code></td><td>적재 작업 중</td></tr>
+      <tr><td>6</td><td><code>0x040</code></td><td><code>UNLOADING</code></td><td>하역 작업 중</td></tr>
+      <tr><td>7</td><td><code>0x080</code></td><td><code>NO_PATH</code></td><td>경로 없음</td></tr>
+      <tr><td>8</td><td><code>0x100</code></td><td><code>EDGE_BLOCKED</code></td><td>엣지 차단</td></tr>
+      <tr><td>9</td><td><code>0x200</code></td><td><code>MANUAL_STOP</code></td><td>수동 정지 명령</td></tr>
+      <tr><td>10</td><td><code>0x400</code></td><td><code>STATION_WAIT</code></td><td>스테이션 대기</td></tr>
+      <tr><td>11</td><td><code>0x800</code></td><td><code>DEADLOCK</code></td><td>데드락 감지</td></tr>
+    </table>
+    <div class="card">
+      <p>Bitmask이므로 복수 사유 동시 표현 가능: <code>SENSOR_STOP | LOCK_WAIT = 0x006</code></p>
+      <pre><code>const reason = float32View[i * 43 + 22];
+const bits = reason | 0;   // float → int
+if (bits &amp; 0x004) console.log("Lock 대기 중");</code></pre>
+    </div>
+
+    <h3>HitZone <span class="badge badge-cyan">-1 ~ 2</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>-1</td><td><code>NONE</code></td><td>충돌 없음</td></tr>
+      <tr><td>0</td><td><code>APPROACH</code></td><td>접근 영역 (감속 시작)</td></tr>
+      <tr><td>1</td><td><code>BRAKE</code></td><td>제동 영역 (강한 감속)</td></tr>
+      <tr><td>2</td><td><code>STOP</code></td><td>정지 영역 (즉시 정차)</td></tr>
+    </table>
+
+    <h3>NextEdgeState <span class="badge badge-green">0 ~ 2</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>EMPTY</code></td><td>다음 엣지 없음</td></tr>
+      <tr><td>1</td><td><code>RESERVED</code></td><td>예약 완료</td></tr>
+      <tr><td>2</td><td><code>CONFIRMED</code></td><td>진입 확정</td></tr>
+    </table>
+
+    <h3>PresetIndex <span class="badge badge-orange">0 ~ 5</span></h3>
+    <table>
+      <tr><th>Value</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>DEFAULT</code></td><td>기본 프리셋</td></tr>
+      <tr><td>1</td><td><code>TIGHT</code></td><td>좁은 간격 프리셋</td></tr>
+      <tr><td>2</td><td><code>WIDE</code></td><td>넓은 간격 프리셋</td></tr>
+      <tr><td>3</td><td><code>CURVE</code></td><td>커브 구간 프리셋</td></tr>
+      <tr><td>4</td><td><code>INTERSECTION</code></td><td>교차로 프리셋</td></tr>
+      <tr><td>5</td><td><code>CUSTOM</code></td><td>사용자 정의 프리셋</td></tr>
+    </table>
+
+    <h3>CheckpointFlags <span class="badge badge-purple">Bitmask &mdash; 5 flags</span></h3>
+    <table>
+      <tr><th>Bit</th><th>Hex</th><th>Name</th><th>Description</th></tr>
+      <tr><td>0</td><td><code>0x01</code></td><td><code>STOP</code></td><td>해당 지점에서 정차</td></tr>
+      <tr><td>1</td><td><code>0x02</code></td><td><code>SLOW</code></td><td>해당 지점에서 감속</td></tr>
+      <tr><td>2</td><td><code>0x04</code></td><td><code>NOTIFY</code></td><td>통과 시 이벤트 발생</td></tr>
+      <tr><td>3</td><td><code>0x08</code></td><td><code>LOCK_ACQUIRE</code></td><td>Lock 획득 후 통과</td></tr>
+      <tr><td>4</td><td><code>0x10</code></td><td><code>LOCK_RELEASE</code></td><td>Lock 해제 후 통과</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>4. Checkpoint Buffer</h2>
+    <p>차량당 <strong>801 floats</strong>의 체크포인트 큐. <code>Float32Array</code> 기반.</p>
+
+    <div class="card highlight">
+      <p><strong>MAX_CHECKPOINTS_PER_VEHICLE = 200</strong><br>
+      <strong>CHECKPOINT_FIELDS = 4</strong> (edge, ratio, flags, target)<br>
+      차량당 크기: <code>1 + (200 &times; 4) = 801 floats = 3,204 bytes</code></p>
+    </div>
+
+    <h3>메모리 레이아웃</h3>
+    <pre><code>checkpointBuffer[vehIdx * 801 + 0]   = count          // 현재 체크포인트 수
+checkpointBuffer[vehIdx * 801 + 1]   = cp[0].edge      // 첫 번째 CP edge
+checkpointBuffer[vehIdx * 801 + 2]   = cp[0].ratio     // 첫 번째 CP ratio
+checkpointBuffer[vehIdx * 801 + 3]   = cp[0].flags     // 첫 번째 CP flags (bitmask)
+checkpointBuffer[vehIdx * 801 + 4]   = cp[0].target    // 첫 번째 CP target
+checkpointBuffer[vehIdx * 801 + 5]   = cp[1].edge      // 두 번째 CP edge
+...
+checkpointBuffer[vehIdx * 801 + 797] = cp[199].edge    // 마지막 CP edge
+checkpointBuffer[vehIdx * 801 + 798] = cp[199].ratio
+checkpointBuffer[vehIdx * 801 + 799] = cp[199].flags
+checkpointBuffer[vehIdx * 801 + 800] = cp[199].target</code></pre>
+
+    <div class="card">
+      <h4>일반 공식</h4>
+      <pre><code>// n번째 체크포인트 (0-indexed)의 field 접근
+const base = vehIdx * 801;
+const cpOffset = base + 1 + n * 4;
+const edge   = checkpointBuffer[cpOffset + 0];
+const ratio  = checkpointBuffer[cpOffset + 1];
+const flags  = checkpointBuffer[cpOffset + 2];
+const target = checkpointBuffer[cpOffset + 3];</code></pre>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. Path Buffer</h2>
+    <p>차량당 <strong>101 Int32s</strong>. <code>Int32Array</code> 기반 경로 데이터.</p>
+
+    <div class="card highlight">
+      <p><strong>MAX_PATH_LENGTH = 100</strong><br>
+      차량당 크기: <code>1 + 100 = 101 Int32s = 404 bytes</code></p>
+    </div>
+
+    <h3>메모리 레이아웃</h3>
+    <pre><code>pathBuffer[vehIdx * 101 + 0]  = pathLen        // 현재 경로 길이 (0 ~ 100)
+pathBuffer[vehIdx * 101 + 1]  = edge[0]        // 첫 번째 엣지
+pathBuffer[vehIdx * 101 + 2]  = edge[1]        // 두 번째 엣지
+...
+pathBuffer[vehIdx * 101 + N]  = edge[N-1]      // N번째 엣지
+// pathLen 이후의 슬롯은 미사용 (stale 데이터 가능)</code></pre>
+
+    <div class="card">
+      <pre><code>// 차량 i의 경로 읽기
+const base = i * 101;
+const len = pathBuffer[base];
+for (let j = 0; j &lt; len; j++) {
+  const edgeId = pathBuffer[base + 1 + j];
+}</code></pre>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. Sensor Point Buffer</h2>
+    <p>차량당 <strong>36 floats</strong>. 3개 존 &times; 6개 포인트 &times; 2 좌표(X, Y). <code>Float32Array</code> 기반.</p>
+
+    <div class="card highlight">
+      <p><strong>3 zones &times; 6 points &times; 2 coords = 36 floats = 144 bytes/vehicle</strong></p>
+    </div>
+
+    <h3>Zone 구성</h3>
+    <table>
+      <tr><th>Zone</th><th>Index</th><th>Role</th><th>Float Offset</th></tr>
+      <tr><td><span class="badge badge-green">Zone 0</span></td><td>APPROACH</td><td>접근 감지 영역 (가장 큰 범위)</td><td>0 ~ 11</td></tr>
+      <tr><td><span class="badge badge-orange">Zone 1</span></td><td>BRAKE</td><td>제동 영역 (중간 범위)</td><td>12 ~ 23</td></tr>
+      <tr><td><span class="badge badge-red">Zone 2</span></td><td>STOP</td><td>정지 영역 (가장 작은 범위)</td><td>24 ~ 35</td></tr>
+    </table>
+
+    <h3>Point 구성 (zone 내 6 points)</h3>
+    <table>
+      <tr><th>Point</th><th>Offset (within zone)</th><th>Description</th></tr>
+      <tr><td><code>FL</code> (Front-Left)</td><td>+0, +1</td><td>전방 좌측 (X, Y)</td></tr>
+      <tr><td><code>FR</code> (Front-Right)</td><td>+2, +3</td><td>전방 우측 (X, Y)</td></tr>
+      <tr><td><code>BL</code> (Back-Left)</td><td>+4, +5</td><td>후방 좌측 (X, Y)</td></tr>
+      <tr><td><code>BR</code> (Back-Right)</td><td>+6, +7</td><td>후방 우측 (X, Y)</td></tr>
+      <tr><td><code>SL</code> (Side-Left)</td><td>+8, +9</td><td>측면 좌측 (X, Y)</td></tr>
+      <tr><td><code>SR</code> (Side-Right)</td><td>+10, +11</td><td>측면 우측 (X, Y)</td></tr>
+    </table>
+
+    <div class="card">
+      <pre><code>// 차량 i의 Zone z, Point p 접근
+const base = i * 36;
+const zoneOffset = base + z * 12;   // z = 0,1,2
+const px = sensorPointBuffer[zoneOffset + p * 2];     // p = 0~5
+const py = sensorPointBuffer[zoneOffset + p * 2 + 1];</code></pre>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. Render Buffer (GPU 최적화)</h2>
+    <p>렌더링 전용 버퍼는 Worker 데이터에서 <strong>GPU 전송에 필요한 최소한의 데이터만 추출</strong>하여 별도로 유지합니다.</p>
+
+    <h3>Vehicle Render Buffer</h3>
+    <div class="card highlight">
+      <p>차량당 <strong>4 floats</strong>: <code>[x, y, z, rotation_deg]</code><br>
+      <strong>16 bytes/vehicle</strong> &mdash; InstancedMesh matrix 계산에 필요한 최소 데이터</p>
+    </div>
+    <pre><code>// renderBuffer layout (Float32Array)
+renderBuffer[i * 4 + 0] = x;             // world X
+renderBuffer[i * 4 + 1] = y;             // world Y
+renderBuffer[i * 4 + 2] = z;             // world Z
+renderBuffer[i * 4 + 3] = rotation_deg;  // rotation in degrees</code></pre>
+
+    <h3>Sensor Render Buffer</h3>
+    <div class="card">
+      <p>차량당 <strong>28 floats</strong>: 7 sections &times; 4 floats (x1, y1, x2, y2)<br>
+      센서 영역 경계선을 line segment로 표현. <strong>112 bytes/vehicle</strong>.</p>
+    </div>
+
+    <h3>Multi-Fab Continuous Layout</h3>
+    <p>다중 fab 환경에서 렌더 버퍼는 <strong>연속 배치</strong>(concatenated)됩니다.</p>
+    <pre><code>// Multi-fab render buffer layout
+[Fab0: veh0, veh1, ..., vehN₀] [Fab1: veh0, veh1, ..., vehN₁] [Fab2: ...]
+ └── offset = 0                 └── offset = N₀ * 4             └── ...</code></pre>
+    <div class="card warning">
+      <p><strong>Render buffer vs Worker buffer 분리 이유:</strong> Worker 버퍼는 43 floats/vehicle 전체를 포함하지만, GPU 전송에는 위치+회전 4 floats만 필요. 별도 버퍼로 분리하면 <code>bufferSubData()</code> 호출 시 불필요한 데이터 전송을 방지합니다.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. Memory Layout Manager</h2>
+    <p><code>MemoryLayoutManager</code>는 Fab 단위로 SharedArrayBuffer를 할당하고, 각 region의 오프셋과 크기를 관리합니다.</p>
+
+    <h3>Per-Fab 할당 구조</h3>
+    <div class="flow"><span class="highlight">MemoryLayoutManager.allocate(fabId, vehicleCount)</span>
+  │
+  ├─ <span class="green">vehicleRegion</span>    Float32Array   N &times; 43 floats
+  ├─ <span class="orange">sensorRegion</span>     Float32Array   N &times; 36 floats
+  ├─ <span class="purple">pathRegion</span>       Int32Array     N &times; 101 ints
+  └─ <span class="highlight">checkpointRegion</span> Float32Array   N &times; 801 floats
+         │
+         ↓
+    SharedArrayBuffer (single contiguous block per fab)</div>
+
+    <h3>크기 계산 예시 (N = 100 vehicles)</h3>
+    <table>
+      <tr><th>Region</th><th>Formula</th><th>Size</th></tr>
+      <tr><td><code>vehicleRegion</code></td><td>100 &times; 43 &times; 4 bytes</td><td><strong>17,200 B</strong></td></tr>
+      <tr><td><code>sensorRegion</code></td><td>100 &times; 36 &times; 4 bytes</td><td><strong>14,400 B</strong></td></tr>
+      <tr><td><code>pathRegion</code></td><td>100 &times; 101 &times; 4 bytes</td><td><strong>40,400 B</strong></td></tr>
+      <tr><td><code>checkpointRegion</code></td><td>100 &times; 801 &times; 4 bytes + 4 (header)</td><td><strong>320,404 B</strong></td></tr>
+      <tr><td colspan="2" style="text-align: right;"><strong>Total per fab</strong></td><td><strong>~383 KB</strong></td></tr>
+    </table>
+
+    <div class="card">
+      <h4>스케일링 참고</h4>
+      <table>
+        <tr><th>Vehicles</th><th>Total Size</th><th>참고</th></tr>
+        <tr><td>100</td><td>~383 KB</td><td>소규모 테스트</td></tr>
+        <tr><td>1,000</td><td>~3.8 MB</td><td>중규모 시뮬레이션</td></tr>
+        <tr><td>10,000</td><td>~38 MB</td><td>대규모 시뮬레이션</td></tr>
+        <tr><td>100,000</td><td>~380 MB</td><td>초대규모 (브라우저 한계 근접)</td></tr>
+      </table>
+    </div>
+
+    <h3>Worker vs Render buffer 분리</h3>
+    <div class="flow"><span class="green">Worker Thread</span>                    <span class="orange">Main Thread</span>
+  │                                  │
+  ├─ vehicleRegion  (READ/WRITE)     ├─ vehicleRegion  (READ ONLY)
+  ├─ sensorRegion   (READ/WRITE)     ├─ sensorRegion   (READ ONLY)
+  ├─ pathRegion     (READ/WRITE)     ├─ pathRegion     (READ ONLY)
+  ├─ checkpointRegion (READ/WRITE)   ├─ checkpointRegion (READ ONLY)
+  │                                  │
+  └─ (no render buffer)              └─ <span class="highlight">renderBuffer</span> (독자 소유, GPU 전송용)</div>
+
+    <!-- ============================================================ -->
+    <h2>9. 메모리 효율 분석</h2>
+
+    <h3>SharedArrayBuffer vs postMessage 비교</h3>
+    <table>
+      <tr><th>방식</th><th>1,000 vehicles / frame</th><th>Overhead</th><th>Latency</th></tr>
+      <tr>
+        <td><code>postMessage</code> (structured clone)</td>
+        <td>~172 KB 복사 + 직렬화</td>
+        <td><span class="badge badge-red">HIGH</span> GC pressure, 메모리 2배</td>
+        <td>~2-5 ms</td>
+      </tr>
+      <tr>
+        <td><code>Transferable</code> (ArrayBuffer transfer)</td>
+        <td>0 bytes 복사 (소유권 이전)</td>
+        <td><span class="badge badge-orange">MED</span> 원본 무효화, 재할당 필요</td>
+        <td>~0.1 ms</td>
+      </tr>
+      <tr>
+        <td><code>SharedArrayBuffer</code></td>
+        <td>0 bytes 복사 (공유)</td>
+        <td><span class="badge badge-green">NONE</span> 추가 메모리 없음</td>
+        <td>~0 ms (즉시)</td>
+      </tr>
+    </table>
+
+    <h3>GPU Transfer 최적화</h3>
+    <div class="card highlight">
+      <p><strong>Render buffer: 4n floats = 16n bytes/frame</strong></p>
+      <p>만약 전체 transformation matrix를 전송한다면 <code>16 floats &times; 4 bytes = 64n bytes/frame</code>. Render buffer는 <strong>position + rotation만 전송</strong>하고, matrix 조립은 GPU(vertex shader)에서 수행하여 대역폭을 <strong>75% 절감</strong>합니다.</p>
+    </div>
+    <table>
+      <tr><th>방식</th><th>Data/vehicle</th><th>1,000 veh @ 60fps</th></tr>
+      <tr><td>Full matrix transfer</td><td>64 bytes</td><td>3.84 MB/s</td></tr>
+      <tr><td><strong>Render buffer (x,y,z,rot)</strong></td><td><strong>16 bytes</strong></td><td><strong>0.96 MB/s</strong></td></tr>
+    </table>
+
+    <h3>Cache Coherency: Section-Based Layout</h3>
+    <div class="card">
+      <p>동일 종류의 데이터를 <strong>연속 메모리에 배치</strong>하여 CPU 캐시 히트율을 높입니다.</p>
+      <ul>
+        <li><strong>AoS (Array of Structs)</strong> 방식이면 차량 전체 데이터가 연속 &rarr; 특정 필드만 읽을 때 캐시 낭비</li>
+        <li><strong>VPS의 region 분리</strong>: vehicleRegion / sensorRegion / pathRegion / checkpointRegion 각각 연속 배치</li>
+        <li>렌더링 시 vehicleRegion의 X, Y, Z, ROTATION만 순차 접근 &rarr; 캐시 라인 효율 극대화</li>
+      </ul>
+      <pre><code>// 캐시 친화적 순차 접근 패턴
+for (let i = 0; i &lt; vehicleCount; i++) {
+  const base = i * VEHICLE_DATA_SIZE;
+  matrix.compose(
+    view[base + 0],  // X  (연속 메모리)
+    view[base + 1],  // Y
+    view[base + 2],  // Z
+    view[base + 3]   // ROTATION
+  );
+}</code></pre>
+    </div>
+
+    <hr style="border-color: var(--border); margin: 32px 0;">
+    <p class="file" style="text-align: center;">Generated by Claude &mdash; source: <code>hwoarang09/vps</code></p>
+  </main>
+</div>
+</body>
+</html>

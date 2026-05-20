@@ -3,7 +3,7 @@
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
 import React, { useEffect, useRef, useState } from "react";
-import { Activity, Radar, Tag, Binary, Palette, Check } from "lucide-react";
+import { Activity, Radar, Tag, Binary, Palette, Check, BookOpen, /* HelpCircle */ } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useThemeStore } from "@store/ui/themeStore";
@@ -290,6 +290,34 @@ const QuickViewToolbar: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Divider */}
+      <div className="w-px h-6 bg-gray-600/50" />
+
+      {/* Docs button */}
+      <a
+        href="/docs/index.html"
+        target="_blank"
+        rel="noopener noreferrer"
+        onMouseEnter={(e) => handleMouseEnter(e, "docs", "Documentation")}
+        onMouseLeave={hideTooltip}
+        className={twMerge(menuButtonVariants({ active: false }), buttonExtra)}
+      >
+        <BookOpen size={16} />
+      </a>
+
+      {/* Help button (TODO: 도움말 페이지 구현 후 활성화)
+      <a
+        href="/help"
+        target="_blank"
+        rel="noopener noreferrer"
+        onMouseEnter={(e) => handleMouseEnter(e, "help", "Help")}
+        onMouseLeave={hideTooltip}
+        className={twMerge(menuButtonVariants({ active: false }), buttonExtra)}
+      >
+        <HelpCircle size={16} />
+      </a>
+      */}
     </div>
   );
 };

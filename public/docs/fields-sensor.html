@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SensorData Fields — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub active">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <p><a href="shared-memory.html">&larr; Shared Memory Layout</a></p>
+
+    <h1>SensorData 필드 상세<span class="subtitle">Offset 18 ~ 20 &mdash; 센서 프리셋, 충돌 감지 영역, 충돌 대상 차량</span></h1>
+
+    <!-- ============================================================ -->
+    <h2>1. 개요</h2>
+    <div class="card highlight">
+      <p>SensorData 섹션(3개 필드)은 <strong>라이다 센서 기반 충돌 감지 시스템</strong>의 상태를 저장합니다. 차량이 주행하는 Edge 타입(직선/커브/합류/분기)에 따라 센서 프리셋이 결정되고, 매 시뮬레이션 스텝마다 앞차와의 충돌 판정 결과(HitZone)와 대상 차량 ID가 기록됩니다.</p>
+    </div>
+
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>요약</th></tr>
+      <tr><td>18</td><td><code>PRESET_IDX</code></td><td>Float32</td><td>적용 중인 센서 프리셋 인덱스 (PresetIndex enum)</td></tr>
+      <tr><td>19</td><td><code>HIT_ZONE</code></td><td>Float32</td><td>충돌 감지 영역 (HitZone enum)</td></tr>
+      <tr><td>20</td><td><code>COLLISION_TARGET</code></td><td>Float32</td><td>충돌 대상 차량 ID (-1 = 없음)</td></tr>
+    </table>
+
+    <h3>핵심 파일</h3>
+    <table>
+      <tr><th>File</th><th>Role</th></tr>
+      <tr><td><code>common/vehicle/initialize/constants.ts</code></td><td>SensorData 오프셋, PresetIndex / HitZone enum 정의</td></tr>
+      <tr><td><code>common/vehicle/collision/sensorPresets.ts</code></td><td>6종 센서 프리셋 (존별 각도/길이/감속도)</td></tr>
+      <tr><td><code>common/vehicle/collision/sensorCollision.ts</code></td><td>SAT 알고리즘 기반 센서 충돌 검사</td></tr>
+      <tr><td><code>common/vehicle/collision/collisionCommon.ts</code></td><td>HitZone 판정 및 감속 적용 공통 로직</td></tr>
+      <tr><td><code>common/vehicle/collision/verifyFollowingCollision.ts</code></td><td>동일 Edge 내 선행 차량 충돌 검사</td></tr>
+      <tr><td><code>common/vehicle/collision/verifyMergeCollision.ts</code></td><td>합류 구간 경쟁 차량 충돌 검사</td></tr>
+      <tr><td><code>common/vehicle/collision/verifyNextPathCollision.ts</code></td><td>다음 Edge 꼬리 차량 충돌 검사</td></tr>
+      <tr><td><code>common/vehicle/helpers/sensorPoints.ts</code></td><td>센서 포인트 좌표 계산 (36 floats/차량)</td></tr>
+      <tr><td><code>common/vehicle/movement/edgeTransition.ts</code></td><td>Edge 전환 시 PRESET_IDX 갱신</td></tr>
+      <tr><td><code>common/vehicle/movement/vehicleState.ts</code></td><td>매 프레임 센서 포인트 업데이트 호출</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>2. PRESET_IDX <span class="badge badge-cyan">Offset 18</span></h2>
+
+    <h3>용도</h3>
+    <p>차량이 현재 주행 중인 Edge의 형상(직선/커브/유턴/합류/분기)에 따라 <strong>어떤 센서 프리셋</strong>을 적용할지를 나타내는 인덱스입니다. 프리셋은 센서의 방향(각도)과 길이, 존별 감속도를 결정하며, 충돌 감지의 정확도와 차량 행동에 직접적인 영향을 줍니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>모듈</th><th>시점</th><th>설명</th></tr>
+      <tr>
+        <td><code>edgeTransition.ts</code><br><code>updateSensorPresetForEdge()</code></td>
+        <td>Edge 전환 시</td>
+        <td>차량이 다음 Edge로 이동할 때, 해당 Edge의 <code>vos_rail_type</code>과 <code>curve_direction</code>을 분석하여 적절한 프리셋 인덱스를 결정하고 <code>data[ptr + SensorData.PRESET_IDX]</code>에 기록합니다.</td>
+      </tr>
+      <tr>
+        <td><code>initializeVehicles.ts</code></td>
+        <td>초기 배치 시</td>
+        <td>차량 최초 생성 시 초기 Edge 타입에 맞는 프리셋을 설정합니다.</td>
+      </tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>모듈</th><th>용도</th></tr>
+      <tr><td><code>collisionCommon.ts</code> &mdash; <code>getCollisionCheckParams()</code></td><td>현재 프리셋에서 존별 거리/감속도를 조회하여 충돌 판정에 사용</td></tr>
+      <tr><td><code>collisionCommon.ts</code> &mdash; <code>applyCollisionZoneLogic()</code></td><td>HitZone에 따른 감속도 적용 시 프리셋의 dec 값 참조</td></tr>
+      <tr><td><code>verifyFollowingCollision.ts</code></td><td>직선 구간에서 프리셋의 존별 길이로 거리 기반 HitZone 판정</td></tr>
+      <tr><td><code>vehicleState.ts</code> &mdash; <code>commitVehicleState()</code></td><td>매 프레임 센서 포인트 업데이트 시 프리셋 인덱스를 전달</td></tr>
+      <tr><td><code>sensorPoints.ts</code> &mdash; <code>updateSensorPoints()</code></td><td>프리셋에서 존별 각도/길이를 읽어 센서 포인트 좌표 계산</td></tr>
+      <tr><td><code>IndividualControlPanel.tsx</code></td><td>UI에서 차량 개별 정보 표시 시 현재 프리셋 인덱스 표시</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; PresetIndex enum</h3>
+    <table>
+      <tr><th>값</th><th>이름</th><th>설명</th><th>센서 특성</th></tr>
+      <tr><td><code>0</code></td><td>STRAIGHT</td><td>직진 구간</td><td>정면으로 길게 뻗음 (approach 4.5m, 좌우 각도 0&deg;)</td></tr>
+      <tr><td><code>1</code></td><td>CURVE_LEFT</td><td>좌회전 구간</td><td>왼쪽으로 치우침 (좌 65&deg;, 우 -30&deg;, 길이 1m)</td></tr>
+      <tr><td><code>2</code></td><td>CURVE_RIGHT</td><td>우회전 구간</td><td>오른쪽으로 치우침 (좌 -30&deg;, 우 -65&deg;, 길이 1m)</td></tr>
+      <tr><td><code>3</code></td><td>U_TURN</td><td>유턴 (180&deg;) 구간</td><td>좌우 대칭 넓은 각도 (좌 45&deg;, 우 -45&deg;, 길이 1m)</td></tr>
+      <tr><td><code>4</code></td><td>MERGE</td><td>합류 구간</td><td>넓은 시야각 (좌 25&deg;, 우 -25&deg;, approach 1.8m)</td></tr>
+      <tr><td><code>5</code></td><td>BRANCH</td><td>분기 구간</td><td>넓은 시야각 (좌 30&deg;, 우 -30&deg;, approach 1.8m)</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; Edge 전환 시 프리셋 결정</h3>
+    <p><code>updateSensorPresetForEdge()</code> 함수가 Edge의 <code>vos_rail_type</code> 속성을 분석하여 프리셋을 결정합니다.</p>
+    <pre><code>// edgeTransition.ts &mdash; updateSensorPresetForEdge()
+const railType = edge.vos_rail_type;
+const isCurve = railType?.includes("CURVE") || railType?.startsWith("C");
+
+if (railType === EdgeType.CURVE_180)
+    presetIdx = PresetIndex.U_TURN;           // 3
+else if (railType === EdgeType.LEFT_CURVE || (isCurve && edge.curve_direction === "left"))
+    presetIdx = PresetIndex.CURVE_LEFT;       // 1
+else if (railType === EdgeType.RIGHT_CURVE || (isCurve && edge.curve_direction === "right"))
+    presetIdx = PresetIndex.CURVE_RIGHT;      // 2
+else
+    presetIdx = PresetIndex.STRAIGHT;         // 0
+
+data[ptr + SensorData.PRESET_IDX] = presetIdx;</code></pre>
+
+    <div class="card warning">
+      <p><strong>참고:</strong> 현재 <code>MERGE(4)</code>와 <code>BRANCH(5)</code>는 Edge 전환 로직에서 자동으로 설정되지 않습니다. 이 프리셋은 커스텀 설정 또는 별도 로직에서 수동으로 할당해야 합니다. 기본적으로 합류/분기 Edge도 <code>STRAIGHT</code>가 적용됩니다.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. HIT_ZONE <span class="badge badge-cyan">Offset 19</span></h2>
+
+    <h3>용도</h3>
+    <p>앞차와의 충돌 감지 결과를 나타냅니다. 뒤차의 센서 영역(3개 존)과 앞차의 본체가 겹치는지를 판정한 결과이며, 이 값에 따라 차량의 <strong>감속/정지 행동</strong>이 결정됩니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>모듈</th><th>시점</th><th>설명</th></tr>
+      <tr>
+        <td><code>collisionCommon.ts</code><br><code>applyCollisionZoneLogic()</code></td>
+        <td>충돌 판정 후</td>
+        <td>모든 충돌 검사 루틴(<code>verifyFollowing</code>, <code>verifyMerge</code>, <code>verifyNextPath</code>)이 HitZone을 결정한 뒤 이 함수를 호출하여 <code>data[ptrBack + SensorData.HIT_ZONE] = hitZone</code>을 기록합니다.</td>
+      </tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>모듈</th><th>용도</th></tr>
+      <tr><td><code>collisionCommon.ts</code> &mdash; <code>applyCollisionZoneLogic()</code></td><td>HitZone 값에 따라 VELOCITY, DECELERATION, MOVING_STATUS를 변경</td></tr>
+      <tr><td><code>vehiclePhysics.ts</code></td><td>센서 정지(STOP) 상태인지 확인하여 물리 계산 스킵 여부 결정</td></tr>
+      <tr><td><code>IndividualControlPanel.tsx</code></td><td>UI에서 차량 충돌 상태 표시</td></tr>
+      <tr><td><code>FabStatsPanel.tsx</code></td><td>통계 패널에서 충돌 빈도/상태 집계</td></tr>
+    </table>
+
+    <h3>값 범위 &mdash; HitZone enum</h3>
+    <table>
+      <tr><th>값</th><th>이름</th><th>설명</th><th>차량 행동</th></tr>
+      <tr><td><code>-1</code></td><td>NONE</td><td>충돌 감지 없음</td><td>감속 해제, COLLISION_TARGET을 -1로 초기화, STOPPED 상태면 MOVING으로 복원</td></tr>
+      <tr><td><code>0</code></td><td>APPROACH</td><td>접근 구역 감지</td><td>프리셋의 approach.dec 감속도 적용 (기본 -3 m/s&sup2;), 속도가 approachMinSpeed 이하면 감속 해제</td></tr>
+      <tr><td><code>1</code></td><td>BRAKE</td><td>제동 구역 감지</td><td>프리셋의 brake.dec 감속도 적용 (기본 -4 m/s&sup2;), 속도가 brakeMinSpeed 이하면 감속 해제</td></tr>
+      <tr><td><code>2</code></td><td>STOP</td><td>정지 구역 감지</td><td>즉시 정지: VELOCITY=0, MOVING_STATUS=STOPPED, DECELERATION=0</td></tr>
+    </table>
+
+    <h3>상세 로직 &mdash; HitZone이 차량 행동에 미치는 영향</h3>
+    <pre><code>// collisionCommon.ts &mdash; applyCollisionZoneLogic()
+
+if (hitZone === HitZone.NONE) {
+    data[ptrBack + SensorData.COLLISION_TARGET] = -1;
+    data[ptrBack + MovementData.DECELERATION] = 0;
+    // STOPPED 상태였으면 MOVING으로 복원
+    if (data[ptrBack + MovementData.MOVING_STATUS] === MovingStatus.STOPPED)
+        data[ptrBack + MovementData.MOVING_STATUS] = MovingStatus.MOVING;
+    return;
+}
+
+data[ptrBack + SensorData.COLLISION_TARGET] = targetVehId;
+
+if (hitZone === HitZone.STOP) {
+    // 즉시 정지 (감속도 -Infinity)
+    data[ptrBack + MovementData.MOVING_STATUS] = MovingStatus.STOPPED;
+    data[ptrBack + MovementData.VELOCITY] = 0;
+    data[ptrBack + MovementData.DECELERATION] = 0;
+    return;
+}
+
+// APPROACH 또는 BRAKE
+const isBrake = hitZone === HitZone.BRAKE;
+const minSpeed = isBrake ? brakeMinSpeed : approachMinSpeed;
+const decValue = isBrake ? preset.zones.brake.dec : preset.zones.approach.dec;
+
+if (velocity > minSpeed)
+    data[ptrBack + MovementData.DECELERATION] = decValue;
+else
+    data[ptrBack + MovementData.DECELERATION] = 0;</code></pre>
+
+    <!-- ============================================================ -->
+    <h2>4. COLLISION_TARGET <span class="badge badge-cyan">Offset 20</span></h2>
+
+    <h3>용도</h3>
+    <p>현재 충돌이 감지된 <strong>대상(앞) 차량의 인덱스</strong>를 저장합니다. 충돌이 없으면 <code>-1</code>이 기록됩니다. 디버깅, UI 표시, 통계 집계에 사용됩니다.</p>
+
+    <h3>Writer</h3>
+    <table>
+      <tr><th>모듈</th><th>시점</th><th>설명</th></tr>
+      <tr>
+        <td><code>collisionCommon.ts</code><br><code>applyCollisionZoneLogic()</code></td>
+        <td>충돌 판정 후</td>
+        <td>HitZone이 NONE이면 <code>-1</code>, 그 외에는 감지된 앞차의 vehicle index를 기록합니다.</td>
+      </tr>
+    </table>
+
+    <h3>Reader</h3>
+    <table>
+      <tr><th>모듈</th><th>용도</th></tr>
+      <tr><td><code>IndividualControlPanel.tsx</code></td><td>UI에서 "어떤 차량과 충돌 중인지" 표시</td></tr>
+      <tr><td><code>FabStatsPanel.tsx</code></td><td>충돌 통계 (어떤 차량 쌍에서 빈번한 충돌이 발생하는지 등)</td></tr>
+    </table>
+
+    <h3>값 범위</h3>
+    <table>
+      <tr><th>값</th><th>의미</th></tr>
+      <tr><td><code>-1</code></td><td>충돌 감지 없음 (HIT_ZONE이 NONE인 경우)</td></tr>
+      <tr><td><code>0 ~ N-1</code></td><td>충돌 대상 차량의 인덱스 (0-based vehicle index)</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>5. 센서 프리셋 시스템</h2>
+
+    <h3>프리셋 구조 (SensorPreset)</h3>
+    <p>각 프리셋은 3개의 존(approach/brake/stop)에 대해 <strong>센서 각도, 길이, 감속도</strong>를 정의합니다.</p>
+
+    <pre><code>interface SensorZone {
+    leftAngle: number;    // 왼쪽 센서 각도 (degree, 정면=0)
+    rightAngle: number;   // 오른쪽 센서 각도 (degree)
+    leftLength: number;   // 왼쪽 센서 길이 (meters)
+    rightLength: number;  // 오른쪽 센서 길이 (meters)
+    dec: number;          // 감속도 (m/s&sup2;, 음수)
+}
+
+interface SensorPreset {
+    zones: {
+        approach: SensorZone;
+        brake: SensorZone;
+        stop: SensorZone;
+    };
+    leftAngle: number;    // 전체 프리셋 대표 각도
+    rightAngle: number;
+    leftLength: number;
+    rightLength: number;
+}</code></pre>
+
+    <h3>기본 프리셋 값 (DEFAULT_SENSOR_PRESETS)</h3>
+    <table>
+      <tr><th rowspan="2">프리셋</th><th colspan="3">Approach</th><th colspan="3">Brake</th><th colspan="3">Stop</th></tr>
+      <tr><th>L/R 각도</th><th>길이</th><th>dec</th><th>L/R 각도</th><th>길이</th><th>dec</th><th>L/R 각도</th><th>길이</th><th>dec</th></tr>
+      <tr><td><strong>STRAIGHT (0)</strong></td><td>0&deg; / 0&deg;</td><td>4.5m</td><td>-3</td><td>0&deg; / 0&deg;</td><td>1.2m</td><td>-4</td><td>0&deg; / 0&deg;</td><td>0.3m</td><td>-Inf</td></tr>
+      <tr><td><strong>CURVE_LEFT (1)</strong></td><td>65&deg; / -30&deg;</td><td>1m</td><td>-1</td><td>65&deg; / -30&deg;</td><td>0.4m</td><td>-3</td><td>65&deg; / -30&deg;</td><td>0.2m</td><td>-Inf</td></tr>
+      <tr><td><strong>CURVE_RIGHT (2)</strong></td><td>-30&deg; / -65&deg;</td><td>1m</td><td>-1</td><td>-30&deg; / -65&deg;</td><td>0.4m</td><td>-3</td><td>-30&deg; / -65&deg;</td><td>0.2m</td><td>-Inf</td></tr>
+      <tr><td><strong>U_TURN (3)</strong></td><td>45&deg; / -45&deg;</td><td>1m</td><td>-1</td><td>45&deg; / -45&deg;</td><td>0.5m</td><td>-3</td><td>45&deg; / -45&deg;</td><td>0.1m</td><td>-Inf</td></tr>
+      <tr><td><strong>MERGE (4)</strong></td><td>25&deg; / -25&deg;</td><td>1.8m</td><td>-1</td><td>25&deg; / -25&deg;</td><td>1m</td><td>-3</td><td>25&deg; / -25&deg;</td><td>0.4m</td><td>-Inf</td></tr>
+      <tr><td><strong>BRANCH (5)</strong></td><td>30&deg; / -30&deg;</td><td>1.8m</td><td>-1</td><td>30&deg; / -30&deg;</td><td>1m</td><td>-3</td><td>30&deg; / -30&deg;</td><td>0.4m</td><td>-Inf</td></tr>
+    </table>
+
+    <div class="card highlight">
+      <p><strong>커스텀 프리셋:</strong> <code>CollisionConfig.customSensorPresets</code>를 통해 Fab별로 커스텀 프리셋 배열을 전달할 수 있습니다. 커스텀이 없으면 위의 <code>DEFAULT_SENSOR_PRESETS</code>가 사용됩니다. <code>getPreset()</code> 함수가 인덱스 범위 초과 시 첫 번째 프리셋(STRAIGHT)으로 fallback합니다.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 센서 포인트 버퍼 (SensorPointArray)</h2>
+
+    <p>PRESET_IDX와 차량 위치/회전을 바탕으로 계산된 <strong>센서 사각형의 월드 좌표</strong>를 저장하는 별도 버퍼입니다. Vehicle Data Array와는 별개의 <code>Float32Array</code>이며, SAT 충돌 검사에서 직접 참조됩니다.</p>
+
+    <h3>메모리 레이아웃</h3>
+    <div class="card">
+      <p><strong>차량 1대당 36 floats</strong> (144 bytes) = 3 zones &times; 12 floats/zone</p>
+    </div>
+
+    <pre><code>SensorPointArray 레이아웃 (per vehicle)
++---------------------------------------------------+
+| Zone 0 (APPROACH): 12 floats (offset 0~11)        |
+| Zone 1 (BRAKE):    12 floats (offset 12~23)       |
+| Zone 2 (STOP):     12 floats (offset 24~35)       |
++---------------------------------------------------+
+
+각 Zone 내부 (12 floats = 6 points &times; 2 좌표):
+  FL_X(0) FL_Y(1)  &mdash; 차량 앞 왼쪽 모서리
+  FR_X(2) FR_Y(3)  &mdash; 차량 앞 오른쪽 모서리
+  BL_X(4) BL_Y(5)  &mdash; 차량 뒤 왼쪽 모서리
+  BR_X(6) BR_Y(7)  &mdash; 차량 뒤 오른쪽 모서리
+  SL_X(8) SL_Y(9)  &mdash; 센서 왼쪽 끝 (프리셋 기반)
+  SR_X(10) SR_Y(11) &mdash; 센서 오른쪽 끝 (프리셋 기반)</code></pre>
+
+    <h3>포인트 계산 흐름</h3>
+    <p><code>updateSensorPoints()</code> 함수가 매 프레임 <code>commitVehicleState()</code>에서 호출됩니다.</p>
+    <ol>
+      <li><strong>본체 모서리 (FL/FR/BL/BR):</strong> 차량 중심 (x, y)에서 bodyLength/2 만큼 전후, bodyWidth/2 만큼 좌우로 회전 변환하여 4개 모서리 좌표를 계산합니다.</li>
+      <li><strong>센서 끝 (SL/SR):</strong> 프리셋의 존별 각도(leftAngle/rightAngle)와 길이(leftLength/rightLength)를 로컬 좌표로 변환한 뒤, 차량 회전에 맞춰 월드 좌표로 변환합니다. FL 기준으로 왼쪽 센서(SL), FR 기준으로 오른쪽 센서(SR)의 끝점을 계산합니다.</li>
+    </ol>
+
+    <div class="flow">차량 위에서 본 센서 포인트 배치
+
+              SL ---------.------------- SR    센서 끝
+               /                          \
+              /                            \
+             /                              \
+            FL ----------------------------- FR    차량 앞면
+            |                               |
+            |          Vehicle              |
+            |          (본체)               |
+            |                               |
+            BL ----------------------------- BR    차량 뒷면
+
+                      <span class="green">^</span>
+                   <span class="green">주행 방향</span>
+
+<span class="cyan">센서 사각형</span> (충돌 검사용): FL -> SL -> SR -> FR
+<span class="orange">본체 사각형</span> (타겟 검사용): FL -> BL -> BR -> FR</code></div>
+
+    <!-- ============================================================ -->
+    <h2>7. 충돌 감지 알고리즘</h2>
+
+    <h3>하이브리드 전략</h3>
+    <p>VPS는 성능과 정확도를 양립하기 위해 <strong>Edge 타입에 따라 서로 다른 충돌 감지 방식</strong>을 사용합니다.</p>
+
+    <table>
+      <tr><th>Edge 타입</th><th>방식</th><th>판정 기준</th><th>성능</th></tr>
+      <tr><td>직선 (vos_rail_type 없음)</td><td>거리 기반</td><td>축 방향 좌표 차이 vs 프리셋 존별 길이 + bodyLength</td><td>매우 빠름</td></tr>
+      <tr><td>커브/합류/분기 (vos_rail_type 있음)</td><td>SAT 기반</td><td>센서 사각형과 본체 사각형의 겹침 판정</td><td>정확하지만 비용 있음</td></tr>
+    </table>
+
+    <h3>3-Zone 충돌 검사 (SAT 알고리즘)</h3>
+
+    <h4>SAT (Separating Axis Theorem) 원리</h4>
+    <p>두 볼록 다각형(사각형)이 <strong>모든 투영 축에서 겹치면</strong> 충돌으로 판정합니다. 하나라도 분리되는 축이 있으면 충돌이 아닙니다.</p>
+
+    <ol>
+      <li>뒤차의 센서 사각형(FL->SL->SR->FR) 4개 변에 수직인 축 4개에 대해 양쪽 사각형을 투영</li>
+      <li>앞차의 본체 사각형(FL->BL->BR->FR) 4개 변에 수직인 축 4개에 대해 양쪽 사각형을 투영</li>
+      <li>총 8개 축 모두에서 투영 구간이 겹치면 충돌 확정</li>
+    </ol>
+
+    <h4>Zone 검사 순서</h4>
+    <p><code>checkSensorCollision()</code>은 <strong>STOP(2) -> BRAKE(1) -> APPROACH(0)</strong> 순서로 검사합니다. 가장 안쪽(강한 제동) 존부터 검사하여, 충돌이 감지되면 즉시 해당 존 번호를 반환합니다.</p>
+
+    <pre><code>// sensorCollision.ts &mdash; checkSensorCollision()
+for (let zone = 2; zone >= 0; zone--) {
+    const sensorBase = baseSensor + zone * SENSOR_POINT_SIZE;
+    const targetBase = baseTarget + 0 * SENSOR_POINT_SIZE; // 타겟은 항상 zone 0 (본체)
+
+    if (
+        satQuadCheck(data, sensorBase, targetBase, SENSOR_QUAD_IDX, BODY_QUAD_IDX) &&
+        satQuadCheck(data, targetBase, sensorBase, BODY_QUAD_IDX, SENSOR_QUAD_IDX)
+    ) {
+        return zone;  // 2=STOP, 1=BRAKE, 0=APPROACH
+    }
+}
+return -1;  // NONE</code></pre>
+
+    <div class="card highlight">
+      <p><strong>Rough Distance Check:</strong> SAT 검사 전에 <code>roughDistanceCheck()</code>로 두 차량 간 유클리드 거리가 임계값(~8m) 이내인지 확인합니다. 대부분의 차량 쌍은 이 단계에서 걸러지므로 SAT 호출 횟수가 ~90% 감소합니다.</p>
+    </div>
+
+    <h3>직선 구간 거리 기반 판정</h3>
+    <p>직선 Edge(<code>vos_rail_type</code>이 없는 경우)에서는 SAT 대신 단순 좌표 차이로 판정합니다.</p>
+
+    <pre><code>// verifyFollowingCollision.ts
+const axisIdx = edge.axis === "y" ? MovementData.Y : MovementData.X;
+const distance = Math.abs(frontPos - backPos);
+
+const stopDist    = preset.zones.stop.leftLength + vehicleLength;
+const brakeDist   = preset.zones.brake.leftLength + vehicleLength;
+const approachDist = preset.zones.approach.leftLength + vehicleLength;
+
+hitZone = determineLinearHitZone(distance, stopDist, brakeDist, approachDist);</code></pre>
+
+    <h3>충돌 검사 종류</h3>
+    <table>
+      <tr><th>검사 유형</th><th>파일</th><th>대상</th><th>설명</th></tr>
+      <tr><td>Following</td><td><code>verifyFollowingCollision.ts</code></td><td>동일 Edge 내 선행 차량</td><td>EdgeVehicleQueue에서 바로 앞 차량과 충돌 검사</td></tr>
+      <tr><td>Merge</td><td><code>verifyMergeCollision.ts</code></td><td>합류 경쟁 차량</td><td>커브 구간에서 다른 Edge의 경쟁 차량과 센서 충돌 검사</td></tr>
+      <tr><td>NextPath</td><td><code>verifyNextPathCollision.ts</code></td><td>다음 Edge 꼬리 차량</td><td>아직 진입하지 않은 다음 Edge의 마지막 차량과 충돌 검사</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>8. 전체 데이터 흐름</h2>
+
+    <div class="flow"><span class="green">1. Edge 전환</span> (edgeTransition.ts)
+  │
+  └─ updateSensorPresetForEdge()
+     └─ <span class="cyan">data[PRESET_IDX]</span> = presetIdx  (Edge 타입에 따라 0~5)
+
+<span class="green">2. 매 프레임 상태 기록</span> (vehicleState.ts)
+  │
+  └─ commitVehicleState()
+     └─ updateSensorPoints(sensorPointArray, vehIdx, x, y, rot, <span class="cyan">presetIdx</span>, config)
+        └─ Zone 0~2 각각에 대해 FL/FR/BL/BR/SL/SR 좌표 계산
+           └─ <span class="orange">sensorPointArray[vehIdx * 36 + zone * 12 + point]</span> 에 기록
+
+<span class="green">3. 충돌 검사</span> (collision/*.ts)
+  │
+  ├─ verifyFollowingCollision()  — 동일 Edge 앞차
+  ├─ verifyMergeCollision()      — 합류 경쟁 차량
+  └─ verifyNextPathCollision()   — 다음 Edge 꼬리 차량
+     │
+     ├─ 직선: determineLinearHitZone(distance, stop, brake, approach)
+     └─ 커브: checkSensorCollision(sensorPointArray, backVeh, frontVeh)
+              └─ SAT(STOP) -> SAT(BRAKE) -> SAT(APPROACH)
+     │
+     └─ applyCollisionZoneLogic(hitZone, data, ptr, targetVehId)
+        ├─ <span class="cyan">data[HIT_ZONE]</span>          = hitZone
+        ├─ <span class="cyan">data[COLLISION_TARGET]</span>  = targetVehId (or -1)
+        ├─ <span class="purple">data[VELOCITY]</span>         = 0           (STOP인 경우)
+        ├─ <span class="purple">data[DECELERATION]</span>     = dec         (APPROACH/BRAKE)
+        └─ <span class="purple">data[MOVING_STATUS]</span>    = STOPPED     (STOP인 경우)</div>
+
+    <!-- ============================================================ -->
+    <h2>9. 성능 최적화</h2>
+
+    <h3>Zero-GC 설계</h3>
+    <ul>
+      <li><strong>객체 생성 제로:</strong> 센서 포인트 계산과 SAT 검사 모두 <code>Float32Array</code>에 직접 읽기/쓰기, stack 변수만 사용</li>
+      <li><strong>모듈 레벨 상수:</strong> <code>ZONE_KEYS</code>, <code>SENSOR_QUAD_IDX</code>, <code>BODY_QUAD_IDX</code> 등 반복 사용 배열을 모듈 스코프에 미리 할당</li>
+      <li><strong>tempRange 재사용:</strong> <code>getProjectedRange()</code>에서 <code>{ min, max }</code> 객체를 매번 생성하지 않고 모듈 레벨 싱글톤 재사용</li>
+    </ul>
+
+    <h3>충돌 체크 주기 (collisionCheckInterval)</h3>
+    <p><code>CollisionConfig.collisionCheckInterval</code> (기본값 33ms)을 통해 차량별로 충돌 검사 주기를 제어합니다. 매 프레임이 아니라 일정 간격으로만 검사하여 CPU 부하를 줄이며, 검사를 스킵하는 프레임에서는 이전 HIT_ZONE 값이 유지됩니다.</p>
+
+    <h3>EdgeVehicleQueue 활용</h3>
+    <p>Edge 내 차량 목록을 <code>EdgeVehicleQueue</code>로 관리하여, 충돌 검사 시 전체 차량을 순회하지 않고 <strong>같은 Edge의 인접 차량만</strong> 검사합니다. Edge당 평균 5~50대 수준이므로 사실상 O(1)에 가까운 성능을 달성합니다.</p>
+
+  </main>
+</div>
+</body>
+</html>

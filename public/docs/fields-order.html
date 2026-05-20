@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrderData Fields (31~42) — VPS Docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
+    <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub active">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <p><a href="shared-memory.html">&larr; Shared Memory Layout</a></p>
+
+    <h1>OrderData 필드별 상세<span class="subtitle">Offset 31 ~ 42 &mdash; Transfer 주문 데이터 및 타임스탬프</span></h1>
+
+    <!-- ============================================================ -->
+    <h2>1. 필드 요약 테이블</h2>
+    <table>
+      <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+      <tr><td>31</td><td><code>ORDER_ID</code></td><td>Float32</td><td>현재 주문 ID (0 = 없음)</td></tr>
+      <tr><td>32</td><td><code>ORDER_SRC_STATION</code></td><td>Float32</td><td>픽업 스테이션 인덱스</td></tr>
+      <tr><td>33</td><td><code>ORDER_DEST_STATION</code></td><td>Float32</td><td>드롭 스테이션 인덱스</td></tr>
+      <tr><td>34</td><td><code>ORDER_DEST_EDGE</code></td><td>Float32</td><td>주문 목적지 edge (DESTINATION_EDGE 와 연동)</td></tr>
+      <tr><td>35</td><td><code>MOVE_TO_PICKUP_TS</code></td><td>Float32</td><td>픽업 이동 시작 시각</td></tr>
+      <tr><td>36</td><td><code>PICKUP_ARRIVE_TS</code></td><td>Float32</td><td>픽업 스테이션 도착 시각</td></tr>
+      <tr><td>37</td><td><code>PICKUP_START_TS</code></td><td>Float32</td><td>적재(Loading) 시작 시각</td></tr>
+      <tr><td>38</td><td><code>PICKUP_DONE_TS</code></td><td>Float32</td><td>적재 완료 시각</td></tr>
+      <tr><td>39</td><td><code>MOVE_TO_DROP_TS</code></td><td>Float32</td><td>드롭 이동 시작 시각</td></tr>
+      <tr><td>40</td><td><code>DROP_ARRIVE_TS</code></td><td>Float32</td><td>드롭 스테이션 도착 시각</td></tr>
+      <tr><td>41</td><td><code>DROP_START_TS</code></td><td>Float32</td><td>하역(Unloading) 시작 시각</td></tr>
+      <tr><td>42</td><td><code>DROP_DONE_TS</code></td><td>Float32</td><td>하역 완료 시각</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>2. 필드별 상세</h2>
+
+    <!-- ORDER_ID -->
+    <h3>ORDER_ID <span class="badge badge-orange">Offset 31</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>현재 차량에 할당된 Transfer 주문의 고유 ID. <code>0</code>이면 주문이 없는 상태 (IDLE).</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> &mdash; Transfer assign 단계에서 <code>nextOrderId++</code> 값을 기록. UNLOADING 완료 시 <code>0</code>으로 초기화.</td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li><code>IndividualControlPanel</code> &mdash; 선택 차량의 주문 정보 표시</li>
+          <li><code>AutoMgr.update()</code> (UNLOADING 완료) &mdash; 로그 콜백용 <code>orderId</code> 읽기</li>
+          <li><code>SimLogger.onOrderComplete()</code> &mdash; 완료 오더 로그 기록</li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>0</code> (없음) 또는 <code>1</code> 이상의 양의 정수. AutoMgr 인스턴스 수명 동안 단조 증가.</td></tr>
+    </table>
+
+    <!-- ORDER_SRC_STATION -->
+    <h3>ORDER_SRC_STATION <span class="badge badge-orange">Offset 32</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>픽업(적재) 스테이션의 인덱스. 오더 할당 시 기록되어 전체 라이프사이클 동안 유지.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> Transfer assign &mdash; <code>srcStationIdx + 1</code> (1-based). UNLOADING 완료 시 <code>0</code>으로 초기화.</td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li><code>IndividualControlPanel</code> &mdash; 출발 스테이션 표시</li>
+          <li><code>AutoMgr.update()</code> (UNLOADING 완료) &mdash; <code>onOrderComplete</code> 콜백 파라미터</li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>0</code> (없음) 또는 <code>1 ~ stations.length</code> (1-based station index)</td></tr>
+    </table>
+
+    <!-- ORDER_DEST_STATION -->
+    <h3>ORDER_DEST_STATION <span class="badge badge-orange">Offset 33</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>드롭(하역) 스테이션의 인덱스. 오더 할당 시 기록.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> Transfer assign &mdash; <code>destStationIdx + 1</code> (1-based). UNLOADING 완료 시 <code>0</code>으로 초기화.</td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li><code>IndividualControlPanel</code> &mdash; 도착 스테이션 표시</li>
+          <li><code>AutoMgr.update()</code> (UNLOADING 완료) &mdash; <code>onOrderComplete</code> 콜백 파라미터</li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>0</code> (없음) 또는 <code>1 ~ stations.length</code> (1-based station index)</td></tr>
+    </table>
+
+    <!-- ORDER_DEST_EDGE -->
+    <h3>ORDER_DEST_EDGE <span class="badge badge-orange">Offset 34</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>오더 목적지 edge ID. <code>LogicData.DESTINATION_EDGE</code>와 연동되어 라우팅 대상 edge를 나타냄. <code>applyPathToVehicle()</code>에서 <code>DESTINATION_EDGE</code>에 기록되며, 이 필드는 오더 컨텍스트에서 별도 보존.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.applyPathToVehicle()</code> 내부에서 <code>LogicData.DESTINATION_EDGE</code>에 기록하며, OrderData 영역은 현재 코드에서 직접 쓰지 않음 (예약 필드). 실질적 목적지는 <code>DESTINATION_EDGE</code>(offset 24)가 관리.</td></tr>
+      <tr><td><strong>Reader</strong></td><td>현재 직접 읽는 UI/로직 없음. 향후 확장용 예약 필드.</td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>0</code> (없음) 또는 1-based edge index</td></tr>
+    </table>
+
+    <!-- MOVE_TO_PICKUP_TS -->
+    <h3>MOVE_TO_PICKUP_TS <span class="badge badge-orange">Offset 35</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>오더 생성(=차량 배정) 시각. 반송 전체 리드타임의 기준점(t0).</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> Transfer assign &mdash; <code>data[ptr + OrderData.MOVE_TO_PICKUP_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li><code>AutoMgr.update()</code> UNLOADING 완료 &mdash; leadTime, waitingTime 산출</li>
+          <li><code>onOrderComplete</code> 콜백 &mdash; <code>createTs</code>, <code>assignTs</code></li>
+          <li>4-stage 평균 &mdash; <code>pickupApproachSum += pickupArriveTs - moveToPickupTs</code></li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 시뮬레이션 시작 이후 경과 시간.</td></tr>
+    </table>
+
+    <!-- PICKUP_ARRIVE_TS -->
+    <h3>PICKUP_ARRIVE_TS <span class="badge badge-orange">Offset 36</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>차량이 픽업 스테이션에 도착(정차)한 시각. Pickup Approach 구간 종료 시점.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> MOVE_TO_LOAD 분기 &mdash; 차량이 src station edge 위에서 정차하고 <code>EDGE_RATIO >= TARGET_RATIO</code>일 때:<br>
+        <code>data[ptr + OrderData.PICKUP_ARRIVE_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li>UNLOADING 완료 &mdash; <code>pickupApproachSum += pickupArriveTs - moveToPickupTs</code></li>
+          <li>UNLOADING 완료 &mdash; <code>loadingSum += pickupDoneTs - pickupArriveTs</code></li>
+          <li><code>onOrderComplete</code> 콜백 &mdash; <code>pickupStartTs</code></li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms)</td></tr>
+    </table>
+
+    <!-- PICKUP_START_TS -->
+    <h3>PICKUP_START_TS <span class="badge badge-orange">Offset 37</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>적재(Loading) 시작 시각. 현재 구현에서는 <code>PICKUP_ARRIVE_TS</code>와 동일 시점에 기록됨 (도착 즉시 적재 시작).</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> MOVE_TO_LOAD 분기 &mdash; LOADING 전환 시:<br>
+        <code>data[ptr + OrderData.PICKUP_START_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>현재 직접 소비하는 로직 없음. PICKUP_ARRIVE_TS와 동일 시점이므로 4-stage 계산에서는 PICKUP_ARRIVE_TS를 사용.</td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 항상 <code>PICKUP_ARRIVE_TS</code>와 동일.</td></tr>
+    </table>
+
+    <!-- PICKUP_DONE_TS -->
+    <h3>PICKUP_DONE_TS <span class="badge badge-orange">Offset 38</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>적재 완료 시각. dwell timer(<code>dwellMs</code>, 기본 7초) 소진 후 기록. waitingTime / deliveryTime 경계점.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> LOADING complete 분기 &mdash; <code>now >= dwellTimers.get(vehId)</code> 충족 시:<br>
+        <code>data[ptr + OrderData.PICKUP_DONE_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li>UNLOADING 완료 &mdash; <code>waitingTimes.push(pickupDoneTs - moveToPickupTs)</code></li>
+          <li>UNLOADING 완료 &mdash; <code>deliveryTimes.push(simulationTime - pickupDoneTs)</code></li>
+          <li>4-stage &mdash; <code>loadingSum += pickupDoneTs - pickupArriveTs</code></li>
+          <li>4-stage &mdash; <code>dropApproachSum += dropArriveTs - pickupDoneTs</code></li>
+          <li><code>onOrderComplete</code> 콜백 &mdash; <code>pickupCompleteTs</code></li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 항상 <code>PICKUP_ARRIVE_TS + dwellMs</code> 이상.</td></tr>
+    </table>
+
+    <!-- MOVE_TO_DROP_TS -->
+    <h3>MOVE_TO_DROP_TS <span class="badge badge-orange">Offset 39</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>드롭 스테이션으로 이동 시작 시각. 현재 구현에서 <code>PICKUP_DONE_TS</code>와 동일 시점에 기록 (적재 완료 즉시 출발).</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> LOADING complete 분기 &mdash; MOVE_TO_UNLOAD 전환 시:<br>
+        <code>data[ptr + OrderData.MOVE_TO_DROP_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>현재 직접 소비하는 로직 없음. PICKUP_DONE_TS와 동일 시점.</td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 항상 <code>PICKUP_DONE_TS</code>와 동일.</td></tr>
+    </table>
+
+    <!-- DROP_ARRIVE_TS -->
+    <h3>DROP_ARRIVE_TS <span class="badge badge-orange">Offset 40</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>차량이 드롭 스테이션에 도착(정차)한 시각. Drop Approach 구간 종료 시점.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> MOVE_TO_UNLOAD 분기 &mdash; 차량이 dest station edge 위에서 정차하고 <code>EDGE_RATIO >= TARGET_RATIO</code>일 때:<br>
+        <code>data[ptr + OrderData.DROP_ARRIVE_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li>UNLOADING 완료 &mdash; <code>dropApproachSum += dropArriveTs - pickupDoneTs</code></li>
+          <li>UNLOADING 완료 &mdash; <code>unloadingSum += simulationTime - dropArriveTs</code></li>
+          <li><code>onOrderComplete</code> 콜백 &mdash; <code>dropStartTs</code></li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms)</td></tr>
+    </table>
+
+    <!-- DROP_START_TS -->
+    <h3>DROP_START_TS <span class="badge badge-orange">Offset 41</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>하역(Unloading) 시작 시각. 현재 구현에서 <code>DROP_ARRIVE_TS</code>와 동일 시점에 기록.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> MOVE_TO_UNLOAD 분기 &mdash; UNLOADING 전환 시:<br>
+        <code>data[ptr + OrderData.DROP_START_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>현재 직접 소비하는 로직 없음. DROP_ARRIVE_TS와 동일 시점.</td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 항상 <code>DROP_ARRIVE_TS</code>와 동일.</td></tr>
+    </table>
+
+    <!-- DROP_DONE_TS -->
+    <h3>DROP_DONE_TS <span class="badge badge-orange">Offset 42</span></h3>
+    <table>
+      <tr><th style="width:120px">항목</th><th>설명</th></tr>
+      <tr><td><strong>용도</strong></td><td>하역 완료 시각. dwell timer 소진 후 기록. 전체 반송 리드타임의 종료 시점.</td></tr>
+      <tr><td><strong>Writer</strong></td><td><code>AutoMgr.update()</code> UNLOADING complete 분기 &mdash; <code>now >= dwellTimers.get(vehId)</code> 충족 시:<br>
+        <code>data[ptr + OrderData.DROP_DONE_TS] = simulationTime</code></td></tr>
+      <tr><td><strong>Reader</strong></td><td>
+        <ul>
+          <li>바로 다음 줄에서 leadTime, deliveryTime 산출에 사용 (<code>simulationTime</code> 자체가 곧 DROP_DONE_TS)</li>
+          <li>4-stage &mdash; <code>unloadingSum += simulationTime - dropArriveTs</code></li>
+        </ul>
+      </td></tr>
+      <tr><td><strong>값 범위</strong></td><td><code>simulationTime</code> (ms). 항상 <code>DROP_ARRIVE_TS + dwellMs</code> 이상.</td></tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>3. Transfer State Machine</h2>
+    <div class="card highlight">
+      <p>Transfer 반송은 <code>JobState</code> enum으로 관리되는 6단계 상태 머신입니다. <code>AutoMgr.update()</code>가 매 프레임 <code>transferringVehicles</code> set을 순회하며 상태를 전이합니다.</p>
+    </div>
+
+    <h3>상태 전이 다이어그램</h3>
+    <div class="flow"><span class="green">IDLE (1)</span>
+  │
+  │  Transfer assign: shouldAssignTransfer() &amp;&amp; isSwappable()
+  │  WRITE: ORDER_ID, ORDER_SRC_STATION, ORDER_DEST_STATION, MOVE_TO_PICKUP_TS
+  │
+  ▼
+<span class="cyan">MOVE_TO_LOAD (2)</span>
+  │
+  │  차량이 src station edge 진입 시:
+  │    - preloadNextPath() → dest 경로 미리 적재
+  │    - TARGET_RATIO = srcStation.ratio (station 위치에서 정차)
+  │
+  │  차량 정차 + EDGE_RATIO >= TARGET_RATIO:
+  │  WRITE: PICKUP_ARRIVE_TS, PICKUP_START_TS
+  │  dwellTimer 시작 (기본 7초)
+  │
+  ▼
+<span class="orange">LOADING (3)</span>
+  │
+  │  dwellTimer 만료 (now >= dwellTimers.get(vehId)):
+  │  WRITE: PICKUP_DONE_TS, MOVE_TO_DROP_TS
+  │  TARGET_RATIO = 1, MOVING_STATUS = MOVING (출발)
+  │
+  ▼
+<span class="cyan">MOVE_TO_UNLOAD (4)</span>
+  │
+  │  차량이 dest station edge 진입 시:
+  │    - preloadLoopPath() → 하역 후 순환 경로 미리 적재
+  │    - TARGET_RATIO = destStation.ratio
+  │    - dwellTimer = Infinity (sentinel, 재진입 방지)
+  │
+  │  차량 정차 + EDGE_RATIO >= TARGET_RATIO:
+  │  WRITE: DROP_ARRIVE_TS, DROP_START_TS
+  │  dwellTimer 시작 (기본 7초)
+  │
+  ▼
+<span class="orange">UNLOADING (5)</span>
+  │
+  │  dwellTimer 만료:
+  │  WRITE: DROP_DONE_TS
+  │  KPI 기록 (leadTimes, waitingTimes, deliveryTimes, 4-stage)
+  │  onOrderComplete 콜백 호출
+  │  CLEAR: ORDER_ID=0, SRC_STATION=0, DEST_STATION=0
+  │  TARGET_RATIO=1, MOVING_STATUS=MOVING
+  │  transferringVehicles.delete(vehId)
+  │
+  ▼
+<span class="green">IDLE (1)</span>  ← 다음 오더 대기</div>
+
+    <h3>주요 조건 상세</h3>
+    <table>
+      <tr><th>전이</th><th>조건</th><th>비고</th></tr>
+      <tr>
+        <td>IDLE &rarr; MOVE_TO_LOAD</td>
+        <td><code>transferEnabled</code> &amp;&amp; <code>shouldAssignTransfer()</code> (utilization/throughput 할당량) &amp;&amp; <code>isSwappable()</code> (미결 lock 없음)</td>
+        <td>src/dest station 랜덤 선택. <code>assignToStation()</code>으로 src까지 경로 적용.</td>
+      </tr>
+      <tr>
+        <td>MOVE_TO_LOAD &rarr; LOADING</td>
+        <td><code>isStopped</code> &amp;&amp; <code>EDGE_RATIO >= TARGET_RATIO</code> &amp;&amp; <code>pendingSrcStation</code> 해소됨</td>
+        <td>lock/충돌로 station 직전에 멈춘 경우를 도착과 구분하기 위해 ratio 비교 필수.</td>
+      </tr>
+      <tr>
+        <td>LOADING &rarr; MOVE_TO_UNLOAD</td>
+        <td><code>now >= dwellTimers.get(vehId)</code></td>
+        <td>dwell 시간은 <code>dwellMs</code> (기본 7000ms). preloadNextPath로 이미 경로 적재됨.</td>
+      </tr>
+      <tr>
+        <td>MOVE_TO_UNLOAD &rarr; UNLOADING</td>
+        <td><code>isStopped</code> &amp;&amp; <code>currentEdge === destStation.edgeIndex</code> &amp;&amp; <code>EDGE_RATIO >= TARGET_RATIO</code></td>
+        <td>dest station edge 진입 시 preloadLoopPath로 순환 경로 미리 적재.</td>
+      </tr>
+      <tr>
+        <td>UNLOADING &rarr; IDLE</td>
+        <td><code>now >= dwellTimers.get(vehId)</code></td>
+        <td>KPI 기록 후 오더 데이터 전부 초기화. preloadLoopPath 경로로 자연스럽게 이동 재개.</td>
+      </tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <h2>4. Timestamp 기록 시점</h2>
+    <div class="card highlight">
+      <p>8개 타임스탬프는 모두 <code>simulationTime</code> (ms) 단위입니다. 시뮬레이션 시작(또는 리셋) 이후 경과한 밀리초 값이며, 실시간 벽시계(Date.now)가 아닙니다.</p>
+    </div>
+
+    <h3>타임라인</h3>
+    <div class="flow">
+t0  MOVE_TO_PICKUP_TS ─── Transfer assign
+│
+│   [Pickup Approach: 차량이 src station으로 이동]
+│
+t1  PICKUP_ARRIVE_TS ──── src station 도착 (정차 + ratio 충족)
+    PICKUP_START_TS ───── (동일 시점, 도착 즉시 적재 시작)
+│
+│   [Loading: dwellMs 대기 (기본 7초)]
+│
+t2  PICKUP_DONE_TS ────── dwell timer 만료
+    MOVE_TO_DROP_TS ───── (동일 시점, 적재 완료 즉시 출발)
+│
+│   [Drop Approach: 차량이 dest station으로 이동]
+│
+t3  DROP_ARRIVE_TS ────── dest station 도착 (정차 + ratio 충족)
+    DROP_START_TS ─────── (동일 시점, 도착 즉시 하역 시작)
+│
+│   [Unloading: dwellMs 대기 (기본 7초)]
+│
+t4  DROP_DONE_TS ──────── dwell timer 만료 → KPI 기록 + 오더 초기화</div>
+
+    <div class="card warning">
+      <p><strong>참고:</strong> 현재 구현에서는 "도착 즉시 작업 시작" 모델이므로 <code>PICKUP_ARRIVE_TS == PICKUP_START_TS</code>, <code>DROP_ARRIVE_TS == DROP_START_TS</code>, <code>PICKUP_DONE_TS == MOVE_TO_DROP_TS</code>입니다. 향후 대기열(queue) 로직이 추가되면 이 타임스탬프들이 분리될 수 있습니다.</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. KPI 산출</h2>
+    <p>오더 완료(UNLOADING complete) 시점에 <code>AutoMgr.orderStats</code>에 3가지 시간 지표와 4-stage 분해를 누적합니다.</p>
+
+    <h3>3대 시간 지표</h3>
+    <table>
+      <tr><th>KPI</th><th>산식</th><th>의미</th></tr>
+      <tr>
+        <td><strong>leadTime</strong></td>
+        <td><code>DROP_DONE_TS - MOVE_TO_PICKUP_TS</code><br>(= t4 - t0)</td>
+        <td>오더 생성부터 하역 완료까지 전체 소요 시간</td>
+      </tr>
+      <tr>
+        <td><strong>waitingTime</strong></td>
+        <td><code>PICKUP_DONE_TS - MOVE_TO_PICKUP_TS</code><br>(= t2 - t0)</td>
+        <td>오더 생성부터 적재 완료까지. Pickup Approach + Loading 합산.</td>
+      </tr>
+      <tr>
+        <td><strong>deliveryTime</strong></td>
+        <td><code>DROP_DONE_TS - PICKUP_DONE_TS</code><br>(= t4 - t2)</td>
+        <td>적재 완료부터 하역 완료까지. Drop Approach + Unloading 합산.</td>
+      </tr>
+    </table>
+
+    <div class="card">
+      <p><strong>관계식:</strong> <code>leadTime = waitingTime + deliveryTime</code></p>
+    </div>
+
+    <h3>4-Stage 분해</h3>
+    <p>각 stage의 <strong>합산값(sum)</strong>과 <strong>오더 수(stageCount)</strong>를 누적하여, flush 시점에 평균을 산출합니다.</p>
+    <table>
+      <tr><th>Stage</th><th>산식</th><th>구간</th></tr>
+      <tr>
+        <td><strong>pickupApproach</strong></td>
+        <td><code>PICKUP_ARRIVE_TS - MOVE_TO_PICKUP_TS</code><br>(= t1 - t0)</td>
+        <td>src station까지 이동 시간</td>
+      </tr>
+      <tr>
+        <td><strong>loading</strong></td>
+        <td><code>PICKUP_DONE_TS - PICKUP_ARRIVE_TS</code><br>(= t2 - t1)</td>
+        <td>적재 대기 시간 (dwellMs)</td>
+      </tr>
+      <tr>
+        <td><strong>dropApproach</strong></td>
+        <td><code>DROP_ARRIVE_TS - PICKUP_DONE_TS</code><br>(= t3 - t2)</td>
+        <td>dest station까지 이동 시간</td>
+      </tr>
+      <tr>
+        <td><strong>unloading</strong></td>
+        <td><code>DROP_DONE_TS - DROP_ARRIVE_TS</code><br>(= t4 - t3)</td>
+        <td>하역 대기 시간 (dwellMs)</td>
+      </tr>
+    </table>
+
+    <div class="card">
+      <p><strong>관계식:</strong> <code>waitingTime = pickupApproach + loading</code> &nbsp;|&nbsp; <code>deliveryTime = dropApproach + unloading</code></p>
+    </div>
+
+    <h3>4-Stage 평균 산출 (FabContext.flushOrderStats)</h3>
+    <div class="flow">// sum / count / 1000 → 초 단위 평균
+pickupApproachMean = pickupApproachSum / stageCount / 1000
+loadingMean        = loadingSum / stageCount / 1000
+dropApproachMean   = dropApproachSum / stageCount / 1000
+unloadingMean      = unloadingSum / stageCount / 1000</div>
+
+    <!-- ============================================================ -->
+    <h2>6. orderStats 히스토그램</h2>
+    <p><code>FabContext.flushOrderStats()</code>에서 raw 배열을 정렬 후 히스토그램 + 백분위수를 산출합니다.</p>
+
+    <h3>히스토그램 설정</h3>
+    <table>
+      <tr><th>지표</th><th>Bucket 폭</th><th>Bucket 수</th><th>커버 범위</th><th>오버플로우</th></tr>
+      <tr>
+        <td><strong>leadTime</strong></td>
+        <td><code>10초</code> (LEAD_BUCKET_SEC)</td>
+        <td>37</td>
+        <td>0 ~ 360초 (6분)</td>
+        <td>마지막 bucket [36] = 360초 이상</td>
+      </tr>
+      <tr>
+        <td><strong>waitingTime</strong></td>
+        <td><code>5초</code> (WAITING_BUCKET_SEC)</td>
+        <td>37</td>
+        <td>0 ~ 180초 (3분)</td>
+        <td>마지막 bucket [36] = 180초 이상</td>
+      </tr>
+      <tr>
+        <td><strong>deliveryTime</strong></td>
+        <td><code>5초</code> (DELIVERY_BUCKET_SEC)</td>
+        <td>37</td>
+        <td>0 ~ 180초 (3분)</td>
+        <td>마지막 bucket [36] = 180초 이상</td>
+      </tr>
+    </table>
+
+    <h3>히스토그램 생성 알고리즘</h3>
+    <div class="flow">function summarize(raw: number[], bucketSec: number) {
+  // 1. 정렬 (p50/p95 산출용)
+  const sorted = raw.slice().sort((a, b) =&gt; a - b);
+
+  // 2. 히스토그램 빌드 (37 buckets)
+  const histogram = new Array(37).fill(0);
+  for (const val of sorted) {
+    const sec = val / 1000;  // ms → sec 변환
+    const idx = Math.min(36, Math.floor(sec / bucketSec));
+    histogram[idx]++;
+  }
+
+  // 3. 백분위수 + 평균
+  const p50  = percentileSorted(sorted, 0.50) / 1000;  // 초 단위
+  const p95  = percentileSorted(sorted, 0.95) / 1000;
+  const mean = sum(sorted) / sorted.length / 1000;
+
+  return { p50, p95, mean, histogram };
+}</div>
+
+    <h3>백분위수 산출</h3>
+    <div class="flow">function percentileSorted(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, idx)];
+}
+
+// 예시: 100개 샘플에서 p50 → idx = ceil(50) - 1 = 49번째
+//       100개 샘플에서 p95 → idx = ceil(95) - 1 = 94번째</div>
+
+    <h3>Worker &rarr; Main Thread 전달</h3>
+    <p><code>flushOrderStats()</code>는 주기적으로 <code>postMessage({ type: "ORDER_STATS", ... })</code>를 호출하여 아래 데이터를 Main Thread로 전송합니다:</p>
+    <table>
+      <tr><th>필드</th><th>타입</th><th>설명</th></tr>
+      <tr><td><code>completed</code></td><td>number</td><td>완료된 오더 수</td></tr>
+      <tr><td><code>throughputPerHour</code></td><td>number</td><td>시간당 처리량 (completed / elapsed * 3,600,000)</td></tr>
+      <tr><td><code>leadTimeP50 / P95 / Mean</code></td><td>number</td><td>리드타임 백분위수 및 평균 (초)</td></tr>
+      <tr><td><code>leadTimeHistogram</code></td><td>number[37]</td><td>리드타임 히스토그램 (10초 bucket)</td></tr>
+      <tr><td><code>waitingTime*</code></td><td>동일 구조</td><td>대기시간 (5초 bucket)</td></tr>
+      <tr><td><code>deliveryTime*</code></td><td>동일 구조</td><td>배송시간 (5초 bucket)</td></tr>
+      <tr><td><code>pickupApproachMean</code></td><td>number</td><td>Pickup Approach 평균 (초)</td></tr>
+      <tr><td><code>loadingMean</code></td><td>number</td><td>Loading 평균 (초)</td></tr>
+      <tr><td><code>dropApproachMean</code></td><td>number</td><td>Drop Approach 평균 (초)</td></tr>
+      <tr><td><code>unloadingMean</code></td><td>number</td><td>Unloading 평균 (초)</td></tr>
+    </table>
+
+    <p>Main Thread에서는 <code>useOrderStatsStore</code> (Zustand)가 fab별로 수신하며, <code>FLUSH_INTERVAL_MS = 5000ms</code> 간격으로 throttle-batch하여 React re-render를 최소화합니다.</p>
+
+    <!-- ============================================================ -->
+    <h2>7. 소스 파일 참조</h2>
+    <table>
+      <tr><th>파일</th><th>역할</th></tr>
+      <tr><td><code>src/common/vehicle/initialize/constants.ts</code></td><td>OrderData 오프셋 정의 (31~42), JobState enum</td></tr>
+      <tr><td><code>src/common/vehicle/logic/AutoMgr.ts</code></td><td>Transfer state machine, 타임스탬프 기록, KPI 누적</td></tr>
+      <tr><td><code>src/shmSimulator/core/FabContext/index.ts</code></td><td><code>flushOrderStats()</code> &mdash; 히스토그램/백분위수 산출 및 postMessage</td></tr>
+      <tr><td><code>src/shmSimulator/MultiWorkerController.ts</code></td><td><code>OrderStatsData</code> 인터페이스 정의</td></tr>
+      <tr><td><code>src/store/simulation/orderStatsStore.ts</code></td><td>Zustand store &mdash; Main Thread에서 fab별 stats throttle 관리</td></tr>
+      <tr><td><code>src/components/react/menu/panels/IndividualControlPanel.tsx</code></td><td>개별 차량 선택 시 ORDER_ID, SRC/DEST_STATION 표시</td></tr>
+    </table>
+
+  </main>
+</div>
+</body>
+</html>

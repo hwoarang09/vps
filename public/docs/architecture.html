@@ -10,18 +10,36 @@
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-title">VPS<small>Virtual Physics Simulator</small></div>
-    <nav>
-      <div class="section-label">Overview</div>
-      <a href="index.html">Home</a>
-      <a href="architecture.html" class="active">System Architecture</a>
-      <div class="section-label">Simulation</div>
-      <a href="simulation.html">Simulation Engine</a>
-      <a href="routing.html">Routing (BPR / EWMA)</a>
-      <div class="section-label">Interface</div>
-      <a href="ui-guide.html">UI &amp; Menu System</a>
-      <a href="preset-system.html">Parameter Preset</a>
-      <div class="section-label">Infrastructure</div>
-      <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <nav>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon cyan">&#9670;</span><span class="nav-group-label">Overview</span></div>
+        <a href="index.html">Home</a>
+        <a href="architecture.html" class="active">System Architecture</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon green">&#9654;</span><span class="nav-group-label">Simulation</span></div>
+        <a href="simulation.html">Simulation Engine</a>
+        <a href="routing.html">Routing (BPR / EWMA)</a>
+        <a href="lock-system.html">Lock System</a>
+        <a href="movement.html">Movement Physics</a>
+        <a href="collision.html">Collision Detection</a>
+        <a href="fab-system.html">FAB &amp; Statistics</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon purple">&#9632;</span><span class="nav-group-label">Interface</span></div>
+        <a href="ui-guide.html">UI &amp; Menu System</a>
+        <a href="preset-system.html">Parameter Preset</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-header"><span class="nav-group-icon orange">&#9881;</span><span class="nav-group-label">Infrastructure</span></div>
+        <a href="logging.html">Logging &amp; Data Pipeline</a>
+        <a href="shared-memory.html">Shared Memory Layout</a>
+        <a href="fields-movement.html" class="sub">MovementData</a>
+        <a href="fields-sensor.html" class="sub">SensorData</a>
+        <a href="fields-logic.html" class="sub">LogicData</a>
+        <a href="fields-order.html" class="sub">OrderData</a>
+        <a href="renderer.html">Three.js Renderer</a>
+      </div>
     </nav>
   </aside>
 
