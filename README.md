@@ -4,6 +4,7 @@
 > 같은 맵에서 라우팅 전략(Distance / BPR / EWMA)을 동시에 돌려 **어느 게 더 효율적인지** 한 화면에서 비교한다.
 
 🔗 **Live demo**: <https://vps-amhs.vercel.app/>
+📄 **Technical docs**: <https://vps-amhs.vercel.app/docs/index.html>
 
 ![Initial scene after loading](public/pic/hero.png)
 
