@@ -123,26 +123,11 @@ interface StationRow {
   editor_y: string;
   barcode_x: string;
   barcode_y: string;
-  barcode_z: string;
   barcode_r: string;
   bay_name: string;
   station_type: string;
-  port_id: string;
-  port_type_code: string;
-  direction_code: string;
-  link_sc_id: string;
-  buffer_size: string;
-  mode_type: string;
-  floor: string;
-  zone_id: string;
-  rail_index: string;
-  sc_id: string;
-  e84: string;
-  teached: string;
-  look_down: string;
   nearest_edge: string;
   nearest_edge_distance: string;
-  eq_id: string;
 }
 
 
@@ -304,26 +289,11 @@ const parseStationMap = (content: string): StationRawData[] => {
       editor_y: row.editor_y,
       barcode_x: Number.parseFloat(row.barcode_x) || 0,
       barcode_y: Number.parseFloat(row.barcode_y) || 0,
-      barcode_z: Number.parseFloat(row.barcode_z) || 0,
       barcode_r: Number.parseFloat(row.barcode_r) || 0,
       bay_name: row.bay_name,
       station_type: row.station_type,
-      port_id: row.port_id,
-      port_type_code: row.port_type_code,
-      direction_code: row.direction_code,
-      link_sc_id: row.link_sc_id,
-      buffer_size: row.buffer_size,
-      mode_type: row.mode_type,
-      floor: row.floor,
-      zone_id: row.zone_id,
-      rail_index: row.rail_index,
-      sc_id: row.sc_id,
-      e84: row.e84,
-      teached: row.teached,
-      look_down: row.look_down,
       nearest_edge: row.nearest_edge,
       nearest_edge_distance: row.nearest_edge_distance,
-      eq_id: row.eq_id,
     }));
 };
 
