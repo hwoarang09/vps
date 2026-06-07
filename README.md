@@ -5,6 +5,9 @@
 
 🔗 **Live demo**: <https://vps-amhs.vercel.app/>
 📄 **Technical docs**: <https://vps-amhs.vercel.app/docs/index.html>
+🎬 **Omniverse 실시간 렌더 데모 (영상)**: <https://youtu.be/ug_QaS7qJH8>
+
+[![Omniverse 실시간 렌더 데모](https://img.youtube.com/vi/ug_QaS7qJH8/maxresdefault.jpg)](https://youtu.be/ug_QaS7qJH8)
 
 ![Initial scene after loading](public/pic/hero.png)
 

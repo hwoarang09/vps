@@ -10,6 +10,9 @@ export interface MenuState {
   rightPanelOpen: boolean;
   activeMainMenuCenterX: number | null; // Lv1 button center X for Lv2 positioning
 
+  // Cinematic mode: hide ALL HUD/menu, show only the Three.js canvas
+  cinematicMode: boolean;
+
   // Remember last selected lv2 menu for each lv1 menu
   lastSubMenuByMainMenu: Partial<Record<MainMenuType, string>>;
 
@@ -26,6 +29,8 @@ export interface MenuState {
   setActiveSubMenu: (menu: string | null) => void;
   setActiveThirdMenu: (menu: string | null) => void;
   setRightPanelOpen: (open: boolean) => void;
+  setCinematicMode: (on: boolean) => void;
+  toggleCinematicMode: () => void;
   // Switch to lv1 menu with restoring last lv2 selection (for Shift+key)
   switchToMainMenuWithMemory: (menu: MainMenuType, centerX?: number) => void;
   showTooltip: (
@@ -45,6 +50,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   activeThirdMenu: null,
   rightPanelOpen: false,
   activeMainMenuCenterX: null,
+  cinematicMode: false,
 
   // Remember last selected lv2 menu for each lv1 menu
   lastSubMenuByMainMenu: {},
@@ -158,6 +164,14 @@ export const useMenuStore = create<MenuState>((set, get) => ({
 
   setRightPanelOpen: (open: boolean) => {
     set({ rightPanelOpen: open });
+  },
+
+  // Cinematic mode — 모든 HUD/메뉴 숨기고 Three.js 화면만 보기
+  setCinematicMode: (on: boolean) => {
+    set({ cinematicMode: on });
+  },
+  toggleCinematicMode: () => {
+    set((state) => ({ cinematicMode: !state.cinematicMode }));
   },
 
   // 툴팁 관련

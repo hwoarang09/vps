@@ -68,6 +68,21 @@ const KeyboardShortcutHandler = () => {
 
       const key = e.key.toLowerCase();
 
+      // Cinematic mode (모든 HUD/메뉴 숨김) — 'H' 로 토글. 메뉴 상태와 무관하게 항상 동작.
+      if (key === "h" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        useMenuStore.getState().toggleCinematicMode();
+        return;
+      }
+      // Cinematic 중에는 다른 단축키를 모두 무시(메뉴가 숨겨져 있음). Esc 로 복귀.
+      if (useMenuStore.getState().cinematicMode) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          useMenuStore.getState().setCinematicMode(false);
+        }
+        return;
+      }
+
       // Handle ESC key - cancel Level 2 menu or Level 1 menu
       if (e.key === "Escape") {
         if (activeSubMenu) {

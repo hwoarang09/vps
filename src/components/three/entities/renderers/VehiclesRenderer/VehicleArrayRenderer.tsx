@@ -152,7 +152,9 @@ const VehicleArrayRenderer: React.FC<VehicleArrayRendererProps> = ({
         float rotation = instanceData.w * ${DEG_TO_RAD_GLSL};
         transformed *= uVehicleScale;
         transformed = rotateZ(rotation) * transformed;
-        transformed += instanceData.xyz;`
+        // 차량을 rail 위로 살짝 올림(렌더 전용). 곡선 rail 은 polygonOffset(-1)로 깊이를
+        // 앞으로 당겨 차량(같은 z)을 덮으므로, 확실히 앞서도록 z 를 들어올린다.
+        transformed += instanceData.xyz + vec3(0.0, 0.0, 0.1);`
       );
 
       shader.vertexShader = shader.vertexShader.replace(

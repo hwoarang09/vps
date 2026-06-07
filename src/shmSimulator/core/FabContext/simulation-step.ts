@@ -13,6 +13,7 @@ import type { TransferMgr, VehicleLoop, VehicleBayLoop } from "@/common/vehicle/
 import type { AutoMgr } from "@/common/vehicle/logic/AutoMgr";
 import type { SimLogger } from "@/logger";
 import type { SnapshotLogger, SnapshotVehicle, SnapshotEdge } from "@/logger/SnapshotLogger";
+import type { VizShipper } from "../../managers/VizShipper";
 import type { EdgeStatsTracker } from "@/common/vehicle/logic/EdgeStatsTracker";
 import { VEHICLE_DATA_SIZE, MovementData, LogicData } from "@/common/vehicle/initialize/constants";
 
@@ -64,6 +65,9 @@ export interface SimulationStepContext {
   // Replay snapshot state
   lastReplaySnapshotTime: number;
   prevVehicleSpeeds: Float32Array | null;
+  // 실시간 viz publish (Omniverse 등). 자체 주기(VIZ_INTERVAL_MS) + 정지전환 트리거.
+  vizShipper: VizShipper | null;
+  lastVizPublishTime: number;
 }
 
 /**
@@ -221,29 +225,51 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
     transferMgr.clearPathChangedVehicles();
   }
 
-  // 5. Replay Snapshot (0.5초 주기 + 속도 0 전환 감지)
-  if (simLogger?.isReplayEnabled()) {
-    const REPLAY_INTERVAL = 0.5; // seconds
-    const doPeriodicSnapshot = simulationTime - ctx.lastReplaySnapshotTime >= REPLAY_INTERVAL;
+  // 5. Replay Snapshot(로그) + Viz publish(Omniverse) — 한 루프, 주기는 각자.
+  //    ⚠ simulationTime 단위 = ms (SimulationEngine: simulationTime += clampedDelta(초) * 1000).
+  const replayOn = simLogger?.isReplayEnabled() ?? false;
+  const vizOn = ctx.vizShipper !== null;
+  if (replayOn || vizOn) {
+    const REPLAY_INTERVAL = 0.5; // (기존 동작 유지 — ms 기준이라 사실상 매 step)
+    const VIZ_INTERVAL_MS = 500; // viz 발행 주기(ms sim-time) = 0.5초. 매 프레임 폭주 방지.
+    const doReplay = simulationTime - ctx.lastReplaySnapshotTime >= REPLAY_INTERVAL;
+    const doViz = vizOn && simulationTime - ctx.lastVizPublishTime >= VIZ_INTERVAL_MS;
+    const vizRows: number[][] | null = vizOn ? [] : null;
 
     for (let i = 0; i < actualNumVehicles; i++) {
       const speed = vehicleDataArray.getVelocity(i);
       const prevSpeed = ctx.prevVehicleSpeeds ? ctx.prevVehicleSpeeds[i] : speed;
       const stoppedNow = speed === 0 && prevSpeed > 0;
 
-      if (doPeriodicSnapshot || stoppedNow) {
+      const needReplay = replayOn && (doReplay || stoppedNow);
+      const needViz = vizRows !== null && (doViz || stoppedNow);
+      if (needReplay || needViz) {
         const pos = vehicleDataArray.getPosition(i);
-        simLogger.logReplaySnapshot({
-          ts: simulationTime,
-          vehId: i,
-          x: pos.x,
-          y: pos.y,
-          z: pos.z,
-          edgeIdx: vehicleDataArray.getData()[i * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE],
-          ratio: vehicleDataArray.getEdgeRatio(i),
-          speed,
-          status: vehicleDataArray.getMovingStatus(i),
-        });
+        if (needReplay) {
+          simLogger!.logReplaySnapshot({
+            ts: simulationTime,
+            vehId: i,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            edgeIdx: vehicleDataArray.getData()[i * VEHICLE_DATA_SIZE + MovementData.CURRENT_EDGE],
+            ratio: vehicleDataArray.getEdgeRatio(i),
+            speed,
+            status: vehicleDataArray.getMovingStatus(i),
+          });
+        }
+        if (needViz && vizRows) {
+          // [id, x, y, rot_deg, spd, job] — 정지 전환 차량은 spd=0 으로 들어가 정지 이벤트 역할.
+          // job = JobState enum → 수신측(Omniverse)에서 VPS 와 동일 색으로 분기.
+          vizRows.push([
+            i,
+            Math.round(pos.x * 1000) / 1000,
+            Math.round(pos.y * 1000) / 1000,
+            Math.round(vehicleDataArray.getRotation(i) * 10) / 10,
+            Math.round(speed * 100) / 100,
+            vehicleDataArray.getJobState(i),
+          ]);
+        }
       }
 
       if (ctx.prevVehicleSpeeds) {
@@ -251,8 +277,16 @@ export function executeSimulationStep(ctx: SimulationStepContext): void {
       }
     }
 
-    if (doPeriodicSnapshot) {
+    if (doReplay) {
       ctx.lastReplaySnapshotTime = simulationTime;
+    }
+
+    // viz publish — simulationTime 이미 ms 라 그대로. 정지전환만 있는 step 은 멈춘 차량만 발행.
+    if (ctx.vizShipper && vizRows && vizRows.length > 0) {
+      ctx.vizShipper.publish(Math.round(simulationTime), vizRows);
+    }
+    if (doViz) {
+      ctx.lastVizPublishTime = simulationTime;
     }
 
     // 최초 호출 시 prevVehicleSpeeds 초기화

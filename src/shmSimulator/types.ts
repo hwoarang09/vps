@@ -130,6 +130,10 @@ export interface SimulationConfig {
   /** EdgeTransitTracker 활성화 여부 (edge 통과 바이너리 로그) */
   edgeTransitLogEnabled?: boolean;
 
+  /** Omniverse 등 외부 뷰어로 실시간 차량 위치 MQTT publish (기본: true).
+   *  토픽 VPS/viz/{fabId}/vehicles, 0.5s 주기 + 정지전환 시 발행. */
+  vizEnabled?: boolean;
+
   /** 로그 세션 메모 (sessionId에 붙음, 예: "test1" → "20260330_0504_test1") */
   logSessionNote?: string;
   /** 로그 출력 대상 + 이벤트별 on/off */

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import ThreeScene from "./components/three/ThreeMain";
 import MenuContainer from "@components/react/menu/MenuContainer";
+import CinematicHint from "@components/react/menu/CinematicHint";
 import KeyboardShortcutHandler from "@components/react/system/KeyboardShortcutHandler";
 import UnusualMoveModal from "@components/three/overlays/UnusualMoveModal";
 import LoadingScreen from "@components/react/LoadingScreen";
@@ -9,6 +10,7 @@ import { initConfig } from "@/config/persistedConfig";
 import { initPresetFromDb } from "@/config/react/parameterPreset";
 import { useLoadingStore } from "@store/ui/loadingStore";
 import { useShmSimulatorStore } from "@store/vehicle/shmMode/shmSimulatorStore";
+import { useMenuStore } from "@store/ui/menuStore";
 import { useCameraStore } from "@store/ui/cameraStore";
 import { useFabStore } from "@store/map/fabStore";
 import { preloadMenuIcons } from "@/utils/preloadIcons";
@@ -34,6 +36,7 @@ const focusCameraOnFabZero = () => {
 const App: React.FC = () => {
   const [configReady, setConfigReady] = useState(false);
   const isShmInitialized = useShmSimulatorStore((s) => s.isInitialized);
+  const cinematicMode = useMenuStore((s) => s.cinematicMode);
 
   useEffect(() => {
     initConfig().then(() => initPresetFromDb()).then(() => {
@@ -60,8 +63,10 @@ const App: React.FC = () => {
       {configReady && (
         <div className="relative w-screen h-screen">
           <KeyboardShortcutHandler />
-          <MenuContainer />
+          {/* Cinematic 모드: HUD/메뉴 전부 숨기고 Three.js 화면만 (H / Esc 로 토글) */}
+          {!cinematicMode && <MenuContainer />}
           <ThreeScene />
+          <CinematicHint />
           <UnusualMoveModal />
         </div>
       )}

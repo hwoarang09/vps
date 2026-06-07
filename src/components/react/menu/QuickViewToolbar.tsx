@@ -3,7 +3,7 @@
 // visualizationStore. When implemented, add corresponding toggle buttons here.
 
 import React, { useEffect, useRef, useState } from "react";
-import { Activity, Radar, Tag, Binary, Palette, Check, BookOpen, /* HelpCircle */ } from "lucide-react";
+import { Activity, Radar, Tag, Binary, Palette, Check, BookOpen, Maximize, /* HelpCircle */ } from "lucide-react";
 import { useVisualizationStore } from "@store/ui/visualizationStore";
 import { useMenuStore } from "@/store/ui/menuStore";
 import { useThemeStore } from "@store/ui/themeStore";
@@ -28,6 +28,7 @@ const QuickViewToolbar: React.FC = () => {
     toggleFabLabels, toggleNodeText, toggleEdgeText, toggleVehicleText, toggleStationText, toggleBayText,
   } = useVisualizationStore();
   const { showTooltip, hideTooltip } = useMenuStore();
+  const setCinematicMode = useMenuStore((s) => s.setCinematicMode);
   const activeMainMenu = useMenuStore((s) => s.activeMainMenu);
   const activeSubMenu = useMenuStore((s) => s.activeSubMenu);
   // 한 번에 하나의 드롭다운만 열기
@@ -290,6 +291,19 @@ const QuickViewToolbar: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Divider */}
+      <div className="w-px h-6 bg-gray-600/50" />
+
+      {/* Cinematic / Clean view — 모든 HUD·메뉴 숨기고 Three.js 화면만 (H 로 복귀) */}
+      <button
+        onClick={() => handleClick(() => setCinematicMode(true))}
+        onMouseEnter={(e) => handleMouseEnter(e, "cinematic", "Clean view (H)")}
+        onMouseLeave={hideTooltip}
+        className={twMerge(menuButtonVariants({ active: false }), buttonExtra)}
+      >
+        <Maximize size={16} />
+      </button>
 
       {/* Divider */}
       <div className="w-px h-6 bg-gray-600/50" />

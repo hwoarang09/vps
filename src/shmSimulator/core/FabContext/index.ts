@@ -25,6 +25,7 @@ import { initializeFab, setupRenderBuffer } from "./initialization";
 import { setupLoggerPort } from "./logger-setup";
 import { writeToRenderRegion } from "./render";
 import { executeSimulationStep } from "./simulation-step";
+import { VizShipper } from "../../managers/VizShipper";
 
 export class FabContext {
   public readonly fabId: string;
@@ -80,6 +81,9 @@ export class FabContext {
   // === SimLogger ===
   private simLogger: SimLogger | null = null;
 
+  // === VizShipper (Omniverse 등 외부 뷰어로 실시간 위치 MQTT publish) ===
+  private vizShipper: VizShipper | null = null;
+
   // === SnapshotLogger (디버그 모드, 0.1s 주기) ===
   private snapshotLogger: SnapshotLogger | null = null;
   private lastSnapshotTime: number = 0;
@@ -97,6 +101,9 @@ export class FabContext {
   // === Replay Snapshot State ===
   private lastReplaySnapshotTime = 0;
   private prevVehicleSpeeds: Float32Array | null = null;
+
+  // === Viz publish State (Omniverse) ===
+  private lastVizPublishTime = 0;
 
   constructor(params: FabInitParams) {
     this.fabId = params.fabId;
@@ -327,6 +334,12 @@ export class FabContext {
     } else {
       console.log(`[FabContext] SnapshotLogger skipped: simLogger is null (fabId=${this.fabId})`);
     }
+
+    // VizShipper — 실시간 viz publish (로그와 독립). config.vizEnabled !== false 면 ON.
+    if (this.config.vizEnabled !== false) {
+      this.vizShipper = new VizShipper(this.fabId);
+      console.log(`[FabContext] VizShipper started: fabId=${this.fabId}`);
+    }
   }
 
   /**
@@ -373,11 +386,14 @@ export class FabContext {
       curveBrakeCheckTimers: this.curveBrakeCheckTimers,
       lastReplaySnapshotTime: this.lastReplaySnapshotTime,
       prevVehicleSpeeds: this.prevVehicleSpeeds,
+      vizShipper: this.vizShipper,
+      lastVizPublishTime: this.lastVizPublishTime,
     };
     executeSimulationStep(ctx);
 
     // Write-back replay state
     this.lastReplaySnapshotTime = ctx.lastReplaySnapshotTime;
+    this.lastVizPublishTime = ctx.lastVizPublishTime;
     this.lastSnapshotTime = ctx.lastSnapshotTime;
     this.prevVehicleSpeeds = ctx.prevVehicleSpeeds;
 
@@ -496,6 +512,10 @@ export class FabContext {
     if (this.snapshotLogger) {
       this.snapshotLogger.close();
       this.snapshotLogger = null;
+    }
+    if (this.vizShipper) {
+      this.vizShipper.dispose();
+      this.vizShipper = null;
     }
 
     this.store.dispose();
