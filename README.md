@@ -3,11 +3,14 @@
 > 반도체 FAB 내 OHT(Overhead Hoist Transport) 차량의 **대규모 라우팅 비교 시뮬레이터**.
 > 같은 맵에서 라우팅 전략(Distance / BPR / EWMA)을 동시에 돌려 **어느 게 더 효율적인지** 한 화면에서 비교한다.
 
-🔗 **Live demo**: <https://vps-amhs.vercel.app/>
-📄 **Technical docs**: <https://vps-amhs.vercel.app/docs/index.html>
 🎬 **Omniverse 실시간 렌더 데모 (영상)**: <https://youtu.be/ug_QaS7qJH8>
 
 [![Omniverse 실시간 렌더 데모](https://img.youtube.com/vi/ug_QaS7qJH8/maxresdefault.jpg)](https://youtu.be/ug_QaS7qJH8)
+
+![Omniverse 실시간 렌더 — Fab top-down](public/pic/omniverse-demo.png)
+
+🔗 **Live demo**: <https://vps-amhs.vercel.app/>  
+📄 **Technical docs**: <https://vps-amhs.vercel.app/docs/index.html>
 
 ![Initial scene after loading](public/pic/hero.png)
 
